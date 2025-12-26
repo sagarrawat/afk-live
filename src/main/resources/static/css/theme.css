@@ -1,0 +1,444 @@
+:root {
+    --bg-dark: #0f0f0f;
+    --surface-dark: #1f1f1f;
+    --primary-red: #cc0000;
+    --text-main: #ffffff;
+    --text-muted: #aaaaaa;
+    --success: #2ba640;
+    --border: #3e3e3e;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    height: 100vh;
+    display: flex; /* Sidebar | Content */
+    flex-direction: row;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.app-sidebar {
+    width: 60px;
+    background: #050505;
+    border-right: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 15px 0;
+    z-index: 100;
+    flex-shrink: 0;
+}
+.brand-icon { font-size: 1.2rem; margin-bottom: 30px; }
+.nav-item {
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 10px; border-radius: 8px; text-decoration: none;
+    font-size: 1.2rem; opacity: 0.5; transition: 0.2s; cursor: pointer;
+}
+.nav-item:hover { background: #1a1a1a; opacity: 1; }
+.nav-item.active { background: #222; opacity: 1; border-left: 3px solid var(--primary-red); }
+.nav-bottom { margin-top: auto; }
+
+/* Main Wrapper */
+.app-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: var(--bg-dark);
+    min-width: 0;
+}
+
+/* Header */
+.app-header {
+    height: 60px;
+    border-bottom: 1px solid #222;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 30px;
+    background: rgba(15, 15, 15, 0.95);
+    flex-shrink: 0;
+}
+.header-title { font-weight: 700; letter-spacing: 1px; font-size: 0.9rem; }
+.live-dot { color: var(--primary-red); animation: pulse 2s infinite; font-size: 0.8rem; margin-left: 10px; }
+.header-profile { display: flex; align-items: center; gap: 10px; }
+
+/* Views */
+.view-section {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 20px;
+}
+.view-section.hidden { display: none !important; }
+
+/* Dashboard */
+.dashboard {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px;
+    padding: 20px;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+.card {
+    background-color: var(--surface-dark);
+    border-radius: 8px;
+    padding: 24px;
+    border: 1px solid var(--border);
+}
+
+/* Footer */
+.app-footer {
+    height: 30px; border-top: 1px solid #222; background: #050505;
+    display: flex; align-items: center; padding: 0 20px;
+    font-size: 0.7rem; color: #555; gap: 20px; flex-shrink: 0;
+}
+.status-item.right { margin-left: auto; }
+
+/* UI Elements */
+h2 { font-size: 1rem; color: var(--text-muted); text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 20px; margin-top: 0;}
+label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 0.9rem; }
+input { width: 100%; background: #121212; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 4px; margin-bottom: 20px; box-sizing: border-box; }
+.btn { width: 100%; padding: 14px; border: none; border-radius: 4px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+.btn-primary { background: var(--primary-red); color: white; }
+.btn-primary:disabled { background: #555; cursor: not-allowed; }
+.btn-stop { background: #2a2a2a; color: #aaa; margin-top: 10px; }
+.disabled-btn { opacity: 0.5; cursor: not-allowed; }
+
+/* Upload & Terminal */
+.upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; margin-bottom: 20px; background: rgba(255,255,255,0.02); }
+.upload-zone.uploaded { border-color: var(--success); background: rgba(43, 166, 64, 0.1); }
+.terminal { background: #000; flex-grow: 1; border-radius: 6px; padding: 15px; font-family: monospace; font-size: 0.85rem; color: #4af626; overflow-y: auto; max-height: 300px; border: 1px solid #333; }
+.log-entry { margin-bottom: 4px; border-bottom: 1px solid #111; }
+
+/* Badge */
+.badge { padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; background: #333; color: #888; }
+.badge.live { background: var(--primary-red); color: white; }
+
+/* Modal */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center;
+    align-items: center; z-index: 2000;
+}
+.modal-box { background: var(--surface-dark); padding: 30px; border-radius: 12px; border: 1px solid var(--border); width: 350px; text-align: center; }
+.modal-title { font-size: 1.2rem; margin-bottom: 10px; color: white; }
+.btn-google { background: white; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: 6px; text-decoration: none; font-weight: bold; }
+.hidden { display: none !important; }
+
+/* --- FIXES FOR UI GLITCHES --- */
+
+/* 1. Fix Timing Radio Buttons */
+.timing-options {
+    display: flex;
+    gap: 30px; /* Space between the two options */
+    align-items: center;
+}
+
+.timing-options > div {
+    display: flex;
+    align-items: center; /* Vertically align dot and text */
+}
+
+/* Force the radio button to be small and inline */
+.timing-options input[type="radio"] {
+    width: auto !important; /* Stop it from being full width */
+    margin-bottom: 0 !important;
+    margin-right: 10px;
+    cursor: pointer;
+    accent-color: var(--primary-red); /* Make the dot red */
+}
+
+/* Force the label to sit next to the dot */
+.timing-options label {
+    display: inline-block !important;
+    margin-bottom: 0 !important;
+    cursor: pointer;
+    font-weight: normal;
+    color: var(--text-main);
+}
+
+/* 2. Fix Monitor/Terminal Spacing */
+/* Give the "SYSTEM LOGS" header some breathing room */
+.card h2 {
+    margin-top: 30px; 
+    border-top: 1px solid #333; /* Optional: adds a separator line above it */
+    padding-top: 15px;
+}
+
+/* Ensure the terminal looks like a distinct box */
+.terminal {
+    background: #000;
+    border: 1px solid #333;
+    min-height: 250px; /* Fixed height so it looks substantial */
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5); /* Inner shadow for depth */
+}
+
+/* Fix the "Signal Active" area spacing */
+.loader-container {
+    margin-bottom: 10px;
+    background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+    .dashboard { display: flex; flex-direction: column; width: 100%; padding: 10px; }
+    .timing-options { flex-direction: column; gap: 10px !important; }
+}
+
+/* --- PRODUCTION PREVIEW SCREEN --- */
+
+/* The Monitor Container */
+.loader-container {
+    height: 250px; /* Taller for a cinematic aspect ratio */
+    background-color: #080808;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #333;
+    border-radius: 4px;
+    box-shadow: inset 0 0 50px rgba(0,0,0,0.8); /* Inner shadow for depth */
+}
+
+/* CRT Scanline Effect Overlay */
+.loader-container::before {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 2;
+    background-size: 100% 2px, 3px 100%;
+    pointer-events: none;
+}
+
+/* The Center Content */
+.standby-content {
+    text-align: center;
+    z-index: 3;
+    opacity: 0.7;
+    animation: breathe 4s infinite ease-in-out;
+}
+
+.standby-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    color: #444; /* Dark grey icon */
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
+}
+
+.standby-text {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    letter-spacing: 3px;
+    color: #666;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+.standby-sub {
+    font-family: 'Roboto', sans-serif;
+    font-size: 0.75rem;
+    color: #444;
+    margin-top: 8px;
+}
+
+/* Viewfinder Corner Markers (The "Production" Look) */
+.corner-marker {
+    position: absolute;
+    width: 20px; height: 20px;
+    border: 2px solid #444;
+    z-index: 3;
+}
+.tl { top: 20px; left: 20px; border-right: none; border-bottom: none; }
+.tr { top: 20px; right: 20px; border-left: none; border-bottom: none; }
+.bl { bottom: 20px; left: 20px; border-right: none; border-top: none; }
+.br { bottom: 20px; right: 20px; border-left: none; border-top: none; }
+
+/* Animations */
+@keyframes breathe {
+    0% { opacity: 0.6; transform: scale(0.98); }
+    50% { opacity: 0.8; transform: scale(1); }
+    100% { opacity: 0.6; transform: scale(0.98); }
+}
+
+/* --- MOBILE LAYOUT FIXES (Bottom Navigation) --- */
+@media (max-width: 900px) {
+    
+    /* 1. Flip the Layout Direction */
+    body {
+        overflow-y: auto !important; 
+        height: auto !important;
+        display: block; /* Switch off the flex/row layout causing stiffness */
+    }
+
+    /* 2. Transform Sidebar into Bottom Bar */
+    .app-sidebar {
+        width: 100%;            /* Full width */
+        height: 60px;           /* Fixed height */
+        flex-direction: row;    /* Horizontal icons */
+        justify-content: space-around; /* Even spacing */
+        padding: 0;
+        
+        /* Pin to bottom */
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        border-right: none;
+        border-top: 1px solid #333;
+        background: #050505;
+        z-index: 1000;
+        order: 2; /* Ensure it visually sits below content if we used flex */
+    }
+
+    /* 3. Adjust Icons for Horizontal Layout */
+    .nav-menu {
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        justify-content: space-around;
+        align-items: center;
+    }
+    
+    .nav-item {
+        margin-bottom: 0; /* Remove vertical gap */
+        border-radius: 0;
+        flex: 1; /* Make touch targets big */
+        height: 100%;
+    }
+
+    .nav-item.active {
+        border-left: none;
+        border-top: 2px solid var(--primary-red); /* indicator moves to top */
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* 4. Hide unnecessary elements on mobile */
+    .brand-icon { display: none; } /* Hide the red dot logo to save space */
+    .nav-bottom { display: none; } /* Hide the help icon on mobile */
+
+    /* 5. Adjust Main Wrapper to prevent overlap */
+    .app-wrapper {
+        height: auto; /* Let it grow */
+        padding-bottom: 70px; /* Add breathing room for the bottom bar */
+        width: 100%;
+    }
+
+    /* 6. Fix Dashboard Padding */
+    .dashboard {
+        padding: 15px; /* Reduce padding on mobile */
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .card {
+        padding: 20px 15px; /* Slightly tighter cards */
+    }
+    .app-wrapper {
+        height: auto; 
+        overflow: visible; /* Let content spill out so body can scroll it */
+    }
+}
+
+/* --- SETTINGS VIEW FIXES --- */
+
+/* 1. Override the Grid Layout specifically for Settings */
+#view-settings .dashboard {
+    display: flex;              /* Switch from Grid to Flex */
+    flex-direction: column;
+    align-items: center;        /* Center horizontally */
+    justify-content: flex-start;
+    max-width: 700px;           /* Limit width so it doesn't stretch too far */
+    margin: 0 auto;             /* Ensure centering in the view */
+}
+
+/* 2. Ensure the Settings Card fills the new container */
+#view-settings .card {
+    width: 100%;
+    border-top: 4px solid var(--primary-red); /* Add a red top border for flair */
+}
+
+/* 3. Optional: Make the "Global Configuration" text look sharper */
+#view-settings h2 {
+    text-align: center;
+    border-bottom: none;      /* Remove default line */
+    letter-spacing: 3px;
+    margin-bottom: 40px;
+    font-size: 1.2rem;
+    color: var(--text-main);
+}
+#volumeSlider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent; /* Hide default track */
+}
+
+/* The Track (The "Loader" part) */
+#volumeSlider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 8px;
+    background: #2a2a2a; /* Dark theme track */
+    border-radius: 4px;
+    border: 1px solid #333;
+}
+
+/* The Thumb (The Red Dot) */
+#volumeSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    background: var(--primary-red);
+    cursor: pointer;
+    margin-top: -6px; /* Centers thumb on track */
+    box-shadow: 0 0 8px rgba(255, 75, 43, 0.5);
+}
+#libraryGrid {
+    max-height: 70vh;
+    padding-right: 10px;
+}
+
+#libraryGrid::-webkit-scrollbar {
+    width: 6px;
+}
+
+#libraryGrid::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 10px;
+}
+
+.video-card-item {
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+/* Custom slider to match the red thumb in your image */
+#volumeSlider {
+    -webkit-appearance: none;
+    height: 6px;
+    background: #333;
+    border-radius: 5px;
+    outline: none;
+}
+
+#volumeSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--primary-red);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(204, 0, 0, 0.4);
+}

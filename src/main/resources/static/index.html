@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFK Live Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/all.min.css">
+    <link rel="stylesheet" href="css/theme.css">
+</head>
+<body>
+
+<nav class="app-sidebar">
+    <div class="brand-icon">🔴</div>
+    <div class="nav-menu">
+        <a href="#" id="nav-studio" class="nav-item active" onclick="switchView('studio')" title="Studio">🎙️</a>
+        <a href="#" id="nav-settings" class="nav-item" onclick="switchView('settings')" title="Settings">⚙️</a>
+    </div>
+    <div class="nav-bottom">
+        <a href="#" class="nav-item" title="Help">❓</a>
+    </div>
+</nav>
+
+<div class="app-wrapper">
+    <header class="app-header">
+        <div class="header-title">
+            <span style="color:var(--text-muted)">/</span> <span id="headerTitle">STUDIO</span>
+            <span class="live-dot hidden" id="headerLiveDot">●</span>
+        </div>
+        <div id="userHeader" class="header-profile">
+            <span style="font-size: 0.8rem; color: #555;">GUEST</span>
+        </div>
+    </header>
+
+    <div id="view-studio" class="view-section">
+        <div class="dashboard"
+             style="grid-template-columns: 320px 1fr 350px; max-width: 1600px; gap: 20px; display: grid;">
+
+            <div class="card">
+                <h2>1. Setup & Upload</h2>
+
+                <label>Video Loop (MP4)</label>
+                <div class="upload-zone" id="dropZone">
+                    <div id="uploadUI">
+                        <span style="font-size: 1.5rem; display: block;">📤</span>
+                        <span id="uploadText" style="font-size: 0.8rem;">Click to upload video</span>
+                    </div>
+                    <div id="conversionOverlay" class="hidden" style="text-align: center; width: 100%;">
+                        <div style="font-size: 0.7rem; margin-bottom: 5px;">OPTIMIZING VIDEO...</div>
+                        <div class="progress-container" style="height: 8px; background: #333; border-radius: 4px;">
+                            <div id="conversionBar"
+                                 style="width: 0%; height: 100%; background: var(--primary-red); border-radius: 4px; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                </div>
+                <input type="file" id="videoFile" class="hidden" accept=".mp4">
+
+                <label style="margin-top: 15px;">Background Music (MP3)</label>
+                <div class="upload-zone" id="musicDropZone" style="padding: 10px; border-style: dotted;">
+                    <span id="musicText" style="font-size: 0.8rem;">🎵 Click to add music</span>
+                </div>
+                <input type="file" id="musicFile" class="hidden" accept=".mp3">
+
+                <div id="audioControlPanel" class="hidden"
+                     style="padding: 10px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 5px;">
+                        <span>🎵 AUDIO PREVIEW</span>
+                        <span id="volValue">80%</span>
+                    </div>
+                    <audio id="audioPreview" controls
+                           style="width: 100%; height: 30px; margin-bottom: 10px; filter: invert(1);"></audio>
+                    <input type="range" id="volumeSlider" min="0" max="100" value="80" style="width: 100%;">
+                </div>
+
+                <label style="margin-top: 15px;">YouTube Stream Key</label>
+                <input type="password" id="streamKey" placeholder="Paste key...">
+
+                <div id="activeStreamControls" class="hidden" style="margin-top: 20px;">
+                    <button id="btnStop" class="btn btn-stop" onclick="stopStream()">STOP Streaming</button>
+                </div>
+
+                <button id="btnGoLive" class="btn btn-primary" onclick="submitJob()" style="margin-top: 20px;">GO LIVE
+                    NOW
+                </button>
+
+                <div class="hidden">
+                    <input type="radio" id="radioNow" name="sched" checked>
+                    <input type="radio" id="radioSchedule" name="sched">
+                    <div id="scheduleInputDiv"></div>
+                </div>
+            </div>
+
+            <div class="card" style="display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; border: none;">2. Video Library</h2>
+                    <button class="btn btn-primary" style="width: auto; padding: 5px 15px; font-size: 0.8rem;"
+                            onclick="loadLibrary()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+
+                <div id="libraryGrid"
+                     style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; overflow-y: auto; max-height: 70vh;">
+                    <div class="log-entry" style="grid-column: 1/-1; text-align: center; color: #555;">Loading your
+                        videos...
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="display: flex; flex-direction: column;">
+                <h2>3. Live Monitor</h2>
+                <div id="previewContainer" class="loader-container"
+                     style="height: 180px; margin-bottom: 15px; background: #000; display: flex; align-items: center; justify-content: center; position: relative;">
+                    <div class="standby-text" style="color: #333; font-size: 0.8rem;">SIGNAL STANDBY</div>
+                </div>
+
+                <div class="terminal" id="console" style="height: 300px; margin-top: 5px; font-size: 0.75rem;">
+                    <div class="log-entry">System ready for commands.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-settings" class="view-section hidden">
+        <div class="dashboard" style="max-width: 600px; margin: 0 auto;">
+            <div class="card">
+                <h2>Global Settings</h2>
+                <label>Default Stream Key</label>
+                <input type="password" id="savedKeyInput" placeholder="Save key to browser...">
+                <button class="btn btn-primary" onclick="saveGlobalSettings()" style="width: auto; margin-top: 10px;">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="app-footer">
+        <div class="status-item">SERVER: <span style="color:var(--success)">64.227.161.240</span></div>
+        <div class="status-item right">FFMPEG: <span style="color:var(--success)">READY</span></div>
+    </footer>
+</div>
+
+<div id="loginModal" class="modal-overlay hidden" style="display: none;">
+    <div class="modal-box">
+        <div class="modal-title">🔒 Login Required</div>
+        <p class="modal-desc">Please sign in to access your library and start streams.</p>
+        <a href="/oauth2/authorization/google" class="btn-google">
+            <img src="https://authjs.dev/img/providers/google.svg" width="20" height="20">
+            Sign in with Google
+        </a>
+        <button onclick="closeModal()"
+                style="margin-top:15px; background:none; border:none; color:#555; cursor:pointer;">Cancel
+        </button>
+    </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

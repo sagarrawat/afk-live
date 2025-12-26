@@ -1,0 +1,101 @@
+# Maven
+target/
+uploads/
+.continue/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+*.env
+*.mp4
+*.mp3
+
+# IDE
+.idea/
+*.im
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+.vscode/
+bin/
+.factorypath
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Local development
+*.properties
+!src/main/resources/application.properties
+*.yml
+!src/main/resources/application*.yml
+.env
+.secrets
+
+# H2 Database
+*.h2.db
+*.mv.db
+*.trace.db
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Build and test output
+**/test-output/
+**/surefire-reports/
+**/failsafe-reports/
+**/test-results/
+
+# Executables
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/

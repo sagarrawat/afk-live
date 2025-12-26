@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: streamer
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: [ profile, email ]
+  datasource:
+    url: jdbc:h2:file:./data/afklive;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+  session:
+    store-type: jdbc
+    jdbc:
+      initialize-schema: always
+    timeout: PT720H
+
+rate-limiter:
+  capacity: 10
+  refill-tokens: 1
+
+server:
+  forward-headers-strategy: native
