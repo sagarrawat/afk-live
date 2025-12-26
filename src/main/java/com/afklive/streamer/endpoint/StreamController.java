@@ -46,7 +46,7 @@ public class StreamController {
 
     @PostMapping("/start")
     public ResponseEntity<ApiResponse<?>> start(@RequestParam String streamKey, @RequestParam String fileName, @RequestParam(required = false) String musicName, @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
-                                                             Principal principal) {
+                                                Principal principal) {
 
         if (streamManager.tryStartStream(principal.getName())) {
             try {

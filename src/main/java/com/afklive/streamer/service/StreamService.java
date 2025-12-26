@@ -1,5 +1,7 @@
 package com.afklive.streamer.service;
 
+import com.afklive.streamer.dto.ApiResponse;
+import com.afklive.streamer.dto.StreamResponse;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.repository.StreamJobRepository;
 import jakarta.annotation.PreDestroy;
@@ -16,8 +18,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import com.afklive.streamer.dto.ApiResponse;
-import com.afklive.streamer.dto.StreamResponse;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -108,10 +108,10 @@ public class StreamService {
         });
 
         return ApiResponse.success("Stream started", new StreamResponse(
-            String.valueOf(process.pid()),
-            streamKey,
-            "RUNNING",
-            "Stream is now live"
+                String.valueOf(process.pid()),
+                streamKey,
+                "RUNNING",
+                "Stream is now live"
         ));
     }
 
