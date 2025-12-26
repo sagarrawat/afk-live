@@ -36,7 +36,6 @@ logs/
 # Local development
 *.properties
 !src/main/resources/application.properties
-*.yml
 !src/main/resources/application*.yml
 .env
 .secrets
