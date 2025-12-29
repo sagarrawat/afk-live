@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>404 // SIGNAL LOST</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Courier+New:wght@400;700&display=swap"
+          rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/all.min.css">
+    <link rel="stylesheet" href="css/theme.css">
+    <style>
+        /* Specific 404 Glitch Styles */
+        .error-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .glitch-text {
+            font-size: 8rem;
+            font-weight: 900;
+            color: white;
+            position: relative;
+            font-family: 'Courier New', monospace;
+            text-shadow: 2px 2px var(--primary-red);
+            letter-spacing: -5px;
+        }
+
+        .glitch-text::before,
+        .glitch-text::after {
+            content: "404";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--void-bg);
+        }
+
+        .glitch-text::before {
+            left: 2px;
+            text-shadow: -1px 0 red;
+            clip: rect(24px, 550px, 90px, 0);
+            animation: glitch-anim 3s infinite linear alternate-reverse;
+        }
+
+        .glitch-text::after {
+            left: -2px;
+            text-shadow: -1px 0 #00ffea;
+            clip: rect(85px, 550px, 140px, 0);
+            animation: glitch-anim 2.5s infinite linear alternate-reverse;
+        }
+
+        @keyframes glitch-anim {
+            0% { clip: rect(14px, 9999px, 122px, 0); }
+            5% { clip: rect(81px, 9999px, 86px, 0); }
+            10% { clip: rect(25px, 9999px, 145px, 0); }
+            15% { clip: rect(4px, 9999px, 126px, 0); }
+            20% { clip: rect(108px, 9999px, 12px, 0); }
+            25% { clip: rect(32px, 9999px, 82px, 0); }
+            30% { clip: rect(138px, 9999px, 60px, 0); }
+            35% { clip: rect(76px, 9999px, 25px, 0); }
+            40% { clip: rect(11px, 9999px, 34px, 0); }
+            45% { clip: rect(69px, 9999px, 92px, 0); }
+            50% { clip: rect(126px, 9999px, 19px, 0); }
+            100% { clip: rect(31px, 9999px, 86px, 0); }
+        }
+
+        .error-sub {
+            font-family: 'Courier New', monospace;
+            color: var(--primary-red);
+            font-size: 1.2rem;
+            margin-top: -20px;
+            margin-bottom: 30px;
+            background: rgba(0,0,0,0.8);
+            padding: 5px 15px;
+            border: 1px solid #333;
+        }
+
+        .terminal-box {
+            background: rgba(0,0,0,0.8);
+            border: 1px solid #333;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            color: #4af626;
+            font-size: 0.8rem;
+            text-align: left;
+            width: 300px;
+            margin-bottom: 30px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="landing-body">
+<div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 600px; background: radial-gradient(circle, rgba(204,0,0,0.15) 0%, rgba(0,0,0,0) 70%); pointer-events: none; z-index: 0;"></div>
+
+<div class="error-container">
+    <h1 class="glitch-text">404</h1>
+
+    <div class="error-sub">>> SYSTEM FAILURE: SIGNAL LOST</div>
+
+    <div class="terminal-box">
+        <div>root@afk-live:~# ping target</div>
+        <div style="color:#aaa">Request timed out.</div>
+        <div style="color:#aaa">Request timed out.</div>
+        <br>
+        <div>root@afk-live:~# traceroute</div>
+        <div style="color:var(--primary-red)">ERROR: Route not found.</div>
+        <br>
+        <div class="cursor-blink">> _</div>
+    </div>
+
+    <a href="home.html" class="btn btn-primary" style="width: auto; padding: 12px 30px; font-family: monospace;">
+        <i class="fas fa-undo"></i> &nbsp; REBOOT SYSTEM (HOME)
+    </a>
+</div>
+
+<script>
+    // Blinking Cursor Animation
+    setInterval(() => {
+        const cursor = document.querySelector('.cursor-blink');
+        cursor.style.opacity = cursor.style.opacity === '0' ? '1' : '0';
+    }, 500);
+</script>
+</body>
+</html>

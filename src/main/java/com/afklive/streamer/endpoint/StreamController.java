@@ -9,8 +9,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -78,6 +82,18 @@ public class StreamController {
     @GetMapping("/library")
     public List<String> getLibrary(Principal principal) throws IOException {
         return userFileService.listConvertedVideos(principal.getName());
+    }
+
+    @DeleteMapping("/api/delete")
+    public ResponseEntity<?> deleteFile(@RequestParam String fileName) {
+        try {
+            // Assuming files are stored in a "uploads" folder
+            Path filePath = Paths.get("uploads").resolve(fileName);
+            Files.deleteIfExists(filePath);
+            return ResponseEntity.ok(Map.of("success", true, "message", "File deleted"));
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body(Map.of("success", false, "message", "Could not delete file"));
+        }
     }
 
     @GetMapping("/logs")

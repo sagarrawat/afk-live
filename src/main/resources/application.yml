@@ -27,7 +27,10 @@ spring:
     jdbc:
       initialize-schema: always
     timeout: PT720H
-
+  sql:
+    init:
+      mode: always
+      
 rate-limiter:
   capacity: 10
   refill-tokens: 1
