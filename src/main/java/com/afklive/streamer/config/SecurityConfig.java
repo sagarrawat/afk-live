@@ -19,7 +19,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         // 1. PUBLIC: Landing page, assets, and user-check API
-                        .requestMatchers("/", "/home.html", "/css/**", "/js/**", "/api/user-info").permitAll()
+                        .requestMatchers("/", "/home.html", "/css/**", "/js/**", "/api/user-info", "/error").permitAll()
 
                         // 2. PROTECTED: The Studio URL and internal index file
                         .requestMatchers("/studio", "/index.html", "/api/**").authenticated()
