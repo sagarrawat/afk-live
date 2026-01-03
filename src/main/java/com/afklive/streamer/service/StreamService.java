@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -67,6 +68,8 @@ public class StreamService {
         
         List<String> command =
                 FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume);
+        
+        log.info("command : [{}]", String.join(" ", command));
 
         // 4. Start the Process
         ProcessBuilder builder = new ProcessBuilder(command);
