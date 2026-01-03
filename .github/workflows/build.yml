@@ -35,7 +35,8 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           source: "target/app.jar"
           target: "/opt/afklive/"
-      
+          strip_components: 1
+          
       # 7. Activate new JAR atomically + restart
       - name: Activate new version
         uses: appleboy/ssh-action@v1.0.3
@@ -46,8 +47,6 @@ jobs:
           script: |
             set -e
             cd /opt/afklive
-            mv app.jar app.jar.bak || true
-            mv app.jar.new app.jar
             systemctl daemon-reload
             systemctl restart afklive
           
