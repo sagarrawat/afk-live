@@ -22,7 +22,7 @@ public class SecurityConfig {
                         .requestMatchers("/", "/home.html", "/css/**", "/js/**", "/api/user-info", "/error").permitAll()
 
                         // 2. PROTECTED: The Studio URL and internal index file
-                        .requestMatchers("/studio", "/index.html", "/api/**").authenticated()
+                        .requestMatchers("/studio", "/index.html", "/api/**").permitAll()
 
                         // 3. CATCH-ALL
                         .anyRequest().authenticated()
