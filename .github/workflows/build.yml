@@ -26,20 +26,7 @@ jobs:
       - name: Build with Maven
         run: mvn clean package
 
-      # 4. Normalize JAR name
-      - name: Rename JAR
-        run: |
-          JAR_FILE=$(ls target/*.jar | head -n 1)
-          mv "$JAR_FILE" target/app.jar
-
-      # 5. Upload artifact (optional but useful)
-      - name: Upload JAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-jar
-          path: target/app.jar
-
-      # 6. Copy JAR to server
+        # 6. Copy JAR to server (as temp file)
       - name: Copy JAR to DigitalOcean VM
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -47,23 +34,23 @@ jobs:
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           source: "target/app.jar"
-          target: ${{ secrets.DO_APP_PATH }}
-
-      # 7. Create / update environment file
-      - name: Create environment file on server
+          target: "/opt/afklive/app.jar.new"
+      
+      # 7. Activate new JAR atomically + restart
+      - name: Activate new version
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
-            cat <<EOF > /opt/afklive/.env
-            GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-            GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-            EOF
-
-            chmod 600 /opt/afklive/.env
-
+            set -e
+            cd /opt/afklive
+            mv app.jar app.jar.bak || true
+            mv app.jar.new app.jar
+            systemctl daemon-reload
+            systemctl restart afklive
+          
       # 8. Restart application
       - name: Restart application
         uses: appleboy/ssh-action@v1.0.3
