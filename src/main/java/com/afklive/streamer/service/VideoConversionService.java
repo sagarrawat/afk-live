@@ -39,7 +39,7 @@ public class VideoConversionService {
             int exitCode = process.waitFor();
             if (exitCode == 0) {
                 log.info("Conversion completed successfully for {}: {}", username, fileName);
-                conversionProgress.put(progressKey, 100);
+                conversionProgress.remove(progressKey);
                 Files.delete(source);
             } else {
                 log.error("Conversion failed for {}: {} (exit code {})", username, fileName, exitCode);

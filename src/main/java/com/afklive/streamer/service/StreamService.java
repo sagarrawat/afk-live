@@ -44,6 +44,8 @@ public class StreamService {
             String musicName,
             String musicVolume
     ) throws IOException {
+        
+        log.info("username [{}]", username);
 
         // 1. SAFETY CHECK: Check DB to see if this user is already live
         if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
@@ -53,10 +55,16 @@ public class StreamService {
         // 2. Resolve Paths
         Path userDir = userFileService.getUserUploadDir(username);
         Path videoPath = userDir.resolve(videoName).toAbsolutePath();
+        
+        log.info("userDir [{}]", userDir);
+        log.info("videoPath [{}]", videoPath);
 
         // 3. Build the FFmpeg Command
         Path musicPath =
                 (musicName != null && !musicName.isEmpty()) ? userDir.resolve(musicName) : null;
+
+        log.info("musicPath [{}]", musicPath);
+        
         List<String> command =
                 FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume);
 
@@ -79,6 +87,7 @@ public class StreamService {
                 }
             } catch (IOException e) {
                 addLog("Log Capture Error: " + e.getMessage());
+                log.error("Error", e);
             }
         });
 
@@ -129,7 +138,7 @@ public class StreamService {
             streamJobRepo.save(job);
             return ApiResponse.success("Stream stopped successfully", null);
         }
-        return ApiResponse.error("No active stream found");
+        return ApiResponse.success("No active stream found", null);
     }
 
     public StreamJob getCurrentStatus(String username) {

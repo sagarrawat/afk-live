@@ -33,7 +33,7 @@ public class UserFileService {
     public Path getUserUploadDir(String username) throws IOException {
         Path userDir = baseUploadDir.resolve(username);
         if (!Files.exists(userDir)) {
-            log.debug("Creating user directory: {}", userDir);
+            log.info("Creating user directory: {}", userDir);
             Files.createDirectories(userDir);
         }
         return userDir;
