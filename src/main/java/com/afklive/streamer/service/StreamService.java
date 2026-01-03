@@ -62,7 +62,7 @@ public class StreamService {
 
         // 3. Build the FFmpeg Command
         Path musicPath =
-                (musicName != null && !musicName.isEmpty()) ? userDir.resolve(musicName) : null;
+                (musicName != null && !musicName.isEmpty()) ? userDir.resolve(musicName).toAbsolutePath() : null;
 
         log.info("musicPath [{}]", musicPath);
         
