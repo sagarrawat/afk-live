@@ -47,15 +47,5 @@ jobs:
           script: |
             set -e
             cd /opt/afklive
-            systemctl daemon-reload
-            systemctl restart afklive
-          
-      # 8. Restart application
-      - name: Restart application
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_KEY }}
-          script: |
+            sudo systemctl daemon-reload
             sudo systemctl restart afklive
