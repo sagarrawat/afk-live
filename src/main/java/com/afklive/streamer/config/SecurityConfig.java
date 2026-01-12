@@ -4,17 +4,29 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.JdbcOAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+
+import java.util.function.Consumer;
 
 @Configuration
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           ClientRegistrationRepository clientRegistrationRepository) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
@@ -28,6 +40,9 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth -> oauth
+                        .authorizationEndpoint(authorization -> authorization
+                                .authorizationRequestResolver(authorizationRequestResolver(clientRegistrationRepository))
+                        )
                         // CHANGE: Redirect to /studio after login, not index.html
                         .defaultSuccessUrl("/studio", true)
                 )
@@ -44,11 +59,74 @@ public class SecurityConfig {
         return http.build();
     }
 
+    private OAuth2AuthorizationRequestResolver authorizationRequestResolver(
+            ClientRegistrationRepository clientRegistrationRepository) {
+
+        DefaultOAuth2AuthorizationRequestResolver authorizationRequestResolver =
+                new DefaultOAuth2AuthorizationRequestResolver(
+                        clientRegistrationRepository, "/oauth2/authorization");
+
+        authorizationRequestResolver.setAuthorizationRequestCustomizer(
+                authorizationRequestCustomizer());
+
+        return authorizationRequestResolver;
+    }
+
+    private Consumer<OAuth2AuthorizationRequest.Builder> authorizationRequestCustomizer() {
+        return customizer -> customizer
+                .additionalParameters(params -> {
+                    params.put("access_type", "offline");
+                    params.put("prompt", "consent");
+                });
+    }
+
     @Bean
     public OAuth2AuthorizedClientService authorizedClientService(
             JdbcTemplate jdbcTemplate,
             ClientRegistrationRepository clientRegistrationRepository) {
-
         return new JdbcOAuth2AuthorizedClientService(jdbcTemplate, clientRegistrationRepository);
+    }
+
+    @Bean
+    public OAuth2AuthorizedClientRepository authorizedClientRepository(OAuth2AuthorizedClientService authorizedClientService) {
+        // We need to use the service-based repository to ensure persistence via JDBC
+        return new org.springframework.security.oauth2.client.web.AuthenticatedPrincipalOAuth2AuthorizedClientRepository(authorizedClientService);
+    }
+
+    @Bean
+    public OAuth2AuthorizedClientManager authorizedClientManager(
+            ClientRegistrationRepository clientRegistrationRepository,
+            OAuth2AuthorizedClientRepository authorizedClientRepository) {
+
+        OAuth2AuthorizedClientProvider authorizedClientProvider =
+                OAuth2AuthorizedClientProviderBuilder.builder()
+                        .authorizationCode()
+                        .refreshToken()
+                        .build();
+
+        DefaultOAuth2AuthorizedClientManager authorizedClientManager =
+                new DefaultOAuth2AuthorizedClientManager(
+                        clientRegistrationRepository, authorizedClientRepository);
+        authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
+
+        return authorizedClientManager;
+    }
+
+    @Bean
+    public AuthorizedClientServiceOAuth2AuthorizedClientManager serviceAuthorizedClientManager(
+            ClientRegistrationRepository clientRegistrationRepository,
+            OAuth2AuthorizedClientService authorizedClientService) {
+
+        OAuth2AuthorizedClientProvider authorizedClientProvider =
+                OAuth2AuthorizedClientProviderBuilder.builder()
+                        .refreshToken()
+                        .build();
+
+        AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager =
+                new AuthorizedClientServiceOAuth2AuthorizedClientManager(
+                        clientRegistrationRepository, authorizedClientService);
+        authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
+
+        return authorizedClientManager;
     }
 }

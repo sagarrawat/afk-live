@@ -39,6 +39,10 @@
             <div class="card">
                 <h2>1. Setup & Upload</h2>
 
+                <div style="margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="showScheduleModal()" style="background-color: #555;">📅 Schedule Upload</button>
+                </div>
+
                 <label>Video Loop (MP4)</label>
                 <div class="upload-zone" id="dropZone">
                     <div id="uploadUI">
@@ -125,6 +129,15 @@
         <div class="dashboard" style="max-width: 600px; margin: 0 auto;">
             <div class="card">
                 <h2>Global Settings</h2>
+
+                <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #333;">
+                    <h3>YouTube Connection</h3>
+                    <div id="ytConnectionStatus" style="margin-bottom: 10px;">Checking status...</div>
+                    <a href="/oauth2/authorization/google" class="btn btn-primary" style="text-decoration: none; display: inline-block;">
+                        <i class="fab fa-youtube"></i> Connect / Reconnect YouTube
+                    </a>
+                </div>
+
                 <label>Default Stream Key</label>
                 <input type="password" id="savedKeyInput" placeholder="Save key to browser...">
                 <button class="btn btn-primary" onclick="saveGlobalSettings()" style="width: auto; margin-top: 10px;">
@@ -151,6 +164,37 @@
         <button onclick="closeModal()"
                 style="margin-top:15px; background:none; border:none; color:#555; cursor:pointer;">Cancel
         </button>
+    </div>
+</div>
+
+<div id="scheduleModal" class="modal-overlay hidden" style="display: none;">
+    <div class="modal-box" style="width: 500px; max-width: 90%; text-align: left;">
+        <div class="modal-title">📅 Schedule Video Upload</div>
+
+        <label>Video File</label>
+        <input type="file" id="scheduleFile" accept="video/*">
+
+        <label style="margin-top: 10px;">Title</label>
+        <input type="text" id="scheduleTitle" placeholder="Video Title">
+
+        <label style="margin-top: 10px;">Description</label>
+        <textarea id="scheduleDescription" rows="3" placeholder="Description..." style="width: 100%; background: #222; border: 1px solid #444; color: white;"></textarea>
+
+        <label style="margin-top: 10px;">Tags (comma separated)</label>
+        <input type="text" id="scheduleTags" placeholder="tag1, tag2">
+
+        <label style="margin-top: 10px;">Privacy</label>
+        <select id="schedulePrivacy" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: white;">
+            <option value="private">Private</option>
+            <option value="unlisted">Unlisted</option>
+            <option value="public">Public</option>
+        </select>
+
+        <label style="margin-top: 10px;">Scheduled Time</label>
+        <input type="datetime-local" id="scheduleTime" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: white;">
+
+        <button id="btnSchedule" class="btn btn-primary" onclick="submitSchedule()" style="margin-top: 20px;">Schedule Upload</button>
+        <button onclick="closeScheduleModal()" style="margin-top:10px; background:none; border:none; color:#555; cursor:pointer; width: 100%;">Cancel</button>
     </div>
 </div>
 
