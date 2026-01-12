@@ -110,6 +110,23 @@
                         <!-- Loaded via JS -->
                     </div>
                 </div>
+
+                <div class="card library-card" style="margin-top: 20px;">
+                    <h3>Backing Track</h3>
+                    <div class="upload-zone small" id="musicDropZone">
+                        <span id="musicText">🎵 Add Music</span>
+                    </div>
+                    <input type="file" id="musicFile" class="hidden" accept=".mp3">
+
+                    <div id="audioControlPanel" class="hidden" style="margin-top: 15px;">
+                        <div class="audio-controls">
+                            <span>Preview</span>
+                            <span id="volValue">80%</span>
+                        </div>
+                        <audio id="audioPreview" controls style="width: 100%; height: 30px; margin-bottom: 10px;"></audio>
+                        <input type="range" id="volumeSlider" min="0" max="100" value="80" style="width: 100%;">
+                    </div>
+                </div>
             </div>
         </div>
     </div>
