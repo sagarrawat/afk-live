@@ -1,51 +1,79 @@
-const API_URL = "/api"; 
+const API_URL = "/api";
 let uploadedFileName = "";
-let currentUser = null; 
-let logInterval = null; // Global reference for the live console timer
+let currentUser = null;
+let logInterval = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
-    await fetchUserInfo(); // This kicks off the login check and subsequent status sync
+    await fetchUserInfo(); // Check login
     
+    // Header User Profile
     const userHeader = document.getElementById("userHeader");
     if (userHeader) {
-        userHeader.style.cursor = "pointer"; // Make it look clickable
         userHeader.addEventListener("click", () => {
             if (!currentUser) showLoginModal();
         });
     }
-    
+
+    // Initialize Views
     loadGlobalSettings();
-    loadLibrary();
-    // --- ATTACH EVENT LISTENERS ---
-    document.getElementById("dropZone").addEventListener("click", () => document.getElementById("videoFile").click());
-    document.getElementById("videoFile").addEventListener("change", handleFileUpload);
-    
-    document.getElementById("musicDropZone").addEventListener("click", () => document.getElementById("musicFile").click());
-    document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
-
-    const radioNow = document.getElementById("radioNow");
-    const radioSchedule = document.getElementById("radioSchedule");
-    if(radioNow) radioNow.addEventListener("change", toggleScheduleUI);
-    if(radioSchedule) radioSchedule.addEventListener("change", toggleScheduleUI);
-
-    document.getElementById("volumeSlider").addEventListener("input", (e) => {
-        document.getElementById("volValue").innerText = e.target.value + "%";
-        document.getElementById("audioPreview").volume = e.target.value / 100;
-    });
-
-    // --- INIT SETTINGS ---
-    loadGlobalSettings();
+    loadLibrary(); // For streaming view
+    loadScheduledQueue(); // For publish view
     checkYoutubeStatus();
+
+    // Event Listeners: Composer
+    const dropZone = document.getElementById("dropZone");
+    if (dropZone) {
+        dropZone.addEventListener("click", () => document.getElementById("scheduleFile").click());
+        // Simple drag and drop could be added here
+    }
+    const scheduleFile = document.getElementById("scheduleFile");
+    if (scheduleFile) {
+        scheduleFile.addEventListener("change", handleScheduleFileSelect);
+    }
+
+    // Event Listeners: Stream Library
+    const videoFile = document.getElementById("videoFile");
+    if(videoFile) {
+        videoFile.addEventListener("change", handleFileUpload);
+    }
 });
+
+/* --- VIEW SWITCHING --- */
+function switchView(viewName) {
+    // Update Sidebar
+    document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`[data-target="view-${viewName}"]`)?.classList.add('active');
+
+    // Update Main Content
+    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+    document.getElementById(`view-${viewName}`).classList.remove('hidden');
+
+    // Update Header Title
+    const titles = {
+        'publish': 'Publishing',
+        'stream': 'Live Studio',
+        'settings': 'Settings'
+    };
+    document.getElementById('pageTitle').innerText = titles[viewName] || 'Dashboard';
+}
+
+/* --- PUBLISH / SCHEDULE LOGIC --- */
 
 function showScheduleModal() {
     document.getElementById('scheduleModal').classList.remove('hidden');
-    document.getElementById('scheduleModal').style.display = 'flex';
 }
 
 function closeScheduleModal() {
     document.getElementById('scheduleModal').classList.add('hidden');
-    document.getElementById('scheduleModal').style.display = 'none';
+}
+
+function handleScheduleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const display = document.getElementById("selectedFileDisplay");
+        display.innerText = "📄 " + file.name;
+        display.classList.remove("hidden");
+    }
 }
 
 async function submitSchedule() {
@@ -65,7 +93,7 @@ async function submitSchedule() {
     }
 
     btn.disabled = true;
-    btn.innerText = "Scheduling...";
+    btn.innerText = "Uploading & Scheduling...";
 
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
@@ -83,11 +111,14 @@ async function submitSchedule() {
         const data = await res.json();
 
         if (data.success) {
-            alert("Video Scheduled Successfully!");
             closeScheduleModal();
+            loadScheduledQueue(); // Refresh list
+            alert("Success! Video scheduled.");
+
             // Reset form
             fileInput.value = '';
             document.getElementById('scheduleTitle').value = '';
+            document.getElementById("selectedFileDisplay").classList.add("hidden");
         } else {
             alert("Error: " + data.message);
         }
@@ -96,7 +127,225 @@ async function submitSchedule() {
         console.error(e);
     } finally {
         btn.disabled = false;
-        btn.innerText = "Schedule Upload";
+        btn.innerText = "Schedule Post";
+    }
+}
+
+async function loadScheduledQueue() {
+    try {
+        const res = await fetch(`${API_URL}/videos`);
+        const videos = await res.json();
+        const container = document.getElementById('queueList');
+
+        if (videos.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon-box">📅</div>
+                    <h3>Your queue is empty</h3>
+                    <p>Schedule your first video to get started.</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = '';
+        videos.forEach(v => {
+            const item = document.createElement('div');
+            item.className = 'queue-item';
+
+            // Status Badge Logic
+            let statusColor = '#888';
+            if(v.status === 'UPLOADED') statusColor = 'var(--success)';
+            if(v.status === 'FAILED') statusColor = 'var(--danger)';
+            if(v.status === 'PROCESSING') statusColor = 'var(--primary)';
+
+            item.innerHTML = `
+                <div class="queue-thumb">
+                    <i class="fa-solid fa-film fa-lg"></i>
+                </div>
+                <div class="queue-details">
+                    <h4>${v.title}</h4>
+                    <div class="queue-meta">
+                        <span><i class="fa-regular fa-clock"></i> ${new Date(v.scheduledTime).toLocaleString()}</span>
+                        <span style="color: ${statusColor}; font-weight: 600;">${v.status}</span>
+                        <span><i class="fa-solid fa-lock"></i> ${v.privacyStatus}</span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+
+    } catch (e) {
+        console.error("Failed to load queue", e);
+    }
+}
+
+
+/* --- STREAMING LOGIC --- */
+
+// (Adapted from previous version)
+async function submitJob(fileNameFromLibrary) {
+    const targetFile = fileNameFromLibrary || uploadedFileName;
+    const key = document.getElementById("streamKey").value;
+    const btn = document.getElementById("btnGoLive");
+    
+    if (!targetFile) return alert("⚠️ Select a video from the library.");
+    if (!key) return alert("⚠️ Please enter a Stream Key.");
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Starting...`;
+
+    const formData = new FormData();
+    formData.append("streamKey", key);
+    formData.append("fileName", targetFile);
+
+    try {
+        const res = await fetch(`${API_URL}/start`, { method: "POST", body: formData });
+        const data = await res.json();
+        
+        if (data.success) {
+            setLiveState(true);
+            log("Stream Started: " + targetFile);
+        } else {
+            alert(data.message);
+        }
+    } catch (err) {
+        alert("Failed to start stream");
+        log("Error starting stream");
+    } finally {
+        if(!document.getElementById("liveIndicator").classList.contains("hidden")) {
+             // If success, keep disabled/change text
+        } else {
+             btn.disabled = false;
+             btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> Go Live`;
+        }
+    }
+}
+
+async function stopStream() {
+    try {
+        await fetch(`${API_URL}/stop`, { method: "POST" });
+        setLiveState(false);
+        log("Stream Stopped");
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function setLiveState(isLive) {
+    const indicator = document.getElementById("liveIndicator");
+    const placeholder = document.querySelector(".preview-placeholder");
+    const btnGo = document.getElementById("btnGoLive");
+    const btnStop = document.getElementById("btnStop");
+
+    if (isLive) {
+        indicator.classList.remove("hidden");
+        placeholder.classList.add("hidden");
+        btnGo.classList.add("hidden");
+        btnStop.classList.remove("hidden");
+    } else {
+        indicator.classList.add("hidden");
+        placeholder.classList.remove("hidden");
+        btnGo.classList.remove("hidden");
+        btnGo.disabled = false;
+        btnGo.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> Go Live`;
+        btnStop.classList.add("hidden");
+    }
+}
+
+/* --- LIBRARY & UPLOAD LOGIC --- */
+
+async function handleFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    log(`Uploading: ${file.name}...`);
+    
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+        if (res.ok) {
+            const data = await res.json();
+            // In a real app we might transcode. Here we just add to library.
+            // But we need the filename returned by server for the streaming backend.
+            uploadedFileName = data.data;
+            log("Upload Complete. Processing...");
+
+            // Mock processing delay then refresh library
+            setTimeout(() => {
+                loadLibrary();
+                log("Ready to stream.");
+            }, 1000);
+        }
+    } catch (err) {
+        log("Upload Failed");
+    }
+}
+
+async function loadLibrary() {
+    try {
+        const res = await fetch('/api/library');
+        const files = await res.json();
+        const grid = document.getElementById('libraryGrid');
+        if(!grid) return;
+
+        grid.innerHTML = '';
+        files.forEach(file => {
+            const item = document.createElement('div');
+            item.className = 'lib-item';
+            item.innerText = file.replace('ready_', '').substring(0, 20) + '...';
+            item.onclick = () => {
+                document.querySelectorAll('.lib-item').forEach(el => el.classList.remove('selected'));
+                item.classList.add('selected');
+                uploadedFileName = file; // Set as target
+                log("Selected: " + file);
+            };
+            grid.appendChild(item);
+        });
+    } catch (err) {
+        console.error("Library load failed", err);
+    }
+}
+
+/* --- SHARED / UTIL --- */
+
+function log(msg) {
+    const consoleDiv = document.getElementById("console");
+    if(consoleDiv) {
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        entry.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        consoleDiv.appendChild(entry);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+}
+
+async function fetchUserInfo() {
+    try {
+        const res = await fetch('/api/user-info');
+        const data = await res.json();
+        if (data.email) {
+            currentUser = data;
+            document.getElementById("userHeader").innerHTML = `
+                <img src="${data.picture}" style="width:32px; height:32px; border-radius:50%; vertical-align:middle; margin-right:8px;">
+                <span>${data.name}</span>
+            `;
+            checkInitialStatus();
+        } else {
+            showLoginModal();
+        }
+    } catch (e) { console.log("Guest"); }
+}
+
+function showLoginModal() {
+    document.getElementById("loginModal").classList.remove("hidden");
+}
+
+function loadGlobalSettings() {
+    const savedKey = localStorage.getItem('afk_stream_key');
+    if(savedKey && document.getElementById('streamKey')) {
+        document.getElementById('streamKey').value = savedKey;
     }
 }
 
@@ -106,428 +355,20 @@ async function checkYoutubeStatus() {
         const data = await res.json();
         const el = document.getElementById('ytConnectionStatus');
         if (el) {
-            if (data.connected) {
-                el.innerHTML = '<span style="color: var(--success)">✅ Connected to YouTube</span>';
-            } else {
-                el.innerHTML = '<span style="color: var(--primary-red)">❌ Not Connected</span>';
-            }
+            el.innerHTML = data.connected ?
+                '<span style="color:var(--success)">Connected</span>' :
+                '<span style="color:var(--danger)">Disconnected</span>';
         }
-    } catch (e) {
-        console.error("Failed to check YT status", e);
-    }
+    } catch(e) {}
 }
 
-// --- STATE PERSISTENCE & LOG POLLING ---
-
-/**
- * Checks if a stream is already running for this user on the server.
- * Restores the UI state if the user refreshed the page or logged back in.
- */
 async function checkInitialStatus() {
     try {
         const res = await fetch(`${API_URL}/status`);
-        const data = await res.json(); 
-        
-        // If data exists and isLive is true, the backend process is active
+        const data = await res.json();
         if (data.success && data.data?.live) {
-            log("🔄 Active session detected. Synchronizing UI...");
-            uploadedFileName = data.fileName; 
-            document.getElementById("uploadText").innerText = "✅ " + data.fileName;
-            document.getElementById("dropZone").classList.add("uploaded");
-            document.getElementById("streamKey").value = data.streamKey; 
-            
-            if (data.musicName) {
-                window.uploadedMusicName = data.musicName;
-                document.getElementById("musicText").innerText = "✅ " + data.musicName;
-                document.getElementById("audioControlPanel").classList.remove("hidden");
-                
-                if (data.musicVolume) {
-                    const volPercent = Math.round(data.musicVolume * 100);
-                    document.getElementById("volumeSlider").value = volPercent;
-                    document.getElementById("volValue").innerText = volPercent + "%";
-                }
-            }
-            
             setLiveState(true);
-//            startLogPolling(); // Connect to the live console logs
+            log("Resumed active session.");
         }
-    } catch (err) {
-        console.log("System Status: Idle / Ready for new stream.");
-    }
-}
-
-/**
- * Periodically fetches the latest FFmpeg output from the server.
- */
-function startLogPolling() {
-    if (logInterval) clearInterval(logInterval);
-    
-    logInterval = setInterval(async () => {
-        try {
-            const res = await fetch(`${API_URL}/logs`);
-            if (!res.ok) return;
-            const logs = await res.json(); // Expected format: Array of strings
-            
-            const consoleDiv = document.getElementById("console");
-            consoleDiv.innerHTML = ""; // Clear for fresh batch of latest lines
-            
-            logs.forEach(line => {
-                const entry = document.createElement("div");
-                entry.className = "log-entry";
-                // Color coding specific FFmpeg keywords for visibility
-                let formattedLine = line.replace(/(speed=|bitrate=|fps=)/g, '<span style="color:var(--primary-red)">$1</span>');
-                entry.innerHTML = `<span class="log-time">[FFMPEG]</span> ${formattedLine}`;
-                consoleDiv.appendChild(entry);
-            });
-            
-            consoleDiv.scrollTop = consoleDiv.scrollHeight; // Auto-scroll to bottom
-        } catch (err) {
-            console.error("Log fetch failed", err);
-        }
-    }, 2000); // Poll every 2 seconds
-}
-
-function stopLogPolling() {
-    if (logInterval) {
-        clearInterval(logInterval);
-        logInterval = null;
-    }
-}
-
-// --- CORE STREAMING LOGIC ---
-
-async function submitJob(fileNameFromLibrary) {
-    const targetFile = fileNameFromLibrary || uploadedFileName;
-    const key = document.getElementById("streamKey").value;
-    const btn = document.getElementById("btnGoLive");
-    
-    if (!targetFile) return log("⚠️ Select a video from the library.");    
-    if (!key) return log("⚠️ Please enter a Stream Key.");
-
-    log(`🚀 Initiating stream for: ${targetFile}`);
-    
-    btn.disabled = true;
-    btn.innerText = "Starting Engine...";
-    showPreviewLoader("Initializing Stream...");
-
-    const formData = new FormData();
-    formData.append("streamKey", key);
-    formData.append("fileName", targetFile);
-
-    if (window.uploadedMusicName) {
-        formData.append("musicName", window.uploadedMusicName);
-        const volPercent = document.getElementById("volumeSlider").value;
-        formData.append("musicVolume", (volPercent / 100).toFixed(2));
-    }
-
-    try {
-        const res = await fetch(`${API_URL}/start`, { method: "POST", body: formData });
-        const data = await res.json();
-        
-        if (data.success) {
-            log(`✅ ${data.message}`);
-            setLiveState(true, data.data);
-//            startLogPolling();
-        } else {
-            throw new Error(data.message || 'Request failed');
-        }
-    } catch (err) {
-        log(`❌ Error: ${err.message}`);
-        btn.disabled = false;
-        btn.innerText = "GO LIVE NOW";
-        showPreviewPlaceholder("Connection Failed");
-    }
-}
-
-async function stopStream() {
-    log("🛑 Sending Stop Signal...");
-    try {
-        const res = await fetch(`${API_URL}/stop`, { method: "POST" });
-        const data = await res.json();
-        if (data.success) {
-            log(`✅ ${data.message}`);
-            setLiveState(false);
-            stopLogPolling();
-        }
-    } catch (err) {
-        log("❌ Error stopping stream.");
-    }
-}
-
-// --- FILE UPLOADS ---
-
-async function handleFileUpload(e) {
-    if (!currentUser) { 
-        e.preventDefault(); 
-        showLoginModal(); 
-        return; 
-    }
-    
-    const file = e.target.files[0];
-    if (!file) return;
-
-    log(`📤 Uploading Video: ${file.name}...`);
-    document.getElementById("uploadText").innerText = "Uploading to Cloud...";
-    
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-        const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
-        if (res.ok) {
-            const data = await res.json();
-            uploadedFileName = data.data;
-            startConversionProcess(uploadedFileName);
-            document.getElementById("uploadText").innerText = "✅ " + file.name;
-            document.getElementById("dropZone").classList.add("uploaded");
-            log("✅ Video Upload Complete.");
-        }
-    } catch (err) {
-        log("❌ Upload Failed.");
-        document.getElementById("uploadText").innerText = "❌ Try Again.";
-    }
-}
-
-async function handleMusicUpload(e) {
-    if (!currentUser) { showLoginModal(); return; }
-    
-    const file = e.target.files[0];
-    if (!file) return;
-
-    document.getElementById("audioControlPanel").classList.remove("hidden");
-    const audioPlayer = document.getElementById("audioPreview");
-    audioPlayer.src = URL.createObjectURL(file);
-
-    log(`🎵 Uploading Music: ${file.name}...`);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
-    if (res.ok) {
-        const data = await res.json();
-            window.uploadedMusicName = data.data;
-        document.getElementById("musicText").innerText = "✅ " + file.name;
-        log("✅ Audio Track Ready.");
-    }
-}
-
-// --- AUTH & ACCOUNT ---
-
-async function fetchUserInfo() {
-    try {
-        const res = await fetch('/api/user-info');
-        const data = await res.json();
-        
-        if (data.email) {
-            currentUser = data;
-            updateUIForUser(); 
-            log("👤 Logged in as: " + currentUser.name);
-            checkInitialStatus(); // Sync state now that we know who the user is
-        } else {
-            currentUser = null;
-            log("👋 Welcome Guest. Please login to continue.");
-        }
-    } catch (err) {
-        console.log("Guest Mode Active");
-    }
-}
-
-function updateUIForUser() {
-    const container = document.getElementById("userHeader");
-    if (!container) return;
-    container.innerHTML = `
-        <span style="margin-right:10px; font-size:0.8rem;">${currentUser.name}</span>
-        <img src="${currentUser.picture}" style="width:32px; height:32px; border-radius:50%; border:1px solid #444;">
-        <a href="/logout" style="margin-left:15px; color:#555; text-decoration:none; font-size:1.2rem;" title="Logout">⏻</a>
-    `;
-}
-
-// --- UI COMPONENT HELPERS ---
-
-function setLiveState(isLive) {
-    const badge = document.getElementById("liveBadge");
-    const container = document.getElementById("previewContainer");
-    const btnGoLive = document.getElementById("btnGoLive");
-    const activeStreamControls = document.getElementById("activeStreamControls"); // Select the wrapper
-    const headerDot = document.getElementById("headerLiveDot");
-
-    if (isLive) {
-        // Update Badge and Header
-        if(badge) {
-            badge.className = "badge live w-100 mb-2 text-center";
-            badge.innerText = "STREAMING NOW";
-        }
-        if(headerDot) headerDot.classList.remove("hidden");
-        
-        // Update Monitor Preview
-        container.innerHTML = `
-            <div style="color: var(--success); font-size: 3rem; margin-bottom: 10px;">📡</div>
-            <div style="color: white; font-weight: bold;">STREAMING ACTIVE</div>
-            <div style="color: #666; font-size: 0.8rem; margin-top: 5px;">Data being pushed to YouTube</div>
-        `;
-
-        // Logic Fix: Hide the Go Live button, show the entire Controls wrapper
-        if (btnGoLive) btnGoLive.classList.add("hidden");
-        if (activeStreamControls) activeStreamControls.classList.remove("hidden");
-    } else {
-        if(badge) {
-            badge.className = "badge";
-            badge.innerText = "OFFLINE";
-        }
-        if(headerDot) headerDot.classList.add("hidden");
-
-        showPreviewPlaceholder("Ready to Broadcast");
-
-        // Logic Fix: Show the Go Live button, hide the entire Controls wrapper
-        if (btnGoLive) {
-            btnGoLive.classList.remove("hidden");
-            btnGoLive.disabled = false;
-            btnGoLive.innerText = "GO LIVE NOW";
-        }
-        if (activeStreamControls) activeStreamControls.classList.add("hidden");
-    }
-}
-
-function showPreviewLoader(text) {
-    document.getElementById("previewContainer").innerHTML = 
-        `<div class="spinner"></div><div class="pulse-text" style="color: #aaa; font-size: 0.9rem; margin-top:15px;">${text}</div>`;
-}
-
-function showPreviewPlaceholder(text) {
-    document.getElementById("previewContainer").innerHTML = `
-        <div class="corner-marker tl"></div><div class="corner-marker tr"></div>
-        <div class="corner-marker bl"></div><div class="corner-marker br"></div>
-        <div class="standby-content">
-            <div class="standby-icon">🎥</div>
-            <div class="standby-text">SIGNAL STANDBY</div>
-            <div class="standby-sub">[ ${text} ]</div>
-        </div>`;
-}
-
-function log(msg) {
-    const consoleDiv = document.getElementById("console");
-    if(!consoleDiv) return;
-    const entry = document.createElement("div");
-    entry.className = "log-entry";
-    entry.innerHTML = `<span class="log-time">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
-    consoleDiv.appendChild(entry);
-    consoleDiv.scrollTop = consoleDiv.scrollHeight;
-}
-
-function showLoginModal() {
-    const modal = document.getElementById("loginModal");
-    modal.classList.remove("hidden");
-    modal.style.display = "flex";
-}
-
-function closeModal() {
-    const modal = document.getElementById("loginModal");
-    modal.classList.add("hidden");
-    modal.style.display = "none";
-}
-
-function toggleScheduleUI() {
-    const isSchedule = document.getElementById("radioSchedule").checked;
-    const scheduleInput = document.getElementById("scheduleInputDiv");
-    const btn = document.getElementById("btnGoLive");
-    
-    if (isSchedule) {
-        scheduleInput.classList.remove("hidden");
-        btn.innerText = "Schedule Stream";
-    } else {
-        scheduleInput.classList.add("hidden");
-        btn.innerText = "GO LIVE NOW";
-    }
-}
-
-function switchView(viewName) {
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    document.getElementById(`nav-${viewName}`).classList.add('active');
-    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-    document.getElementById(`view-${viewName}`).classList.remove('hidden');
-    document.getElementById('headerTitle').innerText = viewName.toUpperCase();
-}
-
-function loadGlobalSettings() {
-    const savedKey = localStorage.getItem('afk_stream_key');
-    if(savedKey) {
-        if(document.getElementById('streamKey')) document.getElementById('streamKey').value = savedKey;
-        if(document.getElementById('savedKeyInput')) document.getElementById('savedKeyInput').value = savedKey;
-        log("🔑 Stream Key loaded from LocalStorage.");
-    }
-}
-
-function saveGlobalSettings() {
-    const key = document.getElementById('savedKeyInput').value;
-    if(key) {
-        localStorage.setItem('afk_stream_key', key);
-        alert('Settings Saved.');
-        if(document.getElementById('streamKey')) document.getElementById('streamKey').value = key;
-    }
-}
-
-async function startConversionProcess(fileName) {
-    // UI Changes
-    document.getElementById("uploadUI").classList.add("hidden");
-    document.getElementById("conversionOverlay").classList.remove("hidden");
-    document.getElementById("btnGoLive").disabled = true;
-    document.getElementById("btnGoLive").innerText = "WAITING FOR OPTIMIZATION...";
-
-    // Tell Backend to start converting
-    await fetch(`${API_URL}/convert?fileName=${fileName}`, { method: "POST" });
-
-    // Poll for status
-    const poll = setInterval(async () => {
-        const res = await fetch(`${API_URL}/convert/status?fileName=${fileName}`);
-        const progress = await res.json();
-        
-        document.getElementById("conversionBar").style.width = progress + "%";
-        
-        if (progress >= 100) {
-            clearInterval(poll);
-            uploadedFileName = fileName; // Use the optimized file
-            finishConversionUI();
-        }
-    }, 2000);
-}
-
-function finishConversionUI() {
-    document.getElementById("conversionOverlay").classList.add("hidden");
-    document.getElementById("uploadUI").classList.remove("hidden");
-    document.getElementById("uploadText").innerText = "✅ Optimized & Ready";
-    document.getElementById("btnGoLive").disabled = false;
-    document.getElementById("btnGoLive").innerText = "GO LIVE NOW";
-}
-
-async function loadLibrary() {
-    try {
-        const res = await fetch('/api/library');
-        const files = await res.json();
-        const grid = document.getElementById('libraryGrid');
-        grid.innerHTML = '';
-
-        files.forEach(file => {
-            const isReady = true;
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.style.padding = '15px';
-            card.style.background = '#181818';
-            
-            card.innerHTML = `
-                <div style="font-size: 1.2rem; margin-bottom: 10px;">${isReady ? '🎬' : '⚙️'}</div>
-                <div style="font-size: 0.8rem; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${file}">
-                    ${file.replace('ready_', '')}
-                </div>
-                <div style="margin-top: 10px; display: flex; gap: 5px;">
-                    ${isReady ? 
-                        `<button class="btn btn-primary" style="padding: 5px; font-size: 0.7rem;" onclick="submitJob('${file}')">GO LIVE</button>` : 
-                        `<span class="badge" style="width: 100%">PROCESSING...</span>`
-                    }
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-    } catch (err) {
-        log("❌ Failed to load library grid.");
-    }
+    } catch(e) {}
 }
