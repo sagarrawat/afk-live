@@ -1,444 +1,285 @@
 :root {
-    --bg-dark: #0f0f0f;
-    --surface-dark: #1f1f1f;
-    --primary-red: #cc0000;
-    --text-main: #ffffff;
-    --text-muted: #aaaaaa;
-    --success: #2ba640;
-    --border: #3e3e3e;
+    --bg-body: #f5f5f5;
+    --bg-sidebar: #ffffff;
+    --bg-card: #ffffff;
+    --text-primary: #172b4d;
+    --text-secondary: #6b778c;
+    --primary: #2c68f6; /* Buffer Blue-ish */
+    --primary-hover: #1b53d6;
+    --danger: #e02424;
+    --border: #dfe1e6;
+    --shadow: 0 1px 3px rgba(0,0,0,0.12);
+    --radius: 8px;
+    --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* Dark Mode for Stream View Preference */
 body {
-    background-color: var(--bg-dark);
-    color: var(--text-main);
-    font-family: 'Roboto', sans-serif;
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+    font-family: var(--font-stack);
     margin: 0;
     height: 100vh;
-    display: flex; /* Sidebar | Content */
-    flex-direction: row;
+    display: flex;
     overflow: hidden;
 }
 
-/* Sidebar */
-.app-sidebar {
-    width: 60px;
-    background: #050505;
-    border-right: 1px solid #222;
+/* SIDEBAR */
+.sidebar {
+    width: 240px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    padding: 15px 0;
-    z-index: 100;
+    padding: 24px 16px;
     flex-shrink: 0;
 }
-.brand-icon { font-size: 1.2rem; margin-bottom: 30px; }
-.nav-item {
-    width: 40px; height: 40px;
-    display: flex; align-items: center; justify-content: center;
-    margin-bottom: 10px; border-radius: 8px; text-decoration: none;
-    font-size: 1.2rem; opacity: 0.5; transition: 0.2s; cursor: pointer;
-}
-.nav-item:hover { background: #1a1a1a; opacity: 1; }
-.nav-item.active { background: #222; opacity: 1; border-left: 3px solid var(--primary-red); }
-.nav-bottom { margin-top: auto; }
 
-/* Main Wrapper */
-.app-wrapper {
+.logo {
+    font-size: 1.5rem;
+    margin-bottom: 40px;
+    padding-left: 12px;
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.menu-item:hover {
+    background: #f4f5f7;
+    color: var(--text-primary);
+}
+
+.menu-item.active {
+    background: #ebecf0;
+    color: var(--primary);
+}
+
+/* MAIN CONTENT */
+.content-area {
     flex: 1;
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    background: var(--bg-dark);
-    min-width: 0;
+    overflow: hidden;
 }
 
-/* Header */
-.app-header {
-    height: 60px;
-    border-bottom: 1px solid #222;
+.top-bar {
+    height: 64px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 0 30px;
-    background: rgba(15, 15, 15, 0.95);
+    justify-content: space-between;
+    padding: 0 32px;
     flex-shrink: 0;
 }
-.header-title { font-weight: 700; letter-spacing: 1px; font-size: 0.9rem; }
-.live-dot { color: var(--primary-red); animation: pulse 2s infinite; font-size: 0.8rem; margin-left: 10px; }
-.header-profile { display: flex; align-items: center; gap: 10px; }
 
-/* Views */
+.top-bar h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.user-profile {
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* VIEWS */
 .view-section {
     flex: 1;
     overflow-y: auto;
-    padding-top: 20px;
-}
-.view-section.hidden { display: none !important; }
-
-/* Dashboard */
-.dashboard {
-    display: grid;
-    grid-template-columns: 350px 1fr;
-    gap: 20px;
-    width: 100%;
-    max-width: 1200px;
-    padding: 20px;
-    margin: 0 auto;
-    box-sizing: border-box;
-}
-.card {
-    background-color: var(--surface-dark);
-    border-radius: 8px;
-    padding: 24px;
-    border: 1px solid var(--border);
+    padding: 32px;
 }
 
-/* Footer */
-.app-footer {
-    height: 30px; border-top: 1px solid #222; background: #050505;
-    display: flex; align-items: center; padding: 0 20px;
-    font-size: 0.7rem; color: #555; gap: 20px; flex-shrink: 0;
-}
-.status-item.right { margin-left: auto; }
-
-/* UI Elements */
-h2 { font-size: 1rem; color: var(--text-muted); text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 20px; margin-top: 0;}
-label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 0.9rem; }
-input { width: 100%; background: #121212; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 4px; margin-bottom: 20px; box-sizing: border-box; }
-.btn { width: 100%; padding: 14px; border: none; border-radius: 4px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
-.btn-primary { background: var(--primary-red); color: white; }
-.btn-primary:disabled { background: #555; cursor: not-allowed; }
-.btn-stop { background: #2a2a2a; color: #aaa; margin-top: 10px; }
-.disabled-btn { opacity: 0.5; cursor: not-allowed; }
-
-/* Upload & Terminal */
-.upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; margin-bottom: 20px; background: rgba(255,255,255,0.02); }
-.upload-zone.uploaded { border-color: var(--success); background: rgba(43, 166, 64, 0.1); }
-.terminal { background: #000; flex-grow: 1; border-radius: 6px; padding: 15px; font-family: monospace; font-size: 0.85rem; color: #4af626; overflow-y: auto; max-height: 300px; border: 1px solid #333; }
-.log-entry { margin-bottom: 4px; border-bottom: 1px solid #111; }
-
-/* Badge */
-.badge { padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; background: #333; color: #888; }
-.badge.live { background: var(--primary-red); color: white; }
-
-/* Modal */
-.modal-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center;
-    align-items: center; z-index: 2000;
-}
-.modal-box { background: var(--surface-dark); padding: 30px; border-radius: 12px; border: 1px solid var(--border); width: 350px; text-align: center; }
-.modal-title { font-size: 1.2rem; margin-bottom: 10px; color: white; }
-.btn-google { background: white; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: 6px; text-decoration: none; font-weight: bold; }
 .hidden { display: none !important; }
 
-/* --- FIXES FOR UI GLITCHES --- */
+.container-narrow {
+    max-width: 800px;
+    margin: 0 auto;
+}
 
-/* 1. Fix Timing Radio Buttons */
-.timing-options {
-    display: flex;
-    gap: 30px; /* Space between the two options */
+/* BUTTONS */
+.btn {
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: inline-flex;
     align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
 }
 
-.timing-options > div {
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+
+.btn-danger { background: var(--danger); color: white; }
+.btn-secondary { background: #dfe1e6; color: var(--text-primary); }
+.btn-outline { border: 1px solid var(--border); background: transparent; color: var(--text-primary); }
+.btn-block { width: 100%; justify-content: center; }
+.btn-google { background: white; border: 1px solid var(--border); color: var(--text-primary); width: 100%; justify-content: center; padding: 12px; }
+
+/* PUBLISH VIEW */
+.action-bar { margin-bottom: 24px; text-align: right; }
+
+.queue-list {
     display: flex;
-    align-items: center; /* Vertically align dot and text */
+    flex-direction: column;
+    gap: 16px;
 }
 
-/* Force the radio button to be small and inline */
-.timing-options input[type="radio"] {
-    width: auto !important; /* Stop it from being full width */
-    margin-bottom: 0 !important;
-    margin-right: 10px;
-    cursor: pointer;
-    accent-color: var(--primary-red); /* Make the dot red */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
 }
+.empty-state .icon-box { font-size: 3rem; margin-bottom: 16px; opacity: 0.5; }
 
-/* Force the label to sit next to the dot */
-.timing-options label {
-    display: inline-block !important;
-    margin-bottom: 0 !important;
-    cursor: pointer;
-    font-weight: normal;
-    color: var(--text-main);
+.queue-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    box-shadow: var(--shadow);
 }
+.queue-thumb { width: 80px; height: 45px; background: #eee; border-radius: 4px; flex-shrink: 0; display:flex; align-items:center; justify-content:center; color:#ccc;}
+.queue-details h4 { margin: 0 0 4px 0; font-size: 1rem; }
+.queue-meta { font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 12px; }
 
-/* 2. Fix Monitor/Terminal Spacing */
-/* Give the "SYSTEM LOGS" header some breathing room */
-.card h2 {
-    margin-top: 30px; 
-    border-top: 1px solid #333; /* Optional: adds a separator line above it */
-    padding-top: 15px;
+/* STREAM VIEW (Darker, Cinematic) */
+#view-stream {
+    background: #0f0f0f;
+    color: #fff;
+    padding: 0;
 }
+.stream-dashboard {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    height: 100%;
+}
+.stream-main { padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto;}
+.stream-sidebar { background: #1a1a1a; border-left: 1px solid #333; padding: 20px; overflow-y: auto;}
 
-/* Ensure the terminal looks like a distinct box */
-.terminal {
+.video-preview-container {
+    aspect-ratio: 16/9;
     background: #000;
+    border-radius: 8px;
     border: 1px solid #333;
-    min-height: 250px; /* Fixed height so it looks substantial */
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.5); /* Inner shadow for depth */
-}
-
-/* Fix the "Signal Active" area spacing */
-.loader-container {
-    margin-bottom: 10px;
-    background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
-}
-
-/* Mobile */
-@media (max-width: 900px) {
-    .dashboard { display: flex; flex-direction: column; width: 100%; padding: 10px; }
-    .timing-options { flex-direction: column; gap: 10px !important; }
-}
-
-/* --- PRODUCTION PREVIEW SCREEN --- */
-
-/* The Monitor Container */
-.loader-container {
-    height: 250px; /* Taller for a cinematic aspect ratio */
-    background-color: #080808;
-    position: relative;
-    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #333;
-    border-radius: 4px;
-    box-shadow: inset 0 0 50px rgba(0,0,0,0.8); /* Inner shadow for depth */
+    position: relative;
+}
+.preview-placeholder { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #555; }
+.live-indicator {
+    position: absolute; top: 16px; left: 16px;
+    background: red; color: white; padding: 4px 8px;
+    font-weight: bold; font-size: 0.8rem; border-radius: 4px;
 }
 
-/* CRT Scanline Effect Overlay */
-.loader-container::before {
-    content: " ";
-    display: block;
-    position: absolute;
-    top: 0; left: 0; bottom: 0; right: 0;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-    z-index: 2;
-    background-size: 100% 2px, 3px 100%;
-    pointer-events: none;
-}
-
-/* The Center Content */
-.standby-content {
-    text-align: center;
-    z-index: 3;
-    opacity: 0.7;
-    animation: breathe 4s infinite ease-in-out;
-}
-
-.standby-icon {
-    font-size: 3rem;
-    margin-bottom: 15px;
-    color: #444; /* Dark grey icon */
-    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
-}
-
-.standby-text {
-    font-family: 'Courier New', monospace;
-    font-size: 0.9rem;
-    letter-spacing: 3px;
-    color: #666;
-    text-transform: uppercase;
-    font-weight: bold;
-}
-
-.standby-sub {
-    font-family: 'Roboto', sans-serif;
-    font-size: 0.75rem;
-    color: #444;
-    margin-top: 8px;
-}
-
-/* Viewfinder Corner Markers (The "Production" Look) */
-.corner-marker {
-    position: absolute;
-    width: 20px; height: 20px;
-    border: 2px solid #444;
-    z-index: 3;
-}
-.tl { top: 20px; left: 20px; border-right: none; border-bottom: none; }
-.tr { top: 20px; right: 20px; border-left: none; border-bottom: none; }
-.bl { bottom: 20px; left: 20px; border-right: none; border-top: none; }
-.br { bottom: 20px; right: 20px; border-left: none; border-top: none; }
-
-/* Animations */
-@keyframes breathe {
-    0% { opacity: 0.6; transform: scale(0.98); }
-    50% { opacity: 0.8; transform: scale(1); }
-    100% { opacity: 0.6; transform: scale(0.98); }
-}
-
-/* --- MOBILE LAYOUT FIXES (Bottom Navigation) --- */
-@media (max-width: 900px) {
-    
-    /* 1. Flip the Layout Direction */
-    body {
-        overflow-y: auto !important; 
-        height: auto !important;
-        display: block; /* Switch off the flex/row layout causing stiffness */
-    }
-
-    /* 2. Transform Sidebar into Bottom Bar */
-    .app-sidebar {
-        width: 100%;            /* Full width */
-        height: 60px;           /* Fixed height */
-        flex-direction: row;    /* Horizontal icons */
-        justify-content: space-around; /* Even spacing */
-        padding: 0;
-        
-        /* Pin to bottom */
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        border-right: none;
-        border-top: 1px solid #333;
-        background: #050505;
-        z-index: 1000;
-        order: 2; /* Ensure it visually sits below content if we used flex */
-    }
-
-    /* 3. Adjust Icons for Horizontal Layout */
-    .nav-menu {
-        display: flex;
-        flex-direction: row;
-        width: 100%;
-        justify-content: space-around;
-        align-items: center;
-    }
-    
-    .nav-item {
-        margin-bottom: 0; /* Remove vertical gap */
-        border-radius: 0;
-        flex: 1; /* Make touch targets big */
-        height: 100%;
-    }
-
-    .nav-item.active {
-        border-left: none;
-        border-top: 2px solid var(--primary-red); /* indicator moves to top */
-        background: rgba(255, 255, 255, 0.05);
-    }
-
-    /* 4. Hide unnecessary elements on mobile */
-    .brand-icon { display: none; } /* Hide the red dot logo to save space */
-    .nav-bottom { display: none; } /* Hide the help icon on mobile */
-
-    /* 5. Adjust Main Wrapper to prevent overlap */
-    .app-wrapper {
-        height: auto; /* Let it grow */
-        padding-bottom: 70px; /* Add breathing room for the bottom bar */
-        width: 100%;
-    }
-
-    /* 6. Fix Dashboard Padding */
-    .dashboard {
-        padding: 15px; /* Reduce padding on mobile */
-        width: 100%;
-        box-sizing: border-box;
-    }
-    
-    .card {
-        padding: 20px 15px; /* Slightly tighter cards */
-    }
-    .app-wrapper {
-        height: auto; 
-        overflow: visible; /* Let content spill out so body can scroll it */
-    }
-}
-
-/* --- SETTINGS VIEW FIXES --- */
-
-/* 1. Override the Grid Layout specifically for Settings */
-#view-settings .dashboard {
-    display: flex;              /* Switch from Grid to Flex */
-    flex-direction: column;
-    align-items: center;        /* Center horizontally */
-    justify-content: flex-start;
-    max-width: 700px;           /* Limit width so it doesn't stretch too far */
-    margin: 0 auto;             /* Ensure centering in the view */
-}
-
-/* 2. Ensure the Settings Card fills the new container */
-#view-settings .card {
-    width: 100%;
-    border-top: 4px solid var(--primary-red); /* Add a red top border for flair */
-}
-
-/* 3. Optional: Make the "Global Configuration" text look sharper */
-#view-settings h2 {
-    text-align: center;
-    border-bottom: none;      /* Remove default line */
-    letter-spacing: 3px;
-    margin-bottom: 40px;
-    font-size: 1.2rem;
-    color: var(--text-main);
-}
-#volumeSlider {
-    -webkit-appearance: none;
-    appearance: none;
-    background: transparent; /* Hide default track */
-}
-
-/* The Track (The "Loader" part) */
-#volumeSlider::-webkit-slider-runnable-track {
-    width: 100%;
-    height: 8px;
-    background: #2a2a2a; /* Dark theme track */
-    border-radius: 4px;
-    border: 1px solid #333;
-}
-
-/* The Thumb (The Red Dot) */
-#volumeSlider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    height: 18px;
-    width: 18px;
-    border-radius: 50%;
-    background: var(--primary-red);
-    cursor: pointer;
-    margin-top: -6px; /* Centers thumb on track */
-    box-shadow: 0 0 8px rgba(255, 75, 43, 0.5);
-}
-#libraryGrid {
-    max-height: 70vh;
-    padding-right: 10px;
-}
-
-#libraryGrid::-webkit-scrollbar {
-    width: 6px;
-}
-
-#libraryGrid::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 10px;
-}
-
-.video-card-item {
+.stream-controls-card {
     background: #1a1a1a;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 12px;
+    padding: 20px;
+    border-radius: 8px;
     display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+    align-items: flex-end;
+    gap: 20px;
 }
-/* Custom slider to match the red thumb in your image */
-#volumeSlider {
-    -webkit-appearance: none;
-    height: 6px;
-    background: #333;
-    border-radius: 5px;
-    outline: none;
+.control-group { flex: 1; }
+.control-group label { display: block; margin-bottom: 8px; color: #aaa; font-size: 0.85rem; }
+.stream-controls-card input {
+    width: 100%; background: #222; border: 1px solid #444; color: white;
+    padding: 10px; border-radius: 4px;
 }
 
-#volumeSlider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    background: var(--primary-red);
-    border-radius: 50%;
+.terminal-card { background: #000 !important; border: 1px solid #333; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; height: 200px; flex-shrink: 0; }
+.terminal-header { background: #222; padding: 8px 12px; font-size: 0.75rem; color: #888; display: flex; justify-content: space-between; }
+.terminal { padding: 12px; font-family: monospace; font-size: 0.8rem; color: #4af626; overflow-y: auto; flex: 1; }
+
+.library-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.lib-item { background: #222; padding: 10px; border-radius: 4px; text-align: center; cursor: pointer; border: 1px solid transparent; }
+.lib-item:hover { border-color: var(--primary); }
+.lib-item.selected { border-color: var(--primary); background: #2a2a2a; }
+
+/* MODALS */
+.modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+}
+.modal-composer {
+    background: var(--bg-card);
+    width: 600px;
+    max-width: 90vw;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column;
+}
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+}
+.modal-header h2 { margin: 0; font-size: 1.1rem; }
+.btn-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-secondary); }
+
+.modal-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; max-height: 70vh; overflow-y: auto; }
+.drop-area {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 32px;
+    text-align: center;
     cursor: pointer;
-    box-shadow: 0 0 10px rgba(204, 0, 0, 0.4);
+    background: #f9fafb;
+    transition: 0.2s;
+}
+.drop-area:hover { border-color: var(--primary); background: #f0f7ff; }
+.drop-area i { font-size: 2rem; color: var(--text-secondary); margin-bottom: 12px; display: block; }
+.drop-area p { margin: 0; color: var(--text-secondary); }
+.file-badge { background: #e3f2fd; color: var(--primary); padding: 8px; border-radius: 6px; display: inline-block; margin-top: 10px; font-weight: 500; font-size: 0.9rem;}
+
+.form-group label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; color: var(--text-primary); }
+.form-group input, .form-group textarea, .form-group select {
+    width: 100%; padding: 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-family: inherit; font-size: 0.9rem;
+    box-sizing: border-box;
+}
+.form-row { display: flex; gap: 20px; }
+.form-row .form-group { flex: 1; }
+
+.modal-footer { padding: 20px 24px; border-top: 1px solid var(--border); background: #f9fafb; border-radius: 0 0 12px 12px; }
+
+/* Responsive */
+@media (max-width: 768px) {
+    body { flex-direction: column; height: auto; overflow: auto; }
+    .sidebar { width: 100%; height: auto; flex-direction: row; align-items: center; justify-content: space-between; padding: 10px; border-right: none; border-bottom: 1px solid var(--border); }
+    .menu { flex-direction: row; }
+    .content-area { height: auto; }
+    .stream-dashboard { grid-template-columns: 1fr; }
+    .stream-sidebar { border-left: none; border-top: 1px solid #333; }
+    .modal-composer { width: 100%; height: 100%; border-radius: 0; }
 }
