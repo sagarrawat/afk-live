@@ -35,7 +35,87 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // --- INIT SETTINGS ---
     loadGlobalSettings();
+    checkYoutubeStatus();
 });
+
+function showScheduleModal() {
+    document.getElementById('scheduleModal').classList.remove('hidden');
+    document.getElementById('scheduleModal').style.display = 'flex';
+}
+
+function closeScheduleModal() {
+    document.getElementById('scheduleModal').classList.add('hidden');
+    document.getElementById('scheduleModal').style.display = 'none';
+}
+
+async function submitSchedule() {
+    if (!currentUser) { showLoginModal(); return; }
+
+    const fileInput = document.getElementById('scheduleFile');
+    const title = document.getElementById('scheduleTitle').value;
+    const description = document.getElementById('scheduleDescription').value;
+    const tags = document.getElementById('scheduleTags').value;
+    const privacy = document.getElementById('schedulePrivacy').value;
+    const time = document.getElementById('scheduleTime').value;
+    const btn = document.getElementById('btnSchedule');
+
+    if (!fileInput.files[0] || !title || !time) {
+        alert("Please fill all required fields (File, Title, Time)");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Scheduling...";
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+    formData.append("title", title);
+    formData.append("description", description);
+    formData.append("tags", tags);
+    formData.append("privacyStatus", privacy);
+    formData.append("scheduledTime", time);
+
+    try {
+        const res = await fetch(`${API_URL}/videos/schedule`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            alert("Video Scheduled Successfully!");
+            closeScheduleModal();
+            // Reset form
+            fileInput.value = '';
+            document.getElementById('scheduleTitle').value = '';
+        } else {
+            alert("Error: " + data.message);
+        }
+    } catch (e) {
+        alert("Scheduling Failed");
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Schedule Upload";
+    }
+}
+
+async function checkYoutubeStatus() {
+    try {
+        const res = await fetch(`${API_URL}/youtube/status`);
+        const data = await res.json();
+        const el = document.getElementById('ytConnectionStatus');
+        if (el) {
+            if (data.connected) {
+                el.innerHTML = '<span style="color: var(--success)">✅ Connected to YouTube</span>';
+            } else {
+                el.innerHTML = '<span style="color: var(--primary-red)">❌ Not Connected</span>';
+            }
+        }
+    } catch (e) {
+        console.error("Failed to check YT status", e);
+    }
+}
 
 // --- STATE PERSISTENCE & LOG POLLING ---
 
