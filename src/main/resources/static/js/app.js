@@ -36,6 +36,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     if(videoFile) {
         videoFile.addEventListener("change", handleFileUpload);
     }
+
+    // Event Listeners: Audio
+    document.getElementById("musicDropZone").addEventListener("click", () => document.getElementById("musicFile").click());
+    document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
+
+    document.getElementById("volumeSlider").addEventListener("input", (e) => {
+        document.getElementById("volValue").innerText = e.target.value + "%";
+        document.getElementById("audioPreview").volume = e.target.value / 100;
+    });
 });
 
 /* --- VIEW SWITCHING --- */
@@ -198,6 +207,12 @@ async function submitJob(fileNameFromLibrary) {
     formData.append("streamKey", key);
     formData.append("fileName", targetFile);
 
+    if (window.uploadedMusicName) {
+        formData.append("musicName", window.uploadedMusicName);
+        const volPercent = document.getElementById("volumeSlider").value;
+        formData.append("musicVolume", (volPercent / 100).toFixed(2));
+    }
+
     try {
         const res = await fetch(`${API_URL}/start`, { method: "POST", body: formData });
         const data = await res.json();
@@ -254,12 +269,35 @@ function setLiveState(isLive) {
 
 /* --- LIBRARY & UPLOAD LOGIC --- */
 
+async function handleMusicUpload(e) {
+    if (!currentUser) { showLoginModal(); return; }
+
+    const file = e.target.files[0];
+    if (!file) return;
+
+    document.getElementById("audioControlPanel").classList.remove("hidden");
+    const audioPlayer = document.getElementById("audioPreview");
+    audioPlayer.src = URL.createObjectURL(file);
+
+    log(`🎵 Uploading Music: ${file.name}...`);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+    if (res.ok) {
+        const data = await res.json();
+        window.uploadedMusicName = data.data;
+        document.getElementById("musicText").innerText = "✅ " + file.name;
+        log("✅ Audio Track Ready.");
+    }
+}
+
 async function handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     log(`Uploading: ${file.name}...`);
-    
+
     const formData = new FormData();
     formData.append("file", file);
 
