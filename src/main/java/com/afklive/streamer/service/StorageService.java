@@ -56,4 +56,12 @@ public class StorageService {
 
         return s3Client.getObject(getOb);
     }
+
+    public void downloadFileToPath(String key, java.nio.file.Path destination) {
+        GetObjectRequest getOb = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+        s3Client.getObject(getOb, software.amazon.awssdk.core.sync.ResponseTransformer.toFile(destination));
+    }
 }

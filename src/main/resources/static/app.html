@@ -80,71 +80,94 @@
 
     <!-- VIEW: STREAM (LiveKaro-like) -->
     <div id="view-stream" class="view-section hidden">
-        <div class="stream-dashboard">
-            <div class="stream-main">
-                <div class="video-preview-container">
-                    <div class="preview-placeholder">
-                        <i class="fa-solid fa-signal"></i>
-                        <span>OFFLINE</span>
-                    </div>
-                    <div class="live-indicator hidden" id="liveIndicator">LIVE</div>
-                </div>
+        <div class="stream-dashboard-layout">
 
-                <div class="stream-controls-card">
-                    <div class="control-group">
-                        <label>Stream Key</label>
-                        <div class="input-row">
-                            <input type="password" id="streamKey" placeholder="Paste YouTube Stream Key">
+            <!-- Left Panel: Controls -->
+            <div class="stream-setup-card card">
+                <h2><i class="fa-solid fa-satellite-dish"></i> Live Studio</h2>
+                <p class="text-secondary" style="margin-bottom: 20px;">Stream your pre-recorded videos in a 24/7 loop.</p>
+
+                <div class="step-box">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <label>Select Video Source</label>
+                        <div id="selectedVideoPreview" class="selected-video-box hidden">
+                            <i class="fa-solid fa-file-video"></i>
+                            <span id="selectedVideoName">Video Name.mp4</span>
+                            <button class="btn-icon-sm" onclick="clearSelectedVideo()"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <button id="btnSelectVideo" class="btn btn-outline btn-block" onclick="openLibraryModalForStream()">
+                            <i class="fa-solid fa-folder-open"></i> Choose from Library
+                        </button>
+
+                        <div style="margin-top: 15px; border-top: 1px dashed #333; padding-top: 15px;">
+                            <label style="font-size: 0.85em; color: #888; margin-bottom: 8px; display: block;">Background Music (Optional)</label>
+                            <div class="upload-zone small" id="musicDropZone" style="border: 1px dashed #444; padding: 10px; text-align: center; border-radius: 4px; cursor: pointer; background: #222; color: #aaa; transition: 0.2s;">
+                                <span id="musicText"><i class="fa-solid fa-music"></i> Upload Audio</span>
+                            </div>
+                            <input type="file" id="musicFile" class="hidden" accept=".mp3, .wav">
+
+                            <div id="audioControlPanel" class="hidden" style="margin-top: 10px;">
+                                <div class="audio-controls" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #ccc; margin-bottom: 4px;">
+                                    <span>Volume</span>
+                                    <span id="volValue">80%</span>
+                                </div>
+                                <input type="range" id="volumeSlider" min="0" max="100" value="80" style="width: 100%; height: 4px; border-radius: 2px;">
+                                <audio id="audioPreview" controls style="width: 100%; height: 30px; margin-top: 8px; filter: invert(0.8);"></audio>
+                            </div>
                         </div>
                     </div>
-                    <div class="control-actions">
-                        <button id="btnGoLive" class="btn btn-danger" onclick="submitJob()">
-                            <i class="fa-solid fa-satellite-dish"></i> Go Live
-                        </button>
-                        <button id="btnStop" class="btn btn-secondary hidden" onclick="stopStream()">
-                            End Stream
-                        </button>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <label>Stream Key</label>
+                        <input type="password" id="streamKey" placeholder="Paste YouTube/Facebook Stream Key" class="form-input">
+                        <small>We don't need channel access. Just the key.</small>
                     </div>
                 </div>
 
-                <div class="card terminal-card">
-                     <div class="terminal-header">
-                        <span>System Logs</span>
-                        <div class="dots"><span></span><span></span><span></span></div>
-                     </div>
-                     <div class="terminal" id="console">
-                        <div class="log-entry">Ready to stream.</div>
-                     </div>
+                <div class="step-box">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <label>Action</label>
+                        <div class="control-actions">
+                            <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
+                                Start Streaming
+                            </button>
+                            <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">
+                                Stop Stream
+                            </button>
+                        </div>
+                         <div class="live-indicator hidden" id="liveIndicator" style="margin-top: 10px; text-align: center; color: var(--danger); font-weight: bold;">
+                            <span class="blink">●</span> LIVE NOW
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="stream-sidebar">
-                <div class="card library-card">
-                    <h3>Media Library</h3>
-                    <button class="btn btn-sm btn-outline" onclick="document.getElementById('videoFile').click()">
-                        <i class="fa-solid fa-upload"></i> Upload Loop
-                    </button>
-                    <input type="file" id="videoFile" class="hidden" accept=".mp4">
-
-                    <div id="libraryGrid" class="library-grid">
-                        <!-- Loaded via JS -->
-                    </div>
+            <!-- Right Panel: Status & Terminal -->
+            <div class="stream-status-panel">
+                 <div class="card terminal-card">
+                     <div class="terminal-header">
+                        <span><i class="fa-solid fa-terminal"></i> Live Logs</span>
+                        <div class="dots"><span></span><span></span><span></span></div>
+                     </div>
+                     <div class="terminal" id="console">
+                        <div class="log-entry">System Ready. Select a video to begin.</div>
+                     </div>
                 </div>
 
-                <div class="card library-card" style="margin-top: 20px;">
-                    <h3>Backing Track</h3>
-                    <div class="upload-zone small" id="musicDropZone">
-                        <span id="musicText">🎵 Add Music</span>
+                <div class="card info-card" style="margin-top: 20px;">
+                    <h3>Stream Info</h3>
+                    <div class="info-row">
+                        <span>Status</span>
+                        <span id="streamStatusText">Offline</span>
                     </div>
-                    <input type="file" id="musicFile" class="hidden" accept=".mp3">
-
-                    <div id="audioControlPanel" class="hidden" style="margin-top: 15px;">
-                        <div class="audio-controls">
-                            <span>Preview</span>
-                            <span id="volValue">80%</span>
-                        </div>
-                        <audio id="audioPreview" controls style="width: 100%; height: 30px; margin-bottom: 10px;"></audio>
-                        <input type="range" id="volumeSlider" min="0" max="100" value="80" style="width: 100%;">
+                    <div class="info-row">
+                         <span>Loop</span>
+                         <span class="badge success" style="background: var(--success); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">Enabled</span>
                     </div>
                 </div>
             </div>
@@ -293,6 +316,20 @@
         </div>
         <div class="modal-footer">
             <button id="btnSchedule" class="btn btn-primary btn-block" onclick="submitSchedule()">Schedule Post</button>
+        </div>
+    </div>
+</div>
+
+<div id="streamLibraryModal" class="modal-overlay hidden">
+    <div class="modal-composer">
+        <div class="modal-header">
+            <h2>Select Video</h2>
+            <button onclick="document.getElementById('streamLibraryModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="streamLibraryList" class="queue-list" style="max-height: 400px; overflow-y: auto;">
+                <!-- Populated via JS -->
+            </div>
         </div>
     </div>
 </div>

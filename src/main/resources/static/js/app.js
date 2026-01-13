@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Initialize Views
     loadGlobalSettings();
-    loadLibrary(); // For streaming view
+    // loadLibrary();
     loadScheduledQueue(); // For publish view
     checkYoutubeStatus();
 
@@ -410,21 +410,72 @@ async function loadScheduledQueue() {
 
 /* --- STREAMING LOGIC --- */
 
-// (Adapted from previous version)
-async function submitJob(fileNameFromLibrary) {
-    const targetFile = fileNameFromLibrary || uploadedFileName;
+let selectedStreamVideo = null;
+
+async function openLibraryModalForStream() {
+    document.getElementById('streamLibraryModal').classList.remove('hidden');
+    const container = document.getElementById('streamLibraryList');
+    container.innerHTML = '<p>Loading...</p>';
+
+    try {
+        const res = await fetch(`${API_URL}/library`);
+        const data = await res.json();
+
+        if (!data.success || data.data.length === 0) {
+            container.innerHTML = '<p>No videos found. Upload in "Library" first.</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        data.data.forEach(v => {
+            const item = document.createElement('div');
+            item.className = 'queue-item';
+            item.style.cursor = 'pointer';
+            item.onclick = () => selectVideoForStream(v);
+
+            item.innerHTML = `
+                <div class="queue-thumb"><i class="fa-solid fa-film"></i></div>
+                <div class="queue-details">
+                    <h4>${v.title}</h4>
+                    <div class="queue-meta">${new Date(v.createdAt || Date.now()).toLocaleDateString()}</div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    } catch (e) {
+        container.innerHTML = '<p>Error loading library</p>';
+    }
+}
+
+function selectVideoForStream(video) {
+    selectedStreamVideo = video;
+    document.getElementById('streamLibraryModal').classList.add('hidden');
+
+    // Update UI
+    document.getElementById('btnSelectVideo').classList.add('hidden');
+    document.getElementById('selectedVideoPreview').classList.remove('hidden');
+    document.getElementById('selectedVideoName').innerText = video.title;
+}
+
+function clearSelectedVideo() {
+    selectedStreamVideo = null;
+    document.getElementById('btnSelectVideo').classList.remove('hidden');
+    document.getElementById('selectedVideoPreview').classList.add('hidden');
+}
+
+async function submitJob() {
     const key = document.getElementById("streamKey").value;
     const btn = document.getElementById("btnGoLive");
-    
-    if (!targetFile) return alert("⚠️ Select a video from the library.");
-    if (!key) return alert("⚠️ Please enter a Stream Key.");
+
+    if (!selectedStreamVideo) return alert("⚠️ Please select a video from Step 1.");
+    if (!key) return alert("⚠️ Please enter a Stream Key in Step 2.");
 
     btn.disabled = true;
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Starting...`;
 
     const formData = new FormData();
     formData.append("streamKey", key);
-    formData.append("fileName", targetFile);
+    formData.append("videoKey", selectedStreamVideo.s3Key);
 
     if (window.uploadedMusicName) {
         formData.append("musicName", window.uploadedMusicName);
@@ -438,7 +489,7 @@ async function submitJob(fileNameFromLibrary) {
         
         if (data.success) {
             setLiveState(true);
-            log("Stream Started: " + targetFile);
+            log("Stream Started: " + selectedStreamVideo.title);
         } else {
             alert(data.message);
         }
@@ -450,7 +501,7 @@ async function submitJob(fileNameFromLibrary) {
              // If success, keep disabled/change text
         } else {
              btn.disabled = false;
-             btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> Go Live`;
+             btn.innerHTML = `Start Streaming`;
         }
     }
 }
@@ -467,101 +518,24 @@ async function stopStream() {
 
 function setLiveState(isLive) {
     const indicator = document.getElementById("liveIndicator");
-    const placeholder = document.querySelector(".preview-placeholder");
     const btnGo = document.getElementById("btnGoLive");
     const btnStop = document.getElementById("btnStop");
+    const statusText = document.getElementById("streamStatusText");
 
     if (isLive) {
         indicator.classList.remove("hidden");
-        placeholder.classList.add("hidden");
         btnGo.classList.add("hidden");
         btnStop.classList.remove("hidden");
+        if(statusText) statusText.innerText = "Live";
+        if(statusText) statusText.style.color = "var(--success)";
     } else {
         indicator.classList.add("hidden");
-        placeholder.classList.remove("hidden");
         btnGo.classList.remove("hidden");
         btnGo.disabled = false;
-        btnGo.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> Go Live`;
+        btnGo.innerHTML = `Start Streaming`;
         btnStop.classList.add("hidden");
-    }
-}
-
-/* --- LIBRARY & UPLOAD LOGIC --- */
-
-async function handleMusicUpload(e) {
-    if (!currentUser) { showLoginModal(); return; }
-
-    const file = e.target.files[0];
-    if (!file) return;
-
-    document.getElementById("audioControlPanel").classList.remove("hidden");
-    const audioPlayer = document.getElementById("audioPreview");
-    audioPlayer.src = URL.createObjectURL(file);
-
-    log(`🎵 Uploading Music: ${file.name}...`);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
-    if (res.ok) {
-        const data = await res.json();
-        window.uploadedMusicName = data.data;
-        document.getElementById("musicText").innerText = "✅ " + file.name;
-        log("✅ Audio Track Ready.");
-    }
-}
-
-async function handleFileUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    log(`Uploading: ${file.name}...`);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-        const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
-        if (res.ok) {
-            const data = await res.json();
-            // In a real app we might transcode. Here we just add to library.
-            // But we need the filename returned by server for the streaming backend.
-            uploadedFileName = data.data;
-            log("Upload Complete. Processing...");
-
-            // Mock processing delay then refresh library
-            setTimeout(() => {
-                loadLibrary();
-                log("Ready to stream.");
-            }, 1000);
-        }
-    } catch (err) {
-        log("Upload Failed");
-    }
-}
-
-async function loadLibrary() {
-    try {
-        const res = await fetch('/api/stream-library');
-        const files = await res.json();
-        const grid = document.getElementById('libraryGrid');
-        if(!grid) return;
-
-        grid.innerHTML = '';
-        files.forEach(file => {
-            const item = document.createElement('div');
-            item.className = 'lib-item';
-            item.innerText = file.replace('ready_', '').substring(0, 20) + '...';
-            item.onclick = () => {
-                document.querySelectorAll('.lib-item').forEach(el => el.classList.remove('selected'));
-                item.classList.add('selected');
-                uploadedFileName = file; // Set as target
-                log("Selected: " + file);
-            };
-            grid.appendChild(item);
-        });
-    } catch (err) {
-        console.error("Library load failed", err);
+        if(statusText) statusText.innerText = "Offline";
+        if(statusText) statusText.style.color = "var(--text-secondary)";
     }
 }
 
