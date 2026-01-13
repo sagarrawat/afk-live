@@ -1,0 +1,108 @@
+:root {
+    --primary: #2c68f6;
+    --primary-dark: #1b53d6;
+    --text-main: #172b4d;
+    --text-muted: #6b778c;
+    --bg-light: #ffffff;
+    --bg-alt: #f5f5f5;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    color: var(--text-main);
+    line-height: 1.5;
+}
+
+a { text-decoration: none; color: inherit; }
+
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* NAV */
+.navbar {
+    padding: 20px 0;
+    position: sticky;
+    top: 0;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(5px);
+    z-index: 100;
+}
+.navbar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.logo { font-weight: 800; font-size: 1.25rem; }
+.nav-links { display: flex; gap: 30px; align-items: center; font-weight: 600; }
+.btn-login { color: var(--text-main); }
+.btn-login:hover { color: var(--primary); }
+
+/* HERO */
+.hero { padding: 80px 0 60px; text-align: center; }
+.hero h1 { font-size: 3.5rem; margin-bottom: 20px; line-height: 1.1; letter-spacing: -1px; }
+.hero p { font-size: 1.25rem; color: var(--text-muted); max-width: 600px; margin: 0 auto 40px; }
+.hero-actions { display: flex; gap: 15px; justify-content: center; margin-bottom: 60px; }
+
+/* BUTTONS */
+.btn { padding: 12px 24px; border-radius: 6px; font-weight: 600; transition: 0.2s; border: none; cursor: pointer; display: inline-block; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-lg { padding: 16px 32px; font-size: 1.1rem; }
+.btn-outline { border: 1px solid var(--primary); color: var(--primary); background: transparent; }
+.btn-outline:hover { background: #f0f5ff; }
+
+/* FAKE UI */
+.fake-ui-window {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+    max-width: 900px;
+    margin: 0 auto;
+    overflow: hidden;
+    border: 1px solid #eee;
+}
+.fake-ui-header { background: #f4f5f7; padding: 12px; display: flex; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.red { background: #ff5f56; }
+.yellow { background: #ffbd2e; }
+.green { background: #27c93f; }
+.fake-ui-body { display: flex; height: 400px; }
+.fake-sidebar { width: 60px; background: #f4f5f7; border-right: 1px solid #eee; }
+.fake-content { flex: 1; padding: 20px; }
+.fake-post { height: 100px; background: #f4f5f7; border-radius: 8px; margin-bottom: 20px; }
+
+/* SOCIAL PROOF */
+.social-proof { padding: 40px 0; background: var(--bg-alt); text-align: center; color: var(--text-muted); font-weight: 600; }
+.logos { display: flex; gap: 40px; justify-content: center; margin-top: 20px; opacity: 0.6; font-size: 1.5rem; }
+
+/* FEATURES */
+.features-preview { padding: 100px 0; }
+.feature-row { display: flex; align-items: center; gap: 60px; margin-bottom: 100px; }
+.feature-row.reverse { flex-direction: row-reverse; }
+.feature-text { flex: 1; }
+.feature-text h2 { font-size: 2.5rem; margin-bottom: 20px; }
+.feature-text p { font-size: 1.1rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+.feature-text a { color: var(--primary); font-weight: 600; }
+.feature-visual { flex: 1; height: 400px; background: var(--bg-alt); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+
+/* FOOTER */
+.footer { padding: 80px 0; border-top: 1px solid #eee; }
+.footer .container { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+.footer h3 { margin-top: 0; }
+.footer h4 { margin-top: 0; margin-bottom: 20px; }
+.footer a { display: block; color: var(--text-muted); margin-bottom: 10px; }
+.footer a:hover { color: var(--primary); }
+
+/* CALENDAR & STREAM VISUALS */
+.calendar-mockup { width: 80%; height: 80%; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
+.cal-header { padding: 15px; background: #f4f5f7; font-weight: bold; text-align: center; }
+.cal-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 100%; }
+.cal-grid div { border: 1px solid #eee; }
+.cal-grid .active { background: #e3f2fd; color: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: 600; }
+
+.stream-mockup { width: 80%; height: 60%; background: #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.play-btn { width: 60px; height: 60px; background: red; border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; padding-left: 5px; }

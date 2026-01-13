@@ -21,6 +21,14 @@
             <i class="fa-solid fa-tower-broadcast"></i>
             <span>Stream</span>
         </a>
+        <a href="#" class="menu-item" data-target="view-calendar" onclick="switchView('calendar')">
+            <i class="fa-regular fa-calendar-days"></i>
+            <span>Calendar</span>
+        </a>
+        <a href="#" class="menu-item" data-target="view-analytics" onclick="switchView('analytics')">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Analytics</span>
+        </a>
         <a href="#" class="menu-item" data-target="view-settings" onclick="switchView('settings')">
             <i class="fa-solid fa-gear"></i>
             <span>Settings</span>
@@ -131,6 +139,23 @@
         </div>
     </div>
 
+    <!-- VIEW: CALENDAR -->
+    <div id="view-calendar" class="view-section hidden">
+        <div class="container-fluid">
+            <div id="calendar"></div>
+        </div>
+    </div>
+
+    <!-- VIEW: ANALYTICS -->
+    <div id="view-analytics" class="view-section hidden">
+        <div class="container-narrow">
+            <div class="card">
+                <h2>Performance Overview</h2>
+                <canvas id="analyticsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
     <!-- VIEW: SETTINGS -->
     <div id="view-settings" class="view-section hidden">
         <div class="container-narrow">
@@ -214,6 +239,8 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

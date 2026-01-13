@@ -61,9 +61,92 @@ function switchView(viewName) {
     const titles = {
         'publish': 'Publishing',
         'stream': 'Live Studio',
+        'calendar': 'Calendar',
+        'analytics': 'Analytics',
         'settings': 'Settings'
     };
     document.getElementById('pageTitle').innerText = titles[viewName] || 'Dashboard';
+
+    // Lazy Load
+    if (viewName === 'calendar') {
+        setTimeout(initCalendar, 100); // Small delay to ensure visibility
+    }
+    if (viewName === 'analytics') {
+        initAnalytics();
+    }
+}
+
+/* --- CALENDAR LOGIC --- */
+function initCalendar() {
+    var calendarEl = document.getElementById('calendar');
+    if (!calendarEl) return;
+
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        themeSystem: 'standard',
+        events: async function(info, successCallback, failureCallback) {
+            try {
+                const res = await fetch(`${API_URL}/videos`);
+                const videos = await res.json();
+                const events = videos.map(v => ({
+                    title: v.title,
+                    start: v.scheduledTime,
+                    color: v.status === 'UPLOADED' ? '#2ba640' : (v.status === 'FAILED' ? '#cc0000' : '#2c68f6')
+                }));
+                successCallback(events);
+            } catch (e) {
+                failureCallback(e);
+            }
+        },
+        eventClick: function(info) {
+            alert('Video: ' + info.event.title + '\nScheduled: ' + info.event.start.toLocaleString());
+        }
+    });
+    calendar.render();
+}
+
+/* --- ANALYTICS LOGIC --- */
+async function initAnalytics() {
+    const ctx = document.getElementById('analyticsChart');
+    if (!ctx) return;
+
+    try {
+        const res = await fetch(`${API_URL}/mock/analytics`);
+        const data = await res.json();
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Views',
+                    data: data.views,
+                    borderColor: '#2c68f6',
+                    tension: 0.4
+                }, {
+                    label: 'Clicks',
+                    data: data.clicks,
+                    borderColor: '#27c93f',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
+    } catch(e) {
+        console.error("Failed to load analytics", e);
+    }
 }
 
 /* --- PUBLISH / SCHEDULE LOGIC --- */

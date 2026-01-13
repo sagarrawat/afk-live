@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing - AFK Live</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/landing.css">
+    <style>
+        .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 50px; }
+        .price-card { border: 1px solid #eee; padding: 40px; border-radius: 8px; text-align: center; }
+        .price-card.popular { border-color: var(--primary); box-shadow: 0 10px 40px rgba(44, 104, 246, 0.1); position: relative; }
+        .price-card.popular::before { content: "Most Popular"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+        .price { font-size: 3rem; font-weight: 800; margin: 20px 0; }
+        .price span { font-size: 1rem; font-weight: 500; color: var(--text-muted); }
+        .features-list { list-style: none; padding: 0; margin: 30px 0; text-align: left; }
+        .features-list li { margin-bottom: 12px; color: var(--text-muted); }
+        .features-list li i { color: #27c93f; margin-right: 10px; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="container">
+        <div class="logo"><a href="/">🔴 AFK Live</a></div>
+        <div class="nav-links">
+            <a href="/features">Features</a>
+            <a href="/pricing" class="active">Pricing</a>
+            <a href="/app" class="btn-login">Log In</a>
+            <a href="/oauth2/authorization/google" class="btn btn-primary">Get Started</a>
+        </div>
+    </div>
+</nav>
+
+<div class="hero">
+    <div class="container">
+        <h1>Simple pricing for everyone</h1>
+        <p>Start for free, upgrade as you grow.</p>
+
+        <div class="pricing-grid">
+            <div class="price-card">
+                <h3>Free</h3>
+                <div class="price">$0<span>/mo</span></div>
+                <p>For individuals getting started.</p>
+                <a href="/oauth2/authorization/google" class="btn btn-outline btn-block">Get Started</a>
+                <ul class="features-list">
+                    <li><i class="fa-solid fa-check"></i> 1 Channel</li>
+                    <li><i class="fa-solid fa-check"></i> 10 Scheduled Posts</li>
+                    <li><i class="fa-solid fa-check"></i> Basic Streaming</li>
+                </ul>
+            </div>
+
+            <div class="price-card popular">
+                <h3>Essentials</h3>
+                <div class="price">$6<span>/mo</span></div>
+                <p>For professionals publishing daily.</p>
+                <a href="/oauth2/authorization/google" class="btn btn-primary btn-block">Try for Free</a>
+                <ul class="features-list">
+                    <li><i class="fa-solid fa-check"></i> 3 Channels</li>
+                    <li><i class="fa-solid fa-check"></i> Unlimited Scheduling</li>
+                    <li><i class="fa-solid fa-check"></i> Analytics</li>
+                    <li><i class="fa-solid fa-check"></i> HD Streaming</li>
+                </ul>
+            </div>
+
+            <div class="price-card">
+                <h3>Team</h3>
+                <div class="price">$12<span>/mo</span></div>
+                <p>For teams collaborating on content.</p>
+                <a href="/oauth2/authorization/google" class="btn btn-outline btn-block">Try for Free</a>
+                <ul class="features-list">
+                    <li><i class="fa-solid fa-check"></i> Unlimited Channels</li>
+                    <li><i class="fa-solid fa-check"></i> Team Members</li>
+                    <li><i class="fa-solid fa-check"></i> Approval Workflow</li>
+                    <li><i class="fa-solid fa-check"></i> 4K Streaming</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
