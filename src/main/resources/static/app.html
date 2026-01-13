@@ -30,6 +30,10 @@
             <i class="fa-solid fa-chart-line"></i>
             <span>Analytics</span>
         </a>
+        <a href="#" class="menu-item" data-target="view-library" onclick="switchView('library')">
+            <i class="fa-solid fa-folder-open"></i>
+            <span>Library</span>
+        </a>
         <a href="#" class="menu-item" data-target="view-settings" onclick="switchView('settings')">
             <i class="fa-solid fa-gear"></i>
             <span>Settings</span>
@@ -164,6 +168,28 @@
         </div>
     </div>
 
+    <!-- VIEW: LIBRARY -->
+    <div id="view-library" class="view-section hidden">
+        <div class="container-narrow">
+            <div class="action-bar" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Unscheduled Videos</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">
+                        <i class="fa-solid fa-upload"></i> Bulk Upload
+                    </button>
+                    <input type="file" id="bulkUploadInput" multiple hidden accept="video/*">
+                    <button class="btn btn-primary" onclick="showAutoScheduleModal()">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Auto Schedule
+                    </button>
+                </div>
+            </div>
+
+            <div id="libraryList" class="queue-list">
+                <!-- Loaded via JS -->
+            </div>
+        </div>
+    </div>
+
     <!-- VIEW: SETTINGS -->
     <div id="view-settings" class="view-section hidden">
         <div class="container-narrow">
@@ -186,6 +212,31 @@
 </main>
 
 <!-- MODAL: SCHEDULE (Buffer Composer) -->
+<!-- MODAL: AUTO SCHEDULE -->
+<div id="autoScheduleModal" class="modal-overlay hidden">
+    <div class="modal-composer">
+        <div class="modal-header">
+            <h2>Auto Schedule Library</h2>
+            <button onclick="document.getElementById('autoScheduleModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <p>Distribute all library videos starting from a specific date.</p>
+            <div class="form-group">
+                <label>Start Date</label>
+                <input type="date" id="autoStartDate">
+            </div>
+            <div class="form-group">
+                <label>Daily Time Slots (comma separated)</label>
+                <input type="text" id="autoTimeSlots" placeholder="10:00, 14:00, 18:00">
+                <small style="color: #888;">Format: HH:mm (24h)</small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary btn-block" onclick="submitAutoSchedule()">Apply Schedule</button>
+        </div>
+    </div>
+</div>
+
 <div id="scheduleModal" class="modal-overlay hidden">
     <div class="modal-composer">
         <div class="modal-header">

@@ -84,7 +84,7 @@ public class StreamController {
         return ResponseEntity.ok(videoConversionService.getProgress(principal.getName(), fileName).orElse(0));
     }
 
-    @GetMapping("/library")
+    @GetMapping("/stream-library")
     public ResponseEntity<?> getLibrary(Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(userFileService.listConvertedVideos(principal.getName()));

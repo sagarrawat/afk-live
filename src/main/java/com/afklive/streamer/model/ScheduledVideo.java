@@ -38,6 +38,7 @@ public class ScheduledVideo {
     private String errorMessage;
 
     public enum VideoStatus {
+        LIBRARY,
         PENDING,
         PROCESSING,
         UPLOADED,

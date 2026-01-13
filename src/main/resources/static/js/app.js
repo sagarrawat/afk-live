@@ -38,13 +38,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Event Listeners: Audio
-    document.getElementById("musicDropZone").addEventListener("click", () => document.getElementById("musicFile").click());
-    document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
+    const musicDropZone = document.getElementById("musicDropZone");
+    if (musicDropZone) {
+        musicDropZone.addEventListener("click", () => document.getElementById("musicFile").click());
+        document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
+    }
 
-    document.getElementById("volumeSlider").addEventListener("input", (e) => {
-        document.getElementById("volValue").innerText = e.target.value + "%";
-        document.getElementById("audioPreview").volume = e.target.value / 100;
-    });
+    const volumeSlider = document.getElementById("volumeSlider");
+    if (volumeSlider) {
+        volumeSlider.addEventListener("input", (e) => {
+            document.getElementById("volValue").innerText = e.target.value + "%";
+            document.getElementById("audioPreview").volume = e.target.value / 100;
+        });
+    }
+
+    // Bulk Upload
+    const bulkInput = document.getElementById("bulkUploadInput");
+    if(bulkInput) bulkInput.addEventListener("change", handleBulkUpload);
 });
 
 /* --- VIEW SWITCHING --- */
@@ -63,6 +73,7 @@ function switchView(viewName) {
         'stream': 'Live Studio',
         'calendar': 'Calendar',
         'analytics': 'Analytics',
+        'library': 'Library',
         'settings': 'Settings'
     };
     document.getElementById('pageTitle').innerText = titles[viewName] || 'Dashboard';
@@ -73,6 +84,9 @@ function switchView(viewName) {
     }
     if (viewName === 'analytics') {
         initAnalytics();
+    }
+    if (viewName === 'library') {
+        loadLibraryVideos();
     }
 }
 
@@ -146,6 +160,104 @@ async function initAnalytics() {
         });
     } catch(e) {
         console.error("Failed to load analytics", e);
+    }
+}
+
+/* --- LIBRARY LOGIC --- */
+async function loadLibraryVideos() {
+    try {
+        const res = await fetch(`${API_URL}/library`);
+        const data = await res.json();
+        const container = document.getElementById('libraryList');
+
+        if (data.data.length === 0) {
+            container.innerHTML = `<div class="empty-state">No videos in library. Upload some!</div>`;
+            return;
+        }
+
+        container.innerHTML = '';
+        data.data.forEach(v => {
+            container.innerHTML += `
+                <div class="queue-item">
+                    <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
+                    <div class="queue-details">
+                        <h4>${v.title}</h4>
+                        <div class="queue-meta">Status: <span style="color:var(--text-secondary)">${v.status}</span></div>
+                    </div>
+                </div>`;
+        });
+    } catch (e) {
+        console.error("Failed to load library", e);
+    }
+}
+
+async function handleBulkUpload(e) {
+    const files = e.target.files;
+    if (!files.length) return;
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+    }
+
+    const btn = document.querySelector('button[onclick*="bulkUploadInput"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerText = "Uploading...";
+
+    try {
+        const res = await fetch(`${API_URL}/library/upload`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert(data.message);
+            loadLibraryVideos();
+        } else {
+            alert("Error: " + data.message);
+        }
+    } catch (err) {
+        alert("Upload failed");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        e.target.value = '';
+    }
+}
+
+function showAutoScheduleModal() {
+    document.getElementById('autoScheduleModal').classList.remove('hidden');
+}
+
+async function submitAutoSchedule() {
+    const startDate = document.getElementById('autoStartDate').value;
+    const slotsStr = document.getElementById('autoTimeSlots').value;
+
+    if (!startDate || !slotsStr) {
+        alert("Please fill all fields");
+        return;
+    }
+
+    const timeSlots = slotsStr.split(',').map(s => s.trim());
+
+    try {
+        const res = await fetch(`${API_URL}/library/auto-schedule`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ startDate, timeSlots })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            alert(data.message);
+            document.getElementById('autoScheduleModal').classList.add('hidden');
+            loadLibraryVideos(); // Should be empty/less now
+        } else {
+            alert("Error: " + data.message);
+        }
+    } catch (e) {
+        alert("Scheduling failed");
     }
 }
 
@@ -430,7 +542,7 @@ async function handleFileUpload(e) {
 
 async function loadLibrary() {
     try {
-        const res = await fetch('/api/library');
+        const res = await fetch('/api/stream-library');
         const files = await res.json();
         const grid = document.getElementById('libraryGrid');
         if(!grid) return;
