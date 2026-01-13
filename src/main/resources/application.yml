@@ -35,6 +35,17 @@ spring:
   sql:
     init:
       mode: always
+  mail:
+    host: localhost
+    port: 1025
+    username: user
+    password: password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
       
 rate-limiter:
   capacity: 10
