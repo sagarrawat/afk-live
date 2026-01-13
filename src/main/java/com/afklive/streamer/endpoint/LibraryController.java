@@ -3,7 +3,7 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
-import com.afklive.streamer.service.StorageService;
+import com.afklive.streamer.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class LibraryController {
 
-    private final StorageService storageService;
+    private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
 
     @PostMapping("/upload")

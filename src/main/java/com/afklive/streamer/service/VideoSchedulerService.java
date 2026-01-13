@@ -17,7 +17,7 @@ import java.util.List;
 public class VideoSchedulerService {
 
     private final ScheduledVideoRepository repository;
-    private final StorageService storageService;
+    private final FileStorageService storageService;
     private final YouTubeService youTubeService;
     private final EmailService emailService;
 

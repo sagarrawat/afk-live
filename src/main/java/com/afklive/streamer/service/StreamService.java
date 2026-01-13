@@ -37,7 +37,7 @@ public class StreamService {
     @Autowired
     private UserFileService userFileService;
     @Autowired
-    private StorageService storageService;
+    private FileStorageService storageService;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -61,15 +61,15 @@ public class StreamService {
         Path videoPath = userDir.resolve("stream_" + videoKey).toAbsolutePath();
 
         if (!java.nio.file.Files.exists(videoPath)) {
-            log.info("Downloading video from S3: {}", videoKey);
+            log.info("Downloading video from Storage: {}", videoKey);
             try {
                 storageService.downloadFileToPath(videoKey, videoPath);
             } catch (Exception e) {
-                log.error("Failed to download video from S3", e);
+                log.error("Failed to download video from Storage", e);
                 // Fallback: Check if it's a local file (legacy support)
                 videoPath = userDir.resolve(videoKey).toAbsolutePath();
                 if (!java.nio.file.Files.exists(videoPath)) {
-                    throw new IOException("Video not found in S3 or local storage: " + videoKey);
+                    throw new IOException("Video not found in Storage or local storage: " + videoKey);
                 }
             }
         }

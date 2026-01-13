@@ -2,7 +2,7 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
-import com.afklive.streamer.service.StorageService;
+import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.YouTubeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +22,7 @@ import java.util.Map;
 @Slf4j
 public class VideoController {
 
-    private final StorageService storageService;
+    private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
     private final YouTubeService youTubeService;
 

@@ -337,3 +337,22 @@ body {
 .info-card { background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333; }
 .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #333; color: #ccc; }
 .info-row:last-child { border-bottom: none; }
+
+/* RESPONSIVE FIXES */
+@media (max-width: 768px) {
+    .stream-dashboard-layout {
+        grid-template-columns: 1fr;
+        padding: 16px;
+        height: auto;
+    }
+    .stream-setup-card {
+        margin-bottom: 20px;
+    }
+    .step-box {
+        margin-bottom: 20px;
+    }
+    /* Prevent horizontal scroll */
+    body {
+        overflow-x: hidden;
+    }
+}

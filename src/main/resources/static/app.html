@@ -96,9 +96,15 @@
                             <span id="selectedVideoName">Video Name.mp4</span>
                             <button class="btn-icon-sm" onclick="clearSelectedVideo()"><i class="fa-solid fa-xmark"></i></button>
                         </div>
-                        <button id="btnSelectVideo" class="btn btn-outline btn-block" onclick="openLibraryModalForStream()">
-                            <i class="fa-solid fa-folder-open"></i> Choose from Library
-                        </button>
+                        <div id="videoSelectionButtons" style="display: flex; gap: 10px;">
+                            <button id="btnSelectVideo" class="btn btn-outline btn-block" onclick="openLibraryModalForStream()">
+                                <i class="fa-solid fa-folder-open"></i> Library
+                            </button>
+                            <button id="btnUploadStreamVideo" class="btn btn-outline btn-block" onclick="document.getElementById('streamUploadInput').click()">
+                                <i class="fa-solid fa-upload"></i> Upload
+                            </button>
+                            <input type="file" id="streamUploadInput" class="hidden" accept="video/*">
+                        </div>
 
                         <div style="margin-top: 15px; border-top: 1px dashed #333; padding-top: 15px;">
                             <label style="font-size: 0.85em; color: #888; margin-bottom: 8px; display: block;">Background Music (Optional)</label>

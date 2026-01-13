@@ -55,6 +55,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Bulk Upload
     const bulkInput = document.getElementById("bulkUploadInput");
     if(bulkInput) bulkInput.addEventListener("change", handleBulkUpload);
+
+    // Stream Direct Upload
+    const streamUpload = document.getElementById("streamUploadInput");
+    if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
 });
 
 /* --- VIEW SWITCHING --- */
@@ -536,6 +540,36 @@ function setLiveState(isLive) {
         btnStop.classList.add("hidden");
         if(statusText) statusText.innerText = "Offline";
         if(statusText) statusText.style.color = "var(--text-secondary)";
+    }
+}
+
+async function handleStreamVideoUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const btn = document.getElementById("btnUploadStreamVideo");
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ...`;
+
+    const formData = new FormData();
+    formData.append("files", file);
+
+    try {
+        const res = await fetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.success) {
+            // Auto-open library to let user select the new video
+            openLibraryModalForStream();
+        } else {
+            alert("Error: " + data.message);
+        }
+    } catch (err) {
+        alert("Upload Failed");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        e.target.value = '';
     }
 }
 
