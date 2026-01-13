@@ -19,6 +19,7 @@ public class VideoSchedulerService {
     private final ScheduledVideoRepository repository;
     private final StorageService storageService;
     private final YouTubeService youTubeService;
+    private final EmailService emailService;
 
     @Scheduled(fixedRate = 60000) // Run every minute
     public void processScheduledVideos() {
@@ -50,10 +51,12 @@ public class VideoSchedulerService {
             video.setYoutubeVideoId(videoId);
             video.setStatus(ScheduledVideo.VideoStatus.UPLOADED);
             log.info("Successfully uploaded video ID: {}", video.getId());
+            emailService.sendUploadNotification(video.getUsername(), video.getTitle(), "UPLOADED");
         } catch (Exception e) {
             log.error("Failed to upload video ID: {}", video.getId(), e);
             video.setStatus(ScheduledVideo.VideoStatus.FAILED);
             video.setErrorMessage(e.getMessage());
+            emailService.sendUploadNotification(video.getUsername(), video.getTitle(), "FAILED: " + e.getMessage());
         } finally {
             repository.save(video);
         }

@@ -195,32 +195,56 @@ async function submitSchedule() {
     formData.append("privacyStatus", privacy);
     formData.append("scheduledTime", time);
 
-    try {
-        const res = await fetch(`${API_URL}/videos/schedule`, {
-            method: 'POST',
-            body: formData
-        });
-        const data = await res.json();
+    // Progress UI
+    const progressContainer = document.getElementById("uploadProgressContainer");
+    const progressBar = document.getElementById("uploadProgressBar");
+    const progressText = document.getElementById("uploadPercent");
+    progressContainer.classList.remove("hidden");
 
-        if (data.success) {
-            closeScheduleModal();
-            loadScheduledQueue(); // Refresh list
-            alert("Success! Video scheduled.");
+    // Use XHR for progress
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/videos/schedule`, true);
 
-            // Reset form
-            fileInput.value = '';
-            document.getElementById('scheduleTitle').value = '';
-            document.getElementById("selectedFileDisplay").classList.add("hidden");
-        } else {
-            alert("Error: " + data.message);
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = percent + "%";
+            progressText.innerText = percent + "%";
         }
-    } catch (e) {
-        alert("Scheduling Failed");
-        console.error(e);
-    } finally {
+    };
+
+    xhr.onload = function() {
         btn.disabled = false;
         btn.innerText = "Schedule Post";
-    }
+        progressContainer.classList.add("hidden");
+
+        if (xhr.status === 200) {
+            const data = JSON.parse(xhr.responseText);
+            if (data.success) {
+                closeScheduleModal();
+                loadScheduledQueue();
+                alert("Success! Video scheduled.");
+
+                // Reset
+                fileInput.value = '';
+                document.getElementById('scheduleTitle').value = '';
+                document.getElementById("selectedFileDisplay").classList.add("hidden");
+            } else {
+                alert("Error: " + data.message);
+            }
+        } else {
+            alert("Upload Failed: " + xhr.statusText);
+        }
+    };
+
+    xhr.onerror = function() {
+        btn.disabled = false;
+        btn.innerText = "Schedule Post";
+        progressContainer.classList.add("hidden");
+        alert("Network Error");
+    };
+
+    xhr.send(formData);
 }
 
 async function loadScheduledQueue() {

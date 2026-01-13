@@ -36,8 +36,8 @@ public class VideoController {
             @RequestParam("scheduledTime") String scheduledTimeStr,
             @AuthenticationPrincipal OAuth2User principal
     ) {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = principal.getName(); // Use principal name (sub) for consistency with OAuth2 storage
-        if (username == null) return ResponseEntity.status(401).body("Unauthorized");
 
         try {
             log.info("Scheduling video for user: {}", username);
@@ -70,8 +70,8 @@ public class VideoController {
 
     @GetMapping("/videos")
     public ResponseEntity<?> getScheduledVideos(@AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = principal.getName();
-        if (username == null) return ResponseEntity.status(401).body("Unauthorized");
 
         List<ScheduledVideo> videos = repository.findByUsername(username);
         return ResponseEntity.ok(videos);
