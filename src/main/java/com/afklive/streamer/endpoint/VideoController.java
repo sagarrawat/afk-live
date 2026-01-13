@@ -3,6 +3,7 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.service.FileStorageService;
+import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.service.YouTubeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ public class VideoController {
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
     private final YouTubeService youTubeService;
+    private final UserService userService;
 
     @PostMapping("/videos/schedule")
     public ResponseEntity<?> scheduleVideo(
@@ -42,8 +44,11 @@ public class VideoController {
         try {
             log.info("Scheduling video for user: {}", username);
 
+            userService.checkStorageQuota(username, file.getSize());
+
             // Upload to S3
             String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
+            userService.updateStorageUsage(username, file.getSize());
 
             // Parse time
             LocalDateTime scheduledTime = LocalDateTime.parse(scheduledTimeStr);

@@ -38,6 +38,8 @@ public class StreamService {
     private UserFileService userFileService;
     @Autowired
     private FileStorageService storageService;
+    @Autowired
+    private UserService userService;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -51,6 +53,10 @@ public class StreamService {
         log.info("username [{}]", username);
 
         // 1. SAFETY CHECK: Check DB to see if this user is already live
+        // Also check quota limits
+        int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
+        userService.checkStreamQuota(username, activeCount);
+
         if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
             throw new IllegalStateException("You already have an active stream running!");
         }

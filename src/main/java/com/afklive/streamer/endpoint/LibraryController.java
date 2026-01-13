@@ -4,6 +4,7 @@ import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.service.FileStorageService;
+import com.afklive.streamer.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,7 @@ public class LibraryController {
 
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
+    private final UserService userService;
 
     @PostMapping("/upload")
     public ResponseEntity<?> bulkUpload(
@@ -41,7 +43,10 @@ public class LibraryController {
             for (MultipartFile file : files) {
                 if (file.isEmpty()) continue;
 
+                userService.checkStorageQuota(username, file.getSize());
+
                 String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
+                userService.updateStorageUsage(username, file.getSize());
 
                 ScheduledVideo video = new ScheduledVideo();
                 video.setUsername(username);

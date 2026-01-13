@@ -596,6 +596,7 @@ async function fetchUserInfo() {
                 <img src="${data.picture}" style="width:32px; height:32px; border-radius:50%; vertical-align:middle; margin-right:8px;">
                 <span>${data.name}</span>
             `;
+            renderPlanInfo(data);
             checkInitialStatus();
         } else {
             showLoginModal();
@@ -625,6 +626,27 @@ async function checkYoutubeStatus() {
                 '<span style="color:var(--danger)">Disconnected</span>';
         }
     } catch(e) {}
+}
+
+function renderPlanInfo(user) {
+    if (!user.plan) return;
+    const p = user.plan;
+
+    const nameEl = document.getElementById("planName");
+    if(nameEl) nameEl.innerText = p.name;
+
+    const usedMB = (p.storageUsed / 1024 / 1024).toFixed(1);
+    const limitMB = (p.storageLimit / 1024 / 1024).toFixed(0);
+    const percent = Math.min(100, (p.storageUsed / p.storageLimit) * 100);
+
+    const storageText = document.getElementById("storageText");
+    if(storageText) storageText.innerText = `${usedMB} / ${limitMB} MB (${percent.toFixed(1)}%)`;
+
+    const bar = document.getElementById("storageBar");
+    if(bar) bar.style.width = percent + "%";
+
+    const streamLimit = document.getElementById("streamLimitText");
+    if(streamLimit) streamLimit.innerText = p.streamLimit + " Concurrent Stream(s)";
 }
 
 async function checkInitialStatus() {

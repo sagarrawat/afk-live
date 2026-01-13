@@ -222,6 +222,30 @@
     <!-- VIEW: SETTINGS -->
     <div id="view-settings" class="view-section hidden">
         <div class="container-narrow">
+            <div class="card settings-card" style="margin-bottom: 20px;">
+                <h2>Plan & Usage</h2>
+                <div id="planInfo">
+                    <p>Current Plan: <span id="planName" style="font-weight:bold; color: var(--primary);">Loading...</span></p>
+
+                    <div style="margin-top: 20px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size: 0.9rem; color: #666;">
+                            <label>Storage</label>
+                            <span id="storageText">0 / 0 MB</span>
+                        </div>
+                        <div style="height:8px; background:#eee; border-radius:4px; overflow:hidden;">
+                            <div id="storageBar" style="width:0%; height:100%; background:var(--primary); transition: width 0.5s;"></div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; font-size: 0.9rem; color: #666;">
+                        <label>Active Streams Limit:</label>
+                        <span id="streamLimitText" style="font-weight: bold; color: var(--text-primary);">1</span>
+                    </div>
+
+                    <a href="/pricing" class="btn btn-outline btn-sm" style="margin-top: 20px;">Upgrade Plan</a>
+                </div>
+            </div>
+
             <div class="card settings-card">
                 <h2>Connections</h2>
                 <div class="connection-item">

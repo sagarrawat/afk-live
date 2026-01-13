@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     // Find the active job for a specific user
     Optional<StreamJob> findByUsernameAndIsLiveTrue(String username);
+    long countByUsernameAndIsLiveTrue(String username);
 }
