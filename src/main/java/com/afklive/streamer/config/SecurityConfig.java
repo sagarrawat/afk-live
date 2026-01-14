@@ -16,6 +16,8 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 
@@ -25,6 +27,11 @@ import java.util.function.Consumer;
 public class SecurityConfig {
 
     @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ClientRegistrationRepository clientRegistrationRepository) throws Exception {
         http
@@ -32,6 +39,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 1. PUBLIC: Landing page, assets, and user-check API
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
+                        .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
 
                         // 2. PROTECTED: The Studio URL and internal index file
                         .requestMatchers("/studio", "/app.html").permitAll()
@@ -39,7 +47,14 @@ public class SecurityConfig {
                         // 3. CATCH-ALL
                         .anyRequest().authenticated()
                 )
+                .formLogin(form -> form
+                        .loginPage("/login")
+                        .loginProcessingUrl("/login")
+                        .defaultSuccessUrl("/studio", true)
+                        .permitAll()
+                )
                 .oauth2Login(oauth -> oauth
+                        .loginPage("/login")
                         .authorizationEndpoint(authorization -> authorization
                                 .authorizationRequestResolver(authorizationRequestResolver(clientRegistrationRepository))
                         )
@@ -51,9 +66,7 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .exceptionHandling(e -> e
-                        // CHANGE: If not logged in, redirect to "/" (Home)
-                        // This replaces the 401 Error or default Login Page
-                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/"))
+                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
                 );
 
         return http.build();

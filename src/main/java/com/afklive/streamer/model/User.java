@@ -17,6 +17,12 @@ public class User {
 
     private long usedStorageBytes = 0;
 
+    private String password;
+    private boolean enabled = true;
+    private String verificationToken;
+    private String resetToken;
+    private String fullName;
+
     public User(String username) {
         this.username = username;
     }

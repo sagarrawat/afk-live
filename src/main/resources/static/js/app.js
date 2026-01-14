@@ -597,11 +597,34 @@ async function fetchUserInfo() {
                 <span>${data.name}</span>
             `;
             renderPlanInfo(data);
+
+            if (data.enabled === false) {
+                document.getElementById("verificationBanner").classList.remove("hidden");
+                disableRestrictedFeatures();
+            }
+
             checkInitialStatus();
         } else {
             showLoginModal();
         }
     } catch (e) { console.log("Guest"); }
+}
+
+function disableRestrictedFeatures() {
+    const streamBtn = document.getElementById("btnGoLive");
+    if(streamBtn) {
+        streamBtn.disabled = true;
+        streamBtn.title = "Verify email to stream";
+        streamBtn.style.opacity = "0.5";
+        streamBtn.style.cursor = "not-allowed";
+    }
+
+    // Disable YouTube connect in Settings (if visible)
+    // We might need to select carefully if there are multiple.
+    // Assuming the one in Settings -> Connections -> YouTube
+    // Since view-settings is hidden initially, we might need to apply this when switching view?
+    // Or just find all restricted buttons.
+    // For now, simple check.
 }
 
 function showLoginModal() {
