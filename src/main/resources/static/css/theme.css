@@ -283,3 +283,76 @@ body {
     .stream-sidebar { border-left: none; border-top: 1px solid #333; }
     .modal-composer { width: 100%; height: 100%; border-radius: 0; }
 }
+
+/* NEW STREAM LAYOUT */
+.stream-dashboard-layout {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 20px;
+    height: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.stream-setup-card {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 30px;
+    border: 1px solid #333;
+    overflow-y: auto;
+}
+
+.step-box {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.step-num {
+    width: 32px; height: 32px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.step-content { flex: 1; }
+.step-content label { display: block; color: #ccc; margin-bottom: 8px; font-weight: 500; }
+.step-content small { display: block; color: #666; margin-top: 4px; font-size: 0.8rem; }
+
+.selected-video-box {
+    background: #222;
+    border: 1px solid #444;
+    padding: 12px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: white;
+}
+.btn-icon-sm { background: none; border: none; color: #888; cursor: pointer; }
+.btn-icon-sm:hover { color: white; }
+
+.stream-status-panel { display: flex; flex-direction: column; gap: 20px; }
+.info-card { background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333; }
+.info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #333; color: #ccc; }
+.info-row:last-child { border-bottom: none; }
+
+/* RESPONSIVE FIXES */
+@media (max-width: 768px) {
+    .stream-dashboard-layout {
+        grid-template-columns: 1fr;
+        padding: 16px;
+        height: auto;
+    }
+    .stream-setup-card {
+        margin-bottom: 20px;
+    }
+    .step-box {
+        margin-bottom: 20px;
+    }
+    /* Prevent horizontal scroll */
+    body {
+        overflow-x: hidden;
+    }
+}

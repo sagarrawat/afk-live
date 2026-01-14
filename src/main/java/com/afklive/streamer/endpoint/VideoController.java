@@ -2,7 +2,8 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
-import com.afklive.streamer.service.StorageService;
+import com.afklive.streamer.service.FileStorageService;
+import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.service.YouTubeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,9 +23,10 @@ import java.util.Map;
 @Slf4j
 public class VideoController {
 
-    private final StorageService storageService;
+    private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
     private final YouTubeService youTubeService;
+    private final UserService userService;
 
     @PostMapping("/videos/schedule")
     public ResponseEntity<?> scheduleVideo(
@@ -36,14 +38,17 @@ public class VideoController {
             @RequestParam("scheduledTime") String scheduledTimeStr,
             @AuthenticationPrincipal OAuth2User principal
     ) {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = principal.getName(); // Use principal name (sub) for consistency with OAuth2 storage
-        if (username == null) return ResponseEntity.status(401).body("Unauthorized");
 
         try {
             log.info("Scheduling video for user: {}", username);
 
+            userService.checkStorageQuota(username, file.getSize());
+
             // Upload to S3
             String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
+            userService.updateStorageUsage(username, file.getSize());
 
             // Parse time
             LocalDateTime scheduledTime = LocalDateTime.parse(scheduledTimeStr);
@@ -70,8 +75,8 @@ public class VideoController {
 
     @GetMapping("/videos")
     public ResponseEntity<?> getScheduledVideos(@AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = principal.getName();
-        if (username == null) return ResponseEntity.status(401).body("Unauthorized");
 
         List<ScheduledVideo> videos = repository.findByUsername(username);
         return ResponseEntity.ok(videos);

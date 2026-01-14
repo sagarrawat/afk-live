@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing - AFK Live</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/landing.css">
+    <meta name="description" content="Simple pricing for YouTube scheduling and streaming.">
+    <meta property="og:title" content="Pricing - AFK Live">
+    <style>
+        .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 50px; }
+        .price-card { border: 1px solid #eee; padding: 40px; border-radius: 8px; text-align: center; }
+        .price-card.popular { border-color: var(--primary); box-shadow: 0 10px 40px rgba(44, 104, 246, 0.1); position: relative; }
+        .price-card.popular::before { content: "Most Popular"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+        .price { font-size: 3rem; font-weight: 800; margin: 20px 0; }
+        .price span { font-size: 1rem; font-weight: 500; color: var(--text-muted); }
+        .features-list { list-style: none; padding: 0; margin: 30px 0; text-align: left; }
+        .features-list li { margin-bottom: 12px; color: var(--text-muted); }
+        .features-list li i { color: #27c93f; margin-right: 10px; }
+
+        .country-toggle { text-align: center; margin-bottom: 20px; }
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; vertical-align: middle; margin: 0 10px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { -webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px); }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="container">
+        <div class="logo"><a href="/">🔴 AFK Live</a></div>
+        <div class="nav-links">
+            <a href="/features">Features</a>
+            <a href="/pricing" class="active">Pricing</a>
+            <a href="/app" class="btn-login">Log In</a>
+            <a href="/oauth2/authorization/google" class="btn btn-primary">Get Started</a>
+        </div>
+    </div>
+</nav>
+
+<div class="hero">
+    <div class="container">
+        <h1>Simple pricing for everyone</h1>
+        <p>Start for free, upgrade as you grow.</p>
+
+        <div class="country-toggle">
+            <span>USA 🇺🇸</span>
+            <label class="switch">
+                <input type="checkbox" id="countrySwitch" onchange="toggleCountry()">
+                <span class="slider round"></span>
+            </label>
+            <span>India 🇮🇳</span>
+        </div>
+
+        <div class="pricing-grid" id="pricingGrid">
+            <!-- Loaded via JS -->
+            <div style="grid-column: 1/-1; text-align: center;">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadPricing(country) {
+        try {
+            const res = await fetch(`/api/pricing?country=${country}`);
+            const data = await res.json();
+            const grid = document.getElementById('pricingGrid');
+            grid.innerHTML = '';
+
+            data.plans.forEach((plan, index) => {
+                const isPop = index === 1 ? 'popular' : '';
+                const btnClass = index === 1 ? 'btn-primary' : 'btn-outline';
+                const featuresHtml = plan.features.map(f => `<li><i class="fa-solid fa-check"></i> ${f}</li>`).join('');
+
+                grid.innerHTML += `
+                    <div class="price-card ${isPop}">
+                        <h3>${plan.title}</h3>
+                        <div class="price">${plan.price}<span>${plan.period}</span></div>
+                        <p>For individuals getting started.</p>
+                        <a href="/oauth2/authorization/google" class="btn ${btnClass} btn-block">Get Started</a>
+                        <ul class="features-list">
+                            ${featuresHtml}
+                        </ul>
+                    </div>
+                `;
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function toggleCountry() {
+        const isIndia = document.getElementById('countrySwitch').checked;
+        loadPricing(isIndia ? 'IN' : 'US');
+    }
+
+    // Init
+    loadPricing('US');
+</script>
+
+</body>
+</html>

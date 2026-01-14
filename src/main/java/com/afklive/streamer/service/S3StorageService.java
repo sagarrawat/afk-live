@@ -1,6 +1,7 @@
 package com.afklive.streamer.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -12,15 +13,17 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.UUID;
 
 @Service
-public class StorageService {
+@ConditionalOnProperty(name = "app.storage.type", havingValue = "s3")
+public class S3StorageService implements FileStorageService {
 
     private final S3Client s3Client;
     private final String bucketName;
 
-    public StorageService(
+    public S3StorageService(
             @Value("${app.storage.endpoint}") String endpoint,
             @Value("${app.storage.region}") String region,
             @Value("${app.storage.bucket}") String bucket,
@@ -55,5 +58,14 @@ public class StorageService {
                 .build();
 
         return s3Client.getObject(getOb);
+    }
+
+    @Override
+    public void downloadFileToPath(String key, Path destination) {
+        GetObjectRequest getOb = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+        s3Client.getObject(getOb, software.amazon.awssdk.core.sync.ResponseTransformer.toFile(destination));
     }
 }

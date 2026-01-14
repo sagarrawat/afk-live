@@ -36,12 +36,16 @@ public class StreamService {
     private final ConcurrentHashMap<String, Process> activeStreams = new ConcurrentHashMap<>();
     @Autowired
     private UserFileService userFileService;
+    @Autowired
+    private FileStorageService storageService;
+    @Autowired
+    private UserService userService;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
             String username,
             String streamKey,
-            String videoName,
+            String videoKey,
             String musicName,
             String musicVolume
     ) throws IOException {
@@ -49,13 +53,32 @@ public class StreamService {
         log.info("username [{}]", username);
 
         // 1. SAFETY CHECK: Check DB to see if this user is already live
+        // Also check quota limits
+        int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
+        userService.checkStreamQuota(username, activeCount);
+
         if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
             throw new IllegalStateException("You already have an active stream running!");
         }
 
-        // 2. Resolve Paths
+        // 2. Resolve Paths & Download from S3
         Path userDir = userFileService.getUserUploadDir(username);
-        Path videoPath = userDir.resolve(videoName).toAbsolutePath();
+        // We use the key as filename prefix to avoid collisions
+        Path videoPath = userDir.resolve("stream_" + videoKey).toAbsolutePath();
+
+        if (!java.nio.file.Files.exists(videoPath)) {
+            log.info("Downloading video from Storage: {}", videoKey);
+            try {
+                storageService.downloadFileToPath(videoKey, videoPath);
+            } catch (Exception e) {
+                log.error("Failed to download video from Storage", e);
+                // Fallback: Check if it's a local file (legacy support)
+                videoPath = userDir.resolve(videoKey).toAbsolutePath();
+                if (!java.nio.file.Files.exists(videoPath)) {
+                    throw new IOException("Video not found in Storage or local storage: " + videoKey);
+                }
+            }
+        }
         
         log.info("userDir [{}]", userDir);
         log.info("videoPath [{}]", videoPath);
@@ -97,7 +120,7 @@ public class StreamService {
         // 5. SAVE STATE TO DATABASE
         // We save the 'pid' so we can kill specifically THIS process later
         StreamJob job =
-                new StreamJob(username, streamKey, videoName, musicName, musicVolume, true, process.pid());
+                new StreamJob(username, streamKey, videoKey, musicName, musicVolume, true, process.pid());
         streamJobRepo.save(job);
 
         // Store reference in memory map as backup (optional, but good for speed)

@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Initialize Views
     loadGlobalSettings();
-    loadLibrary(); // For streaming view
+    // loadLibrary();
     loadScheduledQueue(); // For publish view
     checkYoutubeStatus();
 
@@ -38,13 +38,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Event Listeners: Audio
-    document.getElementById("musicDropZone").addEventListener("click", () => document.getElementById("musicFile").click());
-    document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
+    const musicDropZone = document.getElementById("musicDropZone");
+    if (musicDropZone) {
+        musicDropZone.addEventListener("click", () => document.getElementById("musicFile").click());
+        document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
+    }
 
-    document.getElementById("volumeSlider").addEventListener("input", (e) => {
-        document.getElementById("volValue").innerText = e.target.value + "%";
-        document.getElementById("audioPreview").volume = e.target.value / 100;
-    });
+    const volumeSlider = document.getElementById("volumeSlider");
+    if (volumeSlider) {
+        volumeSlider.addEventListener("input", (e) => {
+            document.getElementById("volValue").innerText = e.target.value + "%";
+            document.getElementById("audioPreview").volume = e.target.value / 100;
+        });
+    }
+
+    // Bulk Upload
+    const bulkInput = document.getElementById("bulkUploadInput");
+    if(bulkInput) bulkInput.addEventListener("change", handleBulkUpload);
+
+    // Stream Direct Upload
+    const streamUpload = document.getElementById("streamUploadInput");
+    if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
 });
 
 /* --- VIEW SWITCHING --- */
@@ -61,9 +75,194 @@ function switchView(viewName) {
     const titles = {
         'publish': 'Publishing',
         'stream': 'Live Studio',
+        'calendar': 'Calendar',
+        'analytics': 'Analytics',
+        'library': 'Library',
         'settings': 'Settings'
     };
     document.getElementById('pageTitle').innerText = titles[viewName] || 'Dashboard';
+
+    // Lazy Load
+    if (viewName === 'calendar') {
+        setTimeout(initCalendar, 100); // Small delay to ensure visibility
+    }
+    if (viewName === 'analytics') {
+        initAnalytics();
+    }
+    if (viewName === 'library') {
+        loadLibraryVideos();
+    }
+}
+
+/* --- CALENDAR LOGIC --- */
+function initCalendar() {
+    var calendarEl = document.getElementById('calendar');
+    if (!calendarEl) return;
+
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        themeSystem: 'standard',
+        events: async function(info, successCallback, failureCallback) {
+            try {
+                const res = await fetch(`${API_URL}/videos`);
+                const videos = await res.json();
+                const events = videos.map(v => ({
+                    title: v.title,
+                    start: v.scheduledTime,
+                    color: v.status === 'UPLOADED' ? '#2ba640' : (v.status === 'FAILED' ? '#cc0000' : '#2c68f6')
+                }));
+                successCallback(events);
+            } catch (e) {
+                failureCallback(e);
+            }
+        },
+        eventClick: function(info) {
+            alert('Video: ' + info.event.title + '\nScheduled: ' + info.event.start.toLocaleString());
+        }
+    });
+    calendar.render();
+}
+
+/* --- ANALYTICS LOGIC --- */
+async function initAnalytics() {
+    const ctx = document.getElementById('analyticsChart');
+    if (!ctx) return;
+
+    try {
+        const res = await fetch(`${API_URL}/mock/analytics`);
+        const data = await res.json();
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Views',
+                    data: data.views,
+                    borderColor: '#2c68f6',
+                    tension: 0.4
+                }, {
+                    label: 'Clicks',
+                    data: data.clicks,
+                    borderColor: '#27c93f',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
+    } catch(e) {
+        console.error("Failed to load analytics", e);
+    }
+}
+
+/* --- LIBRARY LOGIC --- */
+async function loadLibraryVideos() {
+    try {
+        const res = await fetch(`${API_URL}/library`);
+        const data = await res.json();
+        const container = document.getElementById('libraryList');
+
+        if (data.data.length === 0) {
+            container.innerHTML = `<div class="empty-state">No videos in library. Upload some!</div>`;
+            return;
+        }
+
+        container.innerHTML = '';
+        data.data.forEach(v => {
+            container.innerHTML += `
+                <div class="queue-item">
+                    <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
+                    <div class="queue-details">
+                        <h4>${v.title}</h4>
+                        <div class="queue-meta">Status: <span style="color:var(--text-secondary)">${v.status}</span></div>
+                    </div>
+                </div>`;
+        });
+    } catch (e) {
+        console.error("Failed to load library", e);
+    }
+}
+
+async function handleBulkUpload(e) {
+    const files = e.target.files;
+    if (!files.length) return;
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+    }
+
+    const btn = document.querySelector('button[onclick*="bulkUploadInput"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerText = "Uploading...";
+
+    try {
+        const res = await fetch(`${API_URL}/library/upload`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert(data.message);
+            loadLibraryVideos();
+        } else {
+            alert("Error: " + data.message);
+        }
+    } catch (err) {
+        alert("Upload failed");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        e.target.value = '';
+    }
+}
+
+function showAutoScheduleModal() {
+    document.getElementById('autoScheduleModal').classList.remove('hidden');
+}
+
+async function submitAutoSchedule() {
+    const startDate = document.getElementById('autoStartDate').value;
+    const slotsStr = document.getElementById('autoTimeSlots').value;
+
+    if (!startDate || !slotsStr) {
+        alert("Please fill all fields");
+        return;
+    }
+
+    const timeSlots = slotsStr.split(',').map(s => s.trim());
+
+    try {
+        const res = await fetch(`${API_URL}/library/auto-schedule`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ startDate, timeSlots })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            alert(data.message);
+            document.getElementById('autoScheduleModal').classList.add('hidden');
+            loadLibraryVideos(); // Should be empty/less now
+        } else {
+            alert("Error: " + data.message);
+        }
+    } catch (e) {
+        alert("Scheduling failed");
+    }
 }
 
 /* --- PUBLISH / SCHEDULE LOGIC --- */
@@ -112,32 +311,56 @@ async function submitSchedule() {
     formData.append("privacyStatus", privacy);
     formData.append("scheduledTime", time);
 
-    try {
-        const res = await fetch(`${API_URL}/videos/schedule`, {
-            method: 'POST',
-            body: formData
-        });
-        const data = await res.json();
+    // Progress UI
+    const progressContainer = document.getElementById("uploadProgressContainer");
+    const progressBar = document.getElementById("uploadProgressBar");
+    const progressText = document.getElementById("uploadPercent");
+    progressContainer.classList.remove("hidden");
 
-        if (data.success) {
-            closeScheduleModal();
-            loadScheduledQueue(); // Refresh list
-            alert("Success! Video scheduled.");
+    // Use XHR for progress
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/videos/schedule`, true);
 
-            // Reset form
-            fileInput.value = '';
-            document.getElementById('scheduleTitle').value = '';
-            document.getElementById("selectedFileDisplay").classList.add("hidden");
-        } else {
-            alert("Error: " + data.message);
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = percent + "%";
+            progressText.innerText = percent + "%";
         }
-    } catch (e) {
-        alert("Scheduling Failed");
-        console.error(e);
-    } finally {
+    };
+
+    xhr.onload = function() {
         btn.disabled = false;
         btn.innerText = "Schedule Post";
-    }
+        progressContainer.classList.add("hidden");
+
+        if (xhr.status === 200) {
+            const data = JSON.parse(xhr.responseText);
+            if (data.success) {
+                closeScheduleModal();
+                loadScheduledQueue();
+                alert("Success! Video scheduled.");
+
+                // Reset
+                fileInput.value = '';
+                document.getElementById('scheduleTitle').value = '';
+                document.getElementById("selectedFileDisplay").classList.add("hidden");
+            } else {
+                alert("Error: " + data.message);
+            }
+        } else {
+            alert("Upload Failed: " + xhr.statusText);
+        }
+    };
+
+    xhr.onerror = function() {
+        btn.disabled = false;
+        btn.innerText = "Schedule Post";
+        progressContainer.classList.add("hidden");
+        alert("Network Error");
+    };
+
+    xhr.send(formData);
 }
 
 async function loadScheduledQueue() {
@@ -191,21 +414,72 @@ async function loadScheduledQueue() {
 
 /* --- STREAMING LOGIC --- */
 
-// (Adapted from previous version)
-async function submitJob(fileNameFromLibrary) {
-    const targetFile = fileNameFromLibrary || uploadedFileName;
+let selectedStreamVideo = null;
+
+async function openLibraryModalForStream() {
+    document.getElementById('streamLibraryModal').classList.remove('hidden');
+    const container = document.getElementById('streamLibraryList');
+    container.innerHTML = '<p>Loading...</p>';
+
+    try {
+        const res = await fetch(`${API_URL}/library`);
+        const data = await res.json();
+
+        if (!data.success || data.data.length === 0) {
+            container.innerHTML = '<p>No videos found. Upload in "Library" first.</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        data.data.forEach(v => {
+            const item = document.createElement('div');
+            item.className = 'queue-item';
+            item.style.cursor = 'pointer';
+            item.onclick = () => selectVideoForStream(v);
+
+            item.innerHTML = `
+                <div class="queue-thumb"><i class="fa-solid fa-film"></i></div>
+                <div class="queue-details">
+                    <h4>${v.title}</h4>
+                    <div class="queue-meta">${new Date(v.createdAt || Date.now()).toLocaleDateString()}</div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+    } catch (e) {
+        container.innerHTML = '<p>Error loading library</p>';
+    }
+}
+
+function selectVideoForStream(video) {
+    selectedStreamVideo = video;
+    document.getElementById('streamLibraryModal').classList.add('hidden');
+
+    // Update UI
+    document.getElementById('btnSelectVideo').classList.add('hidden');
+    document.getElementById('selectedVideoPreview').classList.remove('hidden');
+    document.getElementById('selectedVideoName').innerText = video.title;
+}
+
+function clearSelectedVideo() {
+    selectedStreamVideo = null;
+    document.getElementById('btnSelectVideo').classList.remove('hidden');
+    document.getElementById('selectedVideoPreview').classList.add('hidden');
+}
+
+async function submitJob() {
     const key = document.getElementById("streamKey").value;
     const btn = document.getElementById("btnGoLive");
-    
-    if (!targetFile) return alert("⚠️ Select a video from the library.");
-    if (!key) return alert("⚠️ Please enter a Stream Key.");
+
+    if (!selectedStreamVideo) return alert("⚠️ Please select a video from Step 1.");
+    if (!key) return alert("⚠️ Please enter a Stream Key in Step 2.");
 
     btn.disabled = true;
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Starting...`;
 
     const formData = new FormData();
     formData.append("streamKey", key);
-    formData.append("fileName", targetFile);
+    formData.append("videoKey", selectedStreamVideo.s3Key);
 
     if (window.uploadedMusicName) {
         formData.append("musicName", window.uploadedMusicName);
@@ -219,7 +493,7 @@ async function submitJob(fileNameFromLibrary) {
         
         if (data.success) {
             setLiveState(true);
-            log("Stream Started: " + targetFile);
+            log("Stream Started: " + selectedStreamVideo.title);
         } else {
             alert(data.message);
         }
@@ -231,7 +505,7 @@ async function submitJob(fileNameFromLibrary) {
              // If success, keep disabled/change text
         } else {
              btn.disabled = false;
-             btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> Go Live`;
+             btn.innerHTML = `Start Streaming`;
         }
     }
 }
@@ -248,101 +522,54 @@ async function stopStream() {
 
 function setLiveState(isLive) {
     const indicator = document.getElementById("liveIndicator");
-    const placeholder = document.querySelector(".preview-placeholder");
     const btnGo = document.getElementById("btnGoLive");
     const btnStop = document.getElementById("btnStop");
+    const statusText = document.getElementById("streamStatusText");
 
     if (isLive) {
         indicator.classList.remove("hidden");
-        placeholder.classList.add("hidden");
         btnGo.classList.add("hidden");
         btnStop.classList.remove("hidden");
+        if(statusText) statusText.innerText = "Live";
+        if(statusText) statusText.style.color = "var(--success)";
     } else {
         indicator.classList.add("hidden");
-        placeholder.classList.remove("hidden");
         btnGo.classList.remove("hidden");
         btnGo.disabled = false;
-        btnGo.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> Go Live`;
+        btnGo.innerHTML = `Start Streaming`;
         btnStop.classList.add("hidden");
+        if(statusText) statusText.innerText = "Offline";
+        if(statusText) statusText.style.color = "var(--text-secondary)";
     }
 }
 
-/* --- LIBRARY & UPLOAD LOGIC --- */
-
-async function handleMusicUpload(e) {
-    if (!currentUser) { showLoginModal(); return; }
-
+async function handleStreamVideoUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    document.getElementById("audioControlPanel").classList.remove("hidden");
-    const audioPlayer = document.getElementById("audioPreview");
-    audioPlayer.src = URL.createObjectURL(file);
-
-    log(`🎵 Uploading Music: ${file.name}...`);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
-    if (res.ok) {
-        const data = await res.json();
-        window.uploadedMusicName = data.data;
-        document.getElementById("musicText").innerText = "✅ " + file.name;
-        log("✅ Audio Track Ready.");
-    }
-}
-
-async function handleFileUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    log(`Uploading: ${file.name}...`);
+    const btn = document.getElementById("btnUploadStreamVideo");
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ...`;
 
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("files", file);
 
     try {
-        const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
-        if (res.ok) {
-            const data = await res.json();
-            // In a real app we might transcode. Here we just add to library.
-            // But we need the filename returned by server for the streaming backend.
-            uploadedFileName = data.data;
-            log("Upload Complete. Processing...");
-
-            // Mock processing delay then refresh library
-            setTimeout(() => {
-                loadLibrary();
-                log("Ready to stream.");
-            }, 1000);
+        const res = await fetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.success) {
+            // Auto-open library to let user select the new video
+            openLibraryModalForStream();
+        } else {
+            alert("Error: " + data.message);
         }
     } catch (err) {
-        log("Upload Failed");
-    }
-}
-
-async function loadLibrary() {
-    try {
-        const res = await fetch('/api/library');
-        const files = await res.json();
-        const grid = document.getElementById('libraryGrid');
-        if(!grid) return;
-
-        grid.innerHTML = '';
-        files.forEach(file => {
-            const item = document.createElement('div');
-            item.className = 'lib-item';
-            item.innerText = file.replace('ready_', '').substring(0, 20) + '...';
-            item.onclick = () => {
-                document.querySelectorAll('.lib-item').forEach(el => el.classList.remove('selected'));
-                item.classList.add('selected');
-                uploadedFileName = file; // Set as target
-                log("Selected: " + file);
-            };
-            grid.appendChild(item);
-        });
-    } catch (err) {
-        console.error("Library load failed", err);
+        alert("Upload Failed");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        e.target.value = '';
     }
 }
 
@@ -369,6 +596,7 @@ async function fetchUserInfo() {
                 <img src="${data.picture}" style="width:32px; height:32px; border-radius:50%; vertical-align:middle; margin-right:8px;">
                 <span>${data.name}</span>
             `;
+            renderPlanInfo(data);
             checkInitialStatus();
         } else {
             showLoginModal();
@@ -398,6 +626,27 @@ async function checkYoutubeStatus() {
                 '<span style="color:var(--danger)">Disconnected</span>';
         }
     } catch(e) {}
+}
+
+function renderPlanInfo(user) {
+    if (!user.plan) return;
+    const p = user.plan;
+
+    const nameEl = document.getElementById("planName");
+    if(nameEl) nameEl.innerText = p.name;
+
+    const usedMB = (p.storageUsed / 1024 / 1024).toFixed(1);
+    const limitMB = (p.storageLimit / 1024 / 1024).toFixed(0);
+    const percent = Math.min(100, (p.storageUsed / p.storageLimit) * 100);
+
+    const storageText = document.getElementById("storageText");
+    if(storageText) storageText.innerText = `${usedMB} / ${limitMB} MB (${percent.toFixed(1)}%)`;
+
+    const bar = document.getElementById("storageBar");
+    if(bar) bar.style.width = percent + "%";
+
+    const streamLimit = document.getElementById("streamLimitText");
+    if(streamLimit) streamLimit.innerText = p.streamLimit + " Concurrent Stream(s)";
 }
 
 async function checkInitialStatus() {
