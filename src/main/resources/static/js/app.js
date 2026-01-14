@@ -288,8 +288,10 @@ async function submitSchedule() {
     if (!currentUser) { showLoginModal(); return; }
 
     const fileInput = document.getElementById('scheduleFile');
+    const thumbnailInput = document.getElementById('scheduleThumbnail');
     const title = document.getElementById('scheduleTitle').value;
     const description = document.getElementById('scheduleDescription').value;
+    const category = document.getElementById('scheduleCategory').value;
     const tags = document.getElementById('scheduleTags').value;
     const privacy = document.getElementById('schedulePrivacy').value;
     const time = document.getElementById('scheduleTime').value;
@@ -305,8 +307,14 @@ async function submitSchedule() {
 
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
+    if (thumbnailInput && thumbnailInput.files[0]) {
+        formData.append("thumbnail", thumbnailInput.files[0]);
+    }
     formData.append("title", title);
     formData.append("description", description);
+    if (category) {
+        formData.append("categoryId", category);
+    }
     formData.append("tags", tags);
     formData.append("privacyStatus", privacy);
     formData.append("scheduledTime", time);
@@ -343,6 +351,7 @@ async function submitSchedule() {
 
                 // Reset
                 fileInput.value = '';
+                if(thumbnailInput) thumbnailInput.value = '';
                 document.getElementById('scheduleTitle').value = '';
                 document.getElementById("selectedFileDisplay").classList.add("hidden");
             } else {
