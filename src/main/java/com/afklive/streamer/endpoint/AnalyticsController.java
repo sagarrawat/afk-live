@@ -20,8 +20,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/analytics")
 @RequiredArgsConstructor
-@Slf4j
 public class AnalyticsController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AnalyticsController.class);
 
     private final YouTubeService youTubeService;
 

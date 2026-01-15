@@ -23,8 +23,8 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/library")
 @RequiredArgsConstructor
-@Slf4j
 public class LibraryController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LibraryController.class);
 
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;

@@ -24,8 +24,8 @@ import java.util.Collections;
 import java.util.List;
 
 @Service
-@Slf4j
 public class YouTubeService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(YouTubeService.class);
 
     private final AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager;
     private static final String APPLICATION_NAME = "AFK Live Streamer";
@@ -67,7 +67,6 @@ public class YouTubeService {
                 .setApplicationName(APPLICATION_NAME)
                 .build();
     }
-    public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus, String categoryId) throws Exception {
 
     private YouTubeAnalytics getAnalyticsClient(String username) throws Exception {
         return new YouTubeAnalytics.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(username))
@@ -185,30 +184,5 @@ public class YouTubeService {
                 .setRegionCode(regionCode != null ? regionCode : "US")
                 .execute();
         return response.getItems();
-        Authentication principal = createPrincipal(username);
-        OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
-                .principal(principal)
-                .build();
-
-        OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
-
-        if (client == null) {
-            throw new IllegalStateException("User " + username + " is not connected to YouTube.");
-        }
-
-        Credential credential = new Credential(BearerToken.authorizationHeaderAccessMethod())
-                .setAccessToken(client.getAccessToken().getTokenValue());
-
-        YouTube youtube = new YouTube.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, credential)
-                .setApplicationName(APPLICATION_NAME)
-                .build();
-
-        InputStreamContent mediaContent = new InputStreamContent("application/octet-stream", thumbnailStream);
-        youtube.thumbnails().set(videoId, mediaContent).execute();
-        log.info("Uploaded thumbnail for video ID: {}", videoId);
-    }
-
-    private Authentication createPrincipal(String username) {
-        return new UsernamePasswordAuthenticationToken(username, "N/A", AuthorityUtils.NO_AUTHORITIES);
     }
 }

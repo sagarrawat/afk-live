@@ -12,8 +12,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/comments")
 @RequiredArgsConstructor
-@Slf4j
 public class CommentController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CommentController.class);
 
     private final YouTubeService youTubeService;
 

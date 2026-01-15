@@ -252,10 +252,10 @@ async function sendReply() {
             loadComments();
             // Note: Optimistic UI update would be better here for "Apple" feel
         } else {
-            alert("Error: " + data.message);
+            showToast("Error: " + data.message, "error");
         }
     } catch (e) {
-        alert("Reply failed");
+        showToast("Reply failed", "error");
     } finally {
         btn.disabled = false;
     }
@@ -275,11 +275,12 @@ async function deleteComment(id) {
                 document.getElementById('activeThread').classList.add('hidden');
                 activeThreadId = null;
             }
+            showToast("Comment deleted", "success");
         } else {
-            alert("Error: " + data.message);
+            showToast("Error: " + data.message, "error");
         }
     } catch(e) {
-        alert("Delete failed");
+        showToast("Delete failed", "error");
     }
 }
 
@@ -311,7 +312,7 @@ function initCalendar() {
             }
         },
         eventClick: function(info) {
-            alert('Video: ' + info.event.title + '\nScheduled: ' + info.event.start.toLocaleString());
+            showToast('Video: ' + info.event.title, 'info');
         }
     });
     calendar.render();
@@ -437,13 +438,13 @@ async function handleBulkUpload(e) {
         });
         const data = await res.json();
         if (res.ok) {
-            alert(data.message);
+            showToast(data.message, "success");
             loadLibraryVideos();
         } else {
-            alert("Error: " + data.message);
+            showToast("Error: " + data.message, "error");
         }
     } catch (err) {
-        alert("Upload failed");
+        showToast("Upload failed", "error");
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
@@ -460,7 +461,7 @@ async function submitAutoSchedule() {
     const slotsStr = document.getElementById('autoTimeSlots').value;
 
     if (!startDate || !slotsStr) {
-        alert("Please fill all fields");
+        showToast("Please fill all fields", "error");
         return;
     }
 
@@ -475,14 +476,14 @@ async function submitAutoSchedule() {
         const data = await res.json();
 
         if (res.ok) {
-            alert(data.message);
+            showToast(data.message, "success");
             document.getElementById('autoScheduleModal').classList.add('hidden');
             loadLibraryVideos(); // Should be empty/less now
         } else {
-            alert("Error: " + data.message);
+            showToast("Error: " + data.message, "error");
         }
     } catch (e) {
-        alert("Scheduling failed");
+        showToast("Scheduling failed", "error");
     }
 }
 
@@ -554,7 +555,7 @@ async function submitSchedule() {
     const btn = document.getElementById('btnSchedule');
 
     if (!fileInput.files[0] || !title || !time) {
-        alert("Please fill all required fields (File, Title, Time)");
+        showToast("Please fill all required fields (File, Title, Time)", "error");
         return;
     }
 
@@ -603,7 +604,7 @@ async function submitSchedule() {
             if (data.success) {
                 closeScheduleModal();
                 loadScheduledQueue();
-                alert("Success! Video scheduled.");
+                showToast("Success! Video scheduled.", "success");
 
                 // Reset
                 fileInput.value = '';
@@ -611,10 +612,10 @@ async function submitSchedule() {
                 document.getElementById('scheduleTitle').value = '';
                 document.getElementById("selectedFileDisplay").classList.add("hidden");
             } else {
-                alert("Error: " + data.message);
+                showToast("Error: " + data.message, "error");
             }
         } else {
-            alert("Upload Failed: " + xhr.statusText);
+            showToast("Upload Failed: " + xhr.statusText, "error");
         }
     };
 
@@ -622,7 +623,7 @@ async function submitSchedule() {
         btn.disabled = false;
         btn.innerText = "Schedule Post";
         progressContainer.classList.add("hidden");
-        alert("Network Error");
+        showToast("Network Error", "error");
     };
 
     xhr.send(formData);
@@ -736,8 +737,8 @@ async function submitJob() {
     const key = document.getElementById("streamKey").value;
     const btn = document.getElementById("btnGoLive");
 
-    if (!selectedStreamVideo) return alert("⚠️ Please select a video from Step 1.");
-    if (!key) return alert("⚠️ Please enter a Stream Key in Step 2.");
+    if (!selectedStreamVideo) return showToast("⚠️ Please select a video from Step 1.", "error");
+    if (!key) return showToast("⚠️ Please enter a Stream Key in Step 2.", "error");
 
     btn.disabled = true;
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Starting...`;
@@ -759,11 +760,12 @@ async function submitJob() {
         if (data.success) {
             setLiveState(true);
             log("Stream Started: " + selectedStreamVideo.title);
+            showToast("Stream started!", "success");
         } else {
-            alert(data.message);
+            showToast(data.message, "error");
         }
     } catch (err) {
-        alert("Failed to start stream");
+        showToast("Failed to start stream", "error");
         log("Error starting stream");
     } finally {
         if(!document.getElementById("liveIndicator").classList.contains("hidden")) {
@@ -826,11 +828,12 @@ async function handleStreamVideoUpload(e) {
         if (data.success) {
             // Auto-open library to let user select the new video
             openLibraryModalForStream();
+            showToast("Video uploaded!", "success");
         } else {
-            alert("Error: " + data.message);
+            showToast("Error: " + data.message, "error");
         }
     } catch (err) {
-        alert("Upload Failed");
+        showToast("Upload Failed", "error");
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;

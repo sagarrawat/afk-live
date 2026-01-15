@@ -61,5 +61,15 @@
     </div>
 </div>
 
+<script>
+    // Redirect if already logged in (checked via API for simplicity in hybrid auth)
+    fetch('/api/user-info')
+        .then(res => res.json())
+        .then(data => {
+            if(data.email) window.location.href = '/studio';
+        })
+        .catch(() => {});
+</script>
+
 </body>
 </html>

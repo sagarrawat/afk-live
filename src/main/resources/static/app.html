@@ -11,8 +11,13 @@
 </head>
 <body>
 
+<!-- Mobile Hamburger Button -->
+<button class="hamburger" style="position: fixed; top: 15px; left: 15px; z-index: 3000;">
+    <i class="fa-solid fa-bars"></i>
+</button>
+
 <nav class="sidebar">
-    <div class="logo" style="font-weight: 800; font-size: 1.2rem; color: #fff;">🔴 AFK Live</div>
+    <div class="logo" style="font-weight: 800; font-size: 1.2rem; color: #172b4d;">🔴 AFK Live</div>
     <div class="menu">
         <a href="#" class="menu-item active" data-target="view-publish" onclick="switchView('publish')">
             <i class="fa-regular fa-calendar"></i>
@@ -56,6 +61,8 @@
 
     <!-- HEADER -->
     <header class="top-bar">
+        <!-- Spacer for hamburger -->
+        <div style="width: 30px; display: inline-block;"></div>
         <h1 id="pageTitle">Publishing</h1>
         <div class="user-profile" id="userHeader">
             <span>Guest</span>
@@ -336,7 +343,6 @@
 
 </main>
 
-<!-- MODAL: SCHEDULE (Buffer Composer) -->
 <!-- MODAL: AUTO SCHEDULE -->
 <div id="autoScheduleModal" class="modal-overlay hidden">
     <div class="modal-composer">
@@ -386,22 +392,13 @@
                 </div>
             </div>
 
-            <div style="display: flex; gap: 20px;">
+            <div style="display: flex; gap: 20px; flex-direction: row;" class="composer-layout">
                 <!-- Left: Form -->
                 <div style="flex: 1;">
                     <div class="form-group">
                         <label>Custom Thumbnail (Optional)</label>
                         <input type="file" id="scheduleThumbnail" accept="image/*" class="form-control" style="padding: 6px;">
                     </div>
-            <div class="form-group">
-                <label>Custom Thumbnail (Optional)</label>
-                <input type="file" id="scheduleThumbnail" accept="image/*" class="form-control" style="padding: 6px;">
-            </div>
-
-            <div class="form-group">
-                <label>Title</label>
-                <input type="text" id="scheduleTitle" placeholder="Video title">
-            </div>
 
                     <div class="form-group">
                         <label>Title</label>
@@ -417,10 +414,31 @@
                         <div class="form-group">
                             <label>Category</label>
                             <select id="scheduleCategory">
-                                <option value="">Select Category</option>
+                                <option value="">Select Category...</option>
+                                <option value="22">People & Blogs</option>
+                                <option value="10">Music</option>
+                                <option value="20">Gaming</option>
+                                <option value="24">Entertainment</option>
+                                <option value="27">Education</option>
+                                <option value="28">Science & Technology</option>
+                                <option value="1">Film & Animation</option>
+                                <option value="2">Autos & Vehicles</option>
+                                <option value="15">Pets & Animals</option>
+                                <option value="17">Sports</option>
+                                <option value="19">Travel & Events</option>
+                                <option value="23">Comedy</option>
+                                <option value="25">News & Politics</option>
+                                <option value="26">Howto & Style</option>
                             </select>
                         </div>
-                         <div class="form-group">
+                        <div class="form-group">
+                             <label>Tags</label>
+                             <input type="text" id="scheduleTags" placeholder="comma, separated, tags">
+                         </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
                             <label>Privacy</label>
                             <select id="schedulePrivacy">
                                 <option value="private">Private</option>
@@ -428,55 +446,15 @@
                                 <option value="public">Public</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="form-row">
                         <div class="form-group">
                             <label>Schedule For</label>
                             <input type="datetime-local" id="scheduleTime">
                         </div>
-                         <div class="form-group">
-                            <label>Tags</label>
-                            <input type="text" id="scheduleTags" placeholder="comma, separated, tags" oninput="updatePreview()">
-                        </div>
                     </div>
-            <div class="form-group">
-                <label>Category</label>
-                <select id="scheduleCategory">
-                    <option value="">Select Category...</option>
-                    <option value="22">People & Blogs</option>
-                    <option value="10">Music</option>
-                    <option value="20">Gaming</option>
-                    <option value="24">Entertainment</option>
-                    <option value="27">Education</option>
-                    <option value="28">Science & Technology</option>
-                    <option value="1">Film & Animation</option>
-                    <option value="2">Autos & Vehicles</option>
-                    <option value="15">Pets & Animals</option>
-                    <option value="17">Sports</option>
-                    <option value="19">Travel & Events</option>
-                    <option value="23">Comedy</option>
-                    <option value="25">News & Politics</option>
-                    <option value="26">Howto & Style</option>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Privacy</label>
-                    <select id="schedulePrivacy">
-                        <option value="private">Private</option>
-                        <option value="unlisted">Unlisted</option>
-                        <option value="public">Public</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Schedule For</label>
-                    <input type="datetime-local" id="scheduleTime">
                 </div>
 
                 <!-- Right: Preview Card -->
-                <div style="width: 300px; flex-shrink: 0;">
+                <div style="width: 300px; flex-shrink: 0;" class="preview-panel">
                      <label style="display:block; margin-bottom: 10px; font-weight: 600; font-size: 0.85rem;">YouTube Preview</label>
                      <div class="yt-preview-card">
                          <div class="yt-preview-thumb">
@@ -515,15 +493,17 @@
     <div class="modal-box center-text">
         <h2>Sign In</h2>
         <p>Access your studio and scheduler.</p>
-        <a href="/oauth2/authorization/google" class="btn btn-google">
-            <i class="fa-brands fa-google"></i> Continue with Google
+        <a href="/login" class="btn btn-primary btn-block">
+             Log In
         </a>
+        <br>
         <button onclick="document.getElementById('loginModal').classList.add('hidden')" class="btn-text">Cancel</button>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="js/toast.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

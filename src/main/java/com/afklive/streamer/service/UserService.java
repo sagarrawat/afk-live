@@ -1,5 +1,6 @@
 package com.afklive.streamer.service;
 
+import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -54,8 +55,9 @@ public class UserService {
         User user = new User(email);
         user.setPassword(passwordEncoder.encode(password));
         user.setFullName(name);
-        user.setEnabled(false);
+        user.setEnabled(false); // Email verification required
         user.setVerificationToken(UUID.randomUUID().toString());
+        user.setPlanType(PlanType.FREE); // Default to Free plan
         userRepository.save(user);
 
         String link = "http://localhost:8080/verify-email?token=" + user.getVerificationToken();
@@ -93,5 +95,12 @@ public class UserService {
             return true;
         }
         return false;
+    }
+
+    @Transactional
+    public void updatePlan(String username, PlanType newPlan) {
+        User user = getOrCreateUser(username);
+        user.setPlanType(newPlan);
+        userRepository.save(user);
     }
 }

@@ -19,8 +19,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@Slf4j
 public class VideoController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VideoController.class);
 
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;

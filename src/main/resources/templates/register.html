@@ -17,6 +17,9 @@
         .links a { color: var(--primary); text-decoration: none; font-weight: 500; }
         .alert { padding: 10px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; }
         .alert-error { background: #ffebeb; color: var(--danger); border: 1px solid #ffcccc; }
+        .divider { text-align: center; margin: 20px 0; color: #888; font-size: 0.9rem; position: relative; }
+        .divider::before { content: ""; position: absolute; left: 0; top: 50%; width: 45%; height: 1px; background: #eee; }
+        .divider::after { content: ""; position: absolute; right: 0; top: 50%; width: 45%; height: 1px; background: #eee; }
     </style>
 </head>
 <body>
@@ -42,10 +45,26 @@
         <button type="submit" class="btn btn-primary btn-block">Create Account</button>
     </form>
 
+    <div class="divider">OR</div>
+
+    <a href="/oauth2/authorization/google" class="btn btn-google btn-block">
+        <i class="fa-brands fa-google"></i> Continue with Google
+    </a>
+
     <div class="links">
         Already have an account? <a href="/login">Log in</a>
     </div>
 </div>
+
+<script>
+    // Redirect if already logged in (checked via API for simplicity in hybrid auth)
+    fetch('/api/user-info')
+        .then(res => res.json())
+        .then(data => {
+            if(data.email) window.location.href = '/studio';
+        })
+        .catch(() => {});
+</script>
 
 </body>
 </html>

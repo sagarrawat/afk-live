@@ -37,12 +37,12 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // 1. PUBLIC: Landing page, assets, and user-check API
+                        // 1. PUBLIC: Landing page, assets
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
 
                         // 2. PROTECTED: The Studio URL and internal index file
-                        .requestMatchers("/studio", "/app.html").permitAll()
+                        // Removed /studio and /app.html from permitAll to force login
 
                         // 3. CATCH-ALL
                         .anyRequest().authenticated()
@@ -58,7 +58,7 @@ public class SecurityConfig {
                         .authorizationEndpoint(authorization -> authorization
                                 .authorizationRequestResolver(authorizationRequestResolver(clientRegistrationRepository))
                         )
-                        // CHANGE: Redirect to /studio after login, not index.html
+                        // CHANGE: Redirect to /studio after login
                         .defaultSuccessUrl("/studio", true)
                 )
                 .logout(logout -> logout
