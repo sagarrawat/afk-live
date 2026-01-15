@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f9f9f9; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .logo { font-size: 24px; font-weight: bold; color: #172b4d; text-decoration: none; }
+        .content { font-size: 16px; line-height: 1.6; color: #333; }
+        .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #999; }
+        .status { font-weight: bold; color: #2c68f6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="#" class="logo">🔴 AFK Live</a>
+        </div>
+        <div class="content">
+            <h2>Video Update</h2>
+            <p>Your video <b th:text="${videoTitle}">Title</b> status has changed.</p>
+            <p>New Status: <span class="status" th:text="${status}">UPLOADED</span></p>
+            <p>Log in to your dashboard to view details.</p>
+        </div>
+        <div class="footer">
+            &copy; 2024 AFK Live. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

@@ -1,10 +1,13 @@
 package com.afklive.streamer.service;
 
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
 
 @Service
 @RequiredArgsConstructor
@@ -12,43 +15,51 @@ import org.springframework.stereotype.Service;
 public class EmailService {
 
     private final JavaMailSender emailSender;
+    private final TemplateEngine templateEngine;
 
     public void sendUploadNotification(String to, String videoTitle, String status) {
-        String subject = "AFK Live: Video " + status;
-        String text = "Hello,\n\nYour video \"" + videoTitle + "\" has been " + status + ".\n\nBest,\nThe AFK Live Team";
-        sendEmail(to, subject, text);
+        Context context = new Context();
+        context.setVariable("videoTitle", videoTitle);
+        context.setVariable("status", status);
+        String html = templateEngine.process("email/notification", context);
+        sendEmail(to, "AFK Live: Video " + status, html);
     }
 
     public void sendVerificationEmail(String to, String link) {
-        String subject = "Verify your email - AFK Live";
-        String text = "Welcome to AFK Live!\n\nPlease click the following link to verify your email address:\n" + link + "\n\nIf you did not sign up, please ignore this email.";
-        sendEmail(to, subject, text);
+        Context context = new Context();
+        context.setVariable("link", link);
+        String html = templateEngine.process("email/verification", context);
+        sendEmail(to, "Verify your email - AFK Live", html);
     }
 
     public void sendPasswordResetEmail(String to, String link) {
-        String subject = "Reset your password - AFK Live";
-        String text = "Hello,\n\nWe received a request to reset your password. Click the link below to set a new password:\n" + link + "\n\nThis link will expire in 24 hours.";
-        sendEmail(to, subject, text);
+        Context context = new Context();
+        context.setVariable("link", link);
+        String html = templateEngine.process("email/reset-password", context);
+        sendEmail(to, "Reset your password - AFK Live", html);
     }
 
-    private void sendEmail(String to, String subject, String text) {
+    private void sendEmail(String to, String subject, String htmlContent) {
         if (to == null || to.isEmpty()) {
             log.warn("Skipping email notification: No recipient address.");
             return;
         }
 
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom("noreply@afklive.com");
-            message.setTo(to);
-            message.setSubject(subject);
-            message.setText(text);
+            MimeMessage message = emailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom("noreply@afklive.com");
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(htmlContent, true); // true = html
+
             emailSender.send(message);
             log.info("Email sent to {}", to);
         } catch (Exception e) {
             log.warn("Failed to send email to {}: {}", to, e.getMessage());
             // Fallback: Just log it since we might not have valid SMTP config in dev
-            log.info("[MOCK EMAIL] To: {}, Subject: {}, Body: {}", to, subject, text);
+            log.info("[MOCK EMAIL] To: {}, Subject: {}, Body: {}", to, subject, htmlContent);
         }
     }
 }

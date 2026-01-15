@@ -7,250 +7,212 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/theme.css">
-    <meta name="description" content="AFK Live Studio - Manage your streams and schedule.">
 </head>
 <body>
 
-<!-- Mobile Hamburger Button -->
-<button class="hamburger" style="position: fixed; top: 15px; left: 15px; z-index: 3000;">
-    <i class="fa-solid fa-bars"></i>
-</button>
+<div class="app-layout">
 
-<nav class="sidebar">
-    <div class="logo" style="font-weight: 800; font-size: 1.2rem; color: #172b4d;">🔴 AFK Live</div>
-    <div class="menu">
-        <a href="#" class="menu-item active" data-target="view-publish" onclick="switchView('publish')">
-            <i class="fa-regular fa-calendar"></i>
-            <span>Publish</span>
-        </a>
-        <a href="#" class="menu-item" data-target="view-stream" onclick="switchView('stream')">
-            <i class="fa-solid fa-tower-broadcast"></i>
-            <span>Stream</span>
-            <span class="badge-new">New</span>
-        </a>
-        <a href="#" class="menu-item" data-target="view-calendar" onclick="switchView('calendar')">
-            <i class="fa-regular fa-calendar-days"></i>
-            <span>Calendar</span>
-        </a>
-        <a href="#" class="menu-item" data-target="view-analytics" onclick="switchView('analytics')">
-            <i class="fa-solid fa-chart-line"></i>
-            <span>Analytics</span>
-        </a>
-        <a href="#" class="menu-item" data-target="view-library" onclick="switchView('library')">
-            <i class="fa-solid fa-folder-open"></i>
-            <span>Library</span>
-        </a>
-        <a href="#" class="menu-item" data-target="view-community" onclick="switchView('community')">
-            <i class="fa-solid fa-comments"></i>
-            <span>Community</span>
-        </a>
-        <a href="#" class="menu-item" data-target="view-settings" onclick="switchView('settings')">
-            <i class="fa-solid fa-gear"></i>
-            <span>Settings</span>
-        </a>
-    </div>
+    <!-- LEVEL 1: ICON SIDEBAR (Channels/Orgs) -->
+    <aside class="icon-sidebar">
+        <a href="#" class="icon-btn logo-btn" title="AFK Live">🔴</a>
 
-    <div style="margin-top: auto; padding-top: 20px;">
-        <a href="/logout" class="menu-item" style="color: var(--danger);">
-            <i class="fa-solid fa-right-from-bracket"></i>
-            <span>Logout</span>
-        </a>
-    </div>
-</nav>
-
-<main class="content-area">
-
-    <!-- HEADER -->
-    <header class="top-bar">
-        <!-- Spacer for hamburger -->
-        <div style="width: 30px; display: inline-block;"></div>
-        <h1 id="pageTitle">Publishing</h1>
-        <div class="user-profile" id="userHeader">
-            <span>Guest</span>
+        <div id="channelIconsList" class="channel-list">
+            <!-- Populated via JS -->
         </div>
-    </header>
 
-    <div id="verificationBanner" class="hidden" style="background: #ffecb5; color: #663c00; padding: 10px; text-align: center; border-bottom: 1px solid #e0c485; font-size: 0.9rem;">
-        ⚠️ Please verify your email address to access all features (Streaming, YouTube Connection).
-    </div>
+        <button class="icon-btn add-btn" onclick="addMockChannel()" title="Add Channel">
+            <i class="fa-solid fa-plus"></i>
+        </button>
 
-    <!-- VIEW: PUBLISH (Buffer-like) -->
-    <div id="view-publish" class="view-section">
-        <div class="container-narrow">
-            <div class="action-bar">
-                <button class="btn btn-primary btn-create" onclick="showScheduleModal()">
-                    <i class="fa-solid fa-plus"></i> Create Post
-                </button>
-            </div>
+        <div class="spacer"></div>
 
-            <div class="channel-tabs" id="publishChannelTabs">
-                <!-- Populated via JS -->
-            </div>
+        <a href="#" class="icon-btn" onclick="switchView('settings')" title="Settings">
+            <img src="" id="userAvatarSmall" class="avatar-small hidden">
+            <i class="fa-solid fa-gear" id="settingsIcon"></i>
+        </a>
+    </aside>
 
-            <div class="queue-list" id="queueList">
-                <!-- Empty State -->
-                <div class="empty-state">
-                    <div class="icon-box">📅</div>
-                    <h3>Your queue is empty</h3>
-                    <p>Schedule your first video to get started.</p>
-                </div>
+    <!-- LEVEL 2: NAV SIDEBAR (Contextual) -->
+    <nav class="sub-sidebar" id="subSidebar">
+        <div class="sidebar-header">
+            <h2 id="sidebarTitle">Publishing</h2>
+            <div class="dropdown-trigger">
+                 <span id="currentChannelName">All Channels</span> <i class="fa-solid fa-chevron-down"></i>
             </div>
         </div>
-    </div>
 
-    <!-- VIEW: STREAM (LiveKaro-like) -->
-    <div id="view-stream" class="view-section hidden">
-        <div class="stream-dashboard-layout">
+        <div class="menu">
+            <a href="#" class="menu-item active" data-target="view-publish" onclick="switchView('publish')">
+                <i class="fa-regular fa-paper-plane"></i>
+                <span>Queue</span>
+            </a>
+            <a href="#" class="menu-item" data-target="view-calendar" onclick="switchView('calendar')">
+                <i class="fa-regular fa-calendar"></i>
+                <span>Calendar</span>
+            </a>
+            <div class="menu-divider"></div>
+            <a href="#" class="menu-item" data-target="view-stream" onclick="switchView('stream')">
+                <i class="fa-solid fa-satellite-dish"></i>
+                <span>Live Stream</span>
+            </a>
+             <a href="#" class="menu-item" data-target="view-community" onclick="switchView('community')">
+                <i class="fa-regular fa-comments"></i>
+                <span>Engagement</span>
+            </a>
+            <a href="#" class="menu-item" data-target="view-analytics" onclick="switchView('analytics')">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Analytics</span>
+            </a>
+            <a href="#" class="menu-item" data-target="view-library" onclick="switchView('library')">
+                <i class="fa-regular fa-folder"></i>
+                <span>Media Library</span>
+            </a>
+            <div class="menu-divider"></div>
+             <a href="#" class="menu-item" data-target="view-settings" onclick="switchView('settings')">
+                <i class="fa-solid fa-gear"></i>
+                <span>Settings</span>
+            </a>
+        </div>
 
-            <!-- Left Panel: Controls -->
-            <div class="stream-setup-card card">
-                <h2><i class="fa-solid fa-satellite-dish"></i> Live Studio</h2>
-                <p class="text-secondary" style="margin-bottom: 20px;">Stream your pre-recorded videos in a 24/7 loop.</p>
+        <div class="sidebar-footer">
+             <a href="/logout" class="menu-item logout">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span>Logout</span>
+            </a>
+        </div>
+    </nav>
 
-                <div class="step-box">
-                    <div class="step-num">1</div>
-                    <div class="step-content">
-                        <label>Select Video Source</label>
-                        <div id="selectedVideoPreview" class="selected-video-box hidden">
-                            <i class="fa-solid fa-file-video"></i>
-                            <span id="selectedVideoName">Video Name.mp4</span>
-                            <button class="btn-icon-sm" onclick="clearSelectedVideo()"><i class="fa-solid fa-xmark"></i></button>
+    <!-- LEVEL 3: CONTENT -->
+    <main class="content-area">
+
+        <!-- Mobile Header -->
+        <header class="mobile-header">
+            <button class="hamburger" onclick="toggleMobileMenu()"><i class="fa-solid fa-bars"></i></button>
+            <span class="mobile-title">AFK Live</span>
+        </header>
+
+        <div id="verificationBanner" class="hidden warning-banner">
+            ⚠️ Please verify your email address to access all features.
+        </div>
+
+        <!-- VIEW: PUBLISH -->
+        <div id="view-publish" class="view-section">
+            <header class="page-header">
+                <h1>Queue</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="showScheduleModal()">
+                        <i class="fa-solid fa-pen-to-square"></i> Create Post
+                    </button>
+                </div>
+            </header>
+
+            <div class="container-fluid">
+                <div class="queue-list" id="queueList">
+                     <!-- Populated JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: STREAM -->
+        <div id="view-stream" class="view-section hidden">
+            <!-- Reuse existing stream layout but cleaner -->
+            <div class="stream-dashboard-layout">
+                <div class="stream-setup-card">
+                    <div class="card-header">
+                        <h2>Live Studio</h2>
+                        <span class="badge live hidden" id="liveBadge">LIVE</span>
+                    </div>
+
+                    <div class="step-box">
+                         <div class="step-num">1</div>
+                         <div class="step-content">
+                             <label>Video Source</label>
+                             <div id="selectedVideoPreview" class="selected-video-box hidden">
+                                 <i class="fa-solid fa-film"></i>
+                                 <span id="selectedVideoName">Video.mp4</span>
+                                 <button class="btn-icon" onclick="clearSelectedVideo()"><i class="fa-solid fa-xmark"></i></button>
+                             </div>
+                             <div id="videoSelectionButtons" class="btn-group">
+                                 <button class="btn btn-outline" onclick="openLibraryModalForStream()">Select from Library</button>
+                                 <button class="btn btn-outline" onclick="document.getElementById('streamUploadInput').click()">Upload New</button>
+                                 <input type="file" id="streamUploadInput" hidden accept="video/*">
+                             </div>
+                         </div>
+                    </div>
+
+                    <div class="step-box">
+                        <div class="step-num">2</div>
+                        <div class="step-content">
+                            <label>Destination</label>
+                            <input type="password" id="streamKey" placeholder="Stream Key (YouTube/Twitch)" class="form-input">
                         </div>
-                        <div id="videoSelectionButtons" style="display: flex; gap: 10px;">
-                            <button id="btnSelectVideo" class="btn btn-outline btn-block" onclick="openLibraryModalForStream()">
-                                <i class="fa-solid fa-folder-open"></i> Library
-                            </button>
-                            <button id="btnUploadStreamVideo" class="btn btn-outline btn-block" onclick="document.getElementById('streamUploadInput').click()">
-                                <i class="fa-solid fa-upload"></i> Upload
-                            </button>
-                            <input type="file" id="streamUploadInput" class="hidden" accept="video/*">
-                        </div>
+                    </div>
 
-                        <div style="margin-top: 15px; border-top: 1px dashed #333; padding-top: 15px;">
-                            <label style="font-size: 0.85em; color: #888; margin-bottom: 8px; display: block;">Background Music (Optional)</label>
-                            <div class="upload-zone small" id="musicDropZone" style="border: 1px dashed #444; padding: 10px; text-align: center; border-radius: 4px; cursor: pointer; background: #222; color: #aaa; transition: 0.2s;">
-                                <span id="musicText"><i class="fa-solid fa-music"></i> Upload Audio</span>
-                            </div>
-                            <input type="file" id="musicFile" class="hidden" accept=".mp3, .wav">
-
-                            <div id="audioControlPanel" class="hidden" style="margin-top: 10px;">
-                                <div class="audio-controls" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #ccc; margin-bottom: 4px;">
-                                    <span>Volume</span>
-                                    <span id="volValue">80%</span>
-                                </div>
-                                <input type="range" id="volumeSlider" min="0" max="100" value="80" style="width: 100%; height: 4px; border-radius: 2px;">
-                                <audio id="audioPreview" controls style="width: 100%; height: 30px; margin-top: 8px; filter: invert(0.8);"></audio>
-                            </div>
-                        </div>
+                    <div class="step-box">
+                         <div class="step-num">3</div>
+                         <div class="step-content">
+                             <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">Go Live</button>
+                             <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
+                         </div>
                     </div>
                 </div>
 
-                <div class="step-box">
-                    <div class="step-num">2</div>
-                    <div class="step-content">
-                        <label>Stream Key</label>
-                        <input type="password" id="streamKey" placeholder="Paste YouTube/Facebook Stream Key" class="form-input">
-                        <small>We don't need channel access. Just the key.</small>
-                    </div>
-                </div>
-
-                <div class="step-box">
-                    <div class="step-num">3</div>
-                    <div class="step-content">
-                        <label>Action</label>
-                        <div class="control-actions">
-                            <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
-                                Start Streaming
-                            </button>
-                            <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">
-                                Stop Stream
-                            </button>
-                        </div>
-                         <div class="live-indicator hidden" id="liveIndicator" style="margin-top: 10px; text-align: center; color: var(--danger); font-weight: bold;">
-                            <span class="blink">●</span> LIVE NOW
-                        </div>
+                <div class="stream-status-panel">
+                    <div class="terminal-card">
+                        <div class="terminal" id="console"></div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Right Panel: Status & Terminal -->
-            <div class="stream-status-panel">
-                 <div class="card terminal-card">
-                     <div class="terminal-header">
-                        <span><i class="fa-solid fa-terminal"></i> Live Logs</span>
-                        <div class="dots"><span></span><span></span><span></span></div>
+        <!-- VIEW: CALENDAR -->
+        <div id="view-calendar" class="view-section hidden">
+            <header class="page-header">
+                <h1>Calendar</h1>
+            </header>
+            <div id="calendar" class="calendar-container"></div>
+        </div>
+
+        <!-- VIEW: COMMUNITY -->
+        <div id="view-community" class="view-section hidden">
+            <div class="community-layout">
+                <div class="thread-list-panel">
+                     <div class="search-bar">
+                         <input type="text" placeholder="Search comments..." class="form-input">
                      </div>
-                     <div class="terminal" id="console">
-                        <div class="log-entry">System Ready. Select a video to begin.</div>
-                     </div>
+                     <div id="threadList" class="thread-list"></div>
                 </div>
-
-                <div class="card info-card" style="margin-top: 20px;">
-                    <h3>Stream Info</h3>
-                    <div class="info-row">
-                        <span>Status</span>
-                        <span id="streamStatusText">Offline</span>
+                <div class="thread-view-panel">
+                    <div id="emptyThreadState" class="empty-state">
+                        <i class="fa-regular fa-comments"></i>
+                        <p>Select a conversation</p>
                     </div>
-                    <div class="info-row">
-                         <span>Loop</span>
-                         <span class="badge success" style="background: var(--success); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">Enabled</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- VIEW: CALENDAR -->
-    <div id="view-calendar" class="view-section hidden">
-        <div class="container-fluid">
-            <div id="calendar"></div>
-        </div>
-    </div>
-
-    <!-- VIEW: COMMUNITY -->
-    <div id="view-community" class="view-section hidden">
-        <div class="community-layout">
-            <!-- Left: Thread List -->
-            <div class="thread-list-panel">
-                 <div class="search-bar">
-                     <input type="text" placeholder="Search comments..." class="form-input">
-                 </div>
-                 <div id="threadList" class="thread-list">
-                     <!-- Populated via JS -->
-                 </div>
-            </div>
-
-            <!-- Right: Conversation -->
-            <div class="thread-view-panel">
-                <div id="emptyThreadState" class="empty-state" style="padding: 100px 0;">
-                    <i class="fa-regular fa-comments" style="font-size: 3rem; color: #ccc;"></i>
-                    <p>Select a conversation to reply</p>
-                </div>
-
-                <div id="activeThread" class="hidden">
-                    <div class="thread-header">
-                        <h3 id="threadVideoTitle">Video Title</h3>
-                        <a href="#" id="threadVideoLink" target="_blank"><i class="fa-solid fa-external-link"></i></a>
-                    </div>
-
-                    <div id="threadMessages" class="thread-messages">
-                        <!-- Messages -->
-                    </div>
-
-                    <div class="reply-box">
-                        <textarea id="replyInput" placeholder="Write a reply..." rows="3"></textarea>
-                        <button class="btn btn-primary" onclick="sendReply()">Reply</button>
+                    <div id="activeThread" class="hidden">
+                        <div class="thread-header">
+                             <h3 id="threadVideoTitle">Video Title</h3>
+                             <a href="#" id="threadVideoLink" target="_blank"><i class="fa-solid fa-external-link"></i></a>
+                        </div>
+                        <div id="threadMessages" class="thread-messages"></div>
+                        <div class="reply-box">
+                            <textarea id="replyInput" placeholder="Write a reply..." rows="3"></textarea>
+                            <button class="btn btn-primary" onclick="sendReply()">Reply</button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- VIEW: ANALYTICS -->
-    <div id="view-analytics" class="view-section hidden">
-        <div class="container-narrow">
-            <!-- Summary Cards -->
-             <div class="summary-grid">
+        <!-- VIEW: ANALYTICS -->
+        <div id="view-analytics" class="view-section hidden">
+             <header class="page-header">
+                <h1>Analytics</h1>
+                <select id="analyticsRange" class="form-select" onchange="initAnalytics()">
+                    <option value="28">Last 28 Days</option>
+                    <option value="7">Last 7 Days</option>
+                </select>
+            </header>
+
+            <div class="summary-grid">
                  <div class="card summary-card">
                      <h3>Views</h3>
                      <p id="totalViews">0</p>
@@ -260,267 +222,176 @@
                      <p id="totalSubs">0</p>
                  </div>
                  <div class="card summary-card">
-                     <h3>Watch Time (min)</h3>
+                     <h3>Watch Time</h3>
                      <p id="totalWatchTime">0</p>
                  </div>
              </div>
-
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2>Performance Overview</h2>
-                    <select id="analyticsRange" class="form-select-sm" onchange="initAnalytics()">
-                        <option value="7">Last 7 Days</option>
-                        <option value="28" selected>Last 28 Days</option>
-                        <option value="90">Last 90 Days</option>
-                    </select>
-                </div>
-                <div style="height: 300px;">
-                    <canvas id="analyticsChart"></canvas>
-                </div>
-            </div>
+             <div class="card chart-card">
+                 <canvas id="analyticsChart"></canvas>
+             </div>
         </div>
-    </div>
 
-    <!-- VIEW: LIBRARY -->
-    <div id="view-library" class="view-section hidden">
-        <div class="container-narrow">
-            <div class="action-bar" style="display: flex; justify-content: space-between; align-items: center;">
-                <h2>Unscheduled Videos</h2>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">
-                        <i class="fa-solid fa-upload"></i> Bulk Upload
-                    </button>
+        <!-- VIEW: LIBRARY -->
+        <div id="view-library" class="view-section hidden">
+            <header class="page-header">
+                <h1>Media Library</h1>
+                <div class="header-actions">
+                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">Upload</button>
                     <input type="file" id="bulkUploadInput" multiple hidden accept="video/*">
-                    <button class="btn btn-primary" onclick="showAutoScheduleModal()">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i> Auto Schedule
-                    </button>
+                    <button class="btn btn-primary" onclick="showAutoScheduleModal()">Auto-Schedule</button>
                 </div>
-            </div>
-
-            <div id="libraryList" class="queue-list">
-                <!-- Loaded via JS -->
-            </div>
+            </header>
+            <div id="libraryList" class="queue-list"></div>
         </div>
-    </div>
 
-    <!-- VIEW: SETTINGS -->
-    <div id="view-settings" class="view-section hidden">
-        <div class="container-narrow">
-            <div class="card settings-card" style="margin-bottom: 20px;">
-                <h2>Plan & Usage</h2>
-                <div id="planInfo">
-                    <p>Current Plan: <span id="planName" style="font-weight:bold; color: var(--primary);">Loading...</span></p>
+        <!-- VIEW: SETTINGS -->
+        <div id="view-settings" class="view-section hidden">
+            <header class="page-header">
+                <h1>Settings</h1>
+            </header>
 
-                    <div style="margin-top: 20px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size: 0.9rem; color: #666;">
-                            <label>Storage</label>
-                            <span id="storageText">0 / 0 MB</span>
+            <div class="settings-grid">
+                <div class="card">
+                    <h2>Subscription</h2>
+                    <div id="planInfo">
+                        <p>Plan: <strong id="planName">Loading...</strong></p>
+                        <div class="progress-bar-container">
+                            <div class="progress-label"><span>Storage</span><span id="storageText">0/0</span></div>
+                            <div class="progress-track"><div id="storageBar" class="progress-fill"></div></div>
                         </div>
-                        <div style="height:8px; background:#eee; border-radius:4px; overflow:hidden;">
-                            <div id="storageBar" style="width:0%; height:100%; background:var(--primary); transition: width 0.5s;"></div>
-                        </div>
+                        <a href="/pricing" class="btn btn-outline btn-sm" style="margin-top:15px;">Upgrade</a>
                     </div>
-
-                    <div style="margin-top: 15px; font-size: 0.9rem; color: #666;">
-                        <label>Active Streams Limit:</label>
-                        <span id="streamLimitText" style="font-weight: bold; color: var(--text-primary);">1</span>
-                    </div>
-
-                    <a href="/pricing" class="btn btn-outline btn-sm" style="margin-top: 20px;">Upgrade Plan</a>
-                </div>
-            </div>
-
-            <div class="card settings-card">
-                <h2>Connections</h2>
-                <div class="connection-item">
-                    <div class="conn-info">
-                        <i class="fa-brands fa-youtube" style="color: red; font-size: 1.5rem;"></i>
-                        <div>
-                            <h3>YouTube</h3>
-                            <div id="ytConnectionStatus" class="status-text">Checking...</div>
-                        </div>
-                    </div>
-                    <a href="/oauth2/authorization/google" class="btn btn-sm btn-outline">Reconnect</a>
                 </div>
 
-                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <h3>Managed Channels</h3>
-                        <button class="btn btn-sm btn-outline" onclick="addMockChannel()">+ Add Channel</button>
-                    </div>
-                    <div id="channelListSettings" class="queue-list">
-                        <!-- Loaded via JS -->
+                <div class="card">
+                    <h2>Channels</h2>
+                    <div id="channelListSettings" class="queue-list compact"></div>
+                    <button class="btn btn-outline btn-sm btn-block" onclick="addMockChannel()">+ Add Channel</button>
+                </div>
+
+                <div class="card">
+                    <h2>Integrations</h2>
+                    <div class="connection-item">
+                        <i class="fa-brands fa-google"></i>
+                        <span>Google Account</span>
+                        <a href="/oauth2/authorization/google" class="btn btn-sm btn-outline">Reconnect</a>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-</main>
-
-<!-- MODAL: AUTO SCHEDULE -->
-<div id="autoScheduleModal" class="modal-overlay hidden">
-    <div class="modal-composer">
-        <div class="modal-header">
-            <h2>Auto Schedule Library</h2>
-            <button onclick="document.getElementById('autoScheduleModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="modal-body">
-            <p>Distribute all library videos starting from a specific date.</p>
-            <div class="form-group">
-                <label>Start Date</label>
-                <input type="date" id="autoStartDate">
-            </div>
-            <div class="form-group">
-                <label>Daily Time Slots (comma separated)</label>
-                <input type="text" id="autoTimeSlots" placeholder="10:00, 14:00, 18:00">
-                <small style="color: #888;">Format: HH:mm (24h)</small>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-primary btn-block" onclick="submitAutoSchedule()">Apply Schedule</button>
-        </div>
-    </div>
+    </main>
 </div>
 
+<!-- MODALS -->
+
+<!-- Schedule Modal -->
 <div id="scheduleModal" class="modal-overlay hidden">
-    <div class="modal-composer" style="width: 900px; max-width: 95vw;">
+    <div class="modal-composer">
         <div class="modal-header">
-            <h2>New Post</h2>
+            <h2>Create Post</h2>
             <button onclick="closeScheduleModal()" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="modal-body">
-            <!-- Channel Selector Step -->
-            <div class="form-group" style="margin-bottom: 20px;">
-                <label>Select Channel</label>
-                <div id="modalChannelSelector" class="channel-selector-grid">
-                    <!-- Populated via JS -->
-                </div>
-            </div>
-
-            <div class="drop-area" id="dropZone">
-                <i class="fa-solid fa-cloud-arrow-up"></i>
-                <p>Drag & drop video or <span>browse</span></p>
-                <input type="file" id="scheduleFile" accept="video/*" hidden>
-                <div id="selectedFileDisplay" class="hidden file-badge"></div>
-
-                <div id="uploadProgressContainer" class="hidden" style="margin-top: 15px; width: 100%;">
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 5px;">
-                        <span>Uploading...</span>
-                        <span id="uploadPercent">0%</span>
-                    </div>
-                    <div style="height: 6px; background: #eee; border-radius: 3px; overflow: hidden;">
-                        <div id="uploadProgressBar" style="width: 0%; height: 100%; background: var(--primary);"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 20px; flex-direction: row;" class="composer-layout">
-                <!-- Left: Form -->
-                <div style="flex: 1;">
+            <div class="composer-grid">
+                <div class="composer-main">
+                    <!-- Step 1: Channel -->
                     <div class="form-group">
-                        <label>Custom Thumbnail (Optional)</label>
-                        <input type="file" id="scheduleThumbnail" accept="image/*" class="form-control" style="padding: 6px;">
+                        <label>Post to</label>
+                        <div id="modalChannelSelector" class="channel-selector-row"></div>
                     </div>
 
+                    <!-- Step 2: Content -->
                     <div class="form-group">
-                        <label>Title <i class="fa-solid fa-wand-magic-sparkles ai-btn" onclick="aiGenerate('title')" title="AI Magic"></i></label>
-                        <input type="text" id="scheduleTitle" placeholder="Video title" oninput="updatePreview()">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Description <i class="fa-solid fa-wand-magic-sparkles ai-btn" onclick="aiGenerate('description')" title="AI Magic"></i></label>
-                        <textarea id="scheduleDescription" rows="4" placeholder="What is this video about?" oninput="updatePreview()"></textarea>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Category</label>
-                            <select id="scheduleCategory">
-                                <option value="">Select Category...</option>
-                                <option value="22">People & Blogs</option>
-                                <option value="10">Music</option>
-                                <option value="20">Gaming</option>
-                                <option value="24">Entertainment</option>
-                                <option value="27">Education</option>
-                                <option value="28">Science & Technology</option>
-                                <option value="1">Film & Animation</option>
-                                <option value="2">Autos & Vehicles</option>
-                                <option value="15">Pets & Animals</option>
-                                <option value="17">Sports</option>
-                                <option value="19">Travel & Events</option>
-                                <option value="23">Comedy</option>
-                                <option value="25">News & Politics</option>
-                                <option value="26">Howto & Style</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                             <label>Tags <i class="fa-solid fa-wand-magic-sparkles ai-btn" onclick="aiGenerate('tags')" title="AI Magic"></i></label>
-                             <input type="text" id="scheduleTags" placeholder="comma, separated, tags">
-                         </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Privacy</label>
-                            <select id="schedulePrivacy">
-                                <option value="private">Private</option>
-                                <option value="unlisted">Unlisted</option>
-                                <option value="public">Public</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Schedule For</label>
-                            <input type="datetime-local" id="scheduleTime">
+                        <textarea id="scheduleDescription" class="composer-textarea" placeholder="What would you like to share?"></textarea>
+                        <div class="composer-tools">
+                             <button class="tool-btn" onclick="aiGenerate('description')" title="AI Assist"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Write</button>
+                             <button class="tool-btn" onclick="document.getElementById('scheduleTags').focus()"><i class="fa-solid fa-hashtag"></i> Tags</button>
                         </div>
                     </div>
-                </div>
 
-                <!-- Right: Preview Card -->
-                <div style="width: 300px; flex-shrink: 0;" class="preview-panel">
-                     <label style="display:block; margin-bottom: 10px; font-weight: 600; font-size: 0.85rem;">YouTube Preview</label>
-                     <div class="yt-preview-card">
-                         <div class="yt-preview-thumb">
-                             <div class="yt-duration">12:34</div>
+                    <div class="media-upload-area" id="dropZone">
+                        <div id="mediaPlaceholder">
+                            <i class="fa-regular fa-image"></i>
+                            <span>Add Video</span>
+                        </div>
+                        <div id="selectedFileDisplay" class="hidden">
+                            <i class="fa-solid fa-file-video"></i> <span id="fileName">video.mp4</span>
+                        </div>
+                        <input type="file" id="scheduleFile" accept="video/*" hidden>
+                    </div>
+
+                    <!-- Progress -->
+                    <div id="uploadProgressContainer" class="hidden">
+                        <div class="progress-track"><div id="uploadProgressBar" class="progress-fill"></div></div>
+                        <small id="uploadPercent">0%</small>
+                    </div>
+
+                    <!-- Details -->
+                     <div class="form-row">
+                        <div class="form-group">
+                            <label>Title</label>
+                            <input type="text" id="scheduleTitle" class="form-input">
+                        </div>
+                         <div class="form-group">
+                            <label>Time</label>
+                            <input type="datetime-local" id="scheduleTime" class="form-input">
+                        </div>
+                    </div>
+
+                    <div class="collapsible-details">
+                         <div class="form-row">
+                             <div class="form-group">
+                                <label>Category</label>
+                                <select id="scheduleCategory" class="form-input"></select>
+                             </div>
+                             <div class="form-group">
+                                <label>Privacy</label>
+                                <select id="schedulePrivacy" class="form-input">
+                                    <option value="private">Private</option>
+                                    <option value="public">Public</option>
+                                </select>
+                             </div>
                          </div>
-                         <div class="yt-preview-info">
-                             <div id="previewTitle" class="yt-preview-title">Video Title</div>
-                             <div class="yt-preview-meta">AFK Live • 0 views • Just now</div>
-                             <div id="previewDesc" class="yt-preview-desc">Video description goes here...</div>
+                         <div class="form-group">
+                             <input type="text" id="scheduleTags" placeholder="Tags (comma separated)" class="form-input">
                          </div>
-                     </div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="modal-footer">
-            <button id="btnSchedule" class="btn btn-primary btn-block" onclick="submitSchedule()">Schedule Post</button>
+            <button class="btn btn-primary" id="btnSchedule" onclick="submitSchedule()">Schedule Post</button>
         </div>
     </div>
 </div>
 
+<!-- Auto Schedule Modal -->
+<div id="autoScheduleModal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <h3>Auto Schedule</h3>
+        <p>Automatically distribute your library content.</p>
+        <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="autoStartDate" class="form-input">
+        </div>
+        <div class="form-group">
+            <label>Times (HH:mm)</label>
+            <input type="text" id="autoTimeSlots" placeholder="10:00, 15:00" class="form-input">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="submitAutoSchedule()">Apply</button>
+            <button class="btn btn-text" onclick="document.getElementById('autoScheduleModal').classList.add('hidden')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Stream Library Modal -->
 <div id="streamLibraryModal" class="modal-overlay hidden">
-    <div class="modal-composer">
-        <div class="modal-header">
-            <h2>Select Video</h2>
-            <button onclick="document.getElementById('streamLibraryModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="modal-body">
-            <div id="streamLibraryList" class="queue-list" style="max-height: 400px; overflow-y: auto;">
-                <!-- Populated via JS -->
-            </div>
-        </div>
-    </div>
-</div>
-
-<div id="loginModal" class="modal-overlay hidden">
-    <div class="modal-box center-text">
-        <h2>Sign In</h2>
-        <p>Access your studio and scheduler.</p>
-        <a href="/login" class="btn btn-primary btn-block">
-             Log In
-        </a>
-        <br>
-        <button onclick="document.getElementById('loginModal').classList.add('hidden')" class="btn-text">Cancel</button>
+    <div class="modal-box">
+        <h3>Select Video</h3>
+        <div id="streamLibraryList" class="scroll-list"></div>
+        <button class="btn btn-text" onclick="document.getElementById('streamLibraryModal').classList.add('hidden')">Cancel</button>
     </div>
 </div>
 
