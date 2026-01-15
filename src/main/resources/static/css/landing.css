@@ -32,9 +32,11 @@ body {
 .logo {
     font-size: 24px;
     font-weight: 800;
-    color: #2c68f6;
     text-transform: uppercase;
     letter-spacing: -0.5px;
+    background: linear-gradient(45deg, #e02424, #ffbd2e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .nav-links a {
@@ -69,10 +71,12 @@ body {
     background: #2c68f6;
     color: white !important;
     border: 1px solid #2c68f6;
+    animation: pulse 2s infinite;
 }
 
 .btn-primary:hover {
     background: #1b52d6;
+    animation: none;
 }
 
 .btn-lg {
@@ -129,6 +133,7 @@ body {
     margin: 0 auto;
     overflow: hidden;
     border: 1px solid #e1e1e1;
+    animation: float 6s ease-in-out infinite;
 }
 
 .fake-ui-header {
@@ -344,6 +349,38 @@ body {
 
 .footer a:hover {
     color: #2c68f6;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(44, 104, 246, 0.7); }
+    70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(44, 104, 246, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(44, 104, 246, 0); }
+}
+
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+}
+
+/* Tablet Media Query */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .container {
+        padding: 0 40px;
+    }
+
+    .hero-content h1 {
+        font-size: 48px;
+    }
+
+    .feature-row {
+        gap: 30px;
+    }
+
+    .feature-text {
+        padding: 20px;
+    }
 }
 
 /* Mobile Responsive */

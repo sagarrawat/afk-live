@@ -58,6 +58,7 @@ body {
     text-decoration: none;
     font-weight: 500;
     transition: all 0.2s;
+    position: relative;
 }
 
 .menu-item:hover {
@@ -68,6 +69,17 @@ body {
 .menu-item.active {
     background: #ebecf0;
     color: var(--primary);
+}
+
+.badge-new {
+    background: #e02424;
+    color: white;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: auto;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 /* MAIN CONTENT */
@@ -315,6 +327,16 @@ body {
     .queue-meta {
         flex-direction: column;
         gap: 4px;
+    }
+}
+
+/* Large Screens */
+@media (min-width: 1440px) {
+    .container-narrow {
+        max-width: 1000px;
+    }
+    .stream-dashboard-layout {
+        max-width: 1600px;
     }
 }
 
