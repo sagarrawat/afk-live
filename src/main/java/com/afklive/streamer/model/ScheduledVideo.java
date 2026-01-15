@@ -31,6 +31,8 @@ public class ScheduledVideo {
 
     private String s3Key;
 
+    private String thumbnailS3Key;
+
     @Enumerated(EnumType.STRING)
     private VideoStatus status;
 

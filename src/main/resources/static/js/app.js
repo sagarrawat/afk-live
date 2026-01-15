@@ -88,7 +88,7 @@ function switchView(viewName) {
         setTimeout(initCalendar, 100); // Small delay to ensure visibility
     }
     if (viewName === 'analytics') {
-        initAnalytics();
+        setTimeout(initAnalytics, 50);
     }
     if (viewName === 'library') {
         loadLibraryVideos();
@@ -543,8 +543,10 @@ async function submitSchedule() {
     if (!currentUser) { showLoginModal(); return; }
 
     const fileInput = document.getElementById('scheduleFile');
+    const thumbnailInput = document.getElementById('scheduleThumbnail');
     const title = document.getElementById('scheduleTitle').value;
     const description = document.getElementById('scheduleDescription').value;
+    const category = document.getElementById('scheduleCategory').value;
     const tags = document.getElementById('scheduleTags').value;
     const categoryId = document.getElementById('scheduleCategory').value;
     const privacy = document.getElementById('schedulePrivacy').value;
@@ -561,10 +563,15 @@ async function submitSchedule() {
 
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
+    if (thumbnailInput && thumbnailInput.files[0]) {
+        formData.append("thumbnail", thumbnailInput.files[0]);
+    }
     formData.append("title", title);
     formData.append("description", description);
+    if (category) {
+        formData.append("categoryId", category);
+    }
     formData.append("tags", tags);
-    if(categoryId) formData.append("categoryId", categoryId);
     formData.append("privacyStatus", privacy);
     formData.append("scheduledTime", time);
 
@@ -600,6 +607,7 @@ async function submitSchedule() {
 
                 // Reset
                 fileInput.value = '';
+                if(thumbnailInput) thumbnailInput.value = '';
                 document.getElementById('scheduleTitle').value = '';
                 document.getElementById("selectedFileDisplay").classList.add("hidden");
             } else {
@@ -854,11 +862,34 @@ async function fetchUserInfo() {
                 <span>${data.name}</span>
             `;
             renderPlanInfo(data);
+
+            if (data.enabled === false) {
+                document.getElementById("verificationBanner").classList.remove("hidden");
+                disableRestrictedFeatures();
+            }
+
             checkInitialStatus();
         } else {
             showLoginModal();
         }
     } catch (e) { console.log("Guest"); }
+}
+
+function disableRestrictedFeatures() {
+    const streamBtn = document.getElementById("btnGoLive");
+    if(streamBtn) {
+        streamBtn.disabled = true;
+        streamBtn.title = "Verify email to stream";
+        streamBtn.style.opacity = "0.5";
+        streamBtn.style.cursor = "not-allowed";
+    }
+
+    // Disable YouTube connect in Settings (if visible)
+    // We might need to select carefully if there are multiple.
+    // Assuming the one in Settings -> Connections -> YouTube
+    // Since view-settings is hidden initially, we might need to apply this when switching view?
+    // Or just find all restricted buttons.
+    // For now, simple check.
 }
 
 function showLoginModal() {

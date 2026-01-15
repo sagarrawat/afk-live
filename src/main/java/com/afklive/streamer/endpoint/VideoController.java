@@ -8,11 +8,10 @@ import com.afklive.streamer.service.YouTubeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +28,7 @@ public class VideoController {
     private final UserService userService;
 
     @GetMapping("/youtube/categories")
-    public ResponseEntity<?> getVideoCategories(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<?> getVideoCategories(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         try {
             return ResponseEntity.ok(youTubeService.getVideoCategories(principal.getName(), "US"));
@@ -41,13 +40,14 @@ public class VideoController {
     @PostMapping("/videos/schedule")
     public ResponseEntity<?> scheduleVideo(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "thumbnail", required = false) MultipartFile thumbnail,
             @RequestParam("title") String title,
             @RequestParam("description") String description,
             @RequestParam("tags") String tags,
             @RequestParam("privacyStatus") String privacyStatus,
             @RequestParam(value = "categoryId", required = false) String categoryId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
-            @AuthenticationPrincipal OAuth2User principal
+            Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = principal.getName(); // Use principal name (sub) for consistency with OAuth2 storage
@@ -60,6 +60,13 @@ public class VideoController {
             // Upload to S3
             String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
             userService.updateStorageUsage(username, file.getSize());
+
+            String thumbnailKey = null;
+            if (thumbnail != null && !thumbnail.isEmpty()) {
+                userService.checkStorageQuota(username, thumbnail.getSize());
+                thumbnailKey = storageService.uploadFile(thumbnail.getInputStream(), thumbnail.getOriginalFilename(), thumbnail.getSize());
+                userService.updateStorageUsage(username, thumbnail.getSize());
+            }
 
             // Parse time
             LocalDateTime scheduledTime = LocalDateTime.parse(scheduledTimeStr);
@@ -74,6 +81,7 @@ public class VideoController {
             video.setPrivacyStatus(privacyStatus);
             video.setScheduledTime(scheduledTime);
             video.setS3Key(s3Key);
+            video.setThumbnailS3Key(thumbnailKey);
             video.setStatus(ScheduledVideo.VideoStatus.PENDING);
 
             repository.save(video);
@@ -86,7 +94,7 @@ public class VideoController {
     }
 
     @GetMapping("/videos")
-    public ResponseEntity<?> getScheduledVideos(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<?> getScheduledVideos(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = principal.getName();
 
@@ -95,7 +103,7 @@ public class VideoController {
     }
 
     @GetMapping("/youtube/status")
-    public ResponseEntity<?> getYouTubeStatus(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<?> getYouTubeStatus(Principal principal) {
         if (principal == null) return ResponseEntity.ok(Map.of("connected", false));
         String username = principal.getName();
         boolean connected = youTubeService.isConnected(username);

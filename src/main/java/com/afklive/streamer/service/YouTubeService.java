@@ -116,6 +116,13 @@ public class YouTubeService {
         return returnedVideo.getId();
     }
 
+    public void uploadThumbnail(String username, String videoId, InputStream thumbnailStream) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        InputStreamContent mediaContent = new InputStreamContent("application/octet-stream", thumbnailStream);
+        youtube.thumbnails().set(videoId, mediaContent).execute();
+        log.info("Uploaded thumbnail for video ID: {}", videoId);
+    }
+
     // --- ANALYTICS ---
 
     public QueryResponse getChannelAnalytics(String username, String startDate, String endDate) throws Exception {
@@ -166,10 +173,6 @@ public class YouTubeService {
 
     public void deleteComment(String username, String commentId) throws Exception {
         YouTube youtube = getYouTubeClient(username);
-        // Note: You can only delete comments you wrote or on your channel.
-        // If it's a top-level comment thread, you might need to use commentThreads().delete?
-        // Actually, comments().delete works for individual comments (replies) and top-level comments if they are treated as comments.
-        // But the ID must be correct.
         youtube.comments().delete(commentId).execute();
     }
 

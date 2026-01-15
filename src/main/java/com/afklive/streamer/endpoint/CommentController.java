@@ -4,10 +4,9 @@ import com.afklive.streamer.service.YouTubeService;
 import com.google.api.services.youtube.model.CommentThreadListResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.Map;
 
 @RestController
@@ -19,7 +18,7 @@ public class CommentController {
     private final YouTubeService youTubeService;
 
     @GetMapping
-    public CommentThreadListResponse getComments(@AuthenticationPrincipal OAuth2User principal) {
+    public CommentThreadListResponse getComments(Principal principal) {
         if (principal == null) throw new IllegalStateException("Not authenticated");
         try {
             return youTubeService.getCommentThreads(principal.getName());
@@ -31,7 +30,7 @@ public class CommentController {
 
     @PostMapping("/{parentId}/reply")
     public Map<String, Object> replyToComment(
-            @AuthenticationPrincipal OAuth2User principal,
+            Principal principal,
             @PathVariable String parentId,
             @RequestBody Map<String, String> payload) {
 
@@ -53,7 +52,7 @@ public class CommentController {
 
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteComment(
-            @AuthenticationPrincipal OAuth2User principal,
+            Principal principal,
             @PathVariable String id) {
 
         if (principal == null) throw new IllegalStateException("Not authenticated");
