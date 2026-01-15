@@ -395,6 +395,32 @@
     </div>
 </div>
 
+<!-- Add Channel Modal -->
+<div id="addChannelModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 400px;">
+        <div class="modal-header" style="padding: 0 0 20px 0; border: none;">
+            <h2>Add Channel</h2>
+            <button onclick="document.getElementById('addChannelModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-group">
+            <label>Channel Name</label>
+            <input type="text" id="newChannelName" class="form-input" placeholder="e.g. My Gaming Channel">
+        </div>
+        <div class="form-group">
+            <label>Platform</label>
+            <div class="platform-select">
+                <div class="platform-option selected"><i class="fa-brands fa-youtube" style="color: red;"></i> YouTube</div>
+                <div class="platform-option disabled"><i class="fa-brands fa-twitch" style="color: purple;"></i> Twitch</div>
+                <div class="platform-option disabled"><i class="fa-brands fa-tiktok" style="color: black;"></i> TikTok</div>
+            </div>
+        </div>
+        <div class="modal-actions" style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-text" onclick="document.getElementById('addChannelModal').classList.add('hidden')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitAddChannel()">Connect Channel</button>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="js/toast.js"></script>

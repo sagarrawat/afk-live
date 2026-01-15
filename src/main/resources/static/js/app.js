@@ -196,9 +196,25 @@ function filterViewByChannel(channel) {
     showToast(`Switched to ${channel.name}`, 'info');
 }
 
-async function addMockChannel() {
-    const name = prompt("Enter Channel Name (Simulation):");
-    if(!name) return;
+function addMockChannel() {
+    document.getElementById('newChannelName').value = '';
+    document.getElementById('addChannelModal').classList.remove('hidden');
+    document.getElementById('newChannelName').focus();
+}
+
+async function submitAddChannel() {
+    const name = document.getElementById('newChannelName').value;
+    if(!name) {
+        showToast("Please enter a channel name", "error");
+        return;
+    }
+
+    // Simulate API call delay for realism
+    const btn = document.querySelector('#addChannelModal .btn-primary');
+    const originalText = btn.innerText;
+    btn.innerText = "Connecting...";
+    btn.disabled = true;
+
     try {
         const res = await fetch(`${API_URL}/channels`, {
              method: 'POST',
@@ -206,10 +222,18 @@ async function addMockChannel() {
              body: JSON.stringify({name: name})
         });
         if(res.ok) {
-            showToast("Channel Added", "success");
+            showToast("Channel Connected Successfully", "success");
+            document.getElementById('addChannelModal').classList.add('hidden');
             loadUserChannels();
+        } else {
+             showToast("Connection failed", "error");
         }
-    } catch(e) { showToast("Error adding channel", "error"); }
+    } catch(e) {
+        showToast("Error adding channel", "error");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
 }
 
 /* --- PUBLISHING --- */
@@ -438,6 +462,13 @@ async function checkInitialStatus() {
         const data = await res.json();
         if(data.success && data.data.live) setLiveState(true);
     } catch(e){}
+}
+
+function loadGlobalSettings() {
+    const savedKey = localStorage.getItem('afk_stream_key');
+    if(savedKey && document.getElementById('streamKey')) {
+        document.getElementById('streamKey').value = savedKey;
+    }
 }
 
 /* --- LIBRARY --- */
