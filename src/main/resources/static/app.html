@@ -83,6 +83,10 @@
                 </button>
             </div>
 
+            <div class="channel-tabs" id="publishChannelTabs">
+                <!-- Populated via JS -->
+            </div>
+
             <div class="queue-list" id="queueList">
                 <!-- Empty State -->
                 <div class="empty-state">
@@ -338,6 +342,16 @@
                     </div>
                     <a href="/oauth2/authorization/google" class="btn btn-sm btn-outline">Reconnect</a>
                 </div>
+
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <h3>Managed Channels</h3>
+                        <button class="btn btn-sm btn-outline" onclick="addMockChannel()">+ Add Channel</button>
+                    </div>
+                    <div id="channelListSettings" class="queue-list">
+                        <!-- Loaded via JS -->
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -376,6 +390,14 @@
             <button onclick="closeScheduleModal()" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="modal-body">
+            <!-- Channel Selector Step -->
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label>Select Channel</label>
+                <div id="modalChannelSelector" class="channel-selector-grid">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
             <div class="drop-area" id="dropZone">
                 <i class="fa-solid fa-cloud-arrow-up"></i>
                 <p>Drag & drop video or <span>browse</span></p>
@@ -402,12 +424,12 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Title</label>
+                        <label>Title <i class="fa-solid fa-wand-magic-sparkles ai-btn" onclick="aiGenerate('title')" title="AI Magic"></i></label>
                         <input type="text" id="scheduleTitle" placeholder="Video title" oninput="updatePreview()">
                     </div>
 
                     <div class="form-group">
-                        <label>Description</label>
+                        <label>Description <i class="fa-solid fa-wand-magic-sparkles ai-btn" onclick="aiGenerate('description')" title="AI Magic"></i></label>
                         <textarea id="scheduleDescription" rows="4" placeholder="What is this video about?" oninput="updatePreview()"></textarea>
                     </div>
 
@@ -433,7 +455,7 @@
                             </select>
                         </div>
                         <div class="form-group">
-                             <label>Tags</label>
+                             <label>Tags <i class="fa-solid fa-wand-magic-sparkles ai-btn" onclick="aiGenerate('tags')" title="AI Magic"></i></label>
                              <input type="text" id="scheduleTags" placeholder="comma, separated, tags">
                          </div>
                     </div>

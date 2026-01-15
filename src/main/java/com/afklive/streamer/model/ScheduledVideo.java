@@ -21,6 +21,8 @@ public class ScheduledVideo {
     private String thumbnailS3Key;
     private String youtubeVideoId;
 
+    private Long socialChannelId; // Link to specific channel
+
     @Enumerated(EnumType.STRING)
     private VideoStatus status = VideoStatus.PENDING;
 
@@ -134,5 +136,13 @@ public class ScheduledVideo {
 
     public void setYoutubeVideoId(String youtubeVideoId) {
         this.youtubeVideoId = youtubeVideoId;
+    }
+
+    public Long getSocialChannelId() {
+        return socialChannelId;
+    }
+
+    public void setSocialChannelId(Long socialChannelId) {
+        this.socialChannelId = socialChannelId;
     }
 }

@@ -20,6 +20,9 @@ public class User {
     private String resetToken;
     private String fullName;
 
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
+
     public User() {
     }
 
@@ -91,5 +94,13 @@ public class User {
 
     public void setFullName(String fullName) {
         this.fullName = fullName;
+    }
+
+    public java.util.List<SocialChannel> getChannels() {
+        return channels;
+    }
+
+    public void setChannels(java.util.List<SocialChannel> channels) {
+        this.channels = channels;
     }
 }

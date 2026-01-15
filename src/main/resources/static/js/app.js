@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // loadLibrary();
     loadScheduledQueue(); // For publish view
     checkYoutubeStatus();
+    loadUserChannels();
 
     // Event Listeners: Composer
     const dropZone = document.getElementById("dropZone");
@@ -917,6 +918,136 @@ async function checkYoutubeStatus() {
                 '<span style="color:var(--danger)">Disconnected</span>';
         }
     } catch(e) {}
+}
+
+/* --- CHANNEL MANAGEMENT --- */
+let userChannels = [];
+let selectedChannelId = null;
+
+async function loadUserChannels() {
+    try {
+        const res = await fetch(`${API_URL}/channels`);
+        userChannels = await res.json();
+
+        // Settings List
+        const settingsList = document.getElementById("channelListSettings");
+        if(settingsList) {
+            settingsList.innerHTML = '';
+            userChannels.forEach(c => {
+                settingsList.innerHTML += `
+                    <div class="queue-item">
+                        <img src="${c.profileUrl}" style="width:40px;height:40px;border-radius:50%">
+                        <div class="queue-details">
+                            <h4>${c.name}</h4>
+                            <div class="queue-meta">${c.platform}</div>
+                        </div>
+                        <button class="btn btn-sm btn-danger" onclick="removeChannel(${c.id})"><i class="fa-solid fa-trash"></i></button>
+                    </div>`;
+            });
+        }
+
+        // Modal Selector
+        const modalList = document.getElementById("modalChannelSelector");
+        if(modalList) {
+            modalList.innerHTML = '';
+            // Always add primary "YouTube" (handled by OAuth logic currently, but visualizing here)
+            // Ideally we migrate primary to be just another channel.
+            // For now, let's treat userChannels as *additional* or *all* if we migrate.
+
+            userChannels.forEach((c, idx) => {
+                const el = document.createElement('div');
+                el.className = 'channel-select-card ' + (idx === 0 ? 'selected' : '');
+                el.innerHTML = `<img src="${c.profileUrl}" title="${c.name}">`;
+                el.onclick = () => selectChannel(c.id, el);
+                modalList.appendChild(el);
+                if(idx === 0) selectedChannelId = c.id;
+            });
+        }
+    } catch(e) {}
+}
+
+function selectChannel(id, el) {
+    selectedChannelId = id;
+    document.querySelectorAll('.channel-select-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+}
+
+async function addMockChannel() {
+    const name = prompt("Enter Channel Name (Simulation):");
+    if(!name) return;
+
+    try {
+        const res = await fetch(`${API_URL}/channels`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name})
+        });
+        const data = await res.json();
+        if(res.ok) {
+            showToast("Channel Added", "success");
+            loadUserChannels();
+        } else {
+            showToast(data.message, "error");
+        }
+    } catch(e) { showToast("Failed to add channel", "error"); }
+}
+
+async function removeChannel(id) {
+    if(!confirm("Remove this channel?")) return;
+    try {
+        await fetch(`${API_URL}/channels/${id}`, {method: 'DELETE'});
+        showToast("Removed", "success");
+        loadUserChannels();
+    } catch(e) {}
+}
+
+/* --- AI FEATURES --- */
+async function aiGenerate(type) {
+    const contextMap = {
+        'title': document.getElementById('scheduleFile')?.files[0]?.name || 'Video',
+        'description': document.getElementById('scheduleTitle').value || 'This video',
+        'tags': document.getElementById('scheduleTitle').value || 'video'
+    };
+
+    const context = contextMap[type];
+    const inputId = type === 'title' ? 'scheduleTitle' : (type === 'description' ? 'scheduleDescription' : 'scheduleTags');
+    const input = document.getElementById(inputId);
+
+    // UI State
+    input.classList.add('loading-shimmer');
+    input.disabled = true;
+
+    try {
+        const res = await fetch(`${API_URL}/ai/generate`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type, context})
+        });
+        const data = await res.json();
+
+        // Typewriter Effect
+        input.value = '';
+        input.classList.remove('loading-shimmer');
+        input.disabled = false;
+
+        let i = 0;
+        const text = data.result;
+        const speed = 20;
+
+        function typeWriter() {
+            if (i < text.length) {
+                input.value += text.charAt(i);
+                i++;
+                setTimeout(typeWriter, speed);
+            }
+        }
+        typeWriter();
+
+    } catch(e) {
+        input.classList.remove('loading-shimmer');
+        input.disabled = false;
+        showToast("AI Failed", "error");
+    }
 }
 
 function renderPlanInfo(user) {
