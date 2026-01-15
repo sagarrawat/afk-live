@@ -19,6 +19,7 @@ public class User {
     private String verificationToken;
     private String resetToken;
     private String fullName;
+    private String pictureUrl;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
@@ -94,6 +95,14 @@ public class User {
 
     public void setFullName(String fullName) {
         this.fullName = fullName;
+    }
+
+    public String getPictureUrl() {
+        return pictureUrl;
+    }
+
+    public void setPictureUrl(String pictureUrl) {
+        this.pictureUrl = pictureUrl;
     }
 
     public java.util.List<SocialChannel> getChannels() {

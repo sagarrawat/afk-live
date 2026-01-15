@@ -543,10 +543,35 @@ async function handleBulkUpload(e) {
     } catch(e){ showToast("Failed", "error"); }
 }
 
+function showAutoScheduleModal() {
+    document.getElementById('autoScheduleModal').classList.remove('hidden');
+}
+
 async function submitAutoSchedule() {
-    // ... similar to previous impl
-    showToast("Auto-scheduler initiated", "success");
-    document.getElementById('autoScheduleModal').classList.add('hidden');
+    const startDate = document.getElementById('autoStartDate').value;
+    const slots = document.getElementById('autoTimeSlots').value;
+
+    if(!startDate || !slots) {
+        showToast("Please fill all fields", "error");
+        return;
+    }
+
+    try {
+        const res = await apiFetch(`${API_URL}/library/auto-schedule`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ startDate, timeSlots: slots.split(',').map(s=>s.trim()) })
+        });
+
+        if(res.ok) {
+            showToast("Auto-scheduler initiated", "success");
+            document.getElementById('autoScheduleModal').classList.add('hidden');
+            loadLibraryVideos();
+        } else {
+            const data = await res.json();
+            showToast(data.message || "Scheduling failed", "error");
+        }
+    } catch(e) { showToast("Error scheduling", "error"); }
 }
 
 /* --- AI --- */

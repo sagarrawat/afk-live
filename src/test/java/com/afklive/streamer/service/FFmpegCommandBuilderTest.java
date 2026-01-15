@@ -25,7 +25,7 @@ class FFmpegCommandBuilderTest {
         Path videoPath = Paths.get("/tmp/video.mp4");
         String streamKey = "live_12345";
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, null, null);
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, null, null, -1);
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command).contains("rtmps://a.rtmp.youtube.com:443/live2/" + streamKey);
@@ -40,7 +40,7 @@ class FFmpegCommandBuilderTest {
         String streamKey = "live_12345";
         String musicVolume = "0.5";
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume);
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume, 1);
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command).contains("-i", musicPath.toString());

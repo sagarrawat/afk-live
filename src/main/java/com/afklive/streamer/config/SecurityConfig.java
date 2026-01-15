@@ -19,6 +19,7 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 
 import java.util.function.Consumer;
@@ -33,7 +34,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
-                                           ClientRegistrationRepository clientRegistrationRepository) throws Exception {
+                                           ClientRegistrationRepository clientRegistrationRepository,
+                                           OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
@@ -58,8 +60,7 @@ public class SecurityConfig {
                         .authorizationEndpoint(authorization -> authorization
                                 .authorizationRequestResolver(authorizationRequestResolver(clientRegistrationRepository))
                         )
-                        // CHANGE: Redirect to /studio after login
-                        .defaultSuccessUrl("/studio", true)
+                        .successHandler(oAuth2LoginSuccessHandler)
                 )
                 .logout(logout -> logout
                         .logoutSuccessUrl("/") // Back to Home after logout
