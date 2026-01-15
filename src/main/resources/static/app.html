@@ -34,6 +34,10 @@
             <i class="fa-solid fa-folder-open"></i>
             <span>Library</span>
         </a>
+        <a href="#" class="menu-item" data-target="view-community" onclick="switchView('community')">
+            <i class="fa-solid fa-comments"></i>
+            <span>Community</span>
+        </a>
         <a href="#" class="menu-item" data-target="view-settings" onclick="switchView('settings')">
             <i class="fa-solid fa-gear"></i>
             <span>Settings</span>
@@ -191,12 +195,76 @@
         </div>
     </div>
 
+    <!-- VIEW: COMMUNITY -->
+    <div id="view-community" class="view-section hidden">
+        <div class="community-layout">
+            <!-- Left: Thread List -->
+            <div class="thread-list-panel">
+                 <div class="search-bar">
+                     <input type="text" placeholder="Search comments..." class="form-input">
+                 </div>
+                 <div id="threadList" class="thread-list">
+                     <!-- Populated via JS -->
+                 </div>
+            </div>
+
+            <!-- Right: Conversation -->
+            <div class="thread-view-panel">
+                <div id="emptyThreadState" class="empty-state" style="padding: 100px 0;">
+                    <i class="fa-regular fa-comments" style="font-size: 3rem; color: #ccc;"></i>
+                    <p>Select a conversation to reply</p>
+                </div>
+
+                <div id="activeThread" class="hidden">
+                    <div class="thread-header">
+                        <h3 id="threadVideoTitle">Video Title</h3>
+                        <a href="#" id="threadVideoLink" target="_blank"><i class="fa-solid fa-external-link"></i></a>
+                    </div>
+
+                    <div id="threadMessages" class="thread-messages">
+                        <!-- Messages -->
+                    </div>
+
+                    <div class="reply-box">
+                        <textarea id="replyInput" placeholder="Write a reply..." rows="3"></textarea>
+                        <button class="btn btn-primary" onclick="sendReply()">Reply</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- VIEW: ANALYTICS -->
     <div id="view-analytics" class="view-section hidden">
         <div class="container-narrow">
+            <!-- Summary Cards -->
+             <div class="summary-grid">
+                 <div class="card summary-card">
+                     <h3>Views</h3>
+                     <p id="totalViews">0</p>
+                 </div>
+                 <div class="card summary-card">
+                     <h3>Subscribers</h3>
+                     <p id="totalSubs">0</p>
+                 </div>
+                 <div class="card summary-card">
+                     <h3>Watch Time (min)</h3>
+                     <p id="totalWatchTime">0</p>
+                 </div>
+             </div>
+
             <div class="card">
-                <h2>Performance Overview</h2>
-                <canvas id="analyticsChart"></canvas>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Performance Overview</h2>
+                    <select id="analyticsRange" class="form-select-sm" onchange="initAnalytics()">
+                        <option value="7">Last 7 Days</option>
+                        <option value="28" selected>Last 28 Days</option>
+                        <option value="90">Last 90 Days</option>
+                    </select>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="analyticsChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -295,7 +363,7 @@
 </div>
 
 <div id="scheduleModal" class="modal-overlay hidden">
-    <div class="modal-composer">
+    <div class="modal-composer" style="width: 900px; max-width: 95vw;">
         <div class="modal-header">
             <h2>New Post</h2>
             <button onclick="closeScheduleModal()" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
@@ -318,6 +386,13 @@
                 </div>
             </div>
 
+            <div style="display: flex; gap: 20px;">
+                <!-- Left: Form -->
+                <div style="flex: 1;">
+                    <div class="form-group">
+                        <label>Custom Thumbnail (Optional)</label>
+                        <input type="file" id="scheduleThumbnail" accept="image/*" class="form-control" style="padding: 6px;">
+                    </div>
             <div class="form-group">
                 <label>Custom Thumbnail (Optional)</label>
                 <input type="file" id="scheduleThumbnail" accept="image/*" class="form-control" style="padding: 6px;">
@@ -328,11 +403,43 @@
                 <input type="text" id="scheduleTitle" placeholder="Video title">
             </div>
 
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="scheduleDescription" rows="4" placeholder="What is this video about?"></textarea>
-            </div>
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" id="scheduleTitle" placeholder="Video title" oninput="updatePreview()">
+                    </div>
 
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="scheduleDescription" rows="4" placeholder="What is this video about?" oninput="updatePreview()"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Category</label>
+                            <select id="scheduleCategory">
+                                <option value="">Select Category</option>
+                            </select>
+                        </div>
+                         <div class="form-group">
+                            <label>Privacy</label>
+                            <select id="schedulePrivacy">
+                                <option value="private">Private</option>
+                                <option value="unlisted">Unlisted</option>
+                                <option value="public">Public</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Schedule For</label>
+                            <input type="datetime-local" id="scheduleTime">
+                        </div>
+                         <div class="form-group">
+                            <label>Tags</label>
+                            <input type="text" id="scheduleTags" placeholder="comma, separated, tags" oninput="updatePreview()">
+                        </div>
+                    </div>
             <div class="form-group">
                 <label>Category</label>
                 <select id="scheduleCategory">
@@ -367,11 +474,21 @@
                     <label>Schedule For</label>
                     <input type="datetime-local" id="scheduleTime">
                 </div>
-            </div>
 
-             <div class="form-group">
-                <label>Tags</label>
-                <input type="text" id="scheduleTags" placeholder="comma, separated, tags">
+                <!-- Right: Preview Card -->
+                <div style="width: 300px; flex-shrink: 0;">
+                     <label style="display:block; margin-bottom: 10px; font-weight: 600; font-size: 0.85rem;">YouTube Preview</label>
+                     <div class="yt-preview-card">
+                         <div class="yt-preview-thumb">
+                             <div class="yt-duration">12:34</div>
+                         </div>
+                         <div class="yt-preview-info">
+                             <div id="previewTitle" class="yt-preview-title">Video Title</div>
+                             <div class="yt-preview-meta">AFK Live • 0 views • Just now</div>
+                             <div id="previewDesc" class="yt-preview-desc">Video description goes here...</div>
+                         </div>
+                     </div>
+                </div>
             </div>
         </div>
         <div class="modal-footer">

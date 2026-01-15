@@ -24,6 +24,7 @@ public class ScheduledVideo {
     private String description;
 
     private String tags;
+    private String categoryId;
     private String privacyStatus; // "public", "private", "unlisted"
 
     private LocalDateTime scheduledTime;
