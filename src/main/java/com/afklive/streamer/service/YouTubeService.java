@@ -6,10 +6,9 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.InputStreamContent;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.youtube.YouTube;
-import com.google.api.services.youtube.model.Video;
-import com.google.api.services.youtube.model.VideoSnippet;
-import com.google.api.services.youtube.model.VideoStatus;
-import lombok.RequiredArgsConstructor;
+import com.google.api.services.youtube.model.*;
+import com.google.api.services.youtubeAnalytics.v2.YouTubeAnalytics;
+import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -36,7 +35,13 @@ public class YouTubeService {
         this.authorizedClientManager = authorizedClientManager;
     }
 
-    public boolean isConnected(String username) {
+    // --- HELPER METHODS ---
+
+    private Authentication createPrincipal(String username) {
+        return new UsernamePasswordAuthenticationToken(username, "N/A", AuthorityUtils.NO_AUTHORITIES);
+    }
+
+    private Credential getCredential(String username) {
         try {
             Authentication principal = createPrincipal(username);
             OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
@@ -44,32 +49,46 @@ public class YouTubeService {
                     .build();
 
             OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
-            return client != null && client.getAccessToken() != null;
+
+            if (client == null || client.getAccessToken() == null) {
+                throw new IllegalStateException("User " + username + " is not connected to YouTube.");
+            }
+
+            return new Credential(BearerToken.authorizationHeaderAccessMethod())
+                    .setAccessToken(client.getAccessToken().getTokenValue());
         } catch (Exception e) {
-            log.warn("Failed to check connection for user {}: {}", username, e.getMessage());
+            log.error("Failed to get credential for user {}", username, e);
+            throw new RuntimeException("Authentication failed: " + e.getMessage());
+        }
+    }
+
+    private YouTube getYouTubeClient(String username) throws Exception {
+        return new YouTube.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(username))
+                .setApplicationName(APPLICATION_NAME)
+                .build();
+    }
+
+    private YouTubeAnalytics getAnalyticsClient(String username) throws Exception {
+        return new YouTubeAnalytics.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(username))
+                .setApplicationName(APPLICATION_NAME)
+                .build();
+    }
+
+    // --- CONNECTION CHECK ---
+
+    public boolean isConnected(String username) {
+        try {
+            getCredential(username);
+            return true;
+        } catch (Exception e) {
             return false;
         }
     }
 
-    public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus) throws Exception {
+    // --- VIDEO UPLOAD ---
 
-        Authentication principal = createPrincipal(username);
-        OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
-                .principal(principal)
-                .build();
-
-        OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
-
-        if (client == null) {
-            throw new IllegalStateException("User " + username + " is not connected to YouTube.");
-        }
-
-        Credential credential = new Credential(BearerToken.authorizationHeaderAccessMethod())
-                .setAccessToken(client.getAccessToken().getTokenValue());
-
-        YouTube youtube = new YouTube.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, credential)
-                .setApplicationName(APPLICATION_NAME)
-                .build();
+    public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus, String categoryId) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
 
         Video video = new Video();
 
@@ -78,6 +97,9 @@ public class YouTubeService {
         snippet.setDescription(description);
         if (tags != null && !tags.isEmpty()) {
             snippet.setTags(List.of(tags.split("\\s*,\\s*")));
+        }
+        if (categoryId != null && !categoryId.isEmpty()) {
+            snippet.setCategoryId(categoryId);
         }
         video.setSnippet(snippet);
 
@@ -94,7 +116,70 @@ public class YouTubeService {
         return returnedVideo.getId();
     }
 
-    private Authentication createPrincipal(String username) {
-        return new UsernamePasswordAuthenticationToken(username, "N/A", AuthorityUtils.NO_AUTHORITIES);
+    // --- ANALYTICS ---
+
+    public QueryResponse getChannelAnalytics(String username, String startDate, String endDate) throws Exception {
+        YouTubeAnalytics analytics = getAnalyticsClient(username);
+
+        return analytics.reports().query()
+                .setIds("channel==MINE")
+                .setStartDate(startDate)
+                .setEndDate(endDate)
+                .setMetrics("views,subscribersGained,estimatedMinutesWatched")
+                .setDimensions("day")
+                .setSort("day")
+                .execute();
+    }
+
+    // --- COMMENTS ---
+
+    public CommentThreadListResponse getCommentThreads(String username) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        return youtube.commentThreads().list(Collections.singletonList("snippet,replies"))
+                .setAllThreadsRelatedToChannelId(getChannelId(username))
+                .setMaxResults(20L)
+                .execute();
+    }
+
+    private String getChannelId(String username) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        ChannelListResponse response = youtube.channels().list(Collections.singletonList("id"))
+                .setMine(true)
+                .execute();
+        if (response.getItems().isEmpty()) {
+            throw new IllegalStateException("No channel found for user.");
+        }
+        return response.getItems().get(0).getId();
+    }
+
+    public void replyToComment(String username, String parentId, String text) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+
+        Comment comment = new Comment();
+        CommentSnippet snippet = new CommentSnippet();
+        snippet.setParentId(parentId);
+        snippet.setTextOriginal(text);
+        comment.setSnippet(snippet);
+
+        youtube.comments().insert(Collections.singletonList("snippet"), comment).execute();
+    }
+
+    public void deleteComment(String username, String commentId) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        // Note: You can only delete comments you wrote or on your channel.
+        // If it's a top-level comment thread, you might need to use commentThreads().delete?
+        // Actually, comments().delete works for individual comments (replies) and top-level comments if they are treated as comments.
+        // But the ID must be correct.
+        youtube.comments().delete(commentId).execute();
+    }
+
+    // --- CATEGORIES ---
+
+    public List<VideoCategory> getVideoCategories(String username, String regionCode) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        VideoCategoryListResponse response = youtube.videoCategories().list(Collections.singletonList("snippet"))
+                .setRegionCode(regionCode != null ? regionCode : "US")
+                .execute();
+        return response.getItems();
     }
 }

@@ -45,7 +45,8 @@ public class VideoSchedulerService {
                     video.getTitle(),
                     video.getDescription(),
                     video.getTags(),
-                    video.getPrivacyStatus()
+                    video.getPrivacyStatus(),
+                    video.getCategoryId()
             );
 
             video.setYoutubeVideoId(videoId);

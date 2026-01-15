@@ -28,6 +28,16 @@ public class VideoController {
     private final YouTubeService youTubeService;
     private final UserService userService;
 
+    @GetMapping("/youtube/categories")
+    public ResponseEntity<?> getVideoCategories(@AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
+        try {
+            return ResponseEntity.ok(youTubeService.getVideoCategories(principal.getName(), "US"));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/videos/schedule")
     public ResponseEntity<?> scheduleVideo(
             @RequestParam("file") MultipartFile file,
@@ -35,6 +45,7 @@ public class VideoController {
             @RequestParam("description") String description,
             @RequestParam("tags") String tags,
             @RequestParam("privacyStatus") String privacyStatus,
+            @RequestParam(value = "categoryId", required = false) String categoryId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
             @AuthenticationPrincipal OAuth2User principal
     ) {
@@ -59,6 +70,7 @@ public class VideoController {
             video.setTitle(title);
             video.setDescription(description);
             video.setTags(tags);
+            video.setCategoryId(categoryId);
             video.setPrivacyStatus(privacyStatus);
             video.setScheduledTime(scheduledTime);
             video.setS3Key(s3Key);
