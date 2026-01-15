@@ -79,6 +79,7 @@ public class VideoController {
             video.setTags(tags);
             video.setCategoryId(categoryId);
             video.setPrivacyStatus(privacyStatus);
+            video.setCategoryId(categoryId);
             video.setScheduledTime(scheduledTime);
             video.setS3Key(s3Key);
             video.setThumbnailS3Key(thumbnailKey);
