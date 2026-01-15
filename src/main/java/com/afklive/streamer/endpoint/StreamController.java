@@ -51,12 +51,13 @@ public class StreamController {
 
     @PostMapping("/start")
     public ResponseEntity<ApiResponse<?>> start(@RequestParam String streamKey, @RequestParam String videoKey, @RequestParam(required = false) String musicName, @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
+                                                @RequestParam(required = false, defaultValue = "-1") int loopCount,
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
         if (streamManager.tryStartStream(principal.getName())) {
             try {
-                return ResponseEntity.ok(streamService.startStream(principal.getName(), streamKey, videoKey, musicName, musicVolume));
+                return ResponseEntity.ok(streamService.startStream(principal.getName(), streamKey, videoKey, musicName, musicVolume, loopCount));
             } catch (Exception e) {
                 return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
             }

@@ -388,10 +388,12 @@
 
 <!-- Stream Library Modal -->
 <div id="streamLibraryModal" class="modal-overlay hidden">
-    <div class="modal-box">
-        <h3>Select Video</h3>
-        <div id="streamLibraryList" class="scroll-list"></div>
-        <button class="btn btn-text" onclick="document.getElementById('streamLibraryModal').classList.add('hidden')">Cancel</button>
+    <div class="modal-box" style="width: 500px;">
+        <div class="modal-header" style="border:none; padding-bottom: 10px;">
+            <h2>Select Video</h2>
+            <button onclick="document.getElementById('streamLibraryModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="streamLibraryList" class="scroll-list" style="height: 300px; padding: 0;"></div>
     </div>
 </div>
 

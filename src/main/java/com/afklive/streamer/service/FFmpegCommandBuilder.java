@@ -37,7 +37,8 @@ public class FFmpegCommandBuilder {
             Path videoPath,
             String streamKey,
             Path musicPath,
-            String musicVolume
+            String musicVolume,
+            int loopCount
     ) {
         List<String> command = new ArrayList<>();
         command.add("nice");
@@ -48,7 +49,7 @@ public class FFmpegCommandBuilder {
         // Video input
         command.add("-re");
         command.add("-stream_loop");
-        command.add("-1");
+        command.add(String.valueOf(loopCount));
         command.add("-i");
         command.add(videoPath.toString());
 

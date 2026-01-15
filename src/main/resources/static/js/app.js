@@ -82,10 +82,36 @@ function toggleMobileMenu() {
     sb.classList.toggle('open');
 }
 
+/* --- API HELPER --- */
+async function apiFetch(url, options = {}) {
+    try {
+        const res = await fetch(url, options);
+        if (res.status === 401 || res.status === 403) {
+            // Check if it's a YouTube specific auth error (usually returned as 401/403 with message)
+            // But usually 401 means "Login required"
+            // Let's read the body to see if it mentions "YouTube"
+            const body = await res.clone().json().catch(() => ({}));
+
+            if (body.message && (body.message.includes("YouTube") || body.message.includes("connected"))) {
+                // Show "Connect Channel" modal
+                document.getElementById('addChannelModal').classList.remove('hidden');
+                showToast("Please connect your YouTube channel.", "error");
+            } else {
+                // Standard Login
+                window.location.href = '/login';
+            }
+            throw new Error("Authentication required");
+        }
+        return res;
+    } catch (e) {
+        throw e;
+    }
+}
+
 /* --- USER & CHANNELS --- */
 async function fetchUserInfo() {
     try {
-        const res = await fetch('/api/user-info');
+        const res = await apiFetch('/api/user-info');
         const data = await res.json();
         if (data.email) {
             currentUser = data;
@@ -121,7 +147,7 @@ let selectedChannelId = null;
 
 async function loadUserChannels() {
     try {
-        const res = await fetch(`${API_URL}/channels`);
+        const res = await apiFetch(`${API_URL}/channels`);
         userChannels = await res.json();
 
         renderChannelList(userChannels);
@@ -242,7 +268,7 @@ function showScheduleModal() {
     // Load categories if empty
     const cat = document.getElementById('scheduleCategory');
     if(cat.options.length === 0) {
-        fetch(`${API_URL}/youtube/categories`)
+        apiFetch(`${API_URL}/youtube/categories`)
             .then(r=>r.json())
             .then(data => {
                  data.forEach(c => {
@@ -333,7 +359,7 @@ async function loadScheduledQueue() {
     if(!list) return;
 
     try {
-        const res = await fetch(`${API_URL}/videos`);
+        const res = await apiFetch(`${API_URL}/videos`);
         const videos = await res.json();
 
         list.innerHTML = '';
@@ -369,7 +395,7 @@ async function openLibraryModalForStream() {
     list.innerHTML = "Loading...";
 
     try {
-        const res = await fetch(`${API_URL}/library`);
+        const res = await apiFetch(`${API_URL}/library`);
         const data = await res.json();
         list.innerHTML = '';
 
@@ -403,17 +429,22 @@ function clearSelectedVideo() {
 
 async function submitJob() {
     const key = document.getElementById('streamKey').value;
+    const loopCount = document.getElementById('streamLoopCount').value;
+
     if(!selectedStreamVideo || !key) return showToast("Select video and enter key", "error");
 
     const btn = document.getElementById('btnGoLive');
     btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Starting...';
 
     const fd = new FormData();
     fd.append("streamKey", key);
     fd.append("videoKey", selectedStreamVideo.s3Key);
+    fd.append("loopCount", loopCount);
+    // Note: Start Time is ignored by backend for now as per plan, but field exists for future usage
 
     try {
-        const res = await fetch(`${API_URL}/start`, {method:'POST', body:fd});
+        const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
         const data = await res.json();
         if(data.success) {
             showToast("Stream Started", "success");
@@ -422,12 +453,19 @@ async function submitJob() {
             showToast(data.message, "error");
         }
     } catch(e) { showToast("Failed to start", "error"); }
-    finally { btn.disabled = false; }
+    finally {
+        btn.disabled = false;
+        if(!document.getElementById('liveIndicator').classList.contains('hidden')) {
+             // If live, button is hidden anyway via setLiveState
+        } else {
+             btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Start Streaming';
+        }
+    }
 }
 
 async function stopStream() {
     try {
-        await fetch(`${API_URL}/stop`, {method:'POST'});
+        await apiFetch(`${API_URL}/stop`, {method:'POST'});
         setLiveState(false);
         showToast("Stream Stopped", "info");
     } catch(e) {}
@@ -458,7 +496,7 @@ function log(msg) {
 
 async function checkInitialStatus() {
     try {
-        const res = await fetch(`${API_URL}/status`);
+        const res = await apiFetch(`${API_URL}/status`);
         const data = await res.json();
         if(data.success && data.data.live) setLiveState(true);
     } catch(e){}
@@ -475,7 +513,7 @@ function loadGlobalSettings() {
 async function loadLibraryVideos() {
     const list = document.getElementById('libraryList');
     try {
-        const res = await fetch(`${API_URL}/library`);
+        const res = await apiFetch(`${API_URL}/library`);
         const data = await res.json();
         list.innerHTML = '';
         data.data.forEach(v => {
@@ -497,7 +535,7 @@ async function handleBulkUpload(e) {
 
     showToast("Uploading library...", "info");
     try {
-        const res = await fetch(`${API_URL}/library/upload`, {method:'POST', body:fd});
+        const res = await apiFetch(`${API_URL}/library/upload`, {method:'POST', body:fd});
         if(res.ok) {
             showToast("Uploaded!", "success");
             loadLibraryVideos();
@@ -519,7 +557,7 @@ async function aiGenerate(type) {
 
     target.placeholder = "AI is writing...";
     try {
-        const res = await fetch(`${API_URL}/ai/generate`, {
+        const res = await apiFetch(`${API_URL}/ai/generate`, {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({type, context: ctx})
         });
@@ -569,9 +607,11 @@ function initCalendar() {
         const cal = new FullCalendar.Calendar(el, {
             initialView: 'dayGridMonth',
             events: async (info, success) => {
-                const res = await fetch(`${API_URL}/videos`);
-                const data = await res.json();
-                success(data.map(v => ({title: v.title, start: v.scheduledTime})));
+                try {
+                    const res = await apiFetch(`${API_URL}/videos`);
+                    const data = await res.json();
+                    success(data.map(v => ({title: v.title, start: v.scheduledTime})));
+                } catch(e) { success([]); }
             }
         });
         cal.render();
@@ -583,7 +623,7 @@ async function loadComments() {
     const list = document.getElementById('threadList');
     list.innerHTML = "Loading...";
     try {
-        const res = await fetch(`${API_URL}/comments`);
+        const res = await apiFetch(`${API_URL}/comments`);
         const data = await res.json();
         list.innerHTML = '';
         if(!data.items || !data.items.length) {
