@@ -51,7 +51,7 @@ public class YouTubeService {
         }
     }
 
-    public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus) throws Exception {
+    public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus, String categoryId) throws Exception {
 
         Authentication principal = createPrincipal(username);
         OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
@@ -79,6 +79,9 @@ public class YouTubeService {
         if (tags != null && !tags.isEmpty()) {
             snippet.setTags(List.of(tags.split("\\s*,\\s*")));
         }
+        if (categoryId != null && !categoryId.isEmpty()) {
+            snippet.setCategoryId(categoryId);
+        }
         video.setSnippet(snippet);
 
         VideoStatus status = new VideoStatus();
@@ -92,6 +95,30 @@ public class YouTubeService {
 
         log.info("Uploaded video ID: {}", returnedVideo.getId());
         return returnedVideo.getId();
+    }
+
+    public void uploadThumbnail(String username, String videoId, InputStream thumbnailStream) throws Exception {
+        Authentication principal = createPrincipal(username);
+        OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
+                .principal(principal)
+                .build();
+
+        OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
+
+        if (client == null) {
+            throw new IllegalStateException("User " + username + " is not connected to YouTube.");
+        }
+
+        Credential credential = new Credential(BearerToken.authorizationHeaderAccessMethod())
+                .setAccessToken(client.getAccessToken().getTokenValue());
+
+        YouTube youtube = new YouTube.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, credential)
+                .setApplicationName(APPLICATION_NAME)
+                .build();
+
+        InputStreamContent mediaContent = new InputStreamContent("application/octet-stream", thumbnailStream);
+        youtube.thumbnails().set(videoId, mediaContent).execute();
+        log.info("Uploaded thumbnail for video ID: {}", videoId);
     }
 
     private Authentication createPrincipal(String username) {

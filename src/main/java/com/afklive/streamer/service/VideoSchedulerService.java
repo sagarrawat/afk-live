@@ -45,8 +45,17 @@ public class VideoSchedulerService {
                     video.getTitle(),
                     video.getDescription(),
                     video.getTags(),
-                    video.getPrivacyStatus()
+                    video.getPrivacyStatus(),
+                    video.getCategoryId()
             );
+
+            if (video.getThumbnailS3Key() != null) {
+                try (InputStream thumbStream = storageService.downloadFile(video.getThumbnailS3Key())) {
+                    youTubeService.uploadThumbnail(video.getUsername(), videoId, thumbStream);
+                } catch (Exception e) {
+                    log.error("Failed to upload thumbnail for video {}", video.getId(), e);
+                }
+            }
 
             video.setYoutubeVideoId(videoId);
             video.setStatus(ScheduledVideo.VideoStatus.UPLOADED);

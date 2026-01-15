@@ -58,6 +58,10 @@
         </div>
     </header>
 
+    <div id="verificationBanner" class="hidden" style="background: #ffecb5; color: #663c00; padding: 10px; text-align: center; border-bottom: 1px solid #e0c485; font-size: 0.9rem;">
+        ⚠️ Please verify your email address to access all features (Streaming, YouTube Connection).
+    </div>
+
     <!-- VIEW: PUBLISH (Buffer-like) -->
     <div id="view-publish" class="view-section">
         <div class="container-narrow">
@@ -315,6 +319,11 @@
             </div>
 
             <div class="form-group">
+                <label>Custom Thumbnail (Optional)</label>
+                <input type="file" id="scheduleThumbnail" accept="image/*" class="form-control" style="padding: 6px;">
+            </div>
+
+            <div class="form-group">
                 <label>Title</label>
                 <input type="text" id="scheduleTitle" placeholder="Video title">
             </div>
@@ -322,6 +331,27 @@
             <div class="form-group">
                 <label>Description</label>
                 <textarea id="scheduleDescription" rows="4" placeholder="What is this video about?"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Category</label>
+                <select id="scheduleCategory">
+                    <option value="">Select Category...</option>
+                    <option value="22">People & Blogs</option>
+                    <option value="10">Music</option>
+                    <option value="20">Gaming</option>
+                    <option value="24">Entertainment</option>
+                    <option value="27">Education</option>
+                    <option value="28">Science & Technology</option>
+                    <option value="1">Film & Animation</option>
+                    <option value="2">Autos & Vehicles</option>
+                    <option value="15">Pets & Animals</option>
+                    <option value="17">Sports</option>
+                    <option value="19">Travel & Events</option>
+                    <option value="23">Comedy</option>
+                    <option value="25">News & Politics</option>
+                    <option value="26">Howto & Style</option>
+                </select>
             </div>
 
             <div class="form-row">

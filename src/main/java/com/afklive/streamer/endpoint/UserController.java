@@ -18,20 +18,37 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/api/user-info")
-    public Map<String, Object> getUser(@AuthenticationPrincipal OAuth2User principal) {
+    public Map<String, Object> getUser(@AuthenticationPrincipal Object principal) {
         if (principal == null) {
-            // Return empty object for Guest
             return Collections.emptyMap();
         }
 
-        String username = principal.getName();
-        User user = userService.getOrCreateUser(username);
+        String username;
+        String name;
+        String picture = "https://via.placeholder.com/32";
 
-        // Return User Details (Name, Picture, Email)
+        if (principal instanceof OAuth2User) {
+            OAuth2User oauth = (OAuth2User) principal;
+            username = oauth.getAttribute("email");
+            name = oauth.getAttribute("name");
+            Object pic = oauth.getAttribute("picture");
+            if (pic != null) picture = pic.toString();
+        } else if (principal instanceof org.springframework.security.core.userdetails.UserDetails) {
+            org.springframework.security.core.userdetails.UserDetails userDetails = (org.springframework.security.core.userdetails.UserDetails) principal;
+            username = userDetails.getUsername();
+            name = username;
+        } else {
+            return Collections.emptyMap();
+        }
+
+        User user = userService.getOrCreateUser(username);
+        if (user.getFullName() != null) name = user.getFullName();
+
         return Map.of(
-                "name", principal.getAttribute("name"),
-                "email", principal.getAttribute("email"),
-                "picture", principal.getAttribute("picture"),
+                "name", name,
+                "email", username,
+                "picture", picture,
+                "enabled", user.isEnabled(),
                 "plan", Map.of(
                     "name", user.getPlanType().getDisplayName(),
                     "storageLimit", user.getPlanType().getMaxStorageBytes(),

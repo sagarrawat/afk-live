@@ -6,11 +6,17 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.security.crypto.password.PasswordEncoder;
+import java.util.Optional;
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
 
     public User getOrCreateUser(String username) {
         return userRepository.findById(username)
@@ -39,5 +45,53 @@ public class UserService {
         if (currentActiveCount >= limit) {
              throw new IllegalStateException("Active stream limit reached (" + limit + ") for plan " + user.getPlanType().getDisplayName());
         }
+    }
+
+    public void registerUser(String email, String password, String name) {
+        if (userRepository.existsById(email)) {
+            throw new IllegalArgumentException("User already exists");
+        }
+        User user = new User(email);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setFullName(name);
+        user.setEnabled(false);
+        user.setVerificationToken(UUID.randomUUID().toString());
+        userRepository.save(user);
+
+        String link = "http://localhost:8080/verify-email?token=" + user.getVerificationToken();
+        emailService.sendVerificationEmail(email, link);
+    }
+
+    public boolean verifyEmail(String token) {
+        Optional<User> userOpt = userRepository.findByVerificationToken(token);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            user.setEnabled(true);
+            user.setVerificationToken(null);
+            userRepository.save(user);
+            return true;
+        }
+        return false;
+    }
+
+    public void requestPasswordReset(String email) {
+        userRepository.findById(email).ifPresent(user -> {
+            user.setResetToken(UUID.randomUUID().toString());
+            userRepository.save(user);
+            String link = "http://localhost:8080/reset-password?token=" + user.getResetToken();
+            emailService.sendPasswordResetEmail(email, link);
+        });
+    }
+
+    public boolean resetPassword(String token, String newPassword) {
+        Optional<User> userOpt = userRepository.findByResetToken(token);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            user.setPassword(passwordEncoder.encode(newPassword));
+            user.setResetToken(null);
+            userRepository.save(user);
+            return true;
+        }
+        return false;
     }
 }

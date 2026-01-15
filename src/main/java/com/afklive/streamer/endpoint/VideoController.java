@@ -31,10 +31,12 @@ public class VideoController {
     @PostMapping("/videos/schedule")
     public ResponseEntity<?> scheduleVideo(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "thumbnail", required = false) MultipartFile thumbnail,
             @RequestParam("title") String title,
             @RequestParam("description") String description,
             @RequestParam("tags") String tags,
             @RequestParam("privacyStatus") String privacyStatus,
+            @RequestParam(value = "categoryId", required = false) String categoryId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
             @AuthenticationPrincipal OAuth2User principal
     ) {
@@ -50,6 +52,13 @@ public class VideoController {
             String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
             userService.updateStorageUsage(username, file.getSize());
 
+            String thumbnailKey = null;
+            if (thumbnail != null && !thumbnail.isEmpty()) {
+                userService.checkStorageQuota(username, thumbnail.getSize());
+                thumbnailKey = storageService.uploadFile(thumbnail.getInputStream(), thumbnail.getOriginalFilename(), thumbnail.getSize());
+                userService.updateStorageUsage(username, thumbnail.getSize());
+            }
+
             // Parse time
             LocalDateTime scheduledTime = LocalDateTime.parse(scheduledTimeStr);
 
@@ -60,8 +69,10 @@ public class VideoController {
             video.setDescription(description);
             video.setTags(tags);
             video.setPrivacyStatus(privacyStatus);
+            video.setCategoryId(categoryId);
             video.setScheduledTime(scheduledTime);
             video.setS3Key(s3Key);
+            video.setThumbnailS3Key(thumbnailKey);
             video.setStatus(ScheduledVideo.VideoStatus.PENDING);
 
             repository.save(video);
