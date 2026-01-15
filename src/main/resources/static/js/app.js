@@ -102,6 +102,14 @@ function switchView(viewName) {
 let activeThreadId = null;
 let currentComments = [];
 
+document.addEventListener("DOMContentLoaded", () => {
+    // ... existing init ...
+    const searchInput = document.querySelector('.search-bar input');
+    if(searchInput) {
+        searchInput.addEventListener('input', (e) => filterComments(e.target.value));
+    }
+});
+
 async function loadComments() {
     const list = document.getElementById('threadList');
     list.innerHTML = '<p style="padding:20px; text-align:center;">Loading...</p>';
@@ -123,9 +131,28 @@ async function loadComments() {
     }
 }
 
+function filterComments(query) {
+    if (!query) {
+        renderThreadList(currentComments);
+        return;
+    }
+    const lower = query.toLowerCase();
+    const filtered = currentComments.filter(t => {
+        const snip = t.snippet.topLevelComment.snippet;
+        return snip.textDisplay.toLowerCase().includes(lower) ||
+               snip.authorDisplayName.toLowerCase().includes(lower);
+    });
+    renderThreadList(filtered);
+}
+
 function renderThreadList(threads) {
     const list = document.getElementById('threadList');
     list.innerHTML = '';
+
+    if(threads.length === 0) {
+        list.innerHTML = '<p style="padding:20px; text-align:center; color:#999;">No matches found.</p>';
+        return;
+    }
 
     threads.forEach(thread => {
         const top = thread.snippet.topLevelComment.snippet;
