@@ -70,4 +70,11 @@ public class PricingController {
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
         }
     }
+
+    @PostMapping("/pricing/cancel")
+    public ResponseEntity<?> cancelPlan(Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        userService.updatePlan(principal.getName(), PlanType.FREE);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Subscription cancelled. You are now on the Free plan."));
+    }
 }

@@ -1,62 +1,95 @@
-// Navigation and Mobile Menu
-document.addEventListener('DOMContentLoaded', () => {
-    const hamburger = document.querySelector('.hamburger');
-    const sidebar = document.querySelector('.sidebar');
-    const contentArea = document.querySelector('.content-area');
+// Modern Toast Notification System
+// Inspired by Buffer/Stripe notifications
 
-    if (hamburger && sidebar) {
-        hamburger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            sidebar.classList.toggle('open');
-        });
-
-        // Close sidebar when clicking outside on mobile
-        contentArea.addEventListener('click', () => {
-            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
-                sidebar.classList.remove('open');
-            }
-        });
-    }
-});
-
-// Toast Notification System
 function showToast(message, type = 'info') {
-    let container = document.querySelector('.toast-container');
+    // Create container if not exists
+    let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
-        container.className = 'toast-container';
+        container.id = 'toast-container';
+        container.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none; /* Let clicks pass through container */
+        `;
         document.body.appendChild(container);
     }
 
+    // Create toast element
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
 
+    // Icon based on type
     let icon = '';
-    if (type === 'success') icon = '<i class="fa-solid fa-check-circle" style="color:#27c93f"></i>';
-    if (type === 'error') icon = '<i class="fa-solid fa-circle-exclamation" style="color:#e02424"></i>';
-    if (type === 'info') icon = '<i class="fa-solid fa-info-circle" style="color:#2c68f6"></i>';
+    let color = '';
+    let bg = '';
+
+    switch(type) {
+        case 'success':
+            icon = '<i class="fa-solid fa-check-circle"></i>';
+            color = '#00875a'; // Green
+            bg = '#e3fcef';
+            break;
+        case 'error':
+            icon = '<i class="fa-solid fa-circle-exclamation"></i>';
+            color = '#de350b'; // Red
+            bg = '#ffebe6';
+            break;
+        case 'warning':
+            icon = '<i class="fa-solid fa-triangle-exclamation"></i>';
+            color = '#ff991f'; // Orange
+            bg = '#fff7d6';
+            break;
+        default:
+            icon = '<i class="fa-solid fa-circle-info"></i>';
+            color = '#42526e'; // Gray/Blue
+            bg = '#ffffff';
+    }
+
+    toast.style.cssText = `
+        background: ${bg};
+        color: ${color};
+        border-left: 4px solid ${color};
+        padding: 16px 20px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 300px;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        pointer-events: auto;
+    `;
 
     toast.innerHTML = `
-        ${icon}
-        <div class="toast-content">${message}</div>
-        <i class="fa-solid fa-times toast-close"></i>
+        <span style="font-size: 18px;">${icon}</span>
+        <span style="flex: 1;">${message}</span>
+        <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:inherit;opacity:0.6;"><i class="fa-solid fa-xmark"></i></button>
     `;
 
     container.appendChild(toast);
 
-    // Auto remove
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%)';
-        toast.style.transition = 'all 0.3s ease-in';
-        setTimeout(() => toast.remove(), 300);
-    }, 5000);
+    // Animate in
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateX(0)';
+    });
 
-    // Click to remove
-    toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
+    // Auto dismiss
+    setTimeout(() => {
+        toast.style.transform = 'translateX(120%)';
+        toast.addEventListener('transitionend', () => {
+            if(toast.parentElement) toast.remove();
+        });
+    }, 4000);
 }
 
-// Override window.alert
-window.alert = function(msg) {
-    showToast(msg, 'info');
-};
+// Make it global
+window.showToast = showToast;

@@ -11,7 +11,8 @@
     <meta name="description" content="Simple pricing for YouTube scheduling and streaming.">
     <style>
         .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 50px; }
-        .price-card { border: 1px solid #eee; padding: 40px; border-radius: 8px; text-align: center; background: white; }
+        .price-card { border: 1px solid #eee; padding: 40px; border-radius: 8px; text-align: center; background: white; transition: transform 0.2s; }
+        .price-card:hover { transform: translateY(-5px); }
         .price-card.popular { border-color: var(--primary); box-shadow: 0 10px 40px rgba(44, 104, 246, 0.1); position: relative; }
         .price-card.popular::before { content: "Most Popular"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
         .price { font-size: 3rem; font-weight: 800; margin: 20px 0; color: #1a1a1a; }
@@ -27,6 +28,11 @@
         .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--primary); }
         input:checked + .slider:before { -webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px); }
+
+        /* Modal for Payment */
+        .payment-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 2000; backdrop-filter: blur(4px); }
+        .payment-box { background: white; padding: 30px; border-radius: 12px; width: 400px; max-width: 90%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+        .payment-spinner { font-size: 3rem; color: var(--primary); margin: 20px 0; }
 
         @media (max-width: 768px) {
             .pricing-grid { grid-template-columns: 1fr; }
@@ -68,8 +74,29 @@
     </div>
 </div>
 
+<!-- Mock Payment Modal -->
+<div id="paymentModal" class="payment-modal">
+    <div class="payment-box">
+        <h2>Confirm Subscription</h2>
+        <p id="paymentPlanName">Upgrade Plan</p>
+        <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
+                <span>Total due today:</span>
+                <strong id="paymentAmount">$0.00</strong>
+            </div>
+            <div style="font-size: 0.9rem; color: #666;">
+                <i class="fa-solid fa-credit-card"></i> **** **** **** 4242
+            </div>
+        </div>
+        <button id="btnConfirmPayment" class="btn btn-primary btn-block btn-lg" onclick="processPayment()">Pay & Upgrade</button>
+        <button class="btn btn-text" onclick="closePaymentModal()" style="margin-top: 10px;">Cancel</button>
+    </div>
+</div>
+
 <script src="js/toast.js"></script>
 <script>
+    let selectedPlanId = null;
+
     async function loadPricing(country) {
         try {
             const res = await fetch(`/api/pricing?country=${country}`);
@@ -84,22 +111,35 @@
                 user = await uRes.json();
             } catch(e) {}
 
+            // Helper to get Plan Rank (Order in enum usually)
+            const planRanks = { 'FREE': 0, 'ESSENTIALS': 1, 'TEAM': 2 };
+            const currentRank = user && user.plan ? (planRanks[user.plan.id] || 0) : -1;
+
             data.plans.forEach((plan, index) => {
                 const isPop = index === 1 ? 'popular' : '';
                 const btnClass = index === 1 ? 'btn-primary' : 'btn-outline';
                 const featuresHtml = plan.features.map(f => `<li><i class="fa-solid fa-check"></i> ${f}</li>`).join('');
 
-                let btnAction = `href="/register"`;
-                let btnText = "Get Started";
+                let btnHtml = '';
 
                 if (user && user.email) {
-                    if (user.plan && user.plan.name === plan.title) {
-                        btnText = "Current Plan";
-                        btnAction = `disabled style="opacity:0.6; cursor:default;"`;
+                    const planRank = planRanks[plan.id] || 0;
+
+                    if (user.plan && user.plan.id === plan.id) {
+                        // Current Plan
+                        btnHtml = `<button class="btn btn-outline btn-block" disabled style="opacity:0.6; cursor:default; background: #eee;">Current Plan</button>`;
+                    } else if (currentRank > planRank) {
+                        // Lower Tier (Hide as per request)
+                        // "they should not see lower tier as upgrade option"
+                        // We can either hide the button or the whole card. Hiding the button is safer to keep grid layout.
+                        btnHtml = `<button class="btn btn-outline btn-block" disabled style="visibility: hidden;">Included</button>`;
                     } else {
-                        btnText = "Upgrade";
-                        btnAction = `onclick="upgradePlan('${plan.id}')"`;
+                        // Upgrade Option
+                        btnHtml = `<button class="btn ${btnClass} btn-block" onclick="openPaymentModal('${plan.id}', '${plan.title}', '${plan.price}')">Upgrade</button>`;
                     }
+                } else {
+                    // Not logged in
+                    btnHtml = `<a href="/register" class="btn ${btnClass} btn-block">Get Started</a>`;
                 }
 
                 grid.innerHTML += `
@@ -107,7 +147,7 @@
                         <h3>${plan.title}</h3>
                         <div class="price">${plan.price}<span>${plan.period}</span></div>
                         <p>For individuals getting started.</p>
-                        ${btnAction.includes('onclick') ? `<button class="btn ${btnClass} btn-block" ${btnAction}>${btnText}</button>` : `<a class="btn ${btnClass} btn-block" ${btnAction}>${btnText}</a>`}
+                        ${btnHtml}
                         <ul class="features-list">
                             ${featuresHtml}
                         </ul>
@@ -119,24 +159,50 @@
         }
     }
 
-    async function upgradePlan(planId) {
-        if(!confirm("Upgrade to this plan? (Mock Payment)")) return;
+    function openPaymentModal(id, title, price) {
+        selectedPlanId = id;
+        document.getElementById('paymentPlanName').innerText = `Upgrading to ${title}`;
+        document.getElementById('paymentAmount').innerText = price;
+        document.getElementById('paymentModal').style.display = 'flex';
+    }
+
+    function closePaymentModal() {
+        document.getElementById('paymentModal').style.display = 'none';
+        selectedPlanId = null;
+    }
+
+    async function processPayment() {
+        if(!selectedPlanId) return;
+
+        const btn = document.getElementById('btnConfirmPayment');
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+        // Mock delay
+        await new Promise(r => setTimeout(r, 1500));
 
         try {
             const res = await fetch('/api/pricing/upgrade', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ planId })
+                body: JSON.stringify({ planId: selectedPlanId })
             });
             const data = await res.json();
+
             if (res.ok) {
-                showToast(data.message, "success");
+                showToast("Payment Successful! Plan Upgraded.", "success");
+                closePaymentModal();
                 setTimeout(() => window.location.reload(), 1500);
             } else {
-                showToast(data.message, "error");
+                showToast(data.message || "Upgrade failed", "error");
+                btn.disabled = false;
+                btn.innerText = originalText;
             }
         } catch(e) {
-            showToast("Upgrade failed", "error");
+            showToast("Network Error", "error");
+            btn.disabled = false;
+            btn.innerText = originalText;
         }
     }
 

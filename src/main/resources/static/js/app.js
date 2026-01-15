@@ -40,6 +40,43 @@ function setupEventListeners() {
     if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
 }
 
+async function handleStreamVideoUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const btn = document.querySelector('button[onclick*="streamUploadInput"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading...`;
+
+    const formData = new FormData();
+    formData.append("file", file); // Backend expects "file" not "files" for single upload, usually
+
+    try {
+        // Re-use library upload endpoint, or a specific stream upload if exists
+        // Plan says "Re-use library upload endpoint" usually or check StreamController
+        // StreamController has /upload but that returns a key. LibraryController has /library/upload
+        // Let's use /api/upload from StreamController as it might be simpler or intended for temp usage
+        // Actually, previous code used /library/upload. Let's stick to that for consistency.
+
+        const res = await apiFetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
+
+        if (res.ok) {
+            showToast("Video uploaded successfully!", "success");
+            // Auto-refresh library modal content
+            openLibraryModalForStream();
+        } else {
+            showToast("Upload failed.", "error");
+        }
+    } catch (err) {
+        showToast("Upload error.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        e.target.value = '';
+    }
+}
+
 /* --- NAVIGATION & VIEW SWITCHING --- */
 function switchView(viewName) {
     // Hide all views
@@ -79,7 +116,15 @@ function switchView(viewName) {
 
 function toggleMobileMenu() {
     const sb = document.getElementById('subSidebar');
-    sb.classList.toggle('open');
+    const overlay = document.getElementById('sidebarOverlay');
+
+    if (sb.classList.contains('open')) {
+        sb.classList.remove('open');
+        if(overlay) overlay.classList.remove('active');
+    } else {
+        sb.classList.add('open');
+        if(overlay) overlay.classList.add('active');
+    }
 }
 
 /* --- API HELPER --- */
@@ -603,6 +648,21 @@ function renderPlanInfo(plan) {
 
 async function checkYoutubeStatus() {
     // ...
+}
+
+async function cancelSubscription() {
+    if(!confirm("Are you sure you want to cancel your subscription? You will be downgraded to the Free plan immediately.")) return;
+
+    try {
+        const res = await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' });
+        const data = await res.json();
+        if(res.ok) {
+            showToast("Subscription cancelled.", "success");
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showToast(data.message || "Cancellation failed", "error");
+        }
+    } catch(e) { showToast("Error cancelling subscription", "error"); }
 }
 
 /* --- ANALYTICS & CALENDAR --- */

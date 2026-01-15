@@ -10,6 +10,9 @@
 </head>
 <body>
 
+<!-- Mobile Sidebar Overlay -->
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleMobileMenu()"></div>
+
 <div class="app-layout">
 
     <!-- LEVEL 1: ICON SIDEBAR (Channels/Orgs) -->
@@ -145,6 +148,9 @@
                         <div class="step-content">
                             <label>Destination</label>
                             <input type="password" id="streamKey" placeholder="Stream Key (YouTube/Twitch)" class="form-input">
+
+                            <label style="margin-top: 10px; display:block;">Loop Video (Times)</label>
+                            <input type="number" id="streamLoopCount" value="1" min="1" class="form-input" style="width: 100px;">
                         </div>
                     </div>
 
@@ -259,7 +265,10 @@
                             <div class="progress-label"><span>Storage</span><span id="storageText">0/0</span></div>
                             <div class="progress-track"><div id="storageBar" class="progress-fill"></div></div>
                         </div>
-                        <a href="/pricing" class="btn btn-outline btn-sm" style="margin-top:15px;">Upgrade</a>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <a href="/pricing" class="btn btn-outline btn-sm">Upgrade Plan</a>
+                            <button onclick="cancelSubscription()" class="btn btn-text btn-sm" style="color: var(--danger);">Cancel Subscription</button>
+                        </div>
                     </div>
                 </div>
 

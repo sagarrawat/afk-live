@@ -404,7 +404,31 @@ body {
         text-align: center;
     }
 
+    /* Fixed Navigation for Mobile */
+    .navbar .container {
+        flex-direction: column;
+        gap: 20px;
+    }
+
     .nav-links {
-        display: none; /* TODO: Add mobile menu */
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        text-align: center;
+        gap: 15px;
+    }
+
+    .nav-links a {
+        margin: 0;
+        display: block;
+        padding: 10px;
+        background: #f9f9f9;
+        border-radius: 6px;
+    }
+
+    .nav-links a.btn-primary {
+        background: var(--primary); /* Assuming var exists or fallback */
+        background: #2c68f6;
+        color: white;
     }
 }

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "scheduled_videos")
 public class ScheduledVideo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
