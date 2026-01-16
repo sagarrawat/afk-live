@@ -433,6 +433,8 @@ async function loadScheduledQueue() {
 
 /* --- STREAMING --- */
 let selectedStreamVideo = null;
+let streamTimerInterval = null;
+let streamStartTime = null;
 
 async function openLibraryModalForStream() {
     document.getElementById('streamLibraryModal').classList.remove('hidden');
@@ -455,10 +457,7 @@ async function openLibraryModalForStream() {
              div.style.cursor = 'pointer';
              div.innerHTML = `<i class="fa-solid fa-film"></i> ${v.title}`;
              div.onclick = () => {
-                 selectedStreamVideo = v;
-                 document.getElementById('selectedVideoPreview').classList.remove('hidden');
-                 document.getElementById('videoSelectionButtons').classList.add('hidden');
-                 document.getElementById('selectedVideoName').innerText = v.title;
+                 selectStreamVideo(v);
                  document.getElementById('streamLibraryModal').classList.add('hidden');
              };
              list.appendChild(div);
@@ -466,17 +465,26 @@ async function openLibraryModalForStream() {
     } catch(e) {}
 }
 
-function clearSelectedVideo() {
-    selectedStreamVideo = null;
-    document.getElementById('selectedVideoPreview').classList.add('hidden');
-    document.getElementById('videoSelectionButtons').classList.remove('hidden');
+function selectStreamVideo(video) {
+    selectedStreamVideo = video;
+    document.getElementById('selectedVideoTitle').innerText = video.title;
+
+    // Preview
+    const player = document.getElementById('previewPlayer');
+    document.getElementById('previewPlaceholder').classList.add('hidden');
+    player.classList.remove('hidden');
+
+    // Use the streaming endpoint
+    player.src = `${API_URL}/library/stream/${video.id}`;
+    player.load();
 }
 
 async function submitJob() {
     const key = document.getElementById('streamKey').value;
     const loopCount = document.getElementById('streamLoopCount').value;
 
-    if(!selectedStreamVideo || !key) return showToast("Select video and enter key", "error");
+    if(!selectedStreamVideo) return showToast("Please select a video source", "error");
+    if(!key) return showToast("Please select a destination or enter stream key", "error");
 
     const btn = document.getElementById('btnGoLive');
     btn.disabled = true;
@@ -486,72 +494,175 @@ async function submitJob() {
     fd.append("streamKey", key);
     fd.append("videoKey", selectedStreamVideo.s3Key);
     fd.append("loopCount", loopCount);
-    // Note: Start Time is ignored by backend for now as per plan, but field exists for future usage
 
     try {
         const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
         const data = await res.json();
         if(data.success) {
-            showToast("Stream Started", "success");
+            showToast("Stream Started Successfully!", "success");
             setLiveState(true);
+            streamStartTime = new Date();
+            startTimer();
         } else {
             showToast(data.message, "error");
         }
-    } catch(e) { showToast("Failed to start", "error"); }
+    } catch(e) { showToast("Failed to start stream", "error"); }
     finally {
         btn.disabled = false;
-        if(!document.getElementById('liveIndicator').classList.contains('hidden')) {
-             // If live, button is hidden anyway via setLiveState
+        if(!document.getElementById('liveBadge').classList.contains('hidden')) {
+             btn.classList.add('hidden');
         } else {
-             btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Start Streaming';
+             btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Go Live';
         }
     }
 }
 
 async function stopStream() {
+    if(!confirm("Are you sure you want to end the stream?")) return;
     try {
         await apiFetch(`${API_URL}/stop`, {method:'POST'});
         setLiveState(false);
         showToast("Stream Stopped", "info");
+        stopTimer();
     } catch(e) {}
 }
 
 function setLiveState(isLive) {
     const badge = document.getElementById('liveBadge');
+    const offlineBadge = document.getElementById('offlineBadge');
     const btnGo = document.getElementById('btnGoLive');
     const btnStop = document.getElementById('btnStop');
 
     if(isLive) {
         badge.classList.remove('hidden');
+        offlineBadge.classList.add('hidden');
         btnGo.classList.add('hidden');
         btnStop.classList.remove('hidden');
         log("Stream is LIVE");
     } else {
         badge.classList.add('hidden');
+        offlineBadge.classList.remove('hidden');
         btnGo.classList.remove('hidden');
         btnStop.classList.add('hidden');
         log("Stream Offline");
+        stopTimer();
     }
 }
 
 function log(msg) {
     const t = document.getElementById('console');
-    if(t) t.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+    if(t) {
+        t.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        t.scrollTop = t.scrollHeight;
+    }
+}
+
+/* --- DESTINATIONS --- */
+let destinations = [];
+
+function loadDestinations() {
+    const saved = localStorage.getItem('afk_destinations');
+    if(saved) destinations = JSON.parse(saved);
+    renderDestinations();
+}
+
+function addDestination() {
+    const name = prompt("Enter Destination Name (e.g. YouTube Main):");
+    if(!name) return;
+    const key = prompt("Enter Stream Key:");
+    if(!key) return;
+
+    destinations.push({ id: Date.now(), name, key });
+    saveDestinations();
+    renderDestinations();
+
+    // Auto select newest
+    selectDestination(destinations[destinations.length-1].id);
+}
+
+function removeDestination(id, e) {
+    e.stopPropagation();
+    if(!confirm("Remove this destination?")) return;
+    destinations = destinations.filter(d => d.id !== id);
+    saveDestinations();
+    renderDestinations();
+}
+
+function saveDestinations() {
+    localStorage.setItem('afk_destinations', JSON.stringify(destinations));
+}
+
+function renderDestinations() {
+    const list = document.getElementById('destinationList');
+    if(!list) return;
+    list.innerHTML = '';
+
+    if(destinations.length === 0) {
+        list.innerHTML = `<div class="empty-state" style="padding: 10px; font-size: 0.9rem;">No destinations. <a href="#" onclick="addDestination()">Add one</a></div>`;
+        return;
+    }
+
+    destinations.forEach(d => {
+        const div = document.createElement('div');
+        div.className = 'destination-item';
+        div.onclick = () => selectDestination(d.id);
+        div.dataset.id = d.id;
+        div.innerHTML = `
+            <div class="dest-icon"><i class="fa-solid fa-key"></i></div>
+            <div style="flex:1"><b>${d.name}</b></div>
+            <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)"><i class="fa-solid fa-trash"></i></button>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function selectDestination(id) {
+    const dest = destinations.find(d => d.id === id);
+    if(!dest) return;
+
+    document.getElementById('streamKey').value = dest.key;
+    document.querySelectorAll('.destination-item').forEach(el => {
+        el.classList.remove('active');
+        if(parseInt(el.dataset.id) === id) el.classList.add('active');
+    });
+}
+
+/* --- TIMER --- */
+function startTimer() {
+    stopTimer();
+    const el = document.getElementById('streamTimer');
+    if(!el) return;
+
+    streamTimerInterval = setInterval(() => {
+        if(!streamStartTime) return;
+        const diff = Math.floor((new Date() - streamStartTime) / 1000);
+        const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+        const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        el.innerText = `${h}:${m}:${s}`;
+    }, 1000);
+}
+
+function stopTimer() {
+    if(streamTimerInterval) clearInterval(streamTimerInterval);
+    const el = document.getElementById('streamTimer');
+    if(el) el.innerText = "00:00:00";
 }
 
 async function checkInitialStatus() {
     try {
         const res = await apiFetch(`${API_URL}/status`);
         const data = await res.json();
-        if(data.success && data.data.live) setLiveState(true);
+        if(data.success && data.data.live) {
+            setLiveState(true);
+            // We don't know start time from backend yet, so just start counting from now or 0
+            // Ideally backend returns startTime. For now, just show LIVE.
+        }
     } catch(e){}
 }
 
 function loadGlobalSettings() {
-    const savedKey = localStorage.getItem('afk_stream_key');
-    if(savedKey && document.getElementById('streamKey')) {
-        document.getElementById('streamKey').value = savedKey;
-    }
+    loadDestinations();
 }
 
 /* --- LIBRARY --- */

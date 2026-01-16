@@ -118,54 +118,75 @@
 
         <!-- VIEW: STREAM -->
         <div id="view-stream" class="view-section hidden">
-            <!-- Reuse existing stream layout but cleaner -->
             <div class="stream-dashboard-layout">
-                <div class="stream-setup-card">
-                    <div class="card-header">
-                        <h2>Live Studio</h2>
-                        <span class="badge live hidden" id="liveBadge">LIVE</span>
-                    </div>
-
-                    <div class="step-box">
-                         <div class="step-num">1</div>
-                         <div class="step-content">
-                             <label>Video Source</label>
-                             <div id="selectedVideoPreview" class="selected-video-box hidden">
-                                 <i class="fa-solid fa-film"></i>
-                                 <span id="selectedVideoName">Video.mp4</span>
-                                 <button class="btn-icon" onclick="clearSelectedVideo()"><i class="fa-solid fa-xmark"></i></button>
-                             </div>
-                             <div id="videoSelectionButtons" class="btn-group">
-                                 <button class="btn btn-outline" onclick="openLibraryModalForStream()">Select from Library</button>
-                                 <button class="btn btn-outline" onclick="document.getElementById('streamUploadInput').click()">Upload New</button>
-                                 <input type="file" id="streamUploadInput" hidden accept="video/*">
-                             </div>
-                         </div>
-                    </div>
-
-                    <div class="step-box">
-                        <div class="step-num">2</div>
-                        <div class="step-content">
-                            <label>Destination</label>
-                            <input type="password" id="streamKey" placeholder="Stream Key (YouTube/Twitch)" class="form-input">
-
-                            <label style="margin-top: 10px; display:block;">Loop Video (Times)</label>
-                            <input type="number" id="streamLoopCount" value="1" min="1" class="form-input" style="width: 100px;">
+                <!-- LEFT: Preview & Source -->
+                <div class="stream-main-panel">
+                    <div class="preview-container">
+                        <video id="previewPlayer" class="preview-player hidden" controls loop playsinline></video>
+                        <div id="previewPlaceholder" class="preview-placeholder">
+                            <i class="fa-solid fa-film fa-3x"></i>
+                            <span>Select a video to preview</span>
                         </div>
+                        <div class="preview-overlay">PREVIEW</div>
                     </div>
 
-                    <div class="step-box">
-                         <div class="step-num">3</div>
-                         <div class="step-content">
-                             <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">Go Live</button>
-                             <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
-                         </div>
+                    <div class="card">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                            <h3 style="margin:0">Video Source</h3>
+                            <div>
+                                <button class="btn btn-outline btn-sm" onclick="openLibraryModalForStream()">Select from Library</button>
+                                <button class="btn btn-outline btn-sm" onclick="document.getElementById('streamUploadInput').click()">Upload New</button>
+                                <input type="file" id="streamUploadInput" hidden accept="video/*">
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 10px;">
+                                <i class="fa-solid fa-file-video" style="color:var(--primary);"></i>
+                                <strong id="selectedVideoTitle" style="font-size: 1.1rem;">No video selected</strong>
+                            </div>
+                            <div style="font-size: 0.9rem; color: #666; display: flex; gap: 20px; align-items: center;">
+                                <span><i class="fa-solid fa-rotate"></i> Loop Count:</span>
+                                <input type="number" id="streamLoopCount" value="1" min="1" class="form-input" style="width: 80px;">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="stream-status-panel">
-                    <div class="terminal-card">
-                        <div class="terminal" id="console"></div>
+                <!-- RIGHT: Controls -->
+                <div class="stream-control-panel">
+                    <!-- Status -->
+                    <div class="stream-status-box">
+                        <div class="status-label">Stream Status</div>
+                        <div class="status-timer" id="streamTimer">00:00:00</div>
+                        <span class="badge hidden" id="liveBadge">LIVE</span>
+                        <span class="badge" id="offlineBadge" style="background:#445; color:#aaa;">OFFLINE</span>
+                    </div>
+
+                    <!-- Action -->
+                    <div class="control-card">
+                         <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
+                            <i class="fa-solid fa-tower-broadcast"></i> Go Live
+                         </button>
+                         <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
+                    </div>
+
+                    <!-- Destinations -->
+                    <div class="control-card">
+                        <h3>Destinations <button class="btn btn-text btn-sm" onclick="addDestination()"><i class="fa-solid fa-plus"></i></button></h3>
+                        <div id="destinationList" class="destination-list">
+                            <!-- Populated via JS -->
+                            <div class="empty-state" style="padding: 10px; font-size: 0.9rem;">No destinations.</div>
+                        </div>
+                        <!-- Hidden input to store active key -->
+                        <input type="hidden" id="streamKey">
+                    </div>
+
+                    <!-- Logs -->
+                    <div class="control-card" style="flex:1; display:flex; flex-direction:column; min-height: 200px;">
+                        <h3>Logs</h3>
+                        <div class="terminal-card">
+                            <div class="terminal" id="console"></div>
+                        </div>
                     </div>
                 </div>
             </div>
