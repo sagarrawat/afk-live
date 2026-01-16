@@ -2,6 +2,7 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
+import com.afklive.streamer.service.FFmpegCommandBuilder;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.service.YouTubeService;
@@ -11,6 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -47,19 +51,57 @@ public class VideoController {
             @RequestParam("privacyStatus") String privacyStatus,
             @RequestParam(value = "categoryId", required = false) String categoryId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
+            @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
+            @RequestParam(value = "audioVolume", defaultValue = "0.5") String audioVolume,
             Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        String username = principal.getName(); // Use principal name (sub) for consistency with OAuth2 storage
+        String username = principal.getName();
 
         try {
             log.info("Scheduling video for user: {}", username);
 
             userService.checkStorageQuota(username, file.getSize());
 
-            // Upload to S3
-            String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
-            userService.updateStorageUsage(username, file.getSize());
+            String s3Key;
+            long finalSize = file.getSize();
+
+            if (audioFile != null && !audioFile.isEmpty()) {
+                // Mix Audio
+                Path tempVideo = Files.createTempFile("vid", ".mp4");
+                Path tempAudio = Files.createTempFile("aud", ".mp3");
+                Path tempOut = Files.createTempFile("mix", ".mp4");
+
+                try {
+                    file.transferTo(tempVideo);
+                    audioFile.transferTo(tempAudio);
+
+                    List<String> cmd = FFmpegCommandBuilder.buildMixCommand(tempVideo, tempAudio, audioVolume, tempOut);
+                    Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+                    // Read output to avoid blocking?
+                    // Simple wait for now as we redirect error stream but don't read it?
+                    // ProcessBuilder.inheritIO() might be better for debugging but we want to capture logs.
+                    // Let's just wait. If buffer fills it blocks. `redirectErrorStream` merges stderr to stdout.
+                    // We should read the stream.
+                    p.getInputStream().transferTo(System.out); // Pipe to stdout log
+
+                    int exit = p.waitFor();
+                    if (exit != 0) throw new RuntimeException("FFmpeg audio mix failed with exit code " + exit);
+
+                    finalSize = Files.size(tempOut);
+                    try (InputStream is = Files.newInputStream(tempOut)) {
+                        s3Key = storageService.uploadFile(is, file.getOriginalFilename(), finalSize);
+                    }
+                } finally {
+                    Files.deleteIfExists(tempVideo);
+                    Files.deleteIfExists(tempAudio);
+                    Files.deleteIfExists(tempOut);
+                }
+            } else {
+                s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
+            }
+
+            userService.updateStorageUsage(username, finalSize);
 
             String thumbnailKey = null;
             if (thumbnail != null && !thumbnail.isEmpty()) {

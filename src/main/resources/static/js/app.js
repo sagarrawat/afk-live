@@ -371,6 +371,15 @@ async function submitSchedule() {
     formData.append("tags", document.getElementById('scheduleTags').value);
     if(selectedChannelId) formData.append("socialChannelId", selectedChannelId);
 
+    // Audio
+    const audioFile = document.getElementById('scheduleAudio').files[0];
+    if (audioFile) {
+        const volPercent = document.getElementById('scheduleAudioVol').value;
+        const vol = (volPercent / 100).toFixed(1);
+        formData.append("audioFile", audioFile);
+        formData.append("audioVolume", vol);
+    }
+
     // Progress
     const pContainer = document.getElementById('uploadProgressContainer');
     const pBar = document.getElementById('uploadProgressBar');

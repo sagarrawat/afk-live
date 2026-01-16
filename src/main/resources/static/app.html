@@ -490,6 +490,19 @@
                          <div class="form-group">
                              <input type="text" id="scheduleTags" placeholder="Tags (comma separated)" class="form-input">
                          </div>
+
+                         <div style="margin-top:15px; padding-top:15px; border-top:1px solid #eee;">
+                            <h4 style="margin:0 0 10px 0; font-size:0.95rem;">Audio & Music</h4>
+                            <div class="form-group">
+                                <label>Backing Track (Optional)</label>
+                                <input type="file" id="scheduleAudio" accept=".mp3,.wav" class="form-control" style="font-size:0.9rem;">
+                            </div>
+                            <div class="form-group">
+                                <label>Music Volume (<span id="volVal">50%</span>)</label>
+                                <input type="range" id="scheduleAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('volVal').innerText = this.value + '%'">
+                                <div style="font-size:0.8rem; color:#888;">100% = Original volume. 200% = Boost.</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

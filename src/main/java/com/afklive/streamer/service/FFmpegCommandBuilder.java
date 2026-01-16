@@ -33,6 +33,31 @@ public class FFmpegCommandBuilder {
         );
     }
 
+    public static List<String> buildMixCommand(Path videoPath, Path audioPath, String volume, Path outputPath) {
+        // ffmpeg -i video.mp4 -stream_loop -1 -i audio.mp3 -filter_complex "[1:a]volume=0.5[a1];[0:a][a1]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -y out.mp4
+        List<String> command = new ArrayList<>();
+        command.add("ffmpeg");
+        command.add("-i");
+        command.add(videoPath.toString());
+        command.add("-stream_loop");
+        command.add("-1");
+        command.add("-i");
+        command.add(audioPath.toString());
+        command.add("-filter_complex");
+        command.add("[1:a]volume=" + volume + "[a1];[0:a][a1]amix=inputs=2:duration=first[aout]");
+        command.add("-map");
+        command.add("0:v");
+        command.add("-map");
+        command.add("[aout]");
+        command.add("-c:v");
+        command.add("copy"); // Copy video stream
+        command.add("-c:a");
+        command.add("aac");
+        command.add("-y");
+        command.add(outputPath.toString());
+        return command;
+    }
+
     public static List<String> buildStreamCommand(
             Path videoPath,
             String streamKey,
