@@ -38,6 +38,14 @@ function setupEventListeners() {
     // Stream Upload
     const streamUpload = document.getElementById("streamUploadInput");
     if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
+
+    // Live Preview
+    document.getElementById('scheduleTitle')?.addEventListener('input', e => {
+        document.getElementById('previewTitleMock').innerText = e.target.value || "Video Title";
+    });
+    document.getElementById('scheduleDescription')?.addEventListener('input', e => {
+        document.getElementById('previewDescMock').innerText = e.target.value || "Description will appear here...";
+    });
 }
 
 async function handleStreamVideoUpload(e) {
