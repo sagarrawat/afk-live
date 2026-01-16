@@ -2,72 +2,106 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title>Login - AFK Live</title>
-    <link rel="stylesheet" href="/css/theme.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background: #f5f5f5; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: 'Inter', sans-serif; }
-        .auth-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        .logo { font-size: 1.5rem; font-weight: 800; text-align: center; margin-bottom: 30px; display: block; color: var(--text-primary); text-decoration: none; }
+        :root { --primary: #2c68f6; --text: #172b4d; --bg: #ffffff; }
+        body { margin: 0; font-family: 'Inter', sans-serif; height: 100vh; display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); color: var(--text); }
+        .auth-side { display: flex; align-items: center; justify-content: center; padding: 40px; }
+        .auth-container { width: 100%; max-width: 400px; }
+        .logo { font-size: 1.5rem; font-weight: 800; margin-bottom: 40px; display: inline-block; color: var(--text); text-decoration: none; }
+        h1 { font-size: 2rem; margin-bottom: 10px; }
+        .subtitle { color: #6b778c; margin-bottom: 30px; }
+
         .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9rem; color: var(--text-secondary); }
-        .form-control { width: 100%; padding: 10px; border: 1px solid #dfe1e6; border-radius: 6px; box-sizing: border-box; font-family: inherit; }
-        .btn-block { width: 100%; justify-content: center; margin-top: 10px; }
-        .divider { text-align: center; margin: 20px 0; color: #888; font-size: 0.9rem; position: relative; }
-        .divider::before { content: ""; position: absolute; left: 0; top: 50%; width: 45%; height: 1px; background: #eee; }
-        .divider::after { content: ""; position: absolute; right: 0; top: 50%; width: 45%; height: 1px; background: #eee; }
-        .links { text-align: center; margin-top: 20px; font-size: 0.9rem; color: var(--text-secondary); }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; }
+        .form-control { width: 100%; padding: 12px; border: 1px solid #dfe1e6; border-radius: 6px; box-sizing: border-box; font-family: inherit; font-size: 1rem; transition: 0.2s; }
+        .form-control:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(44, 104, 246, 0.1); }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; font-size: 1rem; text-decoration: none; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #1b53d6; }
+        .btn-google { background: white; border: 1px solid #dfe1e6; color: var(--text); margin-bottom: 20px; }
+        .btn-google:hover { background: #f4f5f7; }
+        .btn-google i { margin-right: 10px; color: #DB4437; }
+
+        .divider { text-align: center; margin: 20px 0; color: #6b778c; font-size: 0.9rem; position: relative; }
+        .divider::before, .divider::after { content: ""; position: absolute; top: 50%; width: 40%; height: 1px; background: #eee; }
+        .divider::before { left: 0; } .divider::after { right: 0; }
+
+        .links { text-align: center; margin-top: 20px; font-size: 0.9rem; }
         .links a { color: var(--primary); text-decoration: none; font-weight: 500; }
-        .alert { padding: 10px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; }
-        .alert-error { background: #ffebeb; color: var(--danger); border: 1px solid #ffcccc; }
-        .alert-success { background: #e6fffa; color: #2ba640; border: 1px solid #b3f0e0; }
+
+        .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; }
+        .alert-error { background: #ffebeb; color: #e02424; border: 1px solid #ffcccc; }
+
+        .visual-side { background: #f4f5f7; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+        .visual-content { text-align: center; max-width: 400px; padding: 40px; position: relative; z-index: 2; }
+        .visual-content h2 { font-size: 2rem; margin-bottom: 16px; }
+        .visual-content p { color: #6b778c; line-height: 1.6; }
+
+        /* Floating shapes for visual interest */
+        .shape { position: absolute; border-radius: 50%; opacity: 0.5; filter: blur(40px); }
+        .shape-1 { top: -100px; left: -100px; width: 400px; height: 400px; background: #e3f2fd; }
+        .shape-2 { bottom: -100px; right: -100px; width: 300px; height: 300px; background: #fff0b3; }
+
+        @media (max-width: 900px) {
+            body { grid-template-columns: 1fr; }
+            .visual-side { display: none; }
+        }
     </style>
 </head>
 <body>
 
-<div class="auth-card">
-    <a href="/" class="logo">🔴 AFK Live</a>
+<div class="auth-side">
+    <div class="auth-container">
+        <a href="/" class="logo">🔴 AFK Live</a>
+        <h1>Welcome back</h1>
+        <p class="subtitle">Enter your details to access your account.</p>
 
-    <div th:if="${param.error}" class="alert alert-error">
-        Invalid email or password.
-    </div>
-    <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
-    <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+        <div th:if="${param.error}" class="alert alert-error">Invalid email or password.</div>
+        <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
 
-    <form action="/login" method="post">
-        <div class="form-group">
-            <label>Email Address</label>
-            <input type="email" name="username" class="form-control" required placeholder="you@example.com">
+        <a href="/oauth2/authorization/google" class="btn btn-google">
+            <i class="fa-brands fa-google"></i> Log in with Google
+        </a>
+
+        <div class="divider">OR</div>
+
+        <form action="/login" method="post">
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" name="username" class="form-control" required placeholder="name@company.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" class="form-control" required placeholder="••••••••">
+            </div>
+            <div style="text-align:right; margin-bottom:20px;">
+                <a href="/forgot-password" style="font-size:0.9rem; color:var(--primary); text-decoration:none;">Forgot password?</a>
+            </div>
+            <button type="submit" class="btn btn-primary">Log In</button>
+        </form>
+
+        <div class="links">
+            Don't have an account? <a href="/register">Sign up for free</a>
         </div>
-        <div class="form-group">
-            <label>Password</label>
-            <input type="password" name="password" class="form-control" required placeholder="••••••••">
-        </div>
-        <button type="submit" class="btn btn-primary btn-block">Log In</button>
-    </form>
-
-    <div class="links">
-        <a href="/forgot-password">Forgot password?</a>
     </div>
+</div>
 
-    <div class="divider">OR</div>
-
-    <a href="/oauth2/authorization/google" class="btn btn-google btn-block">
-        <i class="fa-brands fa-google"></i> Continue with Google
-    </a>
-
-    <div class="links">
-        Don't have an account? <a href="/register">Sign up</a>
+<div class="visual-side">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="visual-content">
+        <h2>Grow your audience with continuous streaming.</h2>
+        <p>Join thousands of creators who use AFK Live to keep their channels active 24/7.</p>
     </div>
 </div>
 
 <script>
-    // Redirect if already logged in (checked via API for simplicity in hybrid auth)
     fetch('/api/user-info')
         .then(res => res.json())
-        .then(data => {
-            if(data.email) window.location.href = '/studio';
-        })
+        .then(data => { if(data.email) window.location.href = '/studio'; })
         .catch(() => {});
 </script>
 

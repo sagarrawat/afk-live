@@ -1,6 +1,7 @@
 package com.afklive.streamer.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "social_channels")
@@ -15,6 +16,7 @@ public class SocialChannel {
 
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @JsonIgnore
     private User user;
 
     public SocialChannel() {}
