@@ -196,7 +196,9 @@ async function loadUserChannels() {
         userChannels = await res.json();
 
         renderChannelList(userChannels);
-    } catch(e) {}
+    } catch(e) {
+        console.error("Failed to load channels", e);
+    }
 }
 
 function renderChannelList(channels) {
@@ -567,17 +569,28 @@ function loadDestinations() {
 }
 
 function addDestination() {
-    const name = prompt("Enter Destination Name (e.g. YouTube Main):");
-    if(!name) return;
-    const key = prompt("Enter Stream Key:");
-    if(!key) return;
+    document.getElementById('newDestName').value = '';
+    document.getElementById('newDestKey').value = '';
+    document.getElementById('addDestinationModal').classList.remove('hidden');
+    document.getElementById('newDestName').focus();
+}
+
+function submitDestination() {
+    const name = document.getElementById('newDestName').value;
+    const key = document.getElementById('newDestKey').value;
+
+    if(!name || !key) {
+        showToast("Please fill all fields", "error");
+        return;
+    }
 
     destinations.push({ id: Date.now(), name, key });
     saveDestinations();
     renderDestinations();
-
-    // Auto select newest
     selectDestination(destinations[destinations.length-1].id);
+
+    document.getElementById('addDestinationModal').classList.add('hidden');
+    showToast("Destination Added", "success");
 }
 
 function removeDestination(id, e) {
@@ -838,4 +851,105 @@ async function loadComments() {
             list.appendChild(div);
         });
     } catch(e) { list.innerHTML = "Failed to load."; }
+}
+
+/* --- NEW SETTINGS LOGIC --- */
+function switchSettingsTab(tabName) {
+    document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
+    const nav = document.querySelector(`.settings-nav-item[onclick*="'${tabName}'"]`);
+    if(nav) nav.classList.add('active');
+
+    document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
+    const content = document.getElementById(`tab-${tabName}`);
+    if(content) content.classList.remove('hidden');
+
+    if(tabName === 'plans') loadInternalPricing();
+}
+
+async function loadInternalPricing() {
+    const grid = document.getElementById('internalPlanGrid');
+    if(!grid || grid.innerHTML.trim() !== "") return; // Already loaded
+
+    grid.innerHTML = "Loading plans...";
+
+    try {
+        const res = await apiFetch('/api/pricing?country=US');
+        const data = await res.json();
+        grid.innerHTML = '';
+
+        // Plan Ranks
+        const planRanks = { 'FREE': 0, 'ESSENTIALS': 1, 'TEAM': 2 };
+        const currentRank = currentUser && currentUser.plan ? (planRanks[currentUser.plan.id] || 0) : -1;
+
+        data.plans.forEach(plan => {
+            const planRank = planRanks[plan.id] || 0;
+            let btn = '';
+            let activeClass = '';
+
+            if(currentUser && currentUser.plan && currentUser.plan.id === plan.id) {
+                btn = `<button class="btn btn-outline btn-block" disabled style="opacity:0.6; cursor:default;">Current Plan</button>`;
+                activeClass = 'active-plan';
+            } else if (currentRank > planRank) {
+                 btn = `<button class="btn btn-outline btn-block" disabled style="visibility:hidden">Included</button>`;
+            } else {
+                 btn = `<button class="btn btn-primary btn-block" onclick="openPaymentModal('${plan.id}', '${plan.title}', '${plan.price}')">Upgrade</button>`;
+            }
+
+            const features = plan.features.map(f => `<li><i class="fa-solid fa-check" style="color:#00875a"></i> ${f}</li>`).join('');
+
+            grid.innerHTML += `
+                <div class="plan-card ${activeClass}">
+                    <h3>${plan.title}</h3>
+                    <div class="plan-price">${plan.price}<span>${plan.period}</span></div>
+                    <ul class="plan-features">${features}</ul>
+                    ${btn}
+                </div>
+            `;
+        });
+    } catch(e) {
+        grid.innerHTML = "Failed to load pricing.";
+    }
+}
+
+let selectedPlanId = null;
+
+function openPaymentModal(id, title, price) {
+    selectedPlanId = id;
+    document.getElementById('paymentPlanName').innerText = `Upgrading to ${title}`;
+    document.getElementById('paymentAmount').innerText = price;
+    document.getElementById('paymentModal').classList.remove('hidden');
+}
+
+async function processPayment() {
+    if(!selectedPlanId) return;
+
+    const btn = document.getElementById('btnConfirmPayment');
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+    await new Promise(r => setTimeout(r, 1500)); // Mock delay
+
+    try {
+        const res = await apiFetch('/api/pricing/upgrade', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ planId: selectedPlanId })
+        });
+
+        if (res.ok) {
+            showToast("Payment Successful! Plan Upgraded.", "success");
+            document.getElementById('paymentModal').classList.add('hidden');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            const data = await res.json();
+            showToast(data.message || "Upgrade failed", "error");
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    } catch(e) {
+        showToast("Network Error", "error");
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
 }

@@ -214,6 +214,25 @@ body {
 .summary-card p { font-size: 1.8rem; font-weight: 700; margin: 5px 0 0; }
 .chart-card { height: 300px; }
 
+/* SETTINGS LAYOUT (Azure Style) */
+.settings-container { display: flex; height: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: white; }
+.settings-sidebar { width: 250px; background: #f4f5f7; border-right: 1px solid var(--border); padding: 20px 0; flex-shrink: 0; }
+.settings-nav-item { padding: 10px 24px; cursor: pointer; color: var(--text-main); font-size: 0.95rem; border-left: 3px solid transparent; }
+.settings-nav-item:hover { background: #ebecf0; }
+.settings-nav-item.active { background: white; border-left-color: var(--primary); font-weight: 600; color: var(--primary); }
+.settings-content { flex: 1; padding: 40px; overflow-y: auto; }
+.settings-section h2 { margin-top: 0; margin-bottom: 24px; font-size: 1.5rem; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+
+/* PRICING CARDS (Internal) */
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+.plan-card { border: 1px solid var(--border); border-radius: 8px; padding: 24px; text-align: center; transition: 0.2s; position: relative; }
+.plan-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+.plan-card.active-plan { border: 2px solid var(--primary); background: #f0f7ff; }
+.plan-card h3 { margin: 0; font-size: 1.2rem; }
+.plan-price { font-size: 2rem; font-weight: 700; margin: 16px 0; }
+.plan-features { list-style: none; padding: 0; text-align: left; margin-bottom: 24px; font-size: 0.9rem; color: #555; }
+.plan-features li { margin-bottom: 8px; display: flex; gap: 8px; }
+
 /* MODALS */
 .modal-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.5);
