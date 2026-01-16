@@ -40,7 +40,7 @@ public class LibraryController {
     @PostMapping("/upload")
     public ResponseEntity<?> bulkUpload(
             @RequestParam("files") List<MultipartFile> files,
-            @AuthenticationPrincipal OAuth2User principal
+            java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = principal.getName();
@@ -99,7 +99,7 @@ public class LibraryController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getLibraryVideos(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<?> getLibraryVideos(java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = principal.getName();
 
@@ -111,7 +111,7 @@ public class LibraryController {
     }
 
     @GetMapping("/stream/{id}")
-    public ResponseEntity<InputStreamResource> streamVideo(@PathVariable Long id, @AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<InputStreamResource> streamVideo(@PathVariable Long id, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         String username = principal.getName();
 
@@ -134,7 +134,7 @@ public class LibraryController {
     @PostMapping("/auto-schedule")
     public ResponseEntity<?> autoSchedule(
             @RequestBody Map<String, Object> payload,
-            @AuthenticationPrincipal OAuth2User principal
+            java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = principal.getName();
