@@ -23,21 +23,24 @@ public class AudioService {
                 "title", "Summer Vibes",
                 "artist", "Trending Sounds",
                 "cover", "https://ui-avatars.com/api/?name=SV&background=FFD700",
-                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" // Public sample
+                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // Public sample
+                "ytUrl", "https://www.youtube.com/source/1A2B3C4D/shorts" // Mock Deep Link
             ),
             Map.of(
                 "id", "track_2",
                 "title", "Phonk Drift",
                 "artist", "Viral Hits",
                 "cover", "https://ui-avatars.com/api/?name=PD&background=000000&color=fff",
-                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
+                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+                "ytUrl", "https://www.youtube.com/source/5E6F7G8H/shorts"
             ),
             Map.of(
                 "id", "track_3",
                 "title", "Lofi Study",
                 "artist", "Chill Beats",
                 "cover", "https://ui-avatars.com/api/?name=LS&background=A0C4FF",
-                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
+                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+                "ytUrl", "https://www.youtube.com/source/9I0J1K2L/shorts"
             )
         );
     }

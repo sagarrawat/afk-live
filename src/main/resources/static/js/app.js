@@ -1084,7 +1084,10 @@ async function loadAudioLibrary() {
                     <div style="font-weight:600;font-size:0.9rem;">${t.title}</div>
                     <div style="font-size:0.75rem;color:#666;">${t.artist}</div>
                 </div>
-                <button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>
+                <div style="display:flex; gap:5px;">
+                    <a href="${t.ytUrl}" target="_blank" class="btn btn-sm btn-outline" onclick="event.stopPropagation()" title="Open in YouTube App"><i class="fa-brands fa-youtube" style="color:red"></i></a>
+                    <button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>
+                </div>
             `;
             list.appendChild(div);
         });
