@@ -21,6 +21,8 @@ public class User {
     private String fullName;
     private String pictureUrl;
 
+    private String role = "ROLE_USER";
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
 
@@ -103,6 +105,14 @@ public class User {
 
     public void setPictureUrl(String pictureUrl) {
         this.pictureUrl = pictureUrl;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public java.util.List<SocialChannel> getChannels() {

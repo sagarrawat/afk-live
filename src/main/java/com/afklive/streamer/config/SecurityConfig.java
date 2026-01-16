@@ -43,10 +43,13 @@ public class SecurityConfig {
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
 
-                        // 2. PROTECTED: The Studio URL and internal index file
+                        // 2. ADMIN
+                        .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
+
+                        // 3. PROTECTED: The Studio URL and internal index file
                         // Removed /studio and /app.html from permitAll to force login
 
-                        // 3. CATCH-ALL
+                        // 4. CATCH-ALL
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

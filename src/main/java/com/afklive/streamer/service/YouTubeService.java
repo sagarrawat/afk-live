@@ -9,6 +9,7 @@ import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.model.*;
 import com.google.api.services.youtubeAnalytics.v2.YouTubeAnalytics;
 import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
+import com.afklive.streamer.util.AppConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -44,7 +45,7 @@ public class YouTubeService {
     private Credential getCredential(String username) {
         try {
             Authentication principal = createPrincipal(username);
-            OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
+            OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE)
                     .principal(principal)
                     .build();
 

@@ -6,6 +6,7 @@ import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.service.AiService;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.util.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -39,7 +40,7 @@ public class LibraryController {
 
     @PostMapping("/upload")
     public ResponseEntity<?> bulkUpload(
-            @RequestParam("files") List<MultipartFile> files,
+            @RequestParam(AppConstants.PARAM_FILES) List<MultipartFile> files,
             java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
@@ -94,7 +95,7 @@ public class LibraryController {
         video.setTitle(filename);
         video.setS3Key(key);
         video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
-        video.setPrivacyStatus("private");
+        video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
         repository.save(video);
     }
 
@@ -123,7 +124,7 @@ public class LibraryController {
         try {
             InputStream is = storageService.downloadFile(video.getS3Key());
             return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType("video/mp4"))
+                    .contentType(MediaType.parseMediaType(AppConstants.MIME_VIDEO_MP4))
                     .body(new InputStreamResource(is));
         } catch (Exception e) {
             log.error("Failed to stream video", e);

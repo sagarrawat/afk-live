@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Admin - AFK Live</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/theme.css">
+    <style>
+        body { padding: 40px; background: #f4f5f7; }
+        .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .user-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .user-table th, .user-table td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        .user-table th { background: #f9f9f9; font-weight: 600; color: #555; }
+    </style>
+</head>
+<body>
+
+<div class="admin-header">
+    <h1>Admin Dashboard</h1>
+    <a href="/studio" class="btn btn-outline">Back to Studio</a>
+</div>
+
+<div class="card">
+    <h2>Users</h2>
+    <table class="user-table">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Name</th>
+                <th>Plan</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Storage Used</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="user : ${users}">
+                <td th:text="${user.username}">user@example.com</td>
+                <td th:text="${user.fullName}">John Doe</td>
+                <td><span class="badge" th:text="${user.planType}">FREE</span></td>
+                <td th:text="${user.role}">ROLE_USER</td>
+                <td th:text="${user.enabled ? 'Active' : 'Disabled'}">Active</td>
+                <td th:text="${user.usedStorageBytes / 1024 / 1024 + ' MB'}">0 MB</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+</body>
+</html>
