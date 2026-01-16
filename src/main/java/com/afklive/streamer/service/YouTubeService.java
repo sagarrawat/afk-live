@@ -153,7 +153,7 @@ public class YouTubeService {
         ChannelListResponse response = youtube.channels().list(Collections.singletonList("id"))
                 .setMine(true)
                 .execute();
-        if (response.getItems().isEmpty()) {
+        if (response.getItems() == null || response.getItems().isEmpty()) {
             throw new IllegalStateException("No channel found for user.");
         }
         return response.getItems().get(0).getId();

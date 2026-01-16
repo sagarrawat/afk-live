@@ -50,7 +50,7 @@ async function handleStreamVideoUpload(e) {
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading...`;
 
     const formData = new FormData();
-    formData.append("file", file); // Backend expects "file" not "files" for single upload, usually
+    formData.append("files", file);
 
     try {
         // Re-use library upload endpoint, or a specific stream upload if exists
@@ -611,7 +611,14 @@ function renderDestinations() {
     list.innerHTML = '';
 
     if(destinations.length === 0) {
-        list.innerHTML = `<div class="empty-state" style="padding: 10px; font-size: 0.9rem;">No destinations. <a href="#" onclick="addDestination()">Add one</a></div>`;
+        list.innerHTML = `
+            <div class="empty-state" style="padding: 20px; text-align: center;">
+                <p style="margin-bottom: 10px; color: #666;">No stream destinations added.</p>
+                <button class="btn btn-outline btn-sm" onclick="addDestination()">
+                    <i class="fa-solid fa-plus"></i> Add Stream Key
+                </button>
+            </div>
+        `;
         return;
     }
 
