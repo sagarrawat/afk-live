@@ -373,10 +373,15 @@ async function submitSchedule() {
 
     // Audio
     const audioFile = document.getElementById('scheduleAudio').files[0];
-    if (audioFile) {
+    const audioTrackId = document.getElementById('selectedAudioTrackId').value;
+
+    if (audioFile || audioTrackId) {
         const volPercent = document.getElementById('scheduleAudioVol').value;
         const vol = (volPercent / 100).toFixed(1);
-        formData.append("audioFile", audioFile);
+
+        if (audioFile) formData.append("audioFile", audioFile);
+        if (audioTrackId) formData.append("audioTrackId", audioTrackId);
+
         formData.append("audioVolume", vol);
     }
 
@@ -1023,5 +1028,68 @@ async function saveEngagementSettings() {
         document.getElementById('engagementSettingsModal').classList.add('hidden');
     } catch(e) {
         showToast("Failed to save", "error");
+    }
+}
+
+/* --- AUDIO LIBRARY --- */
+function switchAudioTab(tab) {
+    const btnUpload = document.getElementById('tabAudioUpload');
+    const btnLib = document.getElementById('tabAudioLib');
+    const secUpload = document.getElementById('audioUploadSection');
+    const secLib = document.getElementById('audioLibSection');
+
+    if (tab === 'upload') {
+        btnUpload.className = "btn btn-sm btn-primary";
+        btnLib.className = "btn btn-sm btn-outline";
+        secUpload.classList.remove('hidden');
+        secLib.classList.add('hidden');
+        // Clear lib selection
+        document.getElementById('selectedAudioTrackId').value = '';
+        document.getElementById('selectedTrackName').innerText = '';
+    } else {
+        btnUpload.className = "btn btn-sm btn-outline";
+        btnLib.className = "btn btn-sm btn-primary";
+        secUpload.classList.add('hidden');
+        secLib.classList.remove('hidden');
+        // Clear upload selection
+        document.getElementById('scheduleAudio').value = '';
+        loadAudioLibrary();
+    }
+}
+
+async function loadAudioLibrary() {
+    const list = document.getElementById('audioTrackList');
+    if(list.dataset.loaded) return;
+
+    list.innerHTML = "Loading tracks...";
+    try {
+        const res = await apiFetch(`${API_URL}/audio/trending`);
+        const tracks = await res.json();
+        list.innerHTML = '';
+
+        tracks.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.onclick = () => {
+                document.getElementById('selectedAudioTrackId').value = t.id;
+                document.getElementById('selectedTrackName').innerText = "Selected: " + t.title;
+                document.querySelectorAll('#audioTrackList .queue-item').forEach(el => el.style.background = '');
+                div.style.background = '#e3f2fd';
+            };
+
+            div.innerHTML = `
+                <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
+                <div style="flex:1">
+                    <div style="font-weight:600;font-size:0.9rem;">${t.title}</div>
+                    <div style="font-size:0.75rem;color:#666;">${t.artist}</div>
+                </div>
+                <button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>
+            `;
+            list.appendChild(div);
+        });
+        list.dataset.loaded = "true";
+    } catch(e) {
+        list.innerHTML = "Failed to load music.";
     }
 }

@@ -2,6 +2,7 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
+import com.afklive.streamer.service.AudioService;
 import com.afklive.streamer.service.FFmpegCommandBuilder;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
@@ -30,6 +31,13 @@ public class VideoController {
     private final ScheduledVideoRepository repository;
     private final YouTubeService youTubeService;
     private final UserService userService;
+    private final AudioService audioService;
+
+    @GetMapping("/audio/trending")
+    public ResponseEntity<?> getTrendingAudio(Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(audioService.getTrendingTracks());
+    }
 
     @GetMapping("/youtube/categories")
     public ResponseEntity<?> getVideoCategories(Principal principal) {
@@ -52,6 +60,7 @@ public class VideoController {
             @RequestParam(value = "categoryId", required = false) String categoryId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
             @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
+            @RequestParam(value = "audioTrackId", required = false) String audioTrackId,
             @RequestParam(value = "audioVolume", defaultValue = "0.5") String audioVolume,
             Principal principal
     ) {
@@ -66,7 +75,7 @@ public class VideoController {
             String s3Key;
             long finalSize = file.getSize();
 
-            if (audioFile != null && !audioFile.isEmpty()) {
+            if ((audioFile != null && !audioFile.isEmpty()) || (audioTrackId != null && !audioTrackId.isEmpty())) {
                 // Mix Audio
                 Path tempVideo = Files.createTempFile("vid", ".mp4");
                 Path tempAudio = Files.createTempFile("aud", ".mp3");
@@ -74,7 +83,14 @@ public class VideoController {
 
                 try {
                     file.transferTo(tempVideo);
-                    audioFile.transferTo(tempAudio);
+
+                    if (audioFile != null && !audioFile.isEmpty()) {
+                        audioFile.transferTo(tempAudio);
+                    } else if (audioTrackId != null) {
+                        Path fetchedAudio = audioService.getAudioPath(audioTrackId);
+                        Files.copy(fetchedAudio, tempAudio, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        Files.deleteIfExists(fetchedAudio);
+                    }
 
                     List<String> cmd = FFmpegCommandBuilder.buildMixCommand(tempVideo, tempAudio, audioVolume, tempOut);
                     Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
