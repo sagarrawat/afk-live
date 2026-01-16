@@ -51,6 +51,15 @@ public class AiService {
         return base + ",viral,trending,2024,guide,tutorial,review";
     }
 
+    public String analyzeSentiment(String text) {
+        if (isAiEnabled()) {
+            return callGemini("Analyze sentiment of this comment: '" + text + "'. Return only one word: POSITIVE, NEGATIVE, or NEUTRAL.");
+        }
+        if (text.toLowerCase().contains("bad") || text.toLowerCase().contains("hate") || text.toLowerCase().contains("awful")) return "NEGATIVE";
+        if (text.toLowerCase().contains("good") || text.toLowerCase().contains("love") || text.toLowerCase().contains("great")) return "POSITIVE";
+        return "NEUTRAL";
+    }
+
     private boolean isAiEnabled() {
         return geminiKey != null && !geminiKey.isEmpty() && !geminiKey.contains("GEMINI_API_KEY");
     }

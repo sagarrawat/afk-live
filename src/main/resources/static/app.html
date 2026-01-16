@@ -202,6 +202,10 @@
 
         <!-- VIEW: COMMUNITY -->
         <div id="view-community" class="view-section hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                 <h2>Engagement</h2>
+                 <button class="btn btn-outline btn-sm" onclick="showEngagementSettings()"><i class="fa-solid fa-robot"></i> AI Automation</button>
+            </div>
             <div class="community-layout">
                 <div class="thread-list-panel">
                      <div class="search-bar">
@@ -355,6 +359,43 @@
         <div class="modal-actions" style="margin-top: 20px; text-align: right;">
             <button class="btn btn-text" onclick="document.getElementById('addDestinationModal').classList.add('hidden')">Cancel</button>
             <button class="btn btn-primary" onclick="submitDestination()">Save Destination</button>
+        </div>
+    </div>
+</div>
+
+<!-- Engagement Settings Modal -->
+<div id="engagementSettingsModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 500px;">
+        <div class="modal-header" style="border:none;">
+            <h2>Engagement Automation</h2>
+            <button onclick="document.getElementById('engagementSettingsModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p style="color:#666; margin-bottom:20px;">Automatically manage comments using AI (Gemini).</p>
+
+        <div class="form-group" style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 20px;">
+            <div>
+                <label style="margin:0; font-weight:600;">Auto-Like & Reply Positive</label>
+                <div style="font-size:0.85rem; color:#888;">Like positive comments and reply with a smiley.</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="engAutoReply">
+                <span class="slider round"></span>
+            </label>
+        </div>
+
+        <div class="form-group" style="display:flex; align-items:center; justify-content:space-between;">
+            <div>
+                <label style="margin:0; font-weight:600;">Delete Negative Comments</label>
+                <div style="font-size:0.85rem; color:#888;">Automatically remove hate speech or negative sentiment.</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="engDeleteNegative">
+                <span class="slider round"></span>
+            </label>
+        </div>
+
+        <div class="modal-actions" style="text-align:right; margin-top:30px;">
+            <button class="btn btn-primary" onclick="saveEngagementSettings()">Save Changes</button>
         </div>
     </div>
 </div>

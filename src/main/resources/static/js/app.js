@@ -986,3 +986,33 @@ async function processPayment() {
         btn.innerHTML = originalText;
     }
 }
+
+/* --- ENGAGEMENT --- */
+async function showEngagementSettings() {
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/settings`);
+        const data = await res.json();
+        document.getElementById('engAutoReply').checked = data.autoReplyEnabled;
+        document.getElementById('engDeleteNegative').checked = data.deleteNegativeComments;
+        document.getElementById('engagementSettingsModal').classList.remove('hidden');
+    } catch(e) {
+        showToast("Failed to load settings", "error");
+    }
+}
+
+async function saveEngagementSettings() {
+    const autoReply = document.getElementById('engAutoReply').checked;
+    const delNeg = document.getElementById('engDeleteNegative').checked;
+
+    try {
+        await apiFetch(`${API_URL}/engagement/settings`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ autoReplyEnabled: autoReply, deleteNegativeComments: delNeg })
+        });
+        showToast("Settings Saved", "success");
+        document.getElementById('engagementSettingsModal').classList.add('hidden');
+    } catch(e) {
+        showToast("Failed to save", "error");
+    }
+}

@@ -23,6 +23,9 @@ public class User {
 
     private String role = "ROLE_USER";
 
+    private boolean autoReplyEnabled = false;
+    private boolean deleteNegativeComments = false;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
 
@@ -113,6 +116,22 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public boolean isAutoReplyEnabled() {
+        return autoReplyEnabled;
+    }
+
+    public void setAutoReplyEnabled(boolean autoReplyEnabled) {
+        this.autoReplyEnabled = autoReplyEnabled;
+    }
+
+    public boolean isDeleteNegativeComments() {
+        return deleteNegativeComments;
+    }
+
+    public void setDeleteNegativeComments(boolean deleteNegativeComments) {
+        this.deleteNegativeComments = deleteNegativeComments;
     }
 
     public java.util.List<SocialChannel> getChannels() {

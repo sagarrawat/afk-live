@@ -103,4 +103,8 @@ public class UserService {
         user.setPlanType(newPlan);
         userRepository.save(user);
     }
+
+    public void saveUser(User user) {
+        userRepository.save(user);
+    }
 }
