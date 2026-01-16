@@ -53,6 +53,8 @@ rate-limiter:
   refill-tokens: 1
 
 app:
+  gemini:
+    key: ${GEMINI_API_KEY:}
   storage:
     type: ${STORAGE_TYPE:local}
     endpoint: ${DO_SPACES_ENDPOINT}

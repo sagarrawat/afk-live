@@ -683,8 +683,19 @@ async function checkInitialStatus() {
         const data = await res.json();
         if(data.success && data.data.live) {
             setLiveState(true);
-            // We don't know start time from backend yet, so just start counting from now or 0
-            // Ideally backend returns startTime. For now, just show LIVE.
+            streamStartTime = new Date(); // Start from now if live
+            startTimer();
+        }
+    } catch(e){}
+}
+
+async function checkYoutubeStatus() {
+    try {
+        const res = await apiFetch(`${API_URL}/channels`);
+        const channels = await res.json();
+        if(channels.length === 0) {
+            // Optional: Auto-prompt to connect if no channels
+            // For now, let the user click "Add Channel"
         }
     } catch(e){}
 }
@@ -734,9 +745,11 @@ function showAutoScheduleModal() {
 async function submitAutoSchedule() {
     const startDate = document.getElementById('autoStartDate').value;
     const slots = document.getElementById('autoTimeSlots').value;
+    const topic = document.getElementById('autoTopic').value;
+    const useAi = document.getElementById('autoUseAi').checked;
 
     if(!startDate || !slots) {
-        showToast("Please fill all fields", "error");
+        showToast("Please fill start date and time slots", "error");
         return;
     }
 
@@ -744,7 +757,12 @@ async function submitAutoSchedule() {
         const res = await apiFetch(`${API_URL}/library/auto-schedule`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ startDate, timeSlots: slots.split(',').map(s=>s.trim()) })
+            body: JSON.stringify({
+                startDate,
+                timeSlots: slots.split(',').map(s=>s.trim()),
+                topic,
+                useAi
+            })
         });
 
         if(res.ok) {

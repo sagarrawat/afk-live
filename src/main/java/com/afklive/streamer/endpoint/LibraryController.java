@@ -3,6 +3,7 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
+import com.afklive.streamer.service.AiService;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,8 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @RestController
 @RequestMapping("/api/library")
@@ -32,6 +35,7 @@ public class LibraryController {
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
     private final UserService userService;
+    private final AiService aiService;
 
     @PostMapping("/upload")
     public ResponseEntity<?> bulkUpload(
@@ -46,26 +50,52 @@ public class LibraryController {
             for (MultipartFile file : files) {
                 if (file.isEmpty()) continue;
 
-                userService.checkStorageQuota(username, file.getSize());
+                if (file.getOriginalFilename().toLowerCase().endsWith(".zip")) {
+                    // Handle Zip
+                    try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
+                        ZipEntry entry;
+                        while ((entry = zis.getNextEntry()) != null) {
+                            if (entry.isDirectory() || !isVideo(entry.getName())) continue;
 
-                String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
-                userService.updateStorageUsage(username, file.getSize());
+                            // Approx size check (entry.getSize() is -1 if unknown)
+                            long size = entry.getSize() > 0 ? entry.getSize() : file.getSize(); // Fallback to zip size (imperfect)
+                            userService.checkStorageQuota(username, size);
 
-                ScheduledVideo video = new ScheduledVideo();
-                video.setUsername(username);
-                video.setTitle(file.getOriginalFilename()); // Default title
-                video.setS3Key(s3Key);
-                video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
-                video.setPrivacyStatus("private"); // Default
-
-                repository.save(video);
-                successCount++;
+                            String s3Key = storageService.uploadFile(zis, entry.getName(), size);
+                            userService.updateStorageUsage(username, size);
+                            createLibraryEntry(username, entry.getName(), s3Key);
+                            successCount++;
+                        }
+                    }
+                } else {
+                    // Regular file
+                    userService.checkStorageQuota(username, file.getSize());
+                    String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
+                    userService.updateStorageUsage(username, file.getSize());
+                    createLibraryEntry(username, file.getOriginalFilename(), s3Key);
+                    successCount++;
+                }
             }
             return ResponseEntity.ok(ApiResponse.success("Uploaded " + successCount + " videos to library", null));
         } catch (Exception e) {
             log.error("Bulk upload failed", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Bulk upload failed: " + e.getMessage()));
         }
+    }
+
+    private boolean isVideo(String name) {
+        String n = name.toLowerCase();
+        return n.endsWith(".mp4") || n.endsWith(".mov") || n.endsWith(".mkv") || n.endsWith(".avi");
+    }
+
+    private void createLibraryEntry(String username, String filename, String key) {
+        ScheduledVideo video = new ScheduledVideo();
+        video.setUsername(username);
+        video.setTitle(filename);
+        video.setS3Key(key);
+        video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
+        video.setPrivacyStatus("private");
+        repository.save(video);
     }
 
     @GetMapping
@@ -120,6 +150,9 @@ public class LibraryController {
             LocalDate currentDate = LocalDate.parse(startDateStr);
             List<LocalTime> times = timeSlots.stream().map(LocalTime::parse).sorted().toList();
 
+            boolean useAi = Boolean.TRUE.equals(payload.get("useAi"));
+            String topic = (String) payload.get("topic");
+
             // Get all LIBRARY videos for user
             List<ScheduledVideo> libraryVideos = repository.findByUsername(username).stream()
                     .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
@@ -133,9 +166,15 @@ public class LibraryController {
                     ScheduledVideo video = libraryVideos.get(videoIndex);
                     LocalDateTime schedule = LocalDateTime.of(currentDate, time);
 
-                    // Skip if time is in past (simple check, assume user knows what they are doing or start tomorrow)
                     if (schedule.isBefore(LocalDateTime.now())) {
-                        schedule = schedule.plusDays(1); // crude fix, or just let it schedule for next occurrence
+                        schedule = schedule.plusDays(1);
+                    }
+
+                    if (useAi) {
+                        String context = (topic != null && !topic.isEmpty()) ? topic : video.getTitle();
+                        video.setTitle(aiService.generateTitle(context));
+                        video.setDescription(aiService.generateDescription(video.getTitle()));
+                        video.setTags(aiService.generateTags(context));
                     }
 
                     video.setScheduledTime(schedule);

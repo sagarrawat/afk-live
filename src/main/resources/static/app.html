@@ -263,8 +263,8 @@
             <header class="page-header">
                 <h1>Media Library</h1>
                 <div class="header-actions">
-                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">Upload</button>
-                    <input type="file" id="bulkUploadInput" multiple hidden accept="video/*">
+                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">Upload (Video/Zip)</button>
+                    <input type="file" id="bulkUploadInput" multiple hidden accept="video/*,.zip">
                     <button class="btn btn-primary" onclick="showAutoScheduleModal()">Auto-Schedule</button>
                 </div>
             </header>
@@ -490,6 +490,19 @@
             <label>Times (HH:mm)</label>
             <input type="text" id="autoTimeSlots" placeholder="10:00, 15:00" class="form-input">
         </div>
+
+        <div style="border-top:1px solid #eee; margin: 15px 0; padding-top:15px;">
+            <h4 style="margin: 0 0 10px 0;">AI Enhancement</h4>
+            <div class="form-group">
+                <label>Base Topic (Optional)</label>
+                <input type="text" id="autoTopic" placeholder="e.g. Minecraft Gameplay" class="form-input">
+            </div>
+            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                <input type="checkbox" id="autoUseAi">
+                <label for="autoUseAi" style="margin:0; font-weight:400;">Generate Titles, Descriptions & Tags with AI</label>
+            </div>
+        </div>
+
         <div class="modal-actions">
             <button class="btn btn-primary" onclick="submitAutoSchedule()">Apply</button>
             <button class="btn btn-text" onclick="document.getElementById('autoScheduleModal').classList.add('hidden')">Cancel</button>
