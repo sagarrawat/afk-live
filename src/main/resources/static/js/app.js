@@ -1068,25 +1068,38 @@ async function loadAudioLibrary() {
         list.innerHTML = '';
 
         tracks.forEach(t => {
+            const isMixable = !!t.url;
             const div = document.createElement('div');
             div.className = 'queue-item';
-            div.style.cursor = 'pointer';
-            div.onclick = () => {
-                document.getElementById('selectedAudioTrackId').value = t.id;
-                document.getElementById('selectedTrackName').innerText = "Selected: " + t.title;
-                document.querySelectorAll('#audioTrackList .queue-item').forEach(el => el.style.background = '');
-                div.style.background = '#e3f2fd';
-            };
+
+            if (isMixable) {
+                div.style.cursor = 'pointer';
+                div.onclick = () => {
+                    document.getElementById('selectedAudioTrackId').value = t.id;
+                    document.getElementById('selectedTrackName').innerText = "Selected: " + t.title;
+                    document.querySelectorAll('#audioTrackList .queue-item').forEach(el => el.style.background = '');
+                    div.style.background = '#e3f2fd';
+                };
+            } else {
+                div.style.cursor = 'default';
+            }
+
+            let actions = '';
+            if (t.ytUrl) {
+                actions += `<a href="${t.ytUrl}" target="_blank" class="btn btn-sm btn-outline" onclick="event.stopPropagation()" title="Create in YouTube App"><i class="fa-brands fa-youtube" style="color:red"></i> Use</a>`;
+            }
+            if (isMixable) {
+                actions += `<button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>`;
+            }
 
             div.innerHTML = `
                 <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
                 <div style="flex:1">
-                    <div style="font-weight:600;font-size:0.9rem;">${t.title}</div>
+                    <div style="font-weight:600;font-size:0.9rem;">${t.title} ${!isMixable ? '<span style="font-size:0.7rem; background:#eee; padding:2px 4px; border-radius:4px; margin-left:5px; color:#666;">App Only</span>' : ''}</div>
                     <div style="font-size:0.75rem;color:#666;">${t.artist}</div>
                 </div>
                 <div style="display:flex; gap:5px;">
-                    <a href="${t.ytUrl}" target="_blank" class="btn btn-sm btn-outline" onclick="event.stopPropagation()" title="Open in YouTube App"><i class="fa-brands fa-youtube" style="color:red"></i></a>
-                    <button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>
+                    ${actions}
                 </div>
             `;
             list.appendChild(div);
