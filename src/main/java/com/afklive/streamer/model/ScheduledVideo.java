@@ -22,6 +22,8 @@ public class ScheduledVideo {
     private String thumbnailS3Key;
     private String youtubeVideoId;
 
+    private String firstComment;
+
     private Long socialChannelId; // Link to specific channel
 
     @Enumerated(EnumType.STRING)
@@ -137,6 +139,14 @@ public class ScheduledVideo {
 
     public void setYoutubeVideoId(String youtubeVideoId) {
         this.youtubeVideoId = youtubeVideoId;
+    }
+
+    public String getFirstComment() {
+        return firstComment;
+    }
+
+    public void setFirstComment(String firstComment) {
+        this.firstComment = firstComment;
     }
 
     public Long getSocialChannelId() {

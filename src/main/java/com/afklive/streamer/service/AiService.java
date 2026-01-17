@@ -60,6 +60,35 @@ public class AiService {
         return "NEUTRAL";
     }
 
+    public List<String> generateReplySuggestions(String commentText) {
+        if (isAiEnabled()) {
+            String prompt = "Generate 3 short, engaging, and polite reply suggestions for this YouTube comment: '" + commentText + "'. Return them as a pipe-separated string (e.g. Reply 1|Reply 2|Reply 3). Do not include numbering or quotes.";
+            String result = callGemini(prompt);
+            if (result != null && !result.isEmpty()) {
+                String[] splits = result.split("\\|");
+                List<String> suggestions = new java.util.ArrayList<>();
+                for (String s : splits) {
+                    if (!s.trim().isEmpty()) suggestions.add(s.trim());
+                }
+                // Fallback if parsing fails but we got text
+                if (suggestions.isEmpty()) {
+                    suggestions.add(result);
+                }
+                // Ensure we have 3, fill with generic if needed
+                while (suggestions.size() < 3) {
+                     suggestions.add("Thanks for watching! 😊");
+                }
+                return suggestions.subList(0, 3);
+            }
+        }
+        // Fallback
+        return List.of(
+            "Thanks for your comment! 😊",
+            "Appreciate the support! 👍",
+            "Glad you enjoyed the video! 🔥"
+        );
+    }
+
     private boolean isAiEnabled() {
         return geminiKey != null && !geminiKey.isEmpty() && !geminiKey.contains("GEMINI_API_KEY");
     }

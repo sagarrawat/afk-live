@@ -40,6 +40,8 @@ public class StreamService {
     private FileStorageService storageService;
     @Autowired
     private UserService userService;
+    @Autowired
+    private AudioService audioService;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -85,8 +87,15 @@ public class StreamService {
         log.info("videoPath [{}]", videoPath);
 
         // 3. Build the FFmpeg Command
-        Path musicPath =
-                (musicName != null && !musicName.isEmpty()) ? userDir.resolve(musicName).toAbsolutePath() : null;
+        Path musicPath = null;
+        if (musicName != null && !musicName.isEmpty()) {
+            if (musicName.startsWith("stock:")) {
+                String trackId = musicName.substring(6); // remove "stock:"
+                musicPath = audioService.getAudioPath(trackId);
+            } else {
+                musicPath = userDir.resolve(musicName).toAbsolutePath();
+            }
+        }
 
         log.info("musicPath [{}]", musicPath);
         
