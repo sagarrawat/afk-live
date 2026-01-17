@@ -150,6 +150,41 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Music Selection for Live Stream -->
+                    <div class="card" style="margin-top: 15px;">
+                        <div class="card-header">
+                            <h3 style="margin:0">Background Music</h3>
+                        </div>
+                        <div style="display:flex; gap:10px; margin-bottom:10px;">
+                            <button class="btn btn-sm btn-primary" id="tabStreamAudioUpload" onclick="switchStreamAudioTab('upload')">Upload</button>
+                            <button class="btn btn-sm btn-outline" id="tabStreamAudioLib" onclick="switchStreamAudioTab('lib')">Stock Library</button>
+                        </div>
+
+                        <!-- Upload Tab -->
+                        <div id="streamAudioUploadSection">
+                            <div class="form-group">
+                                <label>Upload MP3</label>
+                                <input type="file" id="streamAudioFile" accept=".mp3,.wav" class="form-control" style="font-size:0.9rem;">
+                                <input type="hidden" id="uploadedStreamMusicName">
+                                <small id="streamAudioUploadStatus" style="color: #666;"></small>
+                            </div>
+                        </div>
+
+                        <!-- Library Tab -->
+                        <div id="streamAudioLibSection" class="hidden">
+                            <div id="streamAudioTrackList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">
+                                Loading...
+                            </div>
+                            <input type="hidden" id="selectedStreamStockId">
+                            <div id="selectedStreamTrackName" style="font-size:0.85rem; font-weight:600; color:var(--primary);"></div>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 10px;">
+                            <label>Music Volume (<span id="streamVolVal">50%</span>)</label>
+                            <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
+                        </div>
+                    </div>
                 </div>
 
                 <!-- RIGHT: Controls -->
@@ -204,7 +239,11 @@
         <div id="view-community" class="view-section hidden">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                  <h2>Engagement</h2>
-                 <button class="btn btn-outline btn-sm" onclick="showEngagementSettings()"><i class="fa-solid fa-robot"></i> AI Automation</button>
+                 <div style="display:flex; gap:10px;">
+                     <button class="btn btn-outline btn-sm" onclick="loadUnrepliedComments()"><i class="fa-regular fa-envelope-open"></i> Unreplied</button>
+                     <button class="btn btn-outline btn-sm" onclick="loadComments()"><i class="fa-solid fa-list"></i> All</button>
+                     <button class="btn btn-outline btn-sm" onclick="showEngagementSettings()"><i class="fa-solid fa-robot"></i> AI Automation</button>
+                 </div>
             </div>
             <div class="community-layout">
                 <div class="thread-list-panel">
@@ -224,9 +263,20 @@
                              <a href="#" id="threadVideoLink" target="_blank"><i class="fa-solid fa-external-link"></i></a>
                         </div>
                         <div id="threadMessages" class="thread-messages"></div>
+
+                        <!-- AI Suggestions Area -->
+                        <div id="aiSuggestionsArea" class="hidden" style="padding: 10px; background: #f0f8ff; margin-bottom: 10px; border-radius: 4px;">
+                            <small style="font-weight:600; color:#0052cc; display:block; margin-bottom:5px;">AI Suggestions:</small>
+                            <div id="aiChips" style="display:flex; gap:5px; flex-wrap:wrap;"></div>
+                            <button class="btn btn-sm btn-text" onclick="generateSuggestions()" style="font-size:0.8rem; margin-top:5px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate</button>
+                        </div>
+
                         <div class="reply-box">
                             <textarea id="replyInput" placeholder="Write a reply..." rows="3"></textarea>
-                            <button class="btn btn-primary" onclick="sendReply()">Reply</button>
+                            <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+                                <button class="btn btn-sm btn-outline" onclick="toggleAiSuggestions()"><i class="fa-solid fa-robot"></i> AI Assist</button>
+                                <button class="btn btn-primary" onclick="sendReply()">Reply</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -489,6 +539,11 @@
                          </div>
                          <div class="form-group">
                              <input type="text" id="scheduleTags" placeholder="Tags (comma separated)" class="form-input">
+                         </div>
+
+                         <div class="form-group">
+                            <label>First Comment (Pinned)</label>
+                            <textarea id="scheduleFirstComment" class="form-input" rows="2" placeholder="Post a comment immediately after upload..."></textarea>
                          </div>
 
                          <div style="margin-top:15px; padding-top:15px; border-top:1px solid #eee;">

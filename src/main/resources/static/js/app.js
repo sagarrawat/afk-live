@@ -39,6 +39,10 @@ function setupEventListeners() {
     const streamUpload = document.getElementById("streamUploadInput");
     if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
 
+    // Stream Music Upload
+    const streamMusicUpload = document.getElementById("streamAudioFile");
+    if(streamMusicUpload) streamMusicUpload.addEventListener("change", handleStreamMusicUpload);
+
     // Live Preview
     document.getElementById('scheduleTitle')?.addEventListener('input', e => {
         document.getElementById('previewTitleMock').innerText = e.target.value || "Video Title";
@@ -372,6 +376,10 @@ async function submitSchedule() {
     if(selectedChannelId) formData.append("socialChannelId", selectedChannelId);
 
     // Audio
+    const firstComment = document.getElementById('scheduleFirstComment').value;
+    if(firstComment) formData.append("firstComment", firstComment);
+
+    // Audio
     const audioFile = document.getElementById('scheduleAudio').files[0];
     const audioTrackId = document.getElementById('selectedAudioTrackId').value;
 
@@ -518,6 +526,19 @@ async function submitJob() {
     fd.append("streamKey", key);
     fd.append("videoKey", selectedStreamVideo.s3Key);
     fd.append("loopCount", loopCount);
+
+    // Music
+    const musicUpload = document.getElementById('uploadedStreamMusicName').value;
+    const musicStock = document.getElementById('selectedStreamStockId').value;
+    const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
+
+    if (musicUpload && !document.getElementById('streamAudioUploadSection').classList.contains('hidden')) {
+        fd.append("musicName", musicUpload);
+        fd.append("musicVolume", musicVol);
+    } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
+        fd.append("musicName", "stock:" + musicStock);
+        fd.append("musicVolume", musicVol);
+    }
 
     try {
         const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
@@ -875,29 +896,149 @@ function initCalendar() {
 }
 
 /* --- COMMUNITY --- */
+let activeCommentThread = null;
+
 async function loadComments() {
     const list = document.getElementById('threadList');
     list.innerHTML = "Loading...";
     try {
         const res = await apiFetch(`${API_URL}/comments`);
         const data = await res.json();
-        list.innerHTML = '';
-        if(!data.items || !data.items.length) {
-            list.innerHTML = "<div style='padding:20px;text-align:center'>No conversations.</div>";
-            return;
-        }
-        // ... render threads
-        data.items.forEach(t => {
-            const div = document.createElement('div');
-            div.className = 'queue-item';
-            div.style.cursor = 'pointer';
-            div.innerHTML = `
-                <img src="${t.snippet.topLevelComment.snippet.authorProfileImageUrl}" style="width:32px;height:32px;border-radius:50%">
-                <div>${t.snippet.topLevelComment.snippet.textDisplay.substring(0,50)}...</div>
-            `;
-            list.appendChild(div);
-        });
+        renderThreadList(data.items);
     } catch(e) { list.innerHTML = "Failed to load."; }
+}
+
+async function loadUnrepliedComments() {
+    const list = document.getElementById('threadList');
+    list.innerHTML = "Loading Unreplied...";
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/unreplied`);
+        const data = await res.json();
+        // The endpoint returns a simplified list, not standard YouTube API response structure.
+        // We need to adapt it or the backend should have returned standard objects?
+        // Backend returns: [{id, author, text, publishedAt, videoId}, ...]
+        // renderThreadList expects standard YouTube structure if possible, OR we adapt renderThreadList.
+        // Let's adapt renderThreadList to handle both.
+        renderThreadList(data, true);
+    } catch(e) { list.innerHTML = "Failed to load unreplied."; }
+}
+
+function renderThreadList(items, isSimplified = false) {
+    const list = document.getElementById('threadList');
+    list.innerHTML = '';
+    if(!items || !items.length) {
+        list.innerHTML = "<div style='padding:20px;text-align:center'>No conversations.</div>";
+        return;
+    }
+
+    items.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'queue-item';
+        div.style.cursor = 'pointer';
+
+        let author, text, id;
+        if (isSimplified) {
+            author = t.author;
+            text = t.text;
+            id = t.id;
+        } else {
+            author = t.snippet.topLevelComment.snippet.authorDisplayName;
+            text = t.snippet.topLevelComment.snippet.textDisplay;
+            id = t.id;
+        }
+
+        div.innerHTML = `
+            <div style="width:32px;height:32px;border-radius:50%;background:#eee;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#555;">${author.charAt(0).toUpperCase()}</div>
+            <div style="flex:1;overflow:hidden;">
+                <div style="font-weight:600;font-size:0.85rem;">${author}</div>
+                <div style="font-size:0.8rem;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${text}</div>
+            </div>
+        `;
+        div.onclick = () => selectThread(t, isSimplified);
+        list.appendChild(div);
+    });
+}
+
+function selectThread(thread, isSimplified) {
+    activeCommentThread = thread;
+    document.getElementById('emptyThreadState').classList.add('hidden');
+    document.getElementById('activeThread').classList.remove('hidden');
+    document.getElementById('aiSuggestionsArea').classList.add('hidden');
+    document.getElementById('replyInput').value = '';
+
+    let text;
+    if (isSimplified) {
+        text = thread.text;
+    } else {
+        text = thread.snippet.topLevelComment.snippet.textDisplay;
+    }
+
+    document.getElementById('threadMessages').innerHTML = `
+        <div style="padding:15px; background:#f9f9f9; border-radius:4px; margin-bottom:10px;">
+            <div style="font-size:1rem; margin-bottom:5px;">${text}</div>
+        </div>
+    `;
+}
+
+function toggleAiSuggestions() {
+    const area = document.getElementById('aiSuggestionsArea');
+    if(area.classList.contains('hidden')) {
+        area.classList.remove('hidden');
+        generateSuggestions();
+    } else {
+        area.classList.add('hidden');
+    }
+}
+
+async function generateSuggestions() {
+    const chips = document.getElementById('aiChips');
+    chips.innerHTML = "Generating...";
+
+    let text;
+    if(activeCommentThread.text) text = activeCommentThread.text;
+    else text = activeCommentThread.snippet.topLevelComment.snippet.textDisplay;
+
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/suggest?text=${encodeURIComponent(text)}`);
+        const data = await res.json();
+        chips.innerHTML = '';
+
+        data.suggestions.forEach(s => {
+            const chip = document.createElement('div');
+            chip.style.cssText = "padding:5px 10px; background:white; border:1px solid #cce0ff; border-radius:15px; font-size:0.85rem; cursor:pointer; color:#0052cc;";
+            chip.innerText = s;
+            chip.onclick = () => {
+                document.getElementById('replyInput').value = s;
+            };
+            chips.appendChild(chip);
+        });
+
+    } catch(e) {
+        chips.innerHTML = "Failed to generate.";
+    }
+}
+
+async function sendReply() {
+    const text = document.getElementById('replyInput').value;
+    if(!text) return;
+
+    // Check ID
+    let id;
+    if(activeCommentThread.id) id = activeCommentThread.id; // simplified or standard ID field? Standard is id. Simplified we mapped id.
+
+    try {
+        const res = await apiFetch(`${API_URL}/comments/${id}/reply`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text})
+        });
+        if(res.ok) {
+            showToast("Reply sent!", "success");
+            document.getElementById('replyInput').value = '';
+        } else {
+             showToast("Reply failed", "error");
+        }
+    } catch(e) { showToast("Error", "error"); }
 }
 
 /* --- NEW SETTINGS LOGIC --- */
@@ -1108,4 +1249,82 @@ async function loadAudioLibrary() {
     } catch(e) {
         list.innerHTML = "Failed to load music.";
     }
+}
+
+/* --- STREAM MUSIC --- */
+function switchStreamAudioTab(tab) {
+    const btnUpload = document.getElementById('tabStreamAudioUpload');
+    const btnLib = document.getElementById('tabStreamAudioLib');
+    const secUpload = document.getElementById('streamAudioUploadSection');
+    const secLib = document.getElementById('streamAudioLibSection');
+
+    if (tab === 'upload') {
+        btnUpload.className = "btn btn-sm btn-primary";
+        btnLib.className = "btn btn-sm btn-outline";
+        secUpload.classList.remove('hidden');
+        secLib.classList.add('hidden');
+    } else {
+        btnUpload.className = "btn btn-sm btn-outline";
+        btnLib.className = "btn btn-sm btn-primary";
+        secUpload.classList.add('hidden');
+        secLib.classList.remove('hidden');
+        loadStreamAudioLibrary();
+    }
+}
+
+async function loadStreamAudioLibrary() {
+    const list = document.getElementById('streamAudioTrackList');
+    // Re-use existing trending endpoint
+    list.innerHTML = "Loading tracks...";
+    try {
+        const res = await apiFetch(`${API_URL}/audio/trending`);
+        const tracks = await res.json();
+        list.innerHTML = '';
+
+        tracks.forEach(t => {
+            if (!t.url) return; // Only mixable tracks
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.onclick = () => {
+                document.getElementById('selectedStreamStockId').value = t.id;
+                document.getElementById('selectedStreamTrackName').innerText = "Selected: " + t.title;
+                document.querySelectorAll('#streamAudioTrackList .queue-item').forEach(el => el.style.background = '');
+                div.style.background = '#e3f2fd';
+            };
+            div.innerHTML = `
+                <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
+                <div style="flex:1; font-weight:600; font-size:0.9rem;">${t.title}</div>
+            `;
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "Failed."; }
+}
+
+async function handleStreamMusicUpload(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const status = document.getElementById('streamAudioUploadStatus');
+    status.innerText = "Uploading...";
+    const btn = document.getElementById('tabStreamAudioUpload');
+    btn.disabled = true;
+
+    const fd = new FormData();
+    fd.append("files", file);
+
+    try {
+        // Use generic upload
+        const res = await apiFetch(`${API_URL}/library/upload`, { method: 'POST', body: fd });
+        if(res.ok) {
+            status.innerText = "Uploaded!";
+            document.getElementById('uploadedStreamMusicName').value = file.name; // assuming simple name or backend returns it?
+            // The library upload endpoint returns success but doesn't strictly return the *renamed* file if any.
+            // However, StreamService looks for file in user dir. FileUploadService saves as originalFilename.
+            // So file.name should be correct.
+        } else {
+            status.innerText = "Error.";
+        }
+    } catch(e) { status.innerText = "Error."; }
+    finally { btn.disabled = false; }
 }
