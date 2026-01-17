@@ -89,6 +89,13 @@ public class AiService {
         );
     }
 
+    public String generateSingleReply(String commentText) {
+        if (isAiEnabled()) {
+            return callGemini("Write a single, short, engaging, and friendly reply to this YouTube comment: '" + commentText + "'. Do not use quotes.");
+        }
+        return "Thanks for your comment! 😊";
+    }
+
     private boolean isAiEnabled() {
         return geminiKey != null && !geminiKey.isEmpty() && !geminiKey.contains("GEMINI_API_KEY");
     }
