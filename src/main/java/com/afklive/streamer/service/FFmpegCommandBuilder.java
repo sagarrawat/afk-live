@@ -116,6 +116,9 @@ public class FFmpegCommandBuilder {
         command.add("-re");
         command.add("-stream_loop");
         command.add(String.valueOf(loopCount));
+        // Fix for infinite loops causing non-monotonic timestamps which YouTube rejects
+        command.add("-fflags");
+        command.add("+genpts");
         command.add("-i");
         command.add(videoPath.toString());
 
