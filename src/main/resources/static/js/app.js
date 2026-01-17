@@ -41,7 +41,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     const musicDropZone = document.getElementById("musicDropZone");
     if (musicDropZone) {
         musicDropZone.addEventListener("click", () => document.getElementById("musicFile").click());
-        document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
+        document.getElementById("musicFile").addEventListener("change", (e) => {
+            if (e.target.files.length > 0) handleMusicUpload(e.target.files[0]);
+        });
+
+        musicDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            musicDropZone.style.background = '#333';
+        });
+        musicDropZone.addEventListener('dragleave', () => musicDropZone.style.background = '#222');
+        musicDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            musicDropZone.style.background = '#222';
+            if (e.dataTransfer.files.length > 0) {
+                handleMusicUpload(e.dataTransfer.files[0]);
+            }
+        });
     }
 
     const volumeSlider = document.getElementById("volumeSlider");
@@ -490,8 +505,16 @@ async function submitJob() {
     formData.append("streamKey", key);
     formData.append("videoKey", selectedStreamVideo.s3Key);
 
-    if (window.uploadedMusicName) {
-        formData.append("musicName", window.uploadedMusicName);
+    // MUSIC LOGIC
+    let musicName = "";
+    if (currentMusicMode === 'upload') {
+        musicName = window.uploadedMusicName || "";
+    } else {
+        musicName = document.getElementById('stockMusicSelect').value || "";
+    }
+
+    if (musicName) {
+        formData.append("musicName", musicName);
         const volPercent = document.getElementById("volumeSlider").value;
         formData.append("musicVolume", (volPercent / 100).toFixed(2));
     }
@@ -580,6 +603,128 @@ async function handleStreamVideoUpload(e) {
         btn.innerHTML = originalText;
         e.target.value = '';
     }
+}
+
+/* --- MUSIC LOGIC --- */
+let currentMusicMode = 'upload'; // 'upload' or 'stock'
+
+function toggleMusicSource(mode) {
+    currentMusicMode = mode;
+    const btnUpload = document.getElementById('btnMusicUpload');
+    const btnStock = document.getElementById('btnMusicStock');
+    const secUpload = document.getElementById('musicUploadSection');
+    const secStock = document.getElementById('musicStockSection');
+    const audioPanel = document.getElementById('audioControlPanel');
+    const audio = document.getElementById('audioPreview');
+
+    if (mode === 'upload') {
+        btnUpload.classList.add('btn-primary');
+        btnUpload.classList.remove('btn-outline');
+        btnStock.classList.remove('btn-primary');
+        btnStock.classList.add('btn-outline');
+        secUpload.classList.remove('hidden');
+        secStock.classList.add('hidden');
+
+        // Restore upload preview if exists
+        if (window.uploadedMusicName) {
+             if (audio.src && !audio.src.includes('stock-music/preview')) {
+                 audioPanel.classList.remove('hidden');
+             } else {
+                 audioPanel.classList.add('hidden');
+             }
+        } else {
+            audioPanel.classList.add('hidden');
+        }
+    } else {
+        btnStock.classList.add('btn-primary');
+        btnStock.classList.remove('btn-outline');
+        btnUpload.classList.remove('btn-primary');
+        btnUpload.classList.add('btn-outline');
+        secStock.classList.remove('hidden');
+        secUpload.classList.add('hidden');
+
+        loadStockLibrary();
+
+        // Check if stock is selected
+        if (document.getElementById('stockMusicSelect').value) {
+            audioPanel.classList.remove('hidden');
+        } else {
+            audioPanel.classList.add('hidden');
+        }
+    }
+}
+
+function loadStockLibrary() {
+    const select = document.getElementById('stockMusicSelect');
+    if (select.options.length > 1) return; // Already loaded
+
+    document.getElementById('stockLoading').classList.remove('hidden');
+
+    fetch('/api/stock-music')
+        .then(r => r.json())
+        .then(res => {
+            document.getElementById('stockLoading').classList.add('hidden');
+            if (res.success) {
+                res.data.forEach(track => {
+                    const opt = document.createElement('option');
+                    opt.value = track.key;
+                    opt.textContent = track.name;
+                    select.appendChild(opt);
+                });
+            }
+        })
+        .catch(e => {
+            console.error(e);
+            document.getElementById('stockLoading').textContent = 'Error loading library';
+        });
+}
+
+function previewStockMusic() {
+    const select = document.getElementById('stockMusicSelect');
+    const key = select.value;
+    const audio = document.getElementById('audioPreview');
+    const panel = document.getElementById('audioControlPanel');
+
+    if (!key) {
+        panel.classList.add('hidden');
+        audio.pause();
+        return;
+    }
+
+    // Set preview URL
+    audio.src = `/api/stock-music/preview?key=${encodeURIComponent(key)}`;
+    panel.classList.remove('hidden');
+    audio.load();
+}
+
+function handleMusicUpload(file) {
+    document.getElementById('musicText').innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading...`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.uploadedMusicName = data.data;
+            document.getElementById('musicText').innerHTML = `<i class="fa-solid fa-check"></i> ${file.name}`;
+
+            const audioUrl = URL.createObjectURL(file);
+            const audio = document.getElementById('audioPreview');
+            audio.src = audioUrl;
+            document.getElementById('audioControlPanel').classList.remove('hidden');
+        } else {
+             document.getElementById('musicText').innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Error`;
+        }
+    })
+    .catch(e => {
+        console.error(e);
+        document.getElementById('musicText').innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Error`;
+    });
 }
 
 /* --- SHARED / UTIL --- */

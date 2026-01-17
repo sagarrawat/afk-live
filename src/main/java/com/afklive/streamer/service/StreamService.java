@@ -84,8 +84,33 @@ public class StreamService {
         log.info("videoPath [{}]", videoPath);
 
         // 3. Build the FFmpeg Command
-        Path musicPath =
-                (musicName != null && !musicName.isEmpty()) ? userDir.resolve(musicName).toAbsolutePath() : null;
+        Path musicPath = null;
+        if (musicName != null && !musicName.isEmpty()) {
+            if (musicName.startsWith("stock/")) {
+                // Handle Stock Music
+                // Download to a temp location or a dedicated stock folder in userDir
+                // Using userDir/stock_filename.mp3 to keep it simple and reusable
+                String safeStockName = musicName.replace("/", "_");
+                Path stockDest = userDir.resolve(safeStockName).toAbsolutePath();
+
+                if (!java.nio.file.Files.exists(stockDest)) {
+                    log.info("Downloading stock music: {}", musicName);
+                    try {
+                        storageService.downloadFileToPath(musicName, stockDest);
+                    } catch (Exception e) {
+                        log.error("Failed to download stock music", e);
+                        // Do not fail stream, just continue without music? Or throw?
+                        // Let's log and proceed without music if it fails
+                    }
+                }
+                if (java.nio.file.Files.exists(stockDest)) {
+                    musicPath = stockDest;
+                }
+            } else {
+                // Legacy / User Uploaded Music
+                musicPath = userDir.resolve(musicName).toAbsolutePath();
+            }
+        }
 
         log.info("musicPath [{}]", musicPath);
         

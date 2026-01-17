@@ -51,6 +51,16 @@ public class S3StorageService implements FileStorageService {
         return key;
     }
 
+    @Override
+    public void storeFile(InputStream inputStream, String key, long contentLength) {
+        PutObjectRequest putOb = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+
+        s3Client.putObject(putOb, RequestBody.fromInputStream(inputStream, contentLength));
+    }
+
     public InputStream downloadFile(String key) {
         GetObjectRequest getOb = GetObjectRequest.builder()
                 .bucket(bucketName)

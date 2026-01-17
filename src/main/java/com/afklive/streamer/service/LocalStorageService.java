@@ -36,6 +36,18 @@ public class LocalStorageService implements FileStorageService {
     }
 
     @Override
+    public void storeFile(InputStream inputStream, String key, long contentLength) {
+        try {
+            Path destinationFile = this.rootLocation.resolve(key).normalize().toAbsolutePath();
+            // Ensure parent directory exists (for subfolders like stock/)
+            Files.createDirectories(destinationFile.getParent());
+            Files.copy(inputStream, destinationFile, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to store file with key: " + key, e);
+        }
+    }
+
+    @Override
     public InputStream downloadFile(String key) {
         try {
             Path file = rootLocation.resolve(key);

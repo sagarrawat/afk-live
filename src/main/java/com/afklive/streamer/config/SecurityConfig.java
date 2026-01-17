@@ -40,6 +40,8 @@ public class SecurityConfig {
                         // 1. PUBLIC: Landing page, assets, and user-check API
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
+                        // Allow stock music api for authenticated users (handled by anyRequest().authenticated() but explicit here for clarity/debug)
+                        // .requestMatchers("/api/stock-music/**").authenticated()
 
                         // 2. PROTECTED: The Studio URL and internal index file
                         .requestMatchers("/studio", "/app.html").permitAll()

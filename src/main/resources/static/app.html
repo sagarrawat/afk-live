@@ -112,11 +112,31 @@
 
                         <div style="margin-top: 15px; border-top: 1px dashed #333; padding-top: 15px;">
                             <label style="font-size: 0.85em; color: #888; margin-bottom: 8px; display: block;">Background Music (Optional)</label>
-                            <div class="upload-zone small" id="musicDropZone" style="border: 1px dashed #444; padding: 10px; text-align: center; border-radius: 4px; cursor: pointer; background: #222; color: #aaa; transition: 0.2s;">
-                                <span id="musicText"><i class="fa-solid fa-music"></i> Upload Audio</span>
-                            </div>
-                            <input type="file" id="musicFile" class="hidden" accept=".mp3, .wav">
 
+                            <!-- Music Source Toggle -->
+                            <div class="music-source-toggle" style="display: flex; margin-bottom: 10px; gap: 10px;">
+                                <button id="btnMusicUpload" class="btn btn-sm btn-primary" onclick="toggleMusicSource('upload')">Upload</button>
+                                <button id="btnMusicStock" class="btn btn-sm btn-outline" onclick="toggleMusicSource('stock')">Stock Library</button>
+                            </div>
+
+                            <!-- Upload Area -->
+                            <div id="musicUploadSection">
+                                <div class="upload-zone small" id="musicDropZone" style="border: 1px dashed #444; padding: 10px; text-align: center; border-radius: 4px; cursor: pointer; background: #222; color: #aaa; transition: 0.2s;">
+                                    <span id="musicText"><i class="fa-solid fa-music"></i> Upload Audio</span>
+                                </div>
+                                <input type="file" id="musicFile" class="hidden" accept=".mp3, .wav">
+                            </div>
+
+                            <!-- Stock Selection Area -->
+                            <div id="musicStockSection" class="hidden">
+                                <select id="stockMusicSelect" class="form-input" onchange="previewStockMusic()">
+                                    <option value="">Select a track...</option>
+                                    <!-- Populated by JS -->
+                                </select>
+                                <div id="stockLoading" class="hidden" style="font-size: 0.8rem; color: #888; margin-top: 5px;">Loading library...</div>
+                            </div>
+
+                            <!-- Audio Preview & Controls (Shared) -->
                             <div id="audioControlPanel" class="hidden" style="margin-top: 10px;">
                                 <div class="audio-controls" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #ccc; margin-bottom: 4px;">
                                     <span>Volume</span>
