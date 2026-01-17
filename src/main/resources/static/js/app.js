@@ -107,6 +107,12 @@ function switchView(viewName) {
     document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
     document.querySelector(`[data-target="view-${viewName}"]`)?.classList.add('active');
 
+    // Close Mobile Menu if open
+    const sb = document.getElementById('subSidebar');
+    if (sb && sb.classList.contains('open')) {
+        toggleMobileMenu();
+    }
+
     // Update Header Title (Mobile/Sidebar)
     const titles = {
         'publish': 'Publishing',
@@ -837,14 +843,26 @@ function renderDestinations() {
 
         div.onclick = () => toggleDestination(d.id);
         div.dataset.id = d.id;
+        // XSS Fix: Use textContent for name
+        const nameDiv = document.createElement('div');
+        nameDiv.style.flex = '1';
+        const nameB = document.createElement('b');
+        nameB.textContent = d.name;
+        nameDiv.appendChild(nameB);
+
         div.innerHTML = `
             <div class="dest-icon" style="color: ${d.selected ? 'var(--primary)' : '#999'}">
                 <i class="fa-solid ${d.selected ? 'fa-circle-check' : 'fa-circle'}"></i>
             </div>
-            <div style="flex:1"><b>${d.name}</b></div>
+        `;
+        div.appendChild(nameDiv);
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.innerHTML = `
             <button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)" title="Remove"><i class="fa-solid fa-trash"></i></button>
         `;
+        div.appendChild(actionsDiv);
         list.appendChild(div);
     });
 }
@@ -1440,8 +1458,9 @@ function loadBenefits() {
 
 async function loadInternalPricing() {
     const grid = document.getElementById('internalPlanGrid');
-    if(!grid || grid.innerHTML.trim() !== "") return; // Already loaded
+    if(!grid) return;
 
+    // Always reload to ensure currency/state is fresh
     grid.innerHTML = "Loading plans...";
 
     try {
@@ -1459,6 +1478,12 @@ async function loadInternalPricing() {
         // Simple map:
         const currentPlanName = currentUser && currentUser.plan ? currentUser.plan.name.toUpperCase() : "FREE";
         const currentRank = planRanks[currentPlanName] !== undefined ? planRanks[currentPlanName] : -1;
+
+        // If data.plans is undefined (error), show empty
+        if (!data.plans) {
+             grid.innerHTML = '<p>Could not load plans.</p>';
+             return;
+        }
 
         data.plans.forEach(plan => {
             const planRank = planRanks[plan.id] || 0;
