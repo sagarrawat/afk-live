@@ -39,6 +39,19 @@ public class EmailService {
         sendEmail(to, "Reset your password - AFK Live", html);
     }
 
+    public void sendWelcomeEmail(String to) {
+        Context context = new Context();
+        String html = templateEngine.process("email/welcome", context);
+        sendEmail(to, "Welcome to AFK Live! 🚀", html);
+    }
+
+    public void sendUpgradeEmail(String to, String planName) {
+        Context context = new Context();
+        context.setVariable("planName", planName);
+        String html = templateEngine.process("email/upgrade", context);
+        sendEmail(to, "You've upgraded to " + planName + "!", html);
+    }
+
     private void sendEmail(String to, String subject, String htmlContent) {
         if (to == null || to.isEmpty()) {
             log.warn("Skipping email notification: No recipient address.");

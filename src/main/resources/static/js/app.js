@@ -634,7 +634,8 @@ function selectStreamVideo(video) {
 
 async function submitJob() {
     const key = document.getElementById('streamKey').value;
-    const loopCount = document.getElementById('streamLoopCount').value;
+    const loopInfinite = document.getElementById('streamLoopInfinite').checked;
+    const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
 
     if(!selectedStreamVideo) return showToast("Please select a video source", "error");
     if(!key) return showToast("Please select a destination or enter stream key", "error");
@@ -945,12 +946,23 @@ async function loadLibraryVideos() {
             return;
         }
 
+        // Header stats
+        let totalSize = 0;
+        data.data.forEach(v => totalSize += (v.fileSize || 0));
+        const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+
+        list.innerHTML = `<div style="padding:10px; font-weight:600; color:#666; border-bottom:1px solid #eee; margin-bottom:10px;">Total Library Size: ${totalSizeMB} MB</div>`;
+
         data.data.forEach(v => {
+            const sizeMB = v.fileSize ? (v.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown';
             const div = document.createElement('div');
             div.className = 'queue-item';
             div.innerHTML = `
                  <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
-                 <div style="flex:1">${v.title}</div>
+                 <div style="flex:1">
+                    <div style="font-weight:600;">${v.title}</div>
+                    <div style="font-size:0.8rem; color:#888;">${sizeMB}</div>
+                 </div>
                  <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo('${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
             `;
             list.appendChild(div);

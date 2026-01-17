@@ -2,6 +2,7 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.service.EmailService;
 import com.afklive.streamer.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import java.util.Map;
 public class PricingController {
 
     private final UserService userService;
+    private final EmailService emailService;
 
     @GetMapping("/pricing")
     public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "US") String country) {
@@ -65,6 +67,15 @@ public class PricingController {
         try {
             PlanType plan = PlanType.valueOf(planId);
             userService.updatePlan(principal.getName(), plan);
+
+            // Send email
+            try {
+                 User user = userService.getOrCreateUser(principal.getName());
+                 emailService.sendUpgradeEmail(user.getUsername(), plan.getDisplayName());
+            } catch(Exception ex) {
+                // log error but don't fail upgrade
+            }
+
             return ResponseEntity.ok(Map.of("success", true, "message", "Plan upgraded to " + plan.getDisplayName()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));

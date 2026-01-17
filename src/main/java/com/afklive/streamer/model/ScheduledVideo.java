@@ -24,6 +24,8 @@ public class ScheduledVideo {
 
     private String firstComment;
 
+    private Long fileSize; // in bytes
+
     private Long socialChannelId; // Link to specific channel
 
     @Enumerated(EnumType.STRING)
@@ -147,6 +149,14 @@ public class ScheduledVideo {
 
     public void setFirstComment(String firstComment) {
         this.firstComment = firstComment;
+    }
+
+    public Long getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(Long fileSize) {
+        this.fileSize = fileSize;
     }
 
     public Long getSocialChannelId() {

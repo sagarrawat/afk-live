@@ -42,12 +42,32 @@ public class FFmpegCommandBuilder {
         command.add(input.toString());
         command.add("-vf");
         command.add("split[original][copy];[copy]scale=-1:1920,crop=w=1080:h=1920,gblur=sigma=20[blurred];[original]scale=1080:-1[scaled];[blurred][scaled]overlay=0:(H-h)/2");
+
+        // YouTube Shorts / Live optimizations
         command.add("-c:v");
         command.add("libx264");
         command.add("-preset");
-        command.add("ultrafast");
+        command.add("superfast"); // Balanced for speed/quality
+        command.add("-b:v");
+        command.add("4500k"); // Target bitrate for 1080p Shorts
+        command.add("-maxrate");
+        command.add("6000k");
+        command.add("-bufsize");
+        command.add("12000k");
+        command.add("-pix_fmt");
+        command.add("yuv420p");
+        command.add("-r");
+        command.add("30");
+        command.add("-g");
+        command.add("60"); // 2-second GOP (keyframe interval) for 30fps
+
         command.add("-c:a");
-        command.add("copy");
+        command.add("aac");
+        command.add("-b:a");
+        command.add("128k");
+        command.add("-ar");
+        command.add("44100");
+
         command.add("-y");
         command.add(output.toString());
         return command;

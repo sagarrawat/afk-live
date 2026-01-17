@@ -8,6 +8,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @Controller
@@ -82,6 +83,22 @@ public class AuthController {
         } else {
             model.addAttribute("error", "Invalid or expired token.");
             return "reset-password";
+        }
+    }
+
+    @ResponseBody
+    @PostMapping("/api/auth/resend-verification")
+    public org.springframework.http.ResponseEntity<?> resendVerification(java.security.Principal principal, HttpServletRequest request) {
+        if (principal == null) return org.springframework.http.ResponseEntity.status(401).build();
+        try {
+            String baseUrl = ServletUriComponentsBuilder.fromRequestUri(request)
+                    .replacePath(null)
+                    .build()
+                    .toUriString();
+            userService.resendVerification(principal.getName(), baseUrl);
+            return org.springframework.http.ResponseEntity.ok(java.util.Map.of("success", true, "message", "Verification email sent."));
+        } catch (Exception e) {
+             return org.springframework.http.ResponseEntity.badRequest().body(java.util.Map.of("message", e.getMessage()));
         }
     }
 }

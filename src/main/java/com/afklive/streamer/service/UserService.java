@@ -21,7 +21,14 @@ public class UserService {
 
     public User getOrCreateUser(String username) {
         return userRepository.findById(username)
-                .orElseGet(() -> userRepository.save(new User(username)));
+                .orElseGet(() -> {
+                    User newUser = new User(username);
+                    // OAuth users are pre-verified usually, or handle accordingly.
+                    // Assuming Google OAuth users are verified.
+                    // Send welcome email for new OAuth users
+                    emailService.sendWelcomeEmail(username);
+                    return userRepository.save(newUser);
+                });
     }
 
     public void checkStorageQuota(String username, long fileSize) {
@@ -58,6 +65,28 @@ public class UserService {
         user.setEnabled(false); // Email verification required
         user.setVerificationToken(UUID.randomUUID().toString());
         user.setPlanType(PlanType.FREE); // Default to Free plan
+        user.setLastVerificationSentAt(java.time.LocalDateTime.now());
+        userRepository.save(user);
+
+        String link = baseUrl + "/verify-email?token=" + user.getVerificationToken();
+        emailService.sendVerificationEmail(email, link);
+    }
+
+    public void resendVerification(String email, String baseUrl) {
+        User user = userRepository.findById(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (user.isEnabled()) {
+             throw new IllegalStateException("User already verified.");
+        }
+
+        if (user.getLastVerificationSentAt() != null &&
+            user.getLastVerificationSentAt().plusDays(1).isAfter(java.time.LocalDateTime.now())) {
+            throw new IllegalStateException("Please wait 24 hours before resending verification.");
+        }
+
+        user.setLastVerificationSentAt(java.time.LocalDateTime.now());
+        user.setVerificationToken(UUID.randomUUID().toString()); // Rotate token
         userRepository.save(user);
 
         String link = baseUrl + "/verify-email?token=" + user.getVerificationToken();
@@ -68,9 +97,14 @@ public class UserService {
         Optional<User> userOpt = userRepository.findByVerificationToken(token);
         if (userOpt.isPresent()) {
             User user = userOpt.get();
+            boolean wasEnabled = user.isEnabled();
             user.setEnabled(true);
             user.setVerificationToken(null);
             userRepository.save(user);
+
+            if (!wasEnabled) {
+                emailService.sendWelcomeEmail(user.getUsername());
+            }
             return true;
         }
         return false;

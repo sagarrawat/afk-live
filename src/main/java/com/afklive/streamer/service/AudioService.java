@@ -51,6 +51,31 @@ public class AudioService {
                 "artist", "Pop Star",
                 "cover", "https://ui-avatars.com/api/?name=DH&background=000000&color=fff",
                 "ytUrl", "https://www.youtube.com/shorts/audio/5E6F7G8H"
+            ),
+            // Additional Stock Music
+            Map.of(
+                "id", "royalty_3",
+                "type", "ROYALTY_FREE",
+                "title", "Electronic Upbeat",
+                "artist", "ElectroWorld",
+                "cover", "https://ui-avatars.com/api/?name=EU&background=7B1FA2&color=fff",
+                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
+            ),
+            Map.of(
+                "id", "royalty_4",
+                "type", "ROYALTY_FREE",
+                "title", "Calm Piano",
+                "artist", "Peaceful Mind",
+                "cover", "https://ui-avatars.com/api/?name=CP&background=00796B&color=fff",
+                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3"
+            ),
+            Map.of(
+                "id", "royalty_5",
+                "type", "ROYALTY_FREE",
+                "title", "Cinematic Epic",
+                "artist", "Movie Scores",
+                "cover", "https://ui-avatars.com/api/?name=CE&background=C62828&color=fff",
+                "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3"
             )
         );
     }
