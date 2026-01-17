@@ -33,6 +33,26 @@ public class FFmpegCommandBuilder {
         );
     }
 
+    public static List<String> buildConvertToShortCommand(Path input, Path output) {
+        // Convert Landscape to Portrait (9:16) with blurred background
+        // ffmpeg -i input.mp4 -vf "split[original][copy];[copy]scale=-1:1920,crop=w=1080:h=1920,gblur=sigma=20[blurred];[original]scale=1080:-1[scaled];[blurred][scaled]overlay=0:(H-h)/2" -c:v libx264 -c:a copy output.mp4
+        List<String> command = new ArrayList<>();
+        command.add("ffmpeg");
+        command.add("-i");
+        command.add(input.toString());
+        command.add("-vf");
+        command.add("split[original][copy];[copy]scale=-1:1920,crop=w=1080:h=1920,gblur=sigma=20[blurred];[original]scale=1080:-1[scaled];[blurred][scaled]overlay=0:(H-h)/2");
+        command.add("-c:v");
+        command.add("libx264");
+        command.add("-preset");
+        command.add("ultrafast");
+        command.add("-c:a");
+        command.add("copy");
+        command.add("-y");
+        command.add(output.toString());
+        return command;
+    }
+
     public static List<String> buildMixCommand(Path videoPath, Path audioPath, String volume, Path outputPath) {
         // ffmpeg -i video.mp4 -stream_loop -1 -i audio.mp3 -filter_complex "[1:a]volume=0.5[a1];[0:a][a1]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -y out.mp4
         List<String> command = new ArrayList<>();

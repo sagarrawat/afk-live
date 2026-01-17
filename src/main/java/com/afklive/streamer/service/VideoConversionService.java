@@ -52,6 +52,36 @@ public class VideoConversionService {
         }
     }
 
+    @Async
+    public void convertToShort(Path userDir, String username, String fileName) {
+        try {
+            // Assume fileName exists
+            Path source = userDir.resolve(fileName);
+            String targetFileName = "short_" + fileName;
+            Path target = userDir.resolve(targetFileName);
+
+            List<String> command = FFmpegCommandBuilder.buildConvertToShortCommand(source, target);
+            String progressKey = username + ":" + targetFileName;
+
+            log.info("Starting Shorts conversion for {}: {}", username, targetFileName);
+            conversionProgress.put(progressKey, 0);
+
+            Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+            process.getInputStream().transferTo(System.out); // Log output
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                log.info("Shorts conversion completed: {}", targetFileName);
+                conversionProgress.put(progressKey, 100);
+            } else {
+                log.error("Shorts conversion failed (code {})", exitCode);
+                conversionProgress.put(progressKey, -1);
+            }
+        } catch (Exception e) {
+            log.error("Shorts conversion error", e);
+        }
+    }
+
     public Optional<Integer> getProgress(String username, String fileName) {
         String progressKey = username + ":" + fileName;
 

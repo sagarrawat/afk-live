@@ -85,6 +85,13 @@ public class StreamController {
         return ResponseEntity.ok(videoConversionService.getProgress(principal.getName(), fileName).orElse(0));
     }
 
+    @PostMapping("/convert/shorts")
+    public ResponseEntity<?> convertToShort(@RequestParam String fileName, Principal principal) throws IOException {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
+        videoConversionService.convertToShort(userFileService.getUserUploadDir(principal.getName()), principal.getName(), fileName);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Conversion started"));
+    }
+
     @GetMapping("/stream-library")
     public ResponseEntity<?> getLibrary(Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).build();

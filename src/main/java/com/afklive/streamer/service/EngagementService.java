@@ -60,22 +60,15 @@ public class EngagementService {
                     if (user.isDeleteNegativeComments()) {
                         youTubeService.deleteComment(user.getUsername(), commentId);
                         action = "DELETED";
-                        logActivity(user.getUsername(), "DELETE", commentId, videoId, text);
+                        logActivity(user.getUsername(), "DELETE", commentId, videoId, text, null);
                     }
-                } else if (sentiment.contains("POSITIVE") || user.isAutoReplyEnabled()) { // Reply to all if enabled, or just positive? User asked for auto-reply.
-                    // Assuming user wants to reply to positive comments automatically as per previous logic,
-                    // but also asked for "auto reply option". The check `user.isAutoReplyEnabled()` wraps this.
-                    // We'll generate a real reply now.
-
-                    // Only reply if positive or neutral? If negative and NOT deleted, maybe ignore?
-                    // Let's stick to Positive for now to be safe, or check user config.
-                    // The prompt said "Can we add option to auto reply to commnets...".
-                    // I'll assume replying to Positive is safe.
+                } else if (sentiment.contains("POSITIVE") || user.isAutoReplyEnabled()) {
+                    // Reply logic...
                     if (sentiment.contains("POSITIVE")) {
                         replyText = aiService.generateSingleReply(text);
-                        youTubeService.replyToComment(user.getUsername(), commentId, replyText);
+                        String newId = youTubeService.replyToComment(user.getUsername(), commentId, replyText);
                         action = "REPLIED";
-                        logActivity(user.getUsername(), "REPLY", commentId, videoId, replyText);
+                        logActivity(user.getUsername(), "REPLY", commentId, videoId, replyText, newId);
                     }
                 }
 
@@ -94,13 +87,14 @@ public class EngagementService {
         }
     }
 
-    private void logActivity(String username, String type, String commentId, String videoId, String content) {
+    private void logActivity(String username, String type, String commentId, String videoId, String content, String createdId) {
         EngagementActivity activity = new EngagementActivity();
         activity.setUsername(username);
         activity.setActionType(type);
         activity.setCommentId(commentId);
         activity.setVideoId(videoId);
         activity.setContent(content);
+        activity.setCreatedCommentId(createdId);
         activityRepository.save(activity);
     }
 }

@@ -645,8 +645,28 @@
                             <i class="fa-brands fa-youtube" style="color:red"></i>
                             <span style="font-weight:600; font-size:0.9rem;">YouTube Preview</span>
                         </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding: 0 10px 5px;">
+                            <span style="font-size:0.8rem; color:#666;">Preview Mode:</span>
+                            <div class="toggle-group">
+                                <button class="btn btn-xs btn-primary" onclick="setPreviewMode('standard')">16:9</button>
+                                <button class="btn btn-xs btn-outline" onclick="setPreviewMode('shorts')">9:16</button>
+                            </div>
+                        </div>
+
                         <div class="preview-card-image" id="previewImageMock">
                             <i class="fa-solid fa-play"></i>
+                            <!-- Safe Zone Overlay for Shorts -->
+                            <div id="shortsSafeZone" class="hidden" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;">
+                                <div style="position:absolute; bottom:120px; right:10px; display:flex; flex-direction:column; gap:15px; color:rgba(255,255,255,0.7); align-items:center;">
+                                    <i class="fa-solid fa-thumbs-up fa-lg"></i>
+                                    <i class="fa-solid fa-comment-dots fa-lg"></i>
+                                    <i class="fa-solid fa-share fa-lg"></i>
+                                </div>
+                                <div style="position:absolute; bottom:20px; left:10px; color:white; font-size:0.8rem;">
+                                    <div style="width:30px; height:30px; background:#ccc; border-radius:50%; margin-bottom:5px;"></div>
+                                    Channel Name
+                                </div>
+                            </div>
                         </div>
                         <div class="preview-card-body">
                             <h4 id="previewTitleMock" style="margin:0 0 5px 0; font-size:0.95rem;">Video Title</h4>

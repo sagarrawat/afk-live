@@ -358,6 +358,67 @@ function handleFileSelect(file) {
     // Auto title
     const titleInput = document.getElementById('scheduleTitle');
     if(!titleInput.value) titleInput.value = file.name.replace(/\.[^/.]+$/, "");
+
+    // Check for Shorts
+    checkShortsCriteria(file);
+}
+
+function checkShortsCriteria(file) {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = function() {
+        window.URL.revokeObjectURL(video.src);
+        const duration = video.duration;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+
+        if (duration < 60 && w > h) {
+            // Landscape but short duration -> Suggest convert
+            showConfirmModal("Convert to Short?",
+                "This video is under 60 seconds but in Landscape. Convert to Vertical (9:16) for YouTube Shorts?",
+                () => convertToShort(file.name)
+            );
+        } else if (w < h && duration < 60) {
+            // Already a short -> Auto switch preview
+            setPreviewMode('shorts');
+            showToast("Detected Short format", "info");
+        }
+    }
+    video.src = URL.createObjectURL(file);
+}
+
+async function convertToShort(filename) {
+    showToast("Starting conversion...", "info");
+    try {
+        const res = await apiFetch(`${API_URL}/convert/shorts?fileName=${encodeURIComponent(filename)}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Conversion started. Check library shortly.", "success");
+        }
+    } catch(e) { showToast("Conversion failed", "error"); }
+}
+
+function setPreviewMode(mode) {
+    const img = document.getElementById('previewImageMock');
+    const overlay = document.getElementById('shortsSafeZone');
+    const btns = document.querySelectorAll('.toggle-group button');
+
+    btns.forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline');
+    });
+
+    if (mode === 'shorts') {
+        img.classList.add('shorts-mode');
+        overlay.classList.remove('hidden');
+        btns[1].classList.add('btn-primary');
+        btns[1].classList.remove('btn-outline');
+    } else {
+        img.classList.remove('shorts-mode');
+        overlay.classList.add('hidden');
+        btns[0].classList.add('btn-primary');
+        btns[0].classList.remove('btn-outline');
+    }
 }
 
 /* --- THUMBNAIL LOGIC --- */
@@ -1183,6 +1244,13 @@ async function loadActivityLog() {
             if(act.actionType === 'REPLY') icon = '<i class="fa-solid fa-reply"></i>';
             if(act.actionType === 'DELETE') icon = '<i class="fa-solid fa-trash"></i>';
 
+            let revertBtn = '';
+            if (act.actionType === 'REPLY') {
+                revertBtn = `<button class="btn btn-sm btn-outline" style="margin-left:10px; color:#d32f2f; border-color:#ef9a9a;" onclick="revertAction(${act.id})">Revert</button>`;
+            } else if (act.actionType === 'REVERTED_REPLY') {
+                revertBtn = `<span style="margin-left:10px; font-size:0.75rem; color:#999;">Reverted</span>`;
+            }
+
             list.innerHTML += `
                 <div class="activity-item">
                     <div class="act-icon ${act.actionType}">${icon}</div>
@@ -1191,10 +1259,24 @@ async function loadActivityLog() {
                         <div style="font-size:0.85rem; color:#555; margin-top:4px;">"${act.content}"</div>
                     </div>
                     <div class="act-time">${date}</div>
+                    ${revertBtn}
                 </div>
             `;
         });
     } catch(e) { list.innerHTML = "Failed to load activity."; }
+}
+
+async function revertAction(id) {
+    if (!confirm("Are you sure you want to delete this reply?")) return;
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/revert/${id}`, { method: 'POST' });
+        if (res.ok) {
+            showToast("Action reverted", "success");
+            loadActivityLog();
+        } else {
+            showToast("Failed to revert", "error");
+        }
+    } catch(e) { showToast("Error", "error"); }
 }
 
 function toggleAiSuggestions() {

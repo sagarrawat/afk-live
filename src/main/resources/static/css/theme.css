@@ -250,7 +250,8 @@ body {
 .preview-card { background: white; border: 1px solid #dfe1e6; border-radius: 12px; overflow: hidden; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .preview-card-header { padding: 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; }
 .preview-card-body { padding: 15px; }
-.preview-card-image { width: 100%; aspect-ratio: 16/9; background: #000; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8rem; }
+.preview-card-image { width: 100%; aspect-ratio: 16/9; background: #000; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8rem; transition: aspect-ratio 0.3s; position: relative; }
+.preview-card-image.shorts-mode { aspect-ratio: 9/16; }
 .modal-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
 .modal-header h2 { margin: 0; font-size: 1.1rem; }
 .modal-body { padding: 24px; max-height: 70vh; overflow-y: auto; }

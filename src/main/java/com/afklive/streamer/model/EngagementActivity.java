@@ -12,8 +12,9 @@ public class EngagementActivity {
 
     private String username;
     private String actionType; // REPLY, DELETE, LIKE
-    private String commentId;
+    private String commentId; // The ID of the comment being acted upon
     private String videoId;
+    private String createdCommentId; // The ID of the NEW comment created (for replies)
 
     @Column(length = 2000)
     private String content; // Reply text or original comment text if deleted
@@ -35,6 +36,9 @@ public class EngagementActivity {
 
     public String getVideoId() { return videoId; }
     public void setVideoId(String videoId) { this.videoId = videoId; }
+
+    public String getCreatedCommentId() { return createdCommentId; }
+    public void setCreatedCommentId(String createdCommentId) { this.createdCommentId = createdCommentId; }
 
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }

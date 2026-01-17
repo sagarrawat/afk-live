@@ -100,17 +100,18 @@ public class EngagementController {
         }
 
         if ("REPLY".equals(activity.getActionType())) {
-            // Delete the reply. Note: We need the ID of the reply we posted.
-            // But we stored reply TEXT, not the ID of the new reply.
-            // YouTube API returns the new comment object on insert. We should have stored THAT ID.
-            // Current EngagementService.replyToComment calls YouTubeService.replyToComment which returns void.
-            // I should have updated YouTubeService to return the ID.
-            // For now, I can't revert perfectly without the ID.
-            // I'll return an error or implement ID capture in next step if critical.
-            // Revert request said "option to revert".
-            // I will implement a "soft" revert (delete form DB) but I need to delete from YouTube.
-            // I'll update YouTubeService to return ID.
-            return ResponseEntity.badRequest().body(Map.of("message", "Revert not fully implemented (Missing ID)"));
+            try {
+                if (activity.getCreatedCommentId() != null) {
+                    youTubeService.deleteComment(principal.getName(), activity.getCreatedCommentId());
+                    activity.setActionType("REVERTED_REPLY");
+                    activityRepository.save(activity);
+                    return ResponseEntity.ok(Map.of("success", true, "message", "Reply deleted"));
+                } else {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot revert: ID missing"));
+                }
+            } catch (Exception e) {
+                return ResponseEntity.status(500).body(Map.of("message", "Failed to revert: " + e.getMessage()));
+            }
         }
 
         return ResponseEntity.badRequest().body(Map.of("message", "Cannot revert this action type"));

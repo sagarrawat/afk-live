@@ -209,7 +209,7 @@ public class YouTubeService {
         return unreplied;
     }
 
-    public void replyToComment(String username, String parentId, String text) throws Exception {
+    public String replyToComment(String username, String parentId, String text) throws Exception {
         YouTube youtube = getYouTubeClient(username);
 
         Comment comment = new Comment();
@@ -218,7 +218,8 @@ public class YouTubeService {
         snippet.setTextOriginal(text);
         comment.setSnippet(snippet);
 
-        youtube.comments().insert(Collections.singletonList("snippet"), comment).execute();
+        Comment inserted = youtube.comments().insert(Collections.singletonList("snippet"), comment).execute();
+        return inserted.getId();
     }
 
     public void deleteComment(String username, String commentId) throws Exception {
