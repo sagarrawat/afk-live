@@ -1346,7 +1346,8 @@ let currentAudio = null;
 let currentAudioBtn = null;
 
 function toggleAudioPreview(btn, url) {
-    if (currentAudio && currentAudio.src === url && !currentAudio.paused) {
+    // Check if the same button was clicked
+    if (currentAudio && currentAudioBtn === btn && !currentAudio.paused) {
         currentAudio.pause();
         btn.innerHTML = '<i class="fa-solid fa-play"></i>';
         currentAudio = null;
@@ -1413,7 +1414,7 @@ async function loadStreamAudioLibrary() {
             div.innerHTML = `
                 <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
                 <div style="flex:1; font-weight:600; font-size:0.9rem;">${t.title}</div>
-                <button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>
+                <button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '${t.url}')"><i class="fa-solid fa-play"></i></button>
             `;
             list.appendChild(div);
         });
