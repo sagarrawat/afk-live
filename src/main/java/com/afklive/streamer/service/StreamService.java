@@ -115,7 +115,7 @@ public class StreamService {
 
         clearLogs();
 
-        CompletableFuture.runAsync(() -> {
+        Thread.ofVirtual().start(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while (process.isAlive() && (line = reader.readLine()) != null) {

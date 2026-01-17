@@ -157,7 +157,7 @@ public class YouTubeService {
         if (response.getItems() == null || response.getItems().isEmpty()) {
             throw new IllegalStateException("No channel found for user.");
         }
-        return response.getItems().get(0).getId();
+        return response.getItems().getFirst().getId();
     }
 
     public void addComment(String username, String videoId, String text) throws Exception {
