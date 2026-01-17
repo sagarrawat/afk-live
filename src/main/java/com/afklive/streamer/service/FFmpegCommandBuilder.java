@@ -111,6 +111,10 @@ public class FFmpegCommandBuilder {
         }
 
         // Output configuration
+        if (hasMusic) {
+            command.add("-shortest");
+        }
+
         command.add("-f");
         command.add("flv");
         command.add("-flvflags");

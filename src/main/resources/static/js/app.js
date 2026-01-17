@@ -621,19 +621,34 @@ function addDestination() {
 function submitDestination() {
     const name = document.getElementById('newDestName').value;
     const key = document.getElementById('newDestKey').value;
+    const editId = document.getElementById('addDestinationModal').dataset.editId;
 
     if(!name || !key) {
         showToast("Please fill all fields", "error");
         return;
     }
 
-    destinations.push({ id: Date.now(), name, key });
+    if (editId) {
+        // Update existing
+        const idx = destinations.findIndex(d => d.id == editId);
+        if (idx !== -1) {
+            destinations[idx].name = name;
+            destinations[idx].key = key;
+            showToast("Destination Updated", "success");
+        }
+        delete document.getElementById('addDestinationModal').dataset.editId;
+    } else {
+        // Add new
+        const newId = Date.now();
+        destinations.push({ id: newId, name, key });
+        showToast("Destination Added", "success");
+        // We'll select it after render
+        setTimeout(() => selectDestination(newId), 50);
+    }
+
     saveDestinations();
     renderDestinations();
-    selectDestination(destinations[destinations.length-1].id);
-
     document.getElementById('addDestinationModal').classList.add('hidden');
-    showToast("Destination Added", "success");
 }
 
 function removeDestination(id, e) {
@@ -673,10 +688,31 @@ function renderDestinations() {
         div.innerHTML = `
             <div class="dest-icon"><i class="fa-solid fa-key"></i></div>
             <div style="flex:1"><b>${d.name}</b></div>
-            <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)" title="Remove"><i class="fa-solid fa-trash"></i></button>
         `;
         list.appendChild(div);
     });
+
+    // Auto-select first if none selected
+    const active = document.querySelector('.destination-item.active');
+    if(!active && destinations.length > 0) {
+        selectDestination(destinations[0].id);
+    }
+}
+
+function editDestination(id, e) {
+    e.stopPropagation();
+    const dest = destinations.find(d => d.id === id);
+    if(!dest) return;
+
+    document.getElementById('newDestName').value = dest.name;
+    document.getElementById('newDestKey').value = dest.key;
+    // Store editing ID in modal
+    document.getElementById('addDestinationModal').dataset.editId = id;
+
+    document.getElementById('addDestinationModal').classList.remove('hidden');
+    document.getElementById('newDestName').focus();
 }
 
 function selectDestination(id) {
@@ -1295,6 +1331,7 @@ async function loadStreamAudioLibrary() {
             div.innerHTML = `
                 <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
                 <div style="flex:1; font-weight:600; font-size:0.9rem;">${t.title}</div>
+                <button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>
             `;
             list.appendChild(div);
         });
