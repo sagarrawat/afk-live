@@ -59,6 +59,7 @@ public class VideoController {
             @RequestParam("privacyStatus") String privacyStatus,
             @RequestParam(value = "categoryId", required = false) String categoryId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
+            @RequestParam(value = "firstComment", required = false) String firstComment,
             @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
             @RequestParam(value = "audioTrackId", required = false) String audioTrackId,
             @RequestParam(value = "audioVolume", defaultValue = "0.5") String audioVolume,
@@ -141,6 +142,9 @@ public class VideoController {
             video.setScheduledTime(scheduledTime);
             video.setS3Key(s3Key);
             video.setThumbnailS3Key(thumbnailKey);
+            if (firstComment != null && !firstComment.trim().isEmpty()) {
+                video.setFirstComment(firstComment);
+            }
             video.setStatus(ScheduledVideo.VideoStatus.PENDING);
 
             repository.save(video);

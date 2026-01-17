@@ -17,6 +17,7 @@ public class User {
     private String password;
     private boolean enabled = true;
     private String verificationToken;
+    private LocalDateTime lastVerificationSentAt;
     private String resetToken;
     private String fullName;
     private String pictureUrl;
@@ -84,6 +85,14 @@ public class User {
 
     public void setVerificationToken(String verificationToken) {
         this.verificationToken = verificationToken;
+    }
+
+    public LocalDateTime getLastVerificationSentAt() {
+        return lastVerificationSentAt;
+    }
+
+    public void setLastVerificationSentAt(LocalDateTime lastVerificationSentAt) {
+        this.lastVerificationSentAt = lastVerificationSentAt;
     }
 
     public String getResetToken() {

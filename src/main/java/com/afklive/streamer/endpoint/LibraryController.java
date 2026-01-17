@@ -64,7 +64,7 @@ public class LibraryController {
 
                             String s3Key = storageService.uploadFile(zis, entry.getName(), size);
                             userService.updateStorageUsage(username, size);
-                            createLibraryEntry(username, entry.getName(), s3Key);
+                            createLibraryEntry(username, entry.getName(), s3Key, size);
                             successCount++;
                         }
                     }
@@ -73,7 +73,7 @@ public class LibraryController {
                     userService.checkStorageQuota(username, file.getSize());
                     String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
                     userService.updateStorageUsage(username, file.getSize());
-                    createLibraryEntry(username, file.getOriginalFilename(), s3Key);
+                    createLibraryEntry(username, file.getOriginalFilename(), s3Key, file.getSize());
                     successCount++;
                 }
             }
@@ -89,13 +89,19 @@ public class LibraryController {
         return n.endsWith(".mp4") || n.endsWith(".mov") || n.endsWith(".mkv") || n.endsWith(".avi");
     }
 
-    private void createLibraryEntry(String username, String filename, String key) {
+    private void createLibraryEntry(String username, String filename, String key, long size) {
         ScheduledVideo video = new ScheduledVideo();
         video.setUsername(username);
         video.setTitle(filename);
         video.setS3Key(key);
         video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
         video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
+        // We need a size field in ScheduledVideo.
+        // Since I cannot change the Entity easily without restart/schema issues in this mock env,
+        // I will overload the 'description' or add a transient field?
+        // Actually the prompt says "In library can we also show the size".
+        // I'll add `fileSize` to ScheduledVideo entity.
+        video.setFileSize(size);
         repository.save(video);
     }
 

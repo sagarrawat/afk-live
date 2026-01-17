@@ -39,6 +39,14 @@ function setupEventListeners() {
     const streamUpload = document.getElementById("streamUploadInput");
     if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
 
+    // Stream Music Upload
+    const streamMusicUpload = document.getElementById("streamAudioFile");
+    if(streamMusicUpload) streamMusicUpload.addEventListener("change", handleStreamMusicUpload);
+
+    // Thumbnail Upload
+    const thumbInput = document.getElementById("scheduleThumbnail");
+    if(thumbInput) thumbInput.addEventListener("change", handleThumbnailSelect);
+
     // Live Preview
     document.getElementById('scheduleTitle')?.addEventListener('input', e => {
         document.getElementById('previewTitleMock').innerText = e.target.value || "Video Title";
@@ -73,6 +81,7 @@ async function handleStreamVideoUpload(e) {
             showToast("Video uploaded successfully!", "success");
             // Auto-refresh library modal content
             openLibraryModalForStream();
+            fetchUserInfo(); // Refresh storage
         } else {
             showToast("Upload failed.", "error");
         }
@@ -97,6 +106,12 @@ function switchView(viewName) {
     // Update Menu Active State
     document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
     document.querySelector(`[data-target="view-${viewName}"]`)?.classList.add('active');
+
+    // Close Mobile Menu if open
+    const sb = document.getElementById('subSidebar');
+    if (sb && sb.classList.contains('open')) {
+        toggleMobileMenu();
+    }
 
     // Update Header Title (Mobile/Sidebar)
     const titles = {
@@ -344,10 +359,126 @@ function handleFileSelect(file) {
     document.getElementById('mediaPlaceholder').classList.add('hidden');
     document.getElementById('selectedFileDisplay').classList.remove('hidden');
     document.getElementById('fileName').innerText = file.name;
+    document.getElementById('thumbnailTools').classList.remove('hidden');
 
     // Auto title
     const titleInput = document.getElementById('scheduleTitle');
     if(!titleInput.value) titleInput.value = file.name.replace(/\.[^/.]+$/, "");
+
+    // Check for Shorts
+    checkShortsCriteria(file);
+}
+
+function checkShortsCriteria(file) {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = function() {
+        window.URL.revokeObjectURL(video.src);
+        const duration = video.duration;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+
+        if (duration < 60 && w > h) {
+            // Landscape but short duration -> Suggest convert
+            showConfirmModal("Convert to Short?",
+                "This video is under 60 seconds but in Landscape. Convert to Vertical (9:16) for YouTube Shorts?",
+                () => convertToShort(file.name)
+            );
+        } else if (w < h && duration < 60) {
+            // Already a short -> Auto switch preview
+            setPreviewMode('shorts');
+            showToast("Detected Short format", "info");
+        }
+    }
+    video.src = URL.createObjectURL(file);
+}
+
+async function convertToShort(filename) {
+    showToast("Starting conversion...", "info");
+    try {
+        const res = await apiFetch(`${API_URL}/convert/shorts?fileName=${encodeURIComponent(filename)}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Conversion started. Check library shortly.", "success");
+        }
+    } catch(e) { showToast("Conversion failed", "error"); }
+}
+
+function setPreviewMode(mode) {
+    const img = document.getElementById('previewImageMock');
+    const overlay = document.getElementById('shortsSafeZone');
+    const btns = document.querySelectorAll('.toggle-group button');
+
+    btns.forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline');
+    });
+
+    if (mode === 'shorts') {
+        img.classList.add('shorts-mode');
+        overlay.classList.remove('hidden');
+        btns[1].classList.add('btn-primary');
+        btns[1].classList.remove('btn-outline');
+    } else {
+        img.classList.remove('shorts-mode');
+        overlay.classList.add('hidden');
+        btns[0].classList.add('btn-primary');
+        btns[0].classList.remove('btn-outline');
+    }
+}
+
+/* --- THUMBNAIL LOGIC --- */
+function handleThumbnailSelect(e) {
+    const file = e.target.files[0];
+    if (file) setThumbnailPreview(file);
+}
+
+function setThumbnailPreview(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('thumbPreview').innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;">`;
+    };
+    reader.readAsDataURL(file);
+}
+
+function extractFrame() {
+    const file = document.getElementById('scheduleFile').files[0];
+    if (!file) return showToast("No video selected", "error");
+
+    const video = document.getElementById('frameExtractorVideo');
+    const url = URL.createObjectURL(file);
+
+    video.src = url;
+    video.currentTime = 5; // Capture at 5s mark (or random)
+
+    // Once loaded and seeked
+    video.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+            // Create file from blob
+            const thumbFile = new File([blob], "thumbnail.jpg", { type: "image/jpeg" });
+
+            // Assign to input
+            const dt = new DataTransfer();
+            dt.items.add(thumbFile);
+            document.getElementById('scheduleThumbnail').files = dt.files;
+
+            setThumbnailPreview(thumbFile);
+            showToast("Thumbnail extracted!", "success");
+
+            // Clean up
+            URL.revokeObjectURL(url);
+        }, 'image/jpeg', 0.9);
+    };
+
+    // Trigger load
+    video.load();
 }
 
 async function submitSchedule() {
@@ -370,6 +501,10 @@ async function submitSchedule() {
     formData.append("categoryId", document.getElementById('scheduleCategory').value);
     formData.append("tags", document.getElementById('scheduleTags').value);
     if(selectedChannelId) formData.append("socialChannelId", selectedChannelId);
+
+    // Audio
+    const firstComment = document.getElementById('scheduleFirstComment').value;
+    if(firstComment) formData.append("firstComment", firstComment);
 
     // Audio
     const audioFile = document.getElementById('scheduleAudio').files[0];
@@ -504,20 +639,51 @@ function selectStreamVideo(video) {
 }
 
 async function submitJob() {
-    const key = document.getElementById('streamKey').value;
-    const loopCount = document.getElementById('streamLoopCount').value;
+    // Gather all selected keys
+    const selectedKeys = destinations.filter(d => d.selected).map(d => d.key);
+
+    const loopInfinite = document.getElementById('streamLoopInfinite').checked;
+    const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
 
     if(!selectedStreamVideo) return showToast("Please select a video source", "error");
-    if(!key) return showToast("Please select a destination or enter stream key", "error");
+    if(selectedKeys.length === 0) return showToast("Please select at least one destination", "error");
 
     const btn = document.getElementById('btnGoLive');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Starting...';
 
     const fd = new FormData();
-    fd.append("streamKey", key);
+    // Append each key (Spring will treat same-name keys as a List<String>)
+    selectedKeys.forEach(k => fd.append("streamKey", k));
+
     fd.append("videoKey", selectedStreamVideo.s3Key);
     fd.append("loopCount", loopCount);
+
+    // Music
+    const musicUpload = document.getElementById('uploadedStreamMusicName').value;
+    const musicStock = document.getElementById('selectedStreamStockId').value;
+    const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
+
+    if (musicUpload && !document.getElementById('streamAudioUploadSection').classList.contains('hidden')) {
+        fd.append("musicName", musicUpload);
+        fd.append("musicVolume", musicVol);
+    } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
+        fd.append("musicName", "stock:" + musicStock);
+        fd.append("musicVolume", musicVol);
+    }
+
+    // Watermark
+    if(window.uploadedWatermarkFile) {
+        fd.append("watermarkFile", window.uploadedWatermarkFile);
+    }
+
+    // Mute Original
+    const muteOriginal = document.getElementById('streamMuteOriginal').checked;
+    fd.append("muteVideoAudio", muteOriginal);
+
+    // Output Mode
+    const outputMode = document.getElementById('streamOutputMode').value;
+    fd.append("streamMode", outputMode);
 
     try {
         const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
@@ -527,6 +693,13 @@ async function submitJob() {
             setLiveState(true);
             streamStartTime = new Date();
             startTimer();
+
+            // Save state
+            localStorage.setItem('afk_stream_state', JSON.stringify({
+                startTime: streamStartTime.toISOString(),
+                videoTitle: selectedStreamVideo ? selectedStreamVideo.title : "Unknown Video",
+                videoId: selectedStreamVideo ? selectedStreamVideo.id : null
+            }));
         } else {
             showToast(data.message, "error");
         }
@@ -542,13 +715,15 @@ async function submitJob() {
 }
 
 async function stopStream() {
-    if(!confirm("Are you sure you want to end the stream?")) return;
-    try {
-        await apiFetch(`${API_URL}/stop`, {method:'POST'});
-        setLiveState(false);
-        showToast("Stream Stopped", "info");
-        stopTimer();
-    } catch(e) {}
+    showConfirmModal("End Stream", "Are you sure you want to stop the live stream?", async () => {
+        try {
+            await apiFetch(`${API_URL}/stop`, {method:'POST'});
+            setLiveState(false);
+            showToast("Stream Stopped", "info");
+            stopTimer();
+            localStorage.removeItem('afk_stream_state');
+        } catch(e) {}
+    });
 }
 
 function setLiveState(isLive) {
@@ -600,27 +775,43 @@ function addDestination() {
 function submitDestination() {
     const name = document.getElementById('newDestName').value;
     const key = document.getElementById('newDestKey').value;
+    const editId = document.getElementById('addDestinationModal').dataset.editId;
 
     if(!name || !key) {
         showToast("Please fill all fields", "error");
         return;
     }
 
-    destinations.push({ id: Date.now(), name, key });
+    if (editId) {
+        // Update existing
+        const idx = destinations.findIndex(d => d.id == editId);
+        if (idx !== -1) {
+            destinations[idx].name = name;
+            destinations[idx].key = key;
+            showToast("Destination Updated", "success");
+        }
+        delete document.getElementById('addDestinationModal').dataset.editId;
+    } else {
+        // Add new
+        const newId = Date.now();
+        destinations.push({ id: newId, name, key });
+        showToast("Destination Added", "success");
+        // We'll select it after render
+        setTimeout(() => selectDestination(newId), 50);
+    }
+
     saveDestinations();
     renderDestinations();
-    selectDestination(destinations[destinations.length-1].id);
-
     document.getElementById('addDestinationModal').classList.add('hidden');
-    showToast("Destination Added", "success");
 }
 
 function removeDestination(id, e) {
     e.stopPropagation();
-    if(!confirm("Remove this destination?")) return;
-    destinations = destinations.filter(d => d.id !== id);
-    saveDestinations();
-    renderDestinations();
+    showConfirmModal("Remove Destination", "Delete this stream key?", () => {
+        destinations = destinations.filter(d => d.id !== id);
+        saveDestinations();
+        renderDestinations();
+    });
 }
 
 function saveDestinations() {
@@ -647,27 +838,59 @@ function renderDestinations() {
     destinations.forEach(d => {
         const div = document.createElement('div');
         div.className = 'destination-item';
-        div.onclick = () => selectDestination(d.id);
+        // Multi-select toggle
+        if (d.selected) div.classList.add('active');
+
+        div.onclick = () => toggleDestination(d.id);
         div.dataset.id = d.id;
+        // XSS Fix: Use textContent for name
+        const nameDiv = document.createElement('div');
+        nameDiv.style.flex = '1';
+        const nameB = document.createElement('b');
+        nameB.textContent = d.name;
+        nameDiv.appendChild(nameB);
+
         div.innerHTML = `
-            <div class="dest-icon"><i class="fa-solid fa-key"></i></div>
-            <div style="flex:1"><b>${d.name}</b></div>
-            <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)"><i class="fa-solid fa-trash"></i></button>
+            <div class="dest-icon" style="color: ${d.selected ? 'var(--primary)' : '#999'}">
+                <i class="fa-solid ${d.selected ? 'fa-circle-check' : 'fa-circle'}"></i>
+            </div>
         `;
+        div.appendChild(nameDiv);
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.innerHTML = `
+            <button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)" title="Remove"><i class="fa-solid fa-trash"></i></button>
+        `;
+        div.appendChild(actionsDiv);
         list.appendChild(div);
     });
 }
 
-function selectDestination(id) {
+function toggleDestination(id) {
+    const dest = destinations.find(d => d.id === id);
+    if(dest) {
+        dest.selected = !dest.selected;
+        saveDestinations(); // Save to local storage
+        renderDestinations(); // Re-render
+    }
+}
+
+function editDestination(id, e) {
+    e.stopPropagation();
     const dest = destinations.find(d => d.id === id);
     if(!dest) return;
 
-    document.getElementById('streamKey').value = dest.key;
-    document.querySelectorAll('.destination-item').forEach(el => {
-        el.classList.remove('active');
-        if(parseInt(el.dataset.id) === id) el.classList.add('active');
-    });
+    document.getElementById('newDestName').value = dest.name;
+    document.getElementById('newDestKey').value = dest.key;
+    // Store editing ID in modal
+    document.getElementById('addDestinationModal').dataset.editId = id;
+
+    document.getElementById('addDestinationModal').classList.remove('hidden');
+    document.getElementById('newDestName').focus();
 }
+
+// function selectDestination(id) removed in favor of toggleDestination
 
 /* --- TIMER --- */
 function startTimer() {
@@ -695,10 +918,37 @@ async function checkInitialStatus() {
     try {
         const res = await apiFetch(`${API_URL}/status`);
         const data = await res.json();
+
+        const savedState = localStorage.getItem('afk_stream_state');
+        let stateObj = savedState ? JSON.parse(savedState) : null;
+
         if(data.success && data.data.live) {
             setLiveState(true);
-            streamStartTime = new Date(); // Start from now if live
+            // If we have saved start time, use it
+            if (stateObj && stateObj.startTime) {
+                streamStartTime = new Date(stateObj.startTime);
+            } else {
+                streamStartTime = new Date();
+            }
             startTimer();
+
+            // Restore UI selection if possible
+            if (stateObj) {
+                if (stateObj.videoTitle) {
+                    document.getElementById('selectedVideoTitle').innerText = stateObj.videoTitle;
+                    document.getElementById('previewPlaceholder').classList.add('hidden');
+                    const player = document.getElementById('previewPlayer');
+                    player.classList.remove('hidden');
+                    // We can't easily restore the exact video src without the ID,
+                    // but we can try if state has it.
+                    // Assuming stateObj has videoId if we save it.
+                }
+            }
+        } else {
+            // Backend says offline, clear local state
+            if (stateObj) {
+                localStorage.removeItem('afk_stream_state');
+            }
         }
     } catch(e){}
 }
@@ -725,15 +975,49 @@ async function loadLibraryVideos() {
         const res = await apiFetch(`${API_URL}/library`);
         const data = await res.json();
         list.innerHTML = '';
+        if(!data.data || !data.data.length) {
+            list.innerHTML = '<div class="empty-state">Library is empty. Upload videos to get started.</div>';
+            return;
+        }
+
+        // Header stats
+        let totalSize = 0;
+        data.data.forEach(v => totalSize += (v.fileSize || 0));
+        const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+
+        list.innerHTML = `<div style="padding:10px; font-weight:600; color:#666; border-bottom:1px solid #eee; margin-bottom:10px;">Total Library Size: ${totalSizeMB} MB</div>`;
+
         data.data.forEach(v => {
-            list.innerHTML += `
-                <div class="queue-item">
-                     <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
-                     <div>${v.title}</div>
-                </div>
+            const sizeMB = v.fileSize ? (v.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown';
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.innerHTML = `
+                 <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
+                 <div style="flex:1">
+                    <div style="font-weight:600;">${v.title}</div>
+                    <div style="font-size:0.8rem; color:#888;">${sizeMB}</div>
+                 </div>
+                 <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo('${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
             `;
+            list.appendChild(div);
         });
     } catch(e){}
+}
+
+async function deleteLibraryVideo(filename) {
+    showConfirmModal("Delete Video", `Delete "${filename}"? This cannot be undone.`, async () => {
+        try {
+            const res = await apiFetch(`${API_URL}/delete?fileName=${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            const data = await res.json();
+            if(res.ok && data.success) {
+                showToast("File deleted", "success");
+                loadLibraryVideos();
+                fetchUserInfo(); // Update storage usage
+            } else {
+                showToast(data.message || "Delete failed", "error");
+            }
+        } catch(e) { showToast("Error deleting file", "error"); }
+    });
 }
 
 async function handleBulkUpload(e) {
@@ -748,6 +1032,7 @@ async function handleBulkUpload(e) {
         if(res.ok) {
             showToast("Uploaded!", "success");
             loadLibraryVideos();
+            fetchUserInfo(); // Refresh storage
         }
     } catch(e){ showToast("Failed", "error"); }
 }
@@ -810,11 +1095,22 @@ async function aiGenerate(type) {
 /* --- SETTINGS --- */
 function renderPlanInfo(plan) {
     document.getElementById('planName').innerText = plan.name;
-    const used = (plan.storageUsed / 1024 / 1024).toFixed(1);
-    const limit = (plan.storageLimit / 1024 / 1024).toFixed(0);
-    document.getElementById('storageText').innerText = `${used}/${limit} MB`;
+    const usedMB = plan.storageUsed / 1024 / 1024;
+    const limitMB = plan.storageLimit / 1024 / 1024;
+    const freeMB = limitMB - usedMB;
+
+    document.getElementById('storageText').innerText = `${usedMB.toFixed(1)}/${limitMB.toFixed(0)} MB`;
     const pct = Math.min(100, (plan.storageUsed / plan.storageLimit) * 100);
-    document.getElementById('storageBar').style.width = pct + "%";
+
+    const bar = document.getElementById('storageBar');
+    bar.style.width = pct + "%";
+    bar.className = 'progress-fill'; // reset
+
+    if (freeMB < 100) {
+        bar.classList.add('danger');
+    } else if (freeMB < 500) { // e.g. 500MB warning threshold
+        bar.classList.add('warning');
+    }
 }
 
 async function checkYoutubeStatus() {
@@ -822,18 +1118,18 @@ async function checkYoutubeStatus() {
 }
 
 async function cancelSubscription() {
-    if(!confirm("Are you sure you want to cancel your subscription? You will be downgraded to the Free plan immediately.")) return;
-
-    try {
-        const res = await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' });
-        const data = await res.json();
-        if(res.ok) {
-            showToast("Subscription cancelled.", "success");
-            setTimeout(() => window.location.reload(), 1500);
-        } else {
-            showToast(data.message || "Cancellation failed", "error");
-        }
-    } catch(e) { showToast("Error cancelling subscription", "error"); }
+    showConfirmModal("Cancel Subscription", "Are you sure? You will be downgraded to the Free plan immediately.", async () => {
+        try {
+            const res = await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' });
+            const data = await res.json();
+            if(res.ok) {
+                showToast("Subscription cancelled.", "success");
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(data.message || "Cancellation failed", "error");
+            }
+        } catch(e) { showToast("Error cancelling subscription", "error"); }
+    });
 }
 
 /* --- ANALYTICS & CALENDAR --- */
@@ -874,30 +1170,255 @@ function initCalendar() {
     }
 }
 
-/* --- COMMUNITY --- */
+/* --- COMMUNITY (Engagement) --- */
+let activeCommentThread = null;
+let currentCommTab = 'all';
+
+function filterCommTab(tab) {
+    currentCommTab = tab;
+    // Update nav active state
+    document.querySelectorAll('.comm-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.comm-nav-item[onclick*="'${tab}'"]`)?.classList.add('active');
+
+    // Show/Hide panels
+    if (tab === 'activity') {
+        document.getElementById('commListPanel').classList.add('hidden');
+        document.getElementById('commDetailView').classList.add('hidden');
+        document.getElementById('commActivityView').classList.remove('hidden');
+        loadActivityLog();
+    } else {
+        document.getElementById('commListPanel').classList.remove('hidden');
+        document.getElementById('commDetailView').classList.remove('hidden');
+        document.getElementById('commActivityView').classList.add('hidden');
+
+        if (tab === 'unreplied') loadUnrepliedComments();
+        else loadComments();
+    }
+}
+
 async function loadComments() {
     const list = document.getElementById('threadList');
-    list.innerHTML = "Loading...";
+    list.innerHTML = "<div style='padding:20px;text-align:center'>Loading...</div>";
     try {
         const res = await apiFetch(`${API_URL}/comments`);
         const data = await res.json();
+        renderThreadList(data.items);
+    } catch(e) { list.innerHTML = "Failed to load."; }
+}
+
+async function loadUnrepliedComments() {
+    const list = document.getElementById('threadList');
+    list.innerHTML = "<div style='padding:20px;text-align:center'>Loading...</div>";
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/unreplied`);
+        const data = await res.json();
+        renderThreadList(data, true);
+    } catch(e) { list.innerHTML = "Failed to load."; }
+}
+
+function renderThreadList(items, isSimplified = false) {
+    const list = document.getElementById('threadList');
+    list.innerHTML = '';
+    if(!items || !items.length) {
+        list.innerHTML = "<div style='padding:20px;text-align:center;color:#666;'>No conversations found.</div>";
+        return;
+    }
+
+    items.forEach(t => {
+        let author, text, id, dateStr, avatarUrl;
+
+        if (isSimplified) {
+            author = t.author;
+            text = t.text;
+            id = t.id;
+            dateStr = new Date(t.publishedAt).toLocaleDateString();
+            avatarUrl = ""; // No avatar in simplified response
+        } else {
+            author = t.snippet.topLevelComment.snippet.authorDisplayName;
+            text = t.snippet.topLevelComment.snippet.textDisplay;
+            id = t.id;
+            dateStr = new Date(t.snippet.topLevelComment.snippet.publishedAt).toLocaleDateString();
+            avatarUrl = t.snippet.topLevelComment.snippet.authorProfileImageUrl;
+        }
+
+        const div = document.createElement('div');
+        div.className = 'thread-item';
+        div.innerHTML = `
+            <div class="thread-avatar">
+                ${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%">` : author.charAt(0).toUpperCase()}
+            </div>
+            <div style="flex:1; overflow:hidden;">
+                <div class="thread-meta">
+                    <strong>${author}</strong>
+                    <span>${dateStr}</span>
+                </div>
+                <div class="thread-preview">${text}</div>
+            </div>
+        `;
+        div.onclick = () => {
+            document.querySelectorAll('.thread-item').forEach(el => el.classList.remove('active'));
+            div.classList.add('active');
+            selectThread(t, isSimplified);
+        };
+        list.appendChild(div);
+    });
+}
+
+function selectThread(thread, isSimplified) {
+    activeCommentThread = thread;
+    document.getElementById('emptyThreadState').classList.add('hidden');
+    document.getElementById('activeThread').classList.remove('hidden');
+    document.getElementById('aiSuggestionsArea').classList.add('hidden');
+    document.getElementById('replyInput').value = '';
+
+    let text, title, date;
+    if (isSimplified) {
+        text = thread.text;
+        title = "Video ID: " + thread.videoId; // Simplified doesn't have title yet, maybe fetch or ignore
+        date = new Date(thread.publishedAt).toLocaleString();
+    } else {
+        text = thread.snippet.topLevelComment.snippet.textDisplay;
+        title = "Comment on Video"; // Standard API structure is complex for video title mapping without extra call
+        date = new Date(thread.snippet.topLevelComment.snippet.publishedAt).toLocaleString();
+    }
+
+    document.getElementById('threadVideoTitle').innerText = title;
+
+    const container = document.getElementById('threadMessages');
+    container.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <div class="chat-bubble incoming">
+                <div style="font-weight:600; font-size:0.8rem; margin-bottom:4px; opacity:0.7;">${date}</div>
+                ${text}
+            </div>
+        </div>
+    `;
+
+    // Add replies if standard object and existing
+    if (!isSimplified && thread.replies) {
+        thread.replies.comments.forEach(r => {
+             container.innerHTML += `
+                <div class="chat-bubble outgoing">
+                    ${r.snippet.textDisplay}
+                </div>
+             `;
+        });
+    }
+}
+
+async function loadActivityLog() {
+    const list = document.getElementById('activityList');
+    list.innerHTML = "Loading...";
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/activity`);
+        const data = await res.json();
         list.innerHTML = '';
-        if(!data.items || !data.items.length) {
-            list.innerHTML = "<div style='padding:20px;text-align:center'>No conversations.</div>";
+
+        if(!data || !data.length) {
+            list.innerHTML = "No activity yet.";
             return;
         }
-        // ... render threads
-        data.items.forEach(t => {
-            const div = document.createElement('div');
-            div.className = 'queue-item';
-            div.style.cursor = 'pointer';
-            div.innerHTML = `
-                <img src="${t.snippet.topLevelComment.snippet.authorProfileImageUrl}" style="width:32px;height:32px;border-radius:50%">
-                <div>${t.snippet.topLevelComment.snippet.textDisplay.substring(0,50)}...</div>
+
+        data.forEach(act => {
+            const date = new Date(act.timestamp).toLocaleString();
+            let icon = '<i class="fa-solid fa-check"></i>';
+            if(act.actionType === 'REPLY') icon = '<i class="fa-solid fa-reply"></i>';
+            if(act.actionType === 'DELETE') icon = '<i class="fa-solid fa-trash"></i>';
+
+            let revertBtn = '';
+            if (act.actionType === 'REPLY') {
+                revertBtn = `<button class="btn btn-sm btn-outline" style="margin-left:10px; color:#d32f2f; border-color:#ef9a9a;" onclick="revertAction(${act.id})">Revert</button>`;
+            } else if (act.actionType === 'REVERTED_REPLY') {
+                revertBtn = `<span style="margin-left:10px; font-size:0.75rem; color:#999;">Reverted</span>`;
+            }
+
+            list.innerHTML += `
+                <div class="activity-item">
+                    <div class="act-icon ${act.actionType}">${icon}</div>
+                    <div class="act-content">
+                        <div><b>${act.actionType}</b> on comment ${act.commentId}</div>
+                        <div style="font-size:0.85rem; color:#555; margin-top:4px;">"${act.content}"</div>
+                    </div>
+                    <div class="act-time">${date}</div>
+                    ${revertBtn}
+                </div>
             `;
-            list.appendChild(div);
         });
-    } catch(e) { list.innerHTML = "Failed to load."; }
+    } catch(e) { list.innerHTML = "Failed to load activity."; }
+}
+
+async function revertAction(id) {
+    if (!confirm("Are you sure you want to delete this reply?")) return;
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/revert/${id}`, { method: 'POST' });
+        if (res.ok) {
+            showToast("Action reverted", "success");
+            loadActivityLog();
+        } else {
+            showToast("Failed to revert", "error");
+        }
+    } catch(e) { showToast("Error", "error"); }
+}
+
+function toggleAiSuggestions() {
+    const area = document.getElementById('aiSuggestionsArea');
+    if(area.classList.contains('hidden')) {
+        area.classList.remove('hidden');
+        generateSuggestions();
+    } else {
+        area.classList.add('hidden');
+    }
+}
+
+async function generateSuggestions() {
+    const chips = document.getElementById('aiChips');
+    chips.innerHTML = "Generating...";
+
+    let text;
+    if(activeCommentThread.text) text = activeCommentThread.text;
+    else text = activeCommentThread.snippet.topLevelComment.snippet.textDisplay;
+
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/suggest?text=${encodeURIComponent(text)}`);
+        const data = await res.json();
+        chips.innerHTML = '';
+
+        data.suggestions.forEach(s => {
+            const chip = document.createElement('div');
+            chip.style.cssText = "padding:5px 10px; background:white; border:1px solid #cce0ff; border-radius:15px; font-size:0.85rem; cursor:pointer; color:#0052cc;";
+            chip.innerText = s;
+            chip.onclick = () => {
+                document.getElementById('replyInput').value = s;
+            };
+            chips.appendChild(chip);
+        });
+
+    } catch(e) {
+        chips.innerHTML = "Failed to generate.";
+    }
+}
+
+async function sendReply() {
+    const text = document.getElementById('replyInput').value;
+    if(!text) return;
+
+    // Check ID
+    let id;
+    if(activeCommentThread.id) id = activeCommentThread.id; // simplified or standard ID field? Standard is id. Simplified we mapped id.
+
+    try {
+        const res = await apiFetch(`${API_URL}/comments/${id}/reply`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text})
+        });
+        if(res.ok) {
+            showToast("Reply sent!", "success");
+            document.getElementById('replyInput').value = '';
+        } else {
+             showToast("Reply failed", "error");
+        }
+    } catch(e) { showToast("Error", "error"); }
 }
 
 /* --- NEW SETTINGS LOGIC --- */
@@ -911,12 +1432,35 @@ function switchSettingsTab(tabName) {
     if(content) content.classList.remove('hidden');
 
     if(tabName === 'plans') loadInternalPricing();
+    if(tabName === 'benefits') loadBenefits();
+}
+
+function loadBenefits() {
+    if (!currentUser || !currentUser.plan) return;
+
+    const p = currentUser.plan;
+    const storageLimitMB = (p.storageLimit / 1024 / 1024).toFixed(0);
+    // UserController returns streamLimit, not maxStreams
+    const streams = p.streamLimit !== undefined ? p.streamLimit : (p.maxStreams || 1);
+
+    document.getElementById('benefitsContent').innerHTML = `
+        <div class="card">
+            <h3>Current Plan: <span style="color:var(--primary)">${p.name}</span></h3>
+            <ul style="margin-top:20px; line-height:2;">
+                <li><i class="fa-solid fa-hard-drive"></i> <b>${storageLimitMB} MB</b> Storage Limit</li>
+                <li><i class="fa-solid fa-video"></i> <b>${streams}</b> Concurrent Streams</li>
+                <li><i class="fa-solid fa-users"></i> ${p.name === 'FREE' ? 'Single User' : 'Team Access'}</li>
+                <li><i class="fa-solid fa-robot"></i> ${p.name === 'FREE' ? 'Basic AI' : 'Advanced AI'} Features</li>
+            </ul>
+        </div>
+    `;
 }
 
 async function loadInternalPricing() {
     const grid = document.getElementById('internalPlanGrid');
-    if(!grid || grid.innerHTML.trim() !== "") return; // Already loaded
+    if(!grid) return;
 
+    // Always reload to ensure currency/state is fresh
     grid.innerHTML = "Loading plans...";
 
     try {
@@ -926,14 +1470,27 @@ async function loadInternalPricing() {
 
         // Plan Ranks
         const planRanks = { 'FREE': 0, 'ESSENTIALS': 1, 'TEAM': 2 };
-        const currentRank = currentUser && currentUser.plan ? (planRanks[currentUser.plan.id] || 0) : -1;
+        // If current plan name (from user-info) matches ID in pricing, use it. But user-info returns "display name" sometimes.
+        // Let's assume user-info returns correct ID or map it.
+        // Actually, user-info returns `plan: { name: "Free", ... }`.
+        // We need to map display name back to ID or fix backend to return ID.
+        // Currently PricingController returns ID: "FREE". User-info returns name "Free".
+        // Simple map:
+        const currentPlanName = currentUser && currentUser.plan ? currentUser.plan.name.toUpperCase() : "FREE";
+        const currentRank = planRanks[currentPlanName] !== undefined ? planRanks[currentPlanName] : -1;
+
+        // If data.plans is undefined (error), show empty
+        if (!data.plans) {
+             grid.innerHTML = '<p>Could not load plans.</p>';
+             return;
+        }
 
         data.plans.forEach(plan => {
             const planRank = planRanks[plan.id] || 0;
             let btn = '';
             let activeClass = '';
 
-            if(currentUser && currentUser.plan && currentUser.plan.id === plan.id) {
+            if(currentPlanName === plan.id) {
                 btn = `<button class="btn btn-outline btn-block" disabled style="opacity:0.6; cursor:default;">Current Plan</button>`;
                 activeClass = 'active-plan';
             } else if (currentRank > planRank) {
@@ -956,6 +1513,31 @@ async function loadInternalPricing() {
     } catch(e) {
         grid.innerHTML = "Failed to load pricing.";
     }
+}
+
+/* --- MODALS --- */
+function openSupportModal() {
+    document.getElementById('supportModal').classList.remove('hidden');
+}
+
+let confirmCallback = null;
+
+function showConfirmModal(title, message, onConfirm) {
+    document.getElementById('confirmTitle').innerText = title;
+    document.getElementById('confirmMessage').innerText = message;
+    confirmCallback = onConfirm;
+    document.getElementById('confirmationModal').classList.remove('hidden');
+
+    const btn = document.getElementById('btnConfirmAction');
+    btn.onclick = () => {
+        if(confirmCallback) confirmCallback();
+        closeConfirmModal();
+    };
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmationModal').classList.add('hidden');
+    confirmCallback = null;
 }
 
 let selectedPlanId = null;
@@ -1089,7 +1671,8 @@ async function loadAudioLibrary() {
                 actions += `<a href="${t.ytUrl}" target="_blank" class="btn btn-sm btn-outline" onclick="event.stopPropagation()" title="Create in YouTube App"><i class="fa-brands fa-youtube" style="color:red"></i> Use</a>`;
             }
             if (isMixable) {
-                actions += `<button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>`;
+                // Audio Preview with Toggle
+                actions += `<button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '${t.url}')"><i class="fa-solid fa-play"></i></button>`;
             }
 
             div.innerHTML = `
@@ -1108,4 +1691,133 @@ async function loadAudioLibrary() {
     } catch(e) {
         list.innerHTML = "Failed to load music.";
     }
+}
+
+let currentAudio = null;
+let currentAudioBtn = null;
+
+function toggleAudioPreview(btn, url) {
+    // Check if the same button was clicked
+    if (currentAudio && currentAudioBtn === btn && !currentAudio.paused) {
+        currentAudio.pause();
+        btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        currentAudio = null;
+        currentAudioBtn = null;
+    } else {
+        if (currentAudio) {
+            currentAudio.pause();
+            if(currentAudioBtn) currentAudioBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        }
+        currentAudio = new Audio(url);
+        currentAudio.play();
+        btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        currentAudioBtn = btn;
+
+        currentAudio.onended = () => {
+            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            currentAudio = null;
+            currentAudioBtn = null;
+        };
+    }
+}
+
+/* --- STREAM MUSIC --- */
+function switchStreamAudioTab(tab) {
+    const btnUpload = document.getElementById('tabStreamAudioUpload');
+    const btnLib = document.getElementById('tabStreamAudioLib');
+    const secUpload = document.getElementById('streamAudioUploadSection');
+    const secLib = document.getElementById('streamAudioLibSection');
+
+    if (tab === 'upload') {
+        btnUpload.className = "btn btn-sm btn-primary";
+        btnLib.className = "btn btn-sm btn-outline";
+        secUpload.classList.remove('hidden');
+        secLib.classList.add('hidden');
+    } else {
+        btnUpload.className = "btn btn-sm btn-outline";
+        btnLib.className = "btn btn-sm btn-primary";
+        secUpload.classList.add('hidden');
+        secLib.classList.remove('hidden');
+        loadStreamAudioLibrary();
+    }
+}
+
+/* --- WATERMARK --- */
+function handleWatermarkUpload(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        window.uploadedWatermarkFile = file;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('watermarkImg').src = e.target.result;
+            document.getElementById('watermarkName').innerText = file.name;
+            document.getElementById('watermarkPreview').classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function clearWatermark() {
+    window.uploadedWatermarkFile = null;
+    document.getElementById('streamWatermarkFile').value = '';
+    document.getElementById('watermarkPreview').classList.add('hidden');
+}
+
+async function loadStreamAudioLibrary() {
+    const list = document.getElementById('streamAudioTrackList');
+    // Re-use existing trending endpoint
+    list.innerHTML = "Loading tracks...";
+    try {
+        const res = await apiFetch(`${API_URL}/audio/trending`);
+        const tracks = await res.json();
+        list.innerHTML = '';
+
+        tracks.forEach(t => {
+            if (!t.url) return; // Only mixable tracks
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.onclick = () => {
+                document.getElementById('selectedStreamStockId').value = t.id;
+                document.getElementById('selectedStreamTrackName').innerText = "Selected: " + t.title;
+                document.querySelectorAll('#streamAudioTrackList .queue-item').forEach(el => el.style.background = '');
+                div.style.background = '#e3f2fd';
+            };
+            div.innerHTML = `
+                <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
+                <div style="flex:1; font-weight:600; font-size:0.9rem;">${t.title}</div>
+                <button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '${t.url}')"><i class="fa-solid fa-play"></i></button>
+            `;
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "Failed."; }
+}
+
+async function handleStreamMusicUpload(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const status = document.getElementById('streamAudioUploadStatus');
+    status.innerText = "Uploading...";
+    const btn = document.getElementById('tabStreamAudioUpload');
+    btn.disabled = true;
+
+    const fd = new FormData();
+    fd.append("files", file);
+
+    try {
+        // Use generic upload
+        const res = await apiFetch(`${API_URL}/library/upload`, { method: 'POST', body: fd });
+        if(res.ok) {
+            status.innerText = "Uploaded!";
+            document.getElementById('uploadedStreamMusicName').value = file.name; // assuming simple name or backend returns it?
+            // The library upload endpoint returns success but doesn't strictly return the *renamed* file if any.
+            // However, StreamService looks for file in user dir. FileUploadService saves as originalFilename.
+            // So file.name should be correct.
+        } else {
+            status.innerText = "Error.";
+        }
+    } catch(e) { status.innerText = "Error."; }
+    finally { btn.disabled = false; }
 }
