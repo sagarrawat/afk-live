@@ -43,6 +43,10 @@ function setupEventListeners() {
     const streamMusicUpload = document.getElementById("streamAudioFile");
     if(streamMusicUpload) streamMusicUpload.addEventListener("change", handleStreamMusicUpload);
 
+    // Thumbnail Upload
+    const thumbInput = document.getElementById("scheduleThumbnail");
+    if(thumbInput) thumbInput.addEventListener("change", handleThumbnailSelect);
+
     // Live Preview
     document.getElementById('scheduleTitle')?.addEventListener('input', e => {
         document.getElementById('previewTitleMock').innerText = e.target.value || "Video Title";
@@ -349,10 +353,65 @@ function handleFileSelect(file) {
     document.getElementById('mediaPlaceholder').classList.add('hidden');
     document.getElementById('selectedFileDisplay').classList.remove('hidden');
     document.getElementById('fileName').innerText = file.name;
+    document.getElementById('thumbnailTools').classList.remove('hidden');
 
     // Auto title
     const titleInput = document.getElementById('scheduleTitle');
     if(!titleInput.value) titleInput.value = file.name.replace(/\.[^/.]+$/, "");
+}
+
+/* --- THUMBNAIL LOGIC --- */
+function handleThumbnailSelect(e) {
+    const file = e.target.files[0];
+    if (file) setThumbnailPreview(file);
+}
+
+function setThumbnailPreview(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('thumbPreview').innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;">`;
+    };
+    reader.readAsDataURL(file);
+}
+
+function extractFrame() {
+    const file = document.getElementById('scheduleFile').files[0];
+    if (!file) return showToast("No video selected", "error");
+
+    const video = document.getElementById('frameExtractorVideo');
+    const url = URL.createObjectURL(file);
+
+    video.src = url;
+    video.currentTime = 5; // Capture at 5s mark (or random)
+
+    // Once loaded and seeked
+    video.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+            // Create file from blob
+            const thumbFile = new File([blob], "thumbnail.jpg", { type: "image/jpeg" });
+
+            // Assign to input
+            const dt = new DataTransfer();
+            dt.items.add(thumbFile);
+            document.getElementById('scheduleThumbnail').files = dt.files;
+
+            setThumbnailPreview(thumbFile);
+            showToast("Thumbnail extracted!", "success");
+
+            // Clean up
+            URL.revokeObjectURL(url);
+        }, 'image/jpeg', 0.9);
+    };
+
+    // Trigger load
+    video.load();
 }
 
 async function submitSchedule() {
@@ -564,13 +623,14 @@ async function submitJob() {
 }
 
 async function stopStream() {
-    if(!confirm("Are you sure you want to end the stream?")) return;
-    try {
-        await apiFetch(`${API_URL}/stop`, {method:'POST'});
-        setLiveState(false);
-        showToast("Stream Stopped", "info");
-        stopTimer();
-    } catch(e) {}
+    showConfirmModal("End Stream", "Are you sure you want to stop the live stream?", async () => {
+        try {
+            await apiFetch(`${API_URL}/stop`, {method:'POST'});
+            setLiveState(false);
+            showToast("Stream Stopped", "info");
+            stopTimer();
+        } catch(e) {}
+    });
 }
 
 function setLiveState(isLive) {
@@ -654,10 +714,11 @@ function submitDestination() {
 
 function removeDestination(id, e) {
     e.stopPropagation();
-    if(!confirm("Remove this destination?")) return;
-    destinations = destinations.filter(d => d.id !== id);
-    saveDestinations();
-    renderDestinations();
+    showConfirmModal("Remove Destination", "Delete this stream key?", () => {
+        destinations = destinations.filter(d => d.id !== id);
+        saveDestinations();
+        renderDestinations();
+    });
 }
 
 function saveDestinations() {
@@ -802,19 +863,19 @@ async function loadLibraryVideos() {
 }
 
 async function deleteLibraryVideo(filename) {
-    if(!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
-
-    try {
-        const res = await apiFetch(`${API_URL}/delete?fileName=${encodeURIComponent(filename)}`, { method: 'DELETE' });
-        const data = await res.json();
-        if(res.ok && data.success) {
-            showToast("File deleted", "success");
-            loadLibraryVideos();
-            fetchUserInfo(); // Update storage usage
-        } else {
-            showToast(data.message || "Delete failed", "error");
-        }
-    } catch(e) { showToast("Error deleting file", "error"); }
+    showConfirmModal("Delete Video", `Delete "${filename}"? This cannot be undone.`, async () => {
+        try {
+            const res = await apiFetch(`${API_URL}/delete?fileName=${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            const data = await res.json();
+            if(res.ok && data.success) {
+                showToast("File deleted", "success");
+                loadLibraryVideos();
+                fetchUserInfo(); // Update storage usage
+            } else {
+                showToast(data.message || "Delete failed", "error");
+            }
+        } catch(e) { showToast("Error deleting file", "error"); }
+    });
 }
 
 async function handleBulkUpload(e) {
@@ -915,18 +976,18 @@ async function checkYoutubeStatus() {
 }
 
 async function cancelSubscription() {
-    if(!confirm("Are you sure you want to cancel your subscription? You will be downgraded to the Free plan immediately.")) return;
-
-    try {
-        const res = await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' });
-        const data = await res.json();
-        if(res.ok) {
-            showToast("Subscription cancelled.", "success");
-            setTimeout(() => window.location.reload(), 1500);
-        } else {
-            showToast(data.message || "Cancellation failed", "error");
-        }
-    } catch(e) { showToast("Error cancelling subscription", "error"); }
+    showConfirmModal("Cancel Subscription", "Are you sure? You will be downgraded to the Free plan immediately.", async () => {
+        try {
+            const res = await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' });
+            const data = await res.json();
+            if(res.ok) {
+                showToast("Subscription cancelled.", "success");
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(data.message || "Cancellation failed", "error");
+            }
+        } catch(e) { showToast("Error cancelling subscription", "error"); }
+    });
 }
 
 /* --- ANALYTICS & CALENDAR --- */
@@ -1280,6 +1341,31 @@ async function loadInternalPricing() {
     } catch(e) {
         grid.innerHTML = "Failed to load pricing.";
     }
+}
+
+/* --- MODALS --- */
+function openSupportModal() {
+    document.getElementById('supportModal').classList.remove('hidden');
+}
+
+let confirmCallback = null;
+
+function showConfirmModal(title, message, onConfirm) {
+    document.getElementById('confirmTitle').innerText = title;
+    document.getElementById('confirmMessage').innerText = message;
+    confirmCallback = onConfirm;
+    document.getElementById('confirmationModal').classList.remove('hidden');
+
+    const btn = document.getElementById('btnConfirmAction');
+    btn.onclick = () => {
+        if(confirmCallback) confirmCallback();
+        closeConfirmModal();
+    };
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmationModal').classList.add('hidden');
+    confirmCallback = null;
 }
 
 let selectedPlanId = null;
