@@ -318,6 +318,18 @@ body {
 
     .view-section { padding: 16px; }
 
+    /* Settings Mobile */
+    .settings-container { flex-direction: column; height: auto; overflow: visible; }
+    .settings-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: 10px 0; overflow-x: auto; display: flex; }
+    .settings-nav-item { border-left: none; border-bottom: 3px solid transparent; white-space: nowrap; }
+    .settings-nav-item.active { border-left-color: transparent; border-bottom-color: var(--primary); }
+    .settings-content { padding: 20px; overflow: visible; }
+
+    /* Community Mobile */
+    .community-grid-layout { grid-template-columns: 1fr; height: auto; min-height: 80vh; }
+    .comm-sidebar { display: none; } /* Hide folders on mobile or implement tab switcher */
+    /* For simplicity, we might hide sidebar and just show list/detail logic managed by JS toggling hidden classes */
+
     /* Overlay for sidebar */
     .sidebar-overlay {
         position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 900;

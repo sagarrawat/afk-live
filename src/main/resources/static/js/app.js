@@ -669,6 +669,13 @@ async function submitJob() {
             setLiveState(true);
             streamStartTime = new Date();
             startTimer();
+
+            // Save state
+            localStorage.setItem('afk_stream_state', JSON.stringify({
+                startTime: streamStartTime.toISOString(),
+                videoTitle: selectedStreamVideo ? selectedStreamVideo.title : "Unknown Video",
+                videoId: selectedStreamVideo ? selectedStreamVideo.id : null
+            }));
         } else {
             showToast(data.message, "error");
         }
@@ -690,6 +697,7 @@ async function stopStream() {
             setLiveState(false);
             showToast("Stream Stopped", "info");
             stopTimer();
+            localStorage.removeItem('afk_stream_state');
         } catch(e) {}
     });
 }
@@ -875,10 +883,37 @@ async function checkInitialStatus() {
     try {
         const res = await apiFetch(`${API_URL}/status`);
         const data = await res.json();
+
+        const savedState = localStorage.getItem('afk_stream_state');
+        let stateObj = savedState ? JSON.parse(savedState) : null;
+
         if(data.success && data.data.live) {
             setLiveState(true);
-            streamStartTime = new Date(); // Start from now if live
+            // If we have saved start time, use it
+            if (stateObj && stateObj.startTime) {
+                streamStartTime = new Date(stateObj.startTime);
+            } else {
+                streamStartTime = new Date();
+            }
             startTimer();
+
+            // Restore UI selection if possible
+            if (stateObj) {
+                if (stateObj.videoTitle) {
+                    document.getElementById('selectedVideoTitle').innerText = stateObj.videoTitle;
+                    document.getElementById('previewPlaceholder').classList.add('hidden');
+                    const player = document.getElementById('previewPlayer');
+                    player.classList.remove('hidden');
+                    // We can't easily restore the exact video src without the ID,
+                    // but we can try if state has it.
+                    // Assuming stateObj has videoId if we save it.
+                }
+            }
+        } else {
+            // Backend says offline, clear local state
+            if (stateObj) {
+                localStorage.removeItem('afk_stream_state');
+            }
         }
     } catch(e){}
 }
@@ -1359,13 +1394,15 @@ function loadBenefits() {
 
     const p = currentUser.plan;
     const storageLimitMB = (p.storageLimit / 1024 / 1024).toFixed(0);
+    // UserController returns streamLimit, not maxStreams
+    const streams = p.streamLimit !== undefined ? p.streamLimit : (p.maxStreams || 1);
 
     document.getElementById('benefitsContent').innerHTML = `
         <div class="card">
             <h3>Current Plan: <span style="color:var(--primary)">${p.name}</span></h3>
             <ul style="margin-top:20px; line-height:2;">
                 <li><i class="fa-solid fa-hard-drive"></i> <b>${storageLimitMB} MB</b> Storage Limit</li>
-                <li><i class="fa-solid fa-video"></i> <b>${p.maxStreams}</b> Concurrent Streams</li>
+                <li><i class="fa-solid fa-video"></i> <b>${streams}</b> Concurrent Streams</li>
                 <li><i class="fa-solid fa-users"></i> ${p.name === 'FREE' ? 'Single User' : 'Team Access'}</li>
                 <li><i class="fa-solid fa-robot"></i> ${p.name === 'FREE' ? 'Basic AI' : 'Advanced AI'} Features</li>
             </ul>
