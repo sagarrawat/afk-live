@@ -1,454 +1,755 @@
 const API_URL = "/api";
-let uploadedFileName = "";
 let currentUser = null;
-let logInterval = null;
 
+// On Load
 document.addEventListener("DOMContentLoaded", async () => {
-    await fetchUserInfo(); // Check login
-    
-    // Header User Profile
-    const userHeader = document.getElementById("userHeader");
-    if (userHeader) {
-        userHeader.addEventListener("click", () => {
-            if (!currentUser) showLoginModal();
-        });
-    }
-
-    // Initialize Views
+    await fetchUserInfo();
     loadGlobalSettings();
-    // loadLibrary();
-    loadScheduledQueue(); // For publish view
     checkYoutubeStatus();
+    loadUserChannels();
+    loadScheduledQueue();
 
-    // Event Listeners: Composer
+    // Event Listeners
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    // Drop Zone
     const dropZone = document.getElementById("dropZone");
-    if (dropZone) {
+    if(dropZone) {
         dropZone.addEventListener("click", () => document.getElementById("scheduleFile").click());
-        // Simple drag and drop could be added here
-    }
-    const scheduleFile = document.getElementById("scheduleFile");
-    if (scheduleFile) {
-        scheduleFile.addEventListener("change", handleScheduleFileSelect);
-    }
-
-    // Event Listeners: Stream Library
-    const videoFile = document.getElementById("videoFile");
-    if(videoFile) {
-        videoFile.addEventListener("change", handleFileUpload);
-    }
-
-    // Event Listeners: Audio
-    const musicDropZone = document.getElementById("musicDropZone");
-    if (musicDropZone) {
-        musicDropZone.addEventListener("click", () => document.getElementById("musicFile").click());
-        document.getElementById("musicFile").addEventListener("change", handleMusicUpload);
-    }
-
-    const volumeSlider = document.getElementById("volumeSlider");
-    if (volumeSlider) {
-        volumeSlider.addEventListener("input", (e) => {
-            document.getElementById("volValue").innerText = e.target.value + "%";
-            document.getElementById("audioPreview").volume = e.target.value / 100;
+        dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.style.background = "#e3f2fd"; });
+        dropZone.addEventListener("dragleave", (e) => { e.preventDefault(); dropZone.style.background = ""; });
+        dropZone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropZone.style.background = "";
+            const files = e.dataTransfer.files;
+            if(files.length) handleFileSelect(files[0]);
         });
     }
+
+    const sFile = document.getElementById("scheduleFile");
+    if(sFile) sFile.addEventListener("change", (e) => handleFileSelect(e.target.files[0]));
 
     // Bulk Upload
     const bulkInput = document.getElementById("bulkUploadInput");
     if(bulkInput) bulkInput.addEventListener("change", handleBulkUpload);
 
-    // Stream Direct Upload
+    // Stream Upload
     const streamUpload = document.getElementById("streamUploadInput");
     if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
-});
 
-/* --- VIEW SWITCHING --- */
-function switchView(viewName) {
-    // Update Sidebar
-    document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
-    document.querySelector(`[data-target="view-${viewName}"]`)?.classList.add('active');
-
-    // Update Main Content
-    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-    document.getElementById(`view-${viewName}`).classList.remove('hidden');
-
-    // Update Header Title
-    const titles = {
-        'publish': 'Publishing',
-        'stream': 'Live Studio',
-        'calendar': 'Calendar',
-        'analytics': 'Analytics',
-        'library': 'Library',
-        'community': 'Community',
-        'settings': 'Settings'
-    };
-    document.getElementById('pageTitle').innerText = titles[viewName] || 'Dashboard';
-
-    // Lazy Load
-    if (viewName === 'calendar') {
-        setTimeout(initCalendar, 100); // Small delay to ensure visibility
-    }
-    if (viewName === 'analytics') {
-        setTimeout(initAnalytics, 50);
-    }
-    if (viewName === 'library') {
-        loadLibraryVideos();
-    }
-    if (viewName === 'community') {
-        loadComments();
-    }
-}
-
-/* --- COMMUNITY LOGIC --- */
-let activeThreadId = null;
-let currentComments = [];
-
-document.addEventListener("DOMContentLoaded", () => {
-    // ... existing init ...
-    const searchInput = document.querySelector('.search-bar input');
-    if(searchInput) {
-        searchInput.addEventListener('input', (e) => filterComments(e.target.value));
-    }
-});
-
-async function loadComments() {
-    const list = document.getElementById('threadList');
-    list.innerHTML = '<p style="padding:20px; text-align:center;">Loading...</p>';
-
-    try {
-        const res = await fetch(`${API_URL}/comments`);
-        const data = await res.json();
-
-        if (!data.items || data.items.length === 0) {
-            list.innerHTML = '<p style="padding:20px; text-align:center;">No comments found.</p>';
-            return;
-        }
-
-        currentComments = data.items;
-        renderThreadList(data.items);
-    } catch (e) {
-        list.innerHTML = '<p style="padding:20px; text-align:center; color:red;">Failed to load.</p>';
-        console.error(e);
-    }
-}
-
-function filterComments(query) {
-    if (!query) {
-        renderThreadList(currentComments);
-        return;
-    }
-    const lower = query.toLowerCase();
-    const filtered = currentComments.filter(t => {
-        const snip = t.snippet.topLevelComment.snippet;
-        return snip.textDisplay.toLowerCase().includes(lower) ||
-               snip.authorDisplayName.toLowerCase().includes(lower);
+    // Live Preview
+    document.getElementById('scheduleTitle')?.addEventListener('input', e => {
+        document.getElementById('previewTitleMock').innerText = e.target.value || "Video Title";
     });
-    renderThreadList(filtered);
-}
-
-function renderThreadList(threads) {
-    const list = document.getElementById('threadList');
-    list.innerHTML = '';
-
-    if(threads.length === 0) {
-        list.innerHTML = '<p style="padding:20px; text-align:center; color:#999;">No matches found.</p>';
-        return;
-    }
-
-    threads.forEach(thread => {
-        const top = thread.snippet.topLevelComment.snippet;
-        const div = document.createElement('div');
-        div.className = 'thread-item';
-        if (thread.id === activeThreadId) div.classList.add('active');
-
-        div.onclick = () => selectThread(thread.id);
-
-        div.innerHTML = `
-            <img src="${top.authorProfileImageUrl}" class="thread-avatar">
-            <div class="thread-info">
-                <div class="thread-name">${top.authorDisplayName}</div>
-                <div class="thread-preview">${top.textDisplay}</div>
-                <div class="thread-meta">${new Date(top.publishedAt).toLocaleDateString()} • on ${thread.snippet.videoId}</div>
-            </div>
-        `;
-        list.appendChild(div);
+    document.getElementById('scheduleDescription')?.addEventListener('input', e => {
+        document.getElementById('previewDescMock').innerText = e.target.value || "Description will appear here...";
     });
 }
 
-function selectThread(id) {
-    activeThreadId = id;
-    renderThreadList(currentComments); // Re-render to update active state
+async function handleStreamVideoUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    const thread = currentComments.find(t => t.id === id);
-    if (!thread) return;
-
-    document.getElementById('emptyThreadState').classList.add('hidden');
-    document.getElementById('activeThread').classList.remove('hidden');
-
-    // Header
-    // We don't have video title in comment resource unfortunately, only videoId.
-    // Ideally we would fetch it, but for now use ID.
-    document.getElementById('threadVideoTitle').innerText = "Video ID: " + thread.snippet.videoId;
-    document.getElementById('threadVideoLink').href = `https://youtube.com/watch?v=${thread.snippet.videoId}&lc=${thread.id}`;
-
-    const container = document.getElementById('threadMessages');
-    container.innerHTML = '';
-
-    // Top Level
-    const top = thread.snippet.topLevelComment;
-    renderMessage(container, top, false);
-
-    // Replies
-    if (thread.replies && thread.replies.comments) {
-        thread.replies.comments.forEach(reply => renderMessage(container, reply, true));
-    }
-}
-
-function renderMessage(container, comment, isReply) {
-    const snippet = comment.snippet;
-    const div = document.createElement('div');
-    div.className = `message-bubble ${isReply ? 'reply' : ''}`;
-
-    div.innerHTML = `
-        <img src="${snippet.authorProfileImageUrl}">
-        <div class="bubble-content">
-            <div class="bubble-header">
-                <b>${snippet.authorDisplayName}</b>
-                <span>${new Date(snippet.publishedAt).toLocaleString()}</span>
-                ${canDelete(comment) ? `<i class="fa-solid fa-trash delete-btn" onclick="deleteComment('${comment.id}')"></i>` : ''}
-            </div>
-            <div class="bubble-text">${snippet.textDisplay}</div>
-        </div>
-    `;
-    container.appendChild(div);
-}
-
-function canDelete(comment) {
-    // Crude check: if author is me (connected user).
-    // In reality, channel owner can delete any comment.
-    // We'll assume we can try to delete any for now, backend will reject if not allowed.
-    return true;
-}
-
-async function sendReply() {
-    if (!activeThreadId) return;
-    const input = document.getElementById('replyInput');
-    const text = input.value;
-    if (!text) return;
-
-    const btn = document.querySelector('.reply-box button');
-    btn.disabled = true;
-
-    try {
-        const res = await fetch(`${API_URL}/comments/${activeThreadId}/reply`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ text })
-        });
-        const data = await res.json();
-
-        if (data.success) {
-            input.value = '';
-            // Refresh comments to show new reply
-            loadComments();
-            // Note: Optimistic UI update would be better here for "Apple" feel
-        } else {
-            alert("Error: " + data.message);
-        }
-    } catch (e) {
-        alert("Reply failed");
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-async function deleteComment(id) {
-    if (!confirm("Are you sure you want to delete this comment?")) return;
-
-    try {
-        const res = await fetch(`${API_URL}/comments/${id}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.success) {
-            loadComments();
-            // If we deleted the top level, close the thread view
-            if (id === activeThreadId) {
-                document.getElementById('emptyThreadState').classList.remove('hidden');
-                document.getElementById('activeThread').classList.add('hidden');
-                activeThreadId = null;
-            }
-        } else {
-            alert("Error: " + data.message);
-        }
-    } catch(e) {
-        alert("Delete failed");
-    }
-}
-
-/* --- CALENDAR LOGIC --- */
-function initCalendar() {
-    var calendarEl = document.getElementById('calendar');
-    if (!calendarEl) return;
-
-    var calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        },
-        themeSystem: 'standard',
-        events: async function(info, successCallback, failureCallback) {
-            try {
-                const res = await fetch(`${API_URL}/videos`);
-                const videos = await res.json();
-                const events = videos.map(v => ({
-                    title: v.title,
-                    start: v.scheduledTime,
-                    color: v.status === 'UPLOADED' ? '#2ba640' : (v.status === 'FAILED' ? '#cc0000' : '#2c68f6')
-                }));
-                successCallback(events);
-            } catch (e) {
-                failureCallback(e);
-            }
-        },
-        eventClick: function(info) {
-            alert('Video: ' + info.event.title + '\nScheduled: ' + info.event.start.toLocaleString());
-        }
-    });
-    calendar.render();
-}
-
-/* --- ANALYTICS LOGIC --- */
-let analyticsChart = null;
-
-async function initAnalytics() {
-    const ctx = document.getElementById('analyticsChart');
-    if (!ctx) return;
-
-    const range = document.getElementById('analyticsRange').value;
-    const endDate = new Date().toISOString().split('T')[0];
-    const startDateDate = new Date();
-    startDateDate.setDate(startDateDate.getDate() - parseInt(range));
-    const startDate = startDateDate.toISOString().split('T')[0];
-
-    try {
-        const res = await fetch(`${API_URL}/analytics?startDate=${startDate}&endDate=${endDate}`);
-        const data = await res.json();
-
-        // Update Summary
-        document.getElementById('totalViews').innerText = data.summary.totalViews.toLocaleString();
-        document.getElementById('totalSubs').innerText = data.summary.totalSubs.toLocaleString();
-        document.getElementById('totalWatchTime').innerText = data.summary.totalWatchTime.toLocaleString();
-
-        if (analyticsChart) {
-            analyticsChart.destroy();
-        }
-
-        analyticsChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.labels,
-                datasets: [{
-                    label: 'Views',
-                    data: data.views,
-                    borderColor: '#2c68f6',
-                    backgroundColor: 'rgba(44, 104, 246, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }, {
-                    label: 'Subscribers Gained',
-                    data: data.subs,
-                    borderColor: '#27c93f',
-                    backgroundColor: 'rgba(39, 201, 63, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    hidden: true // Hide by default to keep clean
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: '#f0f0f0' }
-                    },
-                    x: {
-                        grid: { display: false }
-                    }
-                }
-            }
-        });
-    } catch(e) {
-        console.error("Failed to load analytics", e);
-    }
-}
-
-/* --- LIBRARY LOGIC --- */
-async function loadLibraryVideos() {
-    try {
-        const res = await fetch(`${API_URL}/library`);
-        const data = await res.json();
-        const container = document.getElementById('libraryList');
-
-        if (data.data.length === 0) {
-            container.innerHTML = `<div class="empty-state">No videos in library. Upload some!</div>`;
-            return;
-        }
-
-        container.innerHTML = '';
-        data.data.forEach(v => {
-            container.innerHTML += `
-                <div class="queue-item">
-                    <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
-                    <div class="queue-details">
-                        <h4>${v.title}</h4>
-                        <div class="queue-meta">Status: <span style="color:var(--text-secondary)">${v.status}</span></div>
-                    </div>
-                </div>`;
-        });
-    } catch (e) {
-        console.error("Failed to load library", e);
-    }
-}
-
-async function handleBulkUpload(e) {
-    const files = e.target.files;
-    if (!files.length) return;
-
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-        formData.append("files", files[i]);
-    }
-
-    const btn = document.querySelector('button[onclick*="bulkUploadInput"]');
+    const btn = document.querySelector('button[onclick*="streamUploadInput"]');
     const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerText = "Uploading...";
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading...`;
+
+    const formData = new FormData();
+    formData.append("files", file);
 
     try {
-        const res = await fetch(`${API_URL}/library/upload`, {
-            method: 'POST',
-            body: formData
-        });
-        const data = await res.json();
+        // Re-use library upload endpoint, or a specific stream upload if exists
+        // Plan says "Re-use library upload endpoint" usually or check StreamController
+        // StreamController has /upload but that returns a key. LibraryController has /library/upload
+        // Let's use /api/upload from StreamController as it might be simpler or intended for temp usage
+        // Actually, previous code used /library/upload. Let's stick to that for consistency.
+
+        const res = await apiFetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
+
         if (res.ok) {
-            alert(data.message);
-            loadLibraryVideos();
+            showToast("Video uploaded successfully!", "success");
+            // Auto-refresh library modal content
+            openLibraryModalForStream();
         } else {
-            alert("Error: " + data.message);
+            showToast("Upload failed.", "error");
         }
     } catch (err) {
-        alert("Upload failed");
+        showToast("Upload error.", "error");
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
         e.target.value = '';
     }
+}
+
+/* --- NAVIGATION & VIEW SWITCHING --- */
+function switchView(viewName) {
+    // Hide all views
+    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+
+    // Show target view
+    const target = document.getElementById(`view-${viewName}`);
+    if(target) target.classList.remove('hidden');
+
+    // Update Menu Active State
+    document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`[data-target="view-${viewName}"]`)?.classList.add('active');
+
+    // Update Header Title (Mobile/Sidebar)
+    const titles = {
+        'publish': 'Publishing',
+        'stream': 'Live Studio',
+        'calendar': 'Calendar',
+        'analytics': 'Analytics',
+        'library': 'Media Library',
+        'community': 'Engagement',
+        'settings': 'Settings'
+    };
+    const title = titles[viewName] || 'AFK Live';
+    const sidebarTitle = document.getElementById('sidebarTitle');
+    if(sidebarTitle) sidebarTitle.innerText = title;
+
+    // View specific init
+    if (viewName === 'calendar') setTimeout(initCalendar, 100);
+    if (viewName === 'analytics') setTimeout(initAnalytics, 100);
+    if (viewName === 'library') loadLibraryVideos();
+    if (viewName === 'community') loadComments();
+
+    // Close mobile menu if open
+    document.querySelector('.sub-sidebar')?.classList.remove('open');
+}
+
+function toggleMobileMenu() {
+    const sb = document.getElementById('subSidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+
+    if (sb.classList.contains('open')) {
+        sb.classList.remove('open');
+        if(overlay) overlay.classList.remove('active');
+    } else {
+        sb.classList.add('open');
+        if(overlay) overlay.classList.add('active');
+    }
+}
+
+/* --- API HELPER --- */
+async function apiFetch(url, options = {}) {
+    try {
+        const res = await fetch(url, options);
+        if (res.status === 401 || res.status === 403) {
+            // Check if it's a YouTube specific auth error (usually returned as 401/403 with message)
+            // But usually 401 means "Login required"
+            // Let's read the body to see if it mentions "YouTube"
+            const body = await res.clone().json().catch(() => ({}));
+
+            if (body.message && (body.message.includes("YouTube") || body.message.includes("connected"))) {
+                // Show "Connect Channel" modal
+                document.getElementById('addChannelModal').classList.remove('hidden');
+                showToast("Please connect your YouTube channel.", "error");
+            } else {
+                // Standard Login
+                window.location.href = '/login';
+            }
+            throw new Error("Authentication required");
+        }
+        return res;
+    } catch (e) {
+        throw e;
+    }
+}
+
+/* --- USER & CHANNELS --- */
+async function fetchUserInfo() {
+    try {
+        const res = await apiFetch('/api/user-info');
+        const data = await res.json();
+        if (data.email) {
+            currentUser = data;
+
+            // Update Avatar in sidebar
+            const avatar = document.getElementById('userAvatarSmall');
+            const settingsIcon = document.getElementById('settingsIcon');
+            if(avatar) {
+                avatar.src = data.picture;
+                avatar.classList.remove('hidden');
+                settingsIcon.classList.add('hidden');
+            }
+
+            // Plan Info
+            if(data.plan) renderPlanInfo(data.plan);
+
+            // Verification Warning
+            if(data.enabled === false) {
+                document.getElementById('verificationBanner').classList.remove('hidden');
+            }
+
+            // Resume Stream State
+            checkInitialStatus();
+        } else {
+            // Not logged in?
+            window.location.href = '/login';
+        }
+    } catch(e) {}
+}
+
+let userChannels = [];
+let selectedChannelId = null;
+
+async function loadUserChannels() {
+    try {
+        const res = await apiFetch(`${API_URL}/channels`);
+        userChannels = await res.json();
+
+        renderChannelList(userChannels);
+    } catch(e) {
+        console.error("Failed to load channels", e);
+    }
+}
+
+function renderChannelList(channels) {
+    // 1. Sidebar Icons
+    const sidebarList = document.getElementById('channelIconsList');
+    if(sidebarList) {
+        sidebarList.innerHTML = '';
+        channels.forEach((c, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'icon-btn';
+            if(idx === 0) btn.classList.add('active');
+            btn.innerHTML = `<img src="${c.profileUrl}" title="${c.name}">`;
+            btn.onclick = () => {
+                document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                filterViewByChannel(c);
+            };
+            sidebarList.appendChild(btn);
+        });
+    }
+
+    // 2. Settings List
+    const settingsList = document.getElementById('channelListSettings');
+    if(settingsList) {
+        settingsList.innerHTML = '';
+        channels.forEach(c => {
+            settingsList.innerHTML += `
+                <div class="queue-item">
+                    <div class="queue-thumb"><img src="${c.profileUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"></div>
+                    <div style="flex:1">
+                        <b>${c.name}</b>
+                        <div style="font-size:0.8rem;color:#666">${c.platform}</div>
+                    </div>
+                    <button class="btn btn-sm btn-danger" onclick="removeChannel(${c.id})"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `;
+        });
+    }
+
+    // 3. Modal Selector (New Post)
+    const modalList = document.getElementById('modalChannelSelector');
+    if(modalList) {
+        modalList.innerHTML = '';
+        channels.forEach((c, idx) => {
+             const div = document.createElement('div');
+             div.className = 'channel-icon-select';
+             if(idx === 0) {
+                 div.classList.add('selected');
+                 selectedChannelId = c.id;
+             }
+             div.innerHTML = `<img src="${c.profileUrl}" title="${c.name}">`;
+             div.onclick = () => {
+                 document.querySelectorAll('.channel-icon-select').forEach(el => el.classList.remove('selected'));
+                 div.classList.add('selected');
+                 selectedChannelId = c.id;
+             };
+             modalList.appendChild(div);
+        });
+    }
+}
+
+function filterViewByChannel(channel) {
+    // Update label in sub-sidebar
+    const nameEl = document.getElementById('currentChannelName');
+    if(nameEl) nameEl.innerText = channel.name;
+
+    // TODO: Filter queue list logic
+    showToast(`Switched to ${channel.name}`, 'info');
+}
+
+function addMockChannel() {
+    document.getElementById('newChannelName').value = '';
+    document.getElementById('addChannelModal').classList.remove('hidden');
+    document.getElementById('newChannelName').focus();
+}
+
+async function submitAddChannel() {
+    const name = document.getElementById('newChannelName').value;
+    if(!name) {
+        showToast("Please enter a channel name", "error");
+        return;
+    }
+
+    // Simulate API call delay for realism
+    const btn = document.querySelector('#addChannelModal .btn-primary');
+    const originalText = btn.innerText;
+    btn.innerText = "Connecting...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${API_URL}/channels`, {
+             method: 'POST',
+             headers: {'Content-Type': 'application/json'},
+             body: JSON.stringify({name: name})
+        });
+        if(res.ok) {
+            showToast("Channel Connected Successfully", "success");
+            document.getElementById('addChannelModal').classList.add('hidden');
+            loadUserChannels();
+        } else {
+             showToast("Connection failed", "error");
+        }
+    } catch(e) {
+        showToast("Error adding channel", "error");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+
+/* --- PUBLISHING --- */
+function showScheduleModal() {
+    document.getElementById('scheduleModal').classList.remove('hidden');
+    // Load categories if empty
+    const cat = document.getElementById('scheduleCategory');
+    if(cat.options.length === 0) {
+        apiFetch(`${API_URL}/youtube/categories`)
+            .then(r=>r.json())
+            .then(data => {
+                 data.forEach(c => {
+                     if(c.snippet.assignable) {
+                         cat.innerHTML += `<option value="${c.id}">${c.snippet.title}</option>`;
+                     }
+                 });
+            }).catch(()=>{});
+    }
+}
+
+function closeScheduleModal() {
+    document.getElementById('scheduleModal').classList.add('hidden');
+}
+
+function handleFileSelect(file) {
+    if(!file) return;
+    document.getElementById('mediaPlaceholder').classList.add('hidden');
+    document.getElementById('selectedFileDisplay').classList.remove('hidden');
+    document.getElementById('fileName').innerText = file.name;
+
+    // Auto title
+    const titleInput = document.getElementById('scheduleTitle');
+    if(!titleInput.value) titleInput.value = file.name.replace(/\.[^/.]+$/, "");
+}
+
+async function submitSchedule() {
+    const file = document.getElementById('scheduleFile').files[0];
+    const title = document.getElementById('scheduleTitle').value;
+    const time = document.getElementById('scheduleTime').value;
+
+    if(!file || !title || !time) return showToast("Please fill Title, Time and select a Video.", "error");
+
+    const btn = document.getElementById('btnSchedule');
+    btn.disabled = true;
+    btn.innerText = "Uploading...";
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("title", title);
+    formData.append("scheduledTime", time);
+    formData.append("description", document.getElementById('scheduleDescription').value);
+    formData.append("privacyStatus", document.getElementById('schedulePrivacy').value);
+    formData.append("categoryId", document.getElementById('scheduleCategory').value);
+    formData.append("tags", document.getElementById('scheduleTags').value);
+    if(selectedChannelId) formData.append("socialChannelId", selectedChannelId);
+
+    // Audio
+    const audioFile = document.getElementById('scheduleAudio').files[0];
+    const audioTrackId = document.getElementById('selectedAudioTrackId').value;
+
+    if (audioFile || audioTrackId) {
+        const volPercent = document.getElementById('scheduleAudioVol').value;
+        const vol = (volPercent / 100).toFixed(1);
+
+        if (audioFile) formData.append("audioFile", audioFile);
+        if (audioTrackId) formData.append("audioTrackId", audioTrackId);
+
+        formData.append("audioVolume", vol);
+    }
+
+    // Progress
+    const pContainer = document.getElementById('uploadProgressContainer');
+    const pBar = document.getElementById('uploadProgressBar');
+    const pText = document.getElementById('uploadPercent');
+    pContainer.classList.remove('hidden');
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/videos/schedule`, true);
+
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            pBar.style.width = percent + "%";
+            pText.innerText = percent + "%";
+        }
+    };
+
+    xhr.onload = () => {
+        btn.disabled = false;
+        btn.innerText = "Schedule Post";
+        pContainer.classList.add('hidden');
+        if(xhr.status === 200) {
+            showToast("Video Scheduled!", "success");
+            closeScheduleModal();
+            loadScheduledQueue();
+        } else {
+            showToast("Upload Failed", "error");
+        }
+    };
+
+    xhr.onerror = () => {
+        btn.disabled = false;
+        showToast("Network Error", "error");
+    };
+
+    xhr.send(formData);
+}
+
+async function loadScheduledQueue() {
+    const list = document.getElementById('queueList');
+    if(!list) return;
+
+    try {
+        const res = await apiFetch(`${API_URL}/videos`);
+        const videos = await res.json();
+
+        list.innerHTML = '';
+        if(videos.length === 0) {
+            list.innerHTML = `<div class="empty-state">No posts in queue.</div>`;
+            return;
+        }
+
+        videos.forEach(v => {
+            const statusClass = v.status === 'UPLOADED' ? 'color:#00875a' : (v.status === 'FAILED' ? 'color:#e02424' : 'color:#6b778c');
+            list.innerHTML += `
+                <div class="queue-item">
+                    <div class="queue-thumb"><i class="fa-solid fa-film"></i></div>
+                    <div style="flex:1">
+                        <div style="font-weight:600">${v.title}</div>
+                        <div style="font-size:0.85rem; color:#666">
+                            Scheduled: ${new Date(v.scheduledTime).toLocaleString()}
+                        </div>
+                    </div>
+                    <div style="font-size:0.85rem; font-weight:600; ${statusClass}">${v.status}</div>
+                </div>
+            `;
+        });
+    } catch(e) {}
+}
+
+/* --- STREAMING --- */
+let selectedStreamVideo = null;
+let streamTimerInterval = null;
+let streamStartTime = null;
+
+async function openLibraryModalForStream() {
+    document.getElementById('streamLibraryModal').classList.remove('hidden');
+    const list = document.getElementById('streamLibraryList');
+    list.innerHTML = "Loading...";
+
+    try {
+        const res = await apiFetch(`${API_URL}/library`);
+        const data = await res.json();
+        list.innerHTML = '';
+
+        if(!data.data || data.data.length === 0) {
+            list.innerHTML = "No videos in library.";
+            return;
+        }
+
+        data.data.forEach(v => {
+             const div = document.createElement('div');
+             div.className = 'queue-item';
+             div.style.cursor = 'pointer';
+             div.innerHTML = `<i class="fa-solid fa-film"></i> ${v.title}`;
+             div.onclick = () => {
+                 selectStreamVideo(v);
+                 document.getElementById('streamLibraryModal').classList.add('hidden');
+             };
+             list.appendChild(div);
+        });
+    } catch(e) {}
+}
+
+function selectStreamVideo(video) {
+    selectedStreamVideo = video;
+    document.getElementById('selectedVideoTitle').innerText = video.title;
+
+    // Preview
+    const player = document.getElementById('previewPlayer');
+    document.getElementById('previewPlaceholder').classList.add('hidden');
+    player.classList.remove('hidden');
+
+    // Use the streaming endpoint
+    player.src = `${API_URL}/library/stream/${video.id}`;
+    player.load();
+}
+
+async function submitJob() {
+    const key = document.getElementById('streamKey').value;
+    const loopCount = document.getElementById('streamLoopCount').value;
+
+    if(!selectedStreamVideo) return showToast("Please select a video source", "error");
+    if(!key) return showToast("Please select a destination or enter stream key", "error");
+
+    const btn = document.getElementById('btnGoLive');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Starting...';
+
+    const fd = new FormData();
+    fd.append("streamKey", key);
+    fd.append("videoKey", selectedStreamVideo.s3Key);
+    fd.append("loopCount", loopCount);
+
+    try {
+        const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
+        const data = await res.json();
+        if(data.success) {
+            showToast("Stream Started Successfully!", "success");
+            setLiveState(true);
+            streamStartTime = new Date();
+            startTimer();
+        } else {
+            showToast(data.message, "error");
+        }
+    } catch(e) { showToast("Failed to start stream", "error"); }
+    finally {
+        btn.disabled = false;
+        if(!document.getElementById('liveBadge').classList.contains('hidden')) {
+             btn.classList.add('hidden');
+        } else {
+             btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Go Live';
+        }
+    }
+}
+
+async function stopStream() {
+    if(!confirm("Are you sure you want to end the stream?")) return;
+    try {
+        await apiFetch(`${API_URL}/stop`, {method:'POST'});
+        setLiveState(false);
+        showToast("Stream Stopped", "info");
+        stopTimer();
+    } catch(e) {}
+}
+
+function setLiveState(isLive) {
+    const badge = document.getElementById('liveBadge');
+    const offlineBadge = document.getElementById('offlineBadge');
+    const btnGo = document.getElementById('btnGoLive');
+    const btnStop = document.getElementById('btnStop');
+
+    if(isLive) {
+        badge.classList.remove('hidden');
+        offlineBadge.classList.add('hidden');
+        btnGo.classList.add('hidden');
+        btnStop.classList.remove('hidden');
+        log("Stream is LIVE");
+    } else {
+        badge.classList.add('hidden');
+        offlineBadge.classList.remove('hidden');
+        btnGo.classList.remove('hidden');
+        btnStop.classList.add('hidden');
+        log("Stream Offline");
+        stopTimer();
+    }
+}
+
+function log(msg) {
+    const t = document.getElementById('console');
+    if(t) {
+        t.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        t.scrollTop = t.scrollHeight;
+    }
+}
+
+/* --- DESTINATIONS --- */
+let destinations = [];
+
+function loadDestinations() {
+    const saved = localStorage.getItem('afk_destinations');
+    if(saved) destinations = JSON.parse(saved);
+    renderDestinations();
+}
+
+function addDestination() {
+    document.getElementById('newDestName').value = '';
+    document.getElementById('newDestKey').value = '';
+    document.getElementById('addDestinationModal').classList.remove('hidden');
+    document.getElementById('newDestName').focus();
+}
+
+function submitDestination() {
+    const name = document.getElementById('newDestName').value;
+    const key = document.getElementById('newDestKey').value;
+
+    if(!name || !key) {
+        showToast("Please fill all fields", "error");
+        return;
+    }
+
+    destinations.push({ id: Date.now(), name, key });
+    saveDestinations();
+    renderDestinations();
+    selectDestination(destinations[destinations.length-1].id);
+
+    document.getElementById('addDestinationModal').classList.add('hidden');
+    showToast("Destination Added", "success");
+}
+
+function removeDestination(id, e) {
+    e.stopPropagation();
+    if(!confirm("Remove this destination?")) return;
+    destinations = destinations.filter(d => d.id !== id);
+    saveDestinations();
+    renderDestinations();
+}
+
+function saveDestinations() {
+    localStorage.setItem('afk_destinations', JSON.stringify(destinations));
+}
+
+function renderDestinations() {
+    const list = document.getElementById('destinationList');
+    if(!list) return;
+    list.innerHTML = '';
+
+    if(destinations.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state" style="padding: 20px; text-align: center;">
+                <p style="margin-bottom: 10px; color: #666;">No stream destinations added.</p>
+                <button class="btn btn-outline btn-sm" onclick="addDestination()">
+                    <i class="fa-solid fa-plus"></i> Add Stream Key
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    destinations.forEach(d => {
+        const div = document.createElement('div');
+        div.className = 'destination-item';
+        div.onclick = () => selectDestination(d.id);
+        div.dataset.id = d.id;
+        div.innerHTML = `
+            <div class="dest-icon"><i class="fa-solid fa-key"></i></div>
+            <div style="flex:1"><b>${d.name}</b></div>
+            <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)"><i class="fa-solid fa-trash"></i></button>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function selectDestination(id) {
+    const dest = destinations.find(d => d.id === id);
+    if(!dest) return;
+
+    document.getElementById('streamKey').value = dest.key;
+    document.querySelectorAll('.destination-item').forEach(el => {
+        el.classList.remove('active');
+        if(parseInt(el.dataset.id) === id) el.classList.add('active');
+    });
+}
+
+/* --- TIMER --- */
+function startTimer() {
+    stopTimer();
+    const el = document.getElementById('streamTimer');
+    if(!el) return;
+
+    streamTimerInterval = setInterval(() => {
+        if(!streamStartTime) return;
+        const diff = Math.floor((new Date() - streamStartTime) / 1000);
+        const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+        const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        el.innerText = `${h}:${m}:${s}`;
+    }, 1000);
+}
+
+function stopTimer() {
+    if(streamTimerInterval) clearInterval(streamTimerInterval);
+    const el = document.getElementById('streamTimer');
+    if(el) el.innerText = "00:00:00";
+}
+
+async function checkInitialStatus() {
+    try {
+        const res = await apiFetch(`${API_URL}/status`);
+        const data = await res.json();
+        if(data.success && data.data.live) {
+            setLiveState(true);
+            streamStartTime = new Date(); // Start from now if live
+            startTimer();
+        }
+    } catch(e){}
+}
+
+async function checkYoutubeStatus() {
+    try {
+        const res = await apiFetch(`${API_URL}/channels`);
+        const channels = await res.json();
+        if(channels.length === 0) {
+            // Optional: Auto-prompt to connect if no channels
+            // For now, let the user click "Add Channel"
+        }
+    } catch(e){}
+}
+
+function loadGlobalSettings() {
+    loadDestinations();
+}
+
+/* --- LIBRARY --- */
+async function loadLibraryVideos() {
+    const list = document.getElementById('libraryList');
+    try {
+        const res = await apiFetch(`${API_URL}/library`);
+        const data = await res.json();
+        list.innerHTML = '';
+        data.data.forEach(v => {
+            list.innerHTML += `
+                <div class="queue-item">
+                     <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
+                     <div>${v.title}</div>
+                </div>
+            `;
+        });
+    } catch(e){}
+}
+
+async function handleBulkUpload(e) {
+    const files = e.target.files;
+    if(!files.length) return;
+    const fd = new FormData();
+    for(let f of files) fd.append("files", f);
+
+    showToast("Uploading library...", "info");
+    try {
+        const res = await apiFetch(`${API_URL}/library/upload`, {method:'POST', body:fd});
+        if(res.ok) {
+            showToast("Uploaded!", "success");
+            loadLibraryVideos();
+        }
+    } catch(e){ showToast("Failed", "error"); }
 }
 
 function showAutoScheduleModal() {
@@ -457,493 +758,354 @@ function showAutoScheduleModal() {
 
 async function submitAutoSchedule() {
     const startDate = document.getElementById('autoStartDate').value;
-    const slotsStr = document.getElementById('autoTimeSlots').value;
+    const slots = document.getElementById('autoTimeSlots').value;
+    const topic = document.getElementById('autoTopic').value;
+    const useAi = document.getElementById('autoUseAi').checked;
 
-    if (!startDate || !slotsStr) {
-        alert("Please fill all fields");
+    if(!startDate || !slots) {
+        showToast("Please fill start date and time slots", "error");
         return;
     }
 
-    const timeSlots = slotsStr.split(',').map(s => s.trim());
-
     try {
-        const res = await fetch(`${API_URL}/library/auto-schedule`, {
+        const res = await apiFetch(`${API_URL}/library/auto-schedule`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ startDate, timeSlots })
+            body: JSON.stringify({
+                startDate,
+                timeSlots: slots.split(',').map(s=>s.trim()),
+                topic,
+                useAi
+            })
         });
-        const data = await res.json();
 
-        if (res.ok) {
-            alert(data.message);
+        if(res.ok) {
+            showToast("Auto-scheduler initiated", "success");
             document.getElementById('autoScheduleModal').classList.add('hidden');
-            loadLibraryVideos(); // Should be empty/less now
+            loadLibraryVideos();
         } else {
-            alert("Error: " + data.message);
+            const data = await res.json();
+            showToast(data.message || "Scheduling failed", "error");
         }
-    } catch (e) {
-        alert("Scheduling failed");
-    }
+    } catch(e) { showToast("Error scheduling", "error"); }
 }
 
-/* --- PUBLISH / SCHEDULE LOGIC --- */
+/* --- AI --- */
+async function aiGenerate(type) {
+    const ctx = document.getElementById('scheduleTitle').value || "Video";
+    const target = type === 'description' ? document.getElementById('scheduleDescription') : null;
+    if(!target) return;
 
-async function showScheduleModal() {
-    document.getElementById('scheduleModal').classList.remove('hidden');
-
-    // Load Categories if not already
-    const catSelect = document.getElementById('scheduleCategory');
-    if (catSelect.options.length <= 1) {
-        try {
-            const res = await fetch(`${API_URL}/youtube/categories`);
-            const cats = await res.json();
-            if(cats && cats.length) {
-                 cats.forEach(c => {
-                     if (c.snippet.assignable) {
-                         catSelect.innerHTML += `<option value="${c.id}">${c.snippet.title}</option>`;
-                     }
-                 });
-            }
-        } catch(e) {
-            console.error("Failed to load categories", e);
-        }
-    }
-}
-
-function closeScheduleModal() {
-    document.getElementById('scheduleModal').classList.add('hidden');
-}
-
-function handleScheduleFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) {
-        const display = document.getElementById("selectedFileDisplay");
-        display.innerText = "📄 " + file.name;
-        display.classList.remove("hidden");
-
-        // Auto fill title from filename if empty
-        const titleInput = document.getElementById("scheduleTitle");
-        if(!titleInput.value) {
-            titleInput.value = file.name.replace(/\.[^/.]+$/, "");
-            updatePreview();
-        }
-    }
-}
-
-function updatePreview() {
-    const title = document.getElementById("scheduleTitle").value || "Video Title";
-    const desc = document.getElementById("scheduleDescription").value || "Video description...";
-
-    document.getElementById("previewTitle").innerText = title;
-    // Truncate desc for preview
-    document.getElementById("previewDesc").innerText = desc.length > 80 ? desc.substring(0, 80) + "..." : desc;
-}
-
-async function submitSchedule() {
-    if (!currentUser) { showLoginModal(); return; }
-
-    const fileInput = document.getElementById('scheduleFile');
-    const thumbnailInput = document.getElementById('scheduleThumbnail');
-    const title = document.getElementById('scheduleTitle').value;
-    const description = document.getElementById('scheduleDescription').value;
-    const category = document.getElementById('scheduleCategory').value;
-    const tags = document.getElementById('scheduleTags').value;
-    const categoryId = document.getElementById('scheduleCategory').value;
-    const privacy = document.getElementById('schedulePrivacy').value;
-    const time = document.getElementById('scheduleTime').value;
-    const btn = document.getElementById('btnSchedule');
-
-    if (!fileInput.files[0] || !title || !time) {
-        alert("Please fill all required fields (File, Title, Time)");
-        return;
-    }
-
-    btn.disabled = true;
-    btn.innerText = "Uploading & Scheduling...";
-
-    const formData = new FormData();
-    formData.append("file", fileInput.files[0]);
-    if (thumbnailInput && thumbnailInput.files[0]) {
-        formData.append("thumbnail", thumbnailInput.files[0]);
-    }
-    formData.append("title", title);
-    formData.append("description", description);
-    if (category) {
-        formData.append("categoryId", category);
-    }
-    formData.append("tags", tags);
-    formData.append("privacyStatus", privacy);
-    formData.append("scheduledTime", time);
-
-    // Progress UI
-    const progressContainer = document.getElementById("uploadProgressContainer");
-    const progressBar = document.getElementById("uploadProgressBar");
-    const progressText = document.getElementById("uploadPercent");
-    progressContainer.classList.remove("hidden");
-
-    // Use XHR for progress
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_URL}/videos/schedule`, true);
-
-    xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            progressBar.style.width = percent + "%";
-            progressText.innerText = percent + "%";
-        }
-    };
-
-    xhr.onload = function() {
-        btn.disabled = false;
-        btn.innerText = "Schedule Post";
-        progressContainer.classList.add("hidden");
-
-        if (xhr.status === 200) {
-            const data = JSON.parse(xhr.responseText);
-            if (data.success) {
-                closeScheduleModal();
-                loadScheduledQueue();
-                alert("Success! Video scheduled.");
-
-                // Reset
-                fileInput.value = '';
-                if(thumbnailInput) thumbnailInput.value = '';
-                document.getElementById('scheduleTitle').value = '';
-                document.getElementById("selectedFileDisplay").classList.add("hidden");
-            } else {
-                alert("Error: " + data.message);
-            }
-        } else {
-            alert("Upload Failed: " + xhr.statusText);
-        }
-    };
-
-    xhr.onerror = function() {
-        btn.disabled = false;
-        btn.innerText = "Schedule Post";
-        progressContainer.classList.add("hidden");
-        alert("Network Error");
-    };
-
-    xhr.send(formData);
-}
-
-async function loadScheduledQueue() {
+    target.placeholder = "AI is writing...";
     try {
-        const res = await fetch(`${API_URL}/videos`);
-        const videos = await res.json();
-        const container = document.getElementById('queueList');
-
-        if (videos.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="icon-box">📅</div>
-                    <h3>Your queue is empty</h3>
-                    <p>Schedule your first video to get started.</p>
-                </div>`;
-            return;
-        }
-
-        container.innerHTML = '';
-        videos.forEach(v => {
-            const item = document.createElement('div');
-            item.className = 'queue-item';
-
-            // Status Badge Logic
-            let statusColor = '#888';
-            if(v.status === 'UPLOADED') statusColor = 'var(--success)';
-            if(v.status === 'FAILED') statusColor = 'var(--danger)';
-            if(v.status === 'PROCESSING') statusColor = 'var(--primary)';
-
-            item.innerHTML = `
-                <div class="queue-thumb">
-                    <i class="fa-solid fa-film fa-lg"></i>
-                </div>
-                <div class="queue-details">
-                    <h4>${v.title}</h4>
-                    <div class="queue-meta">
-                        <span><i class="fa-regular fa-clock"></i> ${new Date(v.scheduledTime).toLocaleString()}</span>
-                        <span style="color: ${statusColor}; font-weight: 600;">${v.status}</span>
-                        <span><i class="fa-solid fa-lock"></i> ${v.privacyStatus}</span>
-                    </div>
-                </div>
-            `;
-            container.appendChild(item);
+        const res = await apiFetch(`${API_URL}/ai/generate`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({type, context: ctx})
         });
-
-    } catch (e) {
-        console.error("Failed to load queue", e);
-    }
-}
-
-
-/* --- STREAMING LOGIC --- */
-
-let selectedStreamVideo = null;
-
-async function openLibraryModalForStream() {
-    document.getElementById('streamLibraryModal').classList.remove('hidden');
-    const container = document.getElementById('streamLibraryList');
-    container.innerHTML = '<p>Loading...</p>';
-
-    try {
-        const res = await fetch(`${API_URL}/library`);
         const data = await res.json();
-
-        if (!data.success || data.data.length === 0) {
-            container.innerHTML = '<p>No videos found. Upload in "Library" first.</p>';
-            return;
-        }
-
-        container.innerHTML = '';
-        data.data.forEach(v => {
-            const item = document.createElement('div');
-            item.className = 'queue-item';
-            item.style.cursor = 'pointer';
-            item.onclick = () => selectVideoForStream(v);
-
-            item.innerHTML = `
-                <div class="queue-thumb"><i class="fa-solid fa-film"></i></div>
-                <div class="queue-details">
-                    <h4>${v.title}</h4>
-                    <div class="queue-meta">${new Date(v.createdAt || Date.now()).toLocaleDateString()}</div>
-                </div>
-            `;
-            container.appendChild(item);
-        });
-    } catch (e) {
-        container.innerHTML = '<p>Error loading library</p>';
-    }
+        target.value = data.result;
+    } catch(e) { showToast("AI Failed", "error"); }
 }
 
-function selectVideoForStream(video) {
-    selectedStreamVideo = video;
-    document.getElementById('streamLibraryModal').classList.add('hidden');
-
-    // Update UI
-    document.getElementById('btnSelectVideo').classList.add('hidden');
-    document.getElementById('selectedVideoPreview').classList.remove('hidden');
-    document.getElementById('selectedVideoName').innerText = video.title;
-}
-
-function clearSelectedVideo() {
-    selectedStreamVideo = null;
-    document.getElementById('btnSelectVideo').classList.remove('hidden');
-    document.getElementById('selectedVideoPreview').classList.add('hidden');
-}
-
-async function submitJob() {
-    const key = document.getElementById("streamKey").value;
-    const btn = document.getElementById("btnGoLive");
-
-    if (!selectedStreamVideo) return alert("⚠️ Please select a video from Step 1.");
-    if (!key) return alert("⚠️ Please enter a Stream Key in Step 2.");
-
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Starting...`;
-
-    const formData = new FormData();
-    formData.append("streamKey", key);
-    formData.append("videoKey", selectedStreamVideo.s3Key);
-
-    if (window.uploadedMusicName) {
-        formData.append("musicName", window.uploadedMusicName);
-        const volPercent = document.getElementById("volumeSlider").value;
-        formData.append("musicVolume", (volPercent / 100).toFixed(2));
-    }
-
-    try {
-        const res = await fetch(`${API_URL}/start`, { method: "POST", body: formData });
-        const data = await res.json();
-        
-        if (data.success) {
-            setLiveState(true);
-            log("Stream Started: " + selectedStreamVideo.title);
-        } else {
-            alert(data.message);
-        }
-    } catch (err) {
-        alert("Failed to start stream");
-        log("Error starting stream");
-    } finally {
-        if(!document.getElementById("liveIndicator").classList.contains("hidden")) {
-             // If success, keep disabled/change text
-        } else {
-             btn.disabled = false;
-             btn.innerHTML = `Start Streaming`;
-        }
-    }
-}
-
-async function stopStream() {
-    try {
-        await fetch(`${API_URL}/stop`, { method: "POST" });
-        setLiveState(false);
-        log("Stream Stopped");
-    } catch (err) {
-        console.error(err);
-    }
-}
-
-function setLiveState(isLive) {
-    const indicator = document.getElementById("liveIndicator");
-    const btnGo = document.getElementById("btnGoLive");
-    const btnStop = document.getElementById("btnStop");
-    const statusText = document.getElementById("streamStatusText");
-
-    if (isLive) {
-        indicator.classList.remove("hidden");
-        btnGo.classList.add("hidden");
-        btnStop.classList.remove("hidden");
-        if(statusText) statusText.innerText = "Live";
-        if(statusText) statusText.style.color = "var(--success)";
-    } else {
-        indicator.classList.add("hidden");
-        btnGo.classList.remove("hidden");
-        btnGo.disabled = false;
-        btnGo.innerHTML = `Start Streaming`;
-        btnStop.classList.add("hidden");
-        if(statusText) statusText.innerText = "Offline";
-        if(statusText) statusText.style.color = "var(--text-secondary)";
-    }
-}
-
-async function handleStreamVideoUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const btn = document.getElementById("btnUploadStreamVideo");
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ...`;
-
-    const formData = new FormData();
-    formData.append("files", file);
-
-    try {
-        const res = await fetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.success) {
-            // Auto-open library to let user select the new video
-            openLibraryModalForStream();
-        } else {
-            alert("Error: " + data.message);
-        }
-    } catch (err) {
-        alert("Upload Failed");
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-        e.target.value = '';
-    }
-}
-
-/* --- SHARED / UTIL --- */
-
-function log(msg) {
-    const consoleDiv = document.getElementById("console");
-    if(consoleDiv) {
-        const entry = document.createElement("div");
-        entry.className = "log-entry";
-        entry.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        consoleDiv.appendChild(entry);
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
-    }
-}
-
-async function fetchUserInfo() {
-    try {
-        const res = await fetch('/api/user-info');
-        const data = await res.json();
-        if (data.email) {
-            currentUser = data;
-            document.getElementById("userHeader").innerHTML = `
-                <img src="${data.picture}" style="width:32px; height:32px; border-radius:50%; vertical-align:middle; margin-right:8px;">
-                <span>${data.name}</span>
-            `;
-            renderPlanInfo(data);
-
-            if (data.enabled === false) {
-                document.getElementById("verificationBanner").classList.remove("hidden");
-                disableRestrictedFeatures();
-            }
-
-            checkInitialStatus();
-        } else {
-            showLoginModal();
-        }
-    } catch (e) { console.log("Guest"); }
-}
-
-function disableRestrictedFeatures() {
-    const streamBtn = document.getElementById("btnGoLive");
-    if(streamBtn) {
-        streamBtn.disabled = true;
-        streamBtn.title = "Verify email to stream";
-        streamBtn.style.opacity = "0.5";
-        streamBtn.style.cursor = "not-allowed";
-    }
-
-    // Disable YouTube connect in Settings (if visible)
-    // We might need to select carefully if there are multiple.
-    // Assuming the one in Settings -> Connections -> YouTube
-    // Since view-settings is hidden initially, we might need to apply this when switching view?
-    // Or just find all restricted buttons.
-    // For now, simple check.
-}
-
-function showLoginModal() {
-    document.getElementById("loginModal").classList.remove("hidden");
-}
-
-function loadGlobalSettings() {
-    const savedKey = localStorage.getItem('afk_stream_key');
-    if(savedKey && document.getElementById('streamKey')) {
-        document.getElementById('streamKey').value = savedKey;
-    }
+/* --- SETTINGS --- */
+function renderPlanInfo(plan) {
+    document.getElementById('planName').innerText = plan.name;
+    const used = (plan.storageUsed / 1024 / 1024).toFixed(1);
+    const limit = (plan.storageLimit / 1024 / 1024).toFixed(0);
+    document.getElementById('storageText').innerText = `${used}/${limit} MB`;
+    const pct = Math.min(100, (plan.storageUsed / plan.storageLimit) * 100);
+    document.getElementById('storageBar').style.width = pct + "%";
 }
 
 async function checkYoutubeStatus() {
-    try {
-        const res = await fetch(`${API_URL}/youtube/status`);
-        const data = await res.json();
-        const el = document.getElementById('ytConnectionStatus');
-        if (el) {
-            el.innerHTML = data.connected ?
-                '<span style="color:var(--success)">Connected</span>' :
-                '<span style="color:var(--danger)">Disconnected</span>';
-        }
-    } catch(e) {}
+    // ...
 }
 
-function renderPlanInfo(user) {
-    if (!user.plan) return;
-    const p = user.plan;
+async function cancelSubscription() {
+    if(!confirm("Are you sure you want to cancel your subscription? You will be downgraded to the Free plan immediately.")) return;
 
-    const nameEl = document.getElementById("planName");
-    if(nameEl) nameEl.innerText = p.name;
-
-    const usedMB = (p.storageUsed / 1024 / 1024).toFixed(1);
-    const limitMB = (p.storageLimit / 1024 / 1024).toFixed(0);
-    const percent = Math.min(100, (p.storageUsed / p.storageLimit) * 100);
-
-    const storageText = document.getElementById("storageText");
-    if(storageText) storageText.innerText = `${usedMB} / ${limitMB} MB (${percent.toFixed(1)}%)`;
-
-    const bar = document.getElementById("storageBar");
-    if(bar) bar.style.width = percent + "%";
-
-    const streamLimit = document.getElementById("streamLimitText");
-    if(streamLimit) streamLimit.innerText = p.streamLimit + " Concurrent Stream(s)";
+    try {
+        const res = await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' });
+        const data = await res.json();
+        if(res.ok) {
+            showToast("Subscription cancelled.", "success");
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showToast(data.message || "Cancellation failed", "error");
+        }
+    } catch(e) { showToast("Error cancelling subscription", "error"); }
 }
 
-async function checkInitialStatus() {
+/* --- ANALYTICS & CALENDAR --- */
+function initAnalytics() {
+    // Chart.js init
+    const ctx = document.getElementById('analyticsChart');
+    if(ctx && !window.myChart) {
+        window.myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+                datasets: [{
+                    label: 'Views',
+                    data: [12, 19, 3, 5, 2, 3, 15],
+                    borderColor: '#2c68f6',
+                    tension: 0.4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+}
+
+function initCalendar() {
+    const el = document.getElementById('calendar');
+    if(el && !el.innerHTML) {
+        const cal = new FullCalendar.Calendar(el, {
+            initialView: 'dayGridMonth',
+            events: async (info, success) => {
+                try {
+                    const res = await apiFetch(`${API_URL}/videos`);
+                    const data = await res.json();
+                    success(data.map(v => ({title: v.title, start: v.scheduledTime})));
+                } catch(e) { success([]); }
+            }
+        });
+        cal.render();
+    }
+}
+
+/* --- COMMUNITY --- */
+async function loadComments() {
+    const list = document.getElementById('threadList');
+    list.innerHTML = "Loading...";
     try {
-        const res = await fetch(`${API_URL}/status`);
+        const res = await apiFetch(`${API_URL}/comments`);
         const data = await res.json();
-        if (data.success && data.data?.live) {
-            setLiveState(true);
-            log("Resumed active session.");
+        list.innerHTML = '';
+        if(!data.items || !data.items.length) {
+            list.innerHTML = "<div style='padding:20px;text-align:center'>No conversations.</div>";
+            return;
         }
-    } catch(e) {}
+        // ... render threads
+        data.items.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.innerHTML = `
+                <img src="${t.snippet.topLevelComment.snippet.authorProfileImageUrl}" style="width:32px;height:32px;border-radius:50%">
+                <div>${t.snippet.topLevelComment.snippet.textDisplay.substring(0,50)}...</div>
+            `;
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "Failed to load."; }
+}
+
+/* --- NEW SETTINGS LOGIC --- */
+function switchSettingsTab(tabName) {
+    document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
+    const nav = document.querySelector(`.settings-nav-item[onclick*="'${tabName}'"]`);
+    if(nav) nav.classList.add('active');
+
+    document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
+    const content = document.getElementById(`tab-${tabName}`);
+    if(content) content.classList.remove('hidden');
+
+    if(tabName === 'plans') loadInternalPricing();
+}
+
+async function loadInternalPricing() {
+    const grid = document.getElementById('internalPlanGrid');
+    if(!grid || grid.innerHTML.trim() !== "") return; // Already loaded
+
+    grid.innerHTML = "Loading plans...";
+
+    try {
+        const res = await apiFetch('/api/pricing?country=US');
+        const data = await res.json();
+        grid.innerHTML = '';
+
+        // Plan Ranks
+        const planRanks = { 'FREE': 0, 'ESSENTIALS': 1, 'TEAM': 2 };
+        const currentRank = currentUser && currentUser.plan ? (planRanks[currentUser.plan.id] || 0) : -1;
+
+        data.plans.forEach(plan => {
+            const planRank = planRanks[plan.id] || 0;
+            let btn = '';
+            let activeClass = '';
+
+            if(currentUser && currentUser.plan && currentUser.plan.id === plan.id) {
+                btn = `<button class="btn btn-outline btn-block" disabled style="opacity:0.6; cursor:default;">Current Plan</button>`;
+                activeClass = 'active-plan';
+            } else if (currentRank > planRank) {
+                 btn = `<button class="btn btn-outline btn-block" disabled style="visibility:hidden">Included</button>`;
+            } else {
+                 btn = `<button class="btn btn-primary btn-block" onclick="openPaymentModal('${plan.id}', '${plan.title}', '${plan.price}')">Upgrade</button>`;
+            }
+
+            const features = plan.features.map(f => `<li><i class="fa-solid fa-check" style="color:#00875a"></i> ${f}</li>`).join('');
+
+            grid.innerHTML += `
+                <div class="plan-card ${activeClass}">
+                    <h3>${plan.title}</h3>
+                    <div class="plan-price">${plan.price}<span>${plan.period}</span></div>
+                    <ul class="plan-features">${features}</ul>
+                    ${btn}
+                </div>
+            `;
+        });
+    } catch(e) {
+        grid.innerHTML = "Failed to load pricing.";
+    }
+}
+
+let selectedPlanId = null;
+
+function openPaymentModal(id, title, price) {
+    selectedPlanId = id;
+    document.getElementById('paymentPlanName').innerText = `Upgrading to ${title}`;
+    document.getElementById('paymentAmount').innerText = price;
+    document.getElementById('paymentModal').classList.remove('hidden');
+}
+
+async function processPayment() {
+    if(!selectedPlanId) return;
+
+    const btn = document.getElementById('btnConfirmPayment');
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+    await new Promise(r => setTimeout(r, 1500)); // Mock delay
+
+    try {
+        const res = await apiFetch('/api/pricing/upgrade', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ planId: selectedPlanId })
+        });
+
+        if (res.ok) {
+            showToast("Payment Successful! Plan Upgraded.", "success");
+            document.getElementById('paymentModal').classList.add('hidden');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            const data = await res.json();
+            showToast(data.message || "Upgrade failed", "error");
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    } catch(e) {
+        showToast("Network Error", "error");
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+/* --- ENGAGEMENT --- */
+async function showEngagementSettings() {
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/settings`);
+        const data = await res.json();
+        document.getElementById('engAutoReply').checked = data.autoReplyEnabled;
+        document.getElementById('engDeleteNegative').checked = data.deleteNegativeComments;
+        document.getElementById('engagementSettingsModal').classList.remove('hidden');
+    } catch(e) {
+        showToast("Failed to load settings", "error");
+    }
+}
+
+async function saveEngagementSettings() {
+    const autoReply = document.getElementById('engAutoReply').checked;
+    const delNeg = document.getElementById('engDeleteNegative').checked;
+
+    try {
+        await apiFetch(`${API_URL}/engagement/settings`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ autoReplyEnabled: autoReply, deleteNegativeComments: delNeg })
+        });
+        showToast("Settings Saved", "success");
+        document.getElementById('engagementSettingsModal').classList.add('hidden');
+    } catch(e) {
+        showToast("Failed to save", "error");
+    }
+}
+
+/* --- AUDIO LIBRARY --- */
+function switchAudioTab(tab) {
+    const btnUpload = document.getElementById('tabAudioUpload');
+    const btnLib = document.getElementById('tabAudioLib');
+    const secUpload = document.getElementById('audioUploadSection');
+    const secLib = document.getElementById('audioLibSection');
+
+    if (tab === 'upload') {
+        btnUpload.className = "btn btn-sm btn-primary";
+        btnLib.className = "btn btn-sm btn-outline";
+        secUpload.classList.remove('hidden');
+        secLib.classList.add('hidden');
+        // Clear lib selection
+        document.getElementById('selectedAudioTrackId').value = '';
+        document.getElementById('selectedTrackName').innerText = '';
+    } else {
+        btnUpload.className = "btn btn-sm btn-outline";
+        btnLib.className = "btn btn-sm btn-primary";
+        secUpload.classList.add('hidden');
+        secLib.classList.remove('hidden');
+        // Clear upload selection
+        document.getElementById('scheduleAudio').value = '';
+        loadAudioLibrary();
+    }
+}
+
+async function loadAudioLibrary() {
+    const list = document.getElementById('audioTrackList');
+    if(list.dataset.loaded) return;
+
+    list.innerHTML = "Loading tracks...";
+    try {
+        const res = await apiFetch(`${API_URL}/audio/trending`);
+        const tracks = await res.json();
+        list.innerHTML = '';
+
+        tracks.forEach(t => {
+            const isMixable = !!t.url;
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+
+            if (isMixable) {
+                div.style.cursor = 'pointer';
+                div.onclick = () => {
+                    document.getElementById('selectedAudioTrackId').value = t.id;
+                    document.getElementById('selectedTrackName').innerText = "Selected: " + t.title;
+                    document.querySelectorAll('#audioTrackList .queue-item').forEach(el => el.style.background = '');
+                    div.style.background = '#e3f2fd';
+                };
+            } else {
+                div.style.cursor = 'default';
+            }
+
+            let actions = '';
+            if (t.ytUrl) {
+                actions += `<a href="${t.ytUrl}" target="_blank" class="btn btn-sm btn-outline" onclick="event.stopPropagation()" title="Create in YouTube App"><i class="fa-brands fa-youtube" style="color:red"></i> Use</a>`;
+            }
+            if (isMixable) {
+                actions += `<button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>`;
+            }
+
+            div.innerHTML = `
+                <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
+                <div style="flex:1">
+                    <div style="font-weight:600;font-size:0.9rem;">${t.title} ${!isMixable ? '<span style="font-size:0.7rem; background:#eee; padding:2px 4px; border-radius:4px; margin-left:5px; color:#666;">App Only</span>' : ''}</div>
+                    <div style="font-size:0.75rem;color:#666;">${t.artist}</div>
+                </div>
+                <div style="display:flex; gap:5px;">
+                    ${actions}
+                </div>
+            `;
+            list.appendChild(div);
+        });
+        list.dataset.loaded = "true";
+    } catch(e) {
+        list.innerHTML = "Failed to load music.";
+    }
 }

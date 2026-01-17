@@ -3,8 +3,10 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
+import com.afklive.streamer.service.AiService;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.util.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -12,28 +14,34 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.MediaType;
 
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @RestController
 @RequestMapping("/api/library")
 @RequiredArgsConstructor
-@Slf4j
 public class LibraryController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LibraryController.class);
 
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
     private final UserService userService;
+    private final AiService aiService;
 
     @PostMapping("/upload")
     public ResponseEntity<?> bulkUpload(
-            @RequestParam("files") List<MultipartFile> files,
-            @AuthenticationPrincipal OAuth2User principal
+            @RequestParam(AppConstants.PARAM_FILES) List<MultipartFile> files,
+            java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = principal.getName();
@@ -43,20 +51,31 @@ public class LibraryController {
             for (MultipartFile file : files) {
                 if (file.isEmpty()) continue;
 
-                userService.checkStorageQuota(username, file.getSize());
+                if (file.getOriginalFilename().toLowerCase().endsWith(".zip")) {
+                    // Handle Zip
+                    try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
+                        ZipEntry entry;
+                        while ((entry = zis.getNextEntry()) != null) {
+                            if (entry.isDirectory() || !isVideo(entry.getName())) continue;
 
-                String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
-                userService.updateStorageUsage(username, file.getSize());
+                            // Approx size check (entry.getSize() is -1 if unknown)
+                            long size = entry.getSize() > 0 ? entry.getSize() : file.getSize(); // Fallback to zip size (imperfect)
+                            userService.checkStorageQuota(username, size);
 
-                ScheduledVideo video = new ScheduledVideo();
-                video.setUsername(username);
-                video.setTitle(file.getOriginalFilename()); // Default title
-                video.setS3Key(s3Key);
-                video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
-                video.setPrivacyStatus("private"); // Default
-
-                repository.save(video);
-                successCount++;
+                            String s3Key = storageService.uploadFile(zis, entry.getName(), size);
+                            userService.updateStorageUsage(username, size);
+                            createLibraryEntry(username, entry.getName(), s3Key);
+                            successCount++;
+                        }
+                    }
+                } else {
+                    // Regular file
+                    userService.checkStorageQuota(username, file.getSize());
+                    String s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
+                    userService.updateStorageUsage(username, file.getSize());
+                    createLibraryEntry(username, file.getOriginalFilename(), s3Key);
+                    successCount++;
+                }
             }
             return ResponseEntity.ok(ApiResponse.success("Uploaded " + successCount + " videos to library", null));
         } catch (Exception e) {
@@ -65,8 +84,23 @@ public class LibraryController {
         }
     }
 
+    private boolean isVideo(String name) {
+        String n = name.toLowerCase();
+        return n.endsWith(".mp4") || n.endsWith(".mov") || n.endsWith(".mkv") || n.endsWith(".avi");
+    }
+
+    private void createLibraryEntry(String username, String filename, String key) {
+        ScheduledVideo video = new ScheduledVideo();
+        video.setUsername(username);
+        video.setTitle(filename);
+        video.setS3Key(key);
+        video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
+        video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
+        repository.save(video);
+    }
+
     @GetMapping
-    public ResponseEntity<?> getLibraryVideos(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<?> getLibraryVideos(java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = principal.getName();
 
@@ -77,10 +111,31 @@ public class LibraryController {
         return ResponseEntity.ok(ApiResponse.success("Library fetched", videos));
     }
 
+    @GetMapping("/stream/{id}")
+    public ResponseEntity<InputStreamResource> streamVideo(@PathVariable Long id, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        String username = principal.getName();
+
+        ScheduledVideo video = repository.findById(id).orElse(null);
+        if (video == null || !video.getUsername().equals(username)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            InputStream is = storageService.downloadFile(video.getS3Key());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(AppConstants.MIME_VIDEO_MP4))
+                    .body(new InputStreamResource(is));
+        } catch (Exception e) {
+            log.error("Failed to stream video", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
     @PostMapping("/auto-schedule")
     public ResponseEntity<?> autoSchedule(
             @RequestBody Map<String, Object> payload,
-            @AuthenticationPrincipal OAuth2User principal
+            java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = principal.getName();
@@ -96,6 +151,9 @@ public class LibraryController {
             LocalDate currentDate = LocalDate.parse(startDateStr);
             List<LocalTime> times = timeSlots.stream().map(LocalTime::parse).sorted().toList();
 
+            boolean useAi = Boolean.TRUE.equals(payload.get("useAi"));
+            String topic = (String) payload.get("topic");
+
             // Get all LIBRARY videos for user
             List<ScheduledVideo> libraryVideos = repository.findByUsername(username).stream()
                     .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
@@ -109,9 +167,15 @@ public class LibraryController {
                     ScheduledVideo video = libraryVideos.get(videoIndex);
                     LocalDateTime schedule = LocalDateTime.of(currentDate, time);
 
-                    // Skip if time is in past (simple check, assume user knows what they are doing or start tomorrow)
                     if (schedule.isBefore(LocalDateTime.now())) {
-                        schedule = schedule.plusDays(1); // crude fix, or just let it schedule for next occurrence
+                        schedule = schedule.plusDays(1);
+                    }
+
+                    if (useAi) {
+                        String context = (topic != null && !topic.isEmpty()) ? topic : video.getTitle();
+                        video.setTitle(aiService.generateTitle(context));
+                        video.setDescription(aiService.generateDescription(video.getTitle()));
+                        video.setTags(aiService.generateTags(context));
                     }
 
                     video.setScheduledTime(schedule);

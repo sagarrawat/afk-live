@@ -9,6 +9,7 @@ import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.model.*;
 import com.google.api.services.youtubeAnalytics.v2.YouTubeAnalytics;
 import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
+import com.afklive.streamer.util.AppConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -24,8 +25,8 @@ import java.util.Collections;
 import java.util.List;
 
 @Service
-@Slf4j
 public class YouTubeService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(YouTubeService.class);
 
     private final AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager;
     private static final String APPLICATION_NAME = "AFK Live Streamer";
@@ -44,7 +45,7 @@ public class YouTubeService {
     private Credential getCredential(String username) {
         try {
             Authentication principal = createPrincipal(username);
-            OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
+            OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE)
                     .principal(principal)
                     .build();
 
@@ -67,7 +68,6 @@ public class YouTubeService {
                 .setApplicationName(APPLICATION_NAME)
                 .build();
     }
-    public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus, String categoryId) throws Exception {
 
     private YouTubeAnalytics getAnalyticsClient(String username) throws Exception {
         return new YouTubeAnalytics.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(username))
@@ -154,7 +154,7 @@ public class YouTubeService {
         ChannelListResponse response = youtube.channels().list(Collections.singletonList("id"))
                 .setMine(true)
                 .execute();
-        if (response.getItems().isEmpty()) {
+        if (response.getItems() == null || response.getItems().isEmpty()) {
             throw new IllegalStateException("No channel found for user.");
         }
         return response.getItems().get(0).getId();
@@ -177,6 +177,7 @@ public class YouTubeService {
         youtube.comments().delete(commentId).execute();
     }
 
+
     // --- CATEGORIES ---
 
     public List<VideoCategory> getVideoCategories(String username, String regionCode) throws Exception {
@@ -185,30 +186,5 @@ public class YouTubeService {
                 .setRegionCode(regionCode != null ? regionCode : "US")
                 .execute();
         return response.getItems();
-        Authentication principal = createPrincipal(username);
-        OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("google")
-                .principal(principal)
-                .build();
-
-        OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
-
-        if (client == null) {
-            throw new IllegalStateException("User " + username + " is not connected to YouTube.");
-        }
-
-        Credential credential = new Credential(BearerToken.authorizationHeaderAccessMethod())
-                .setAccessToken(client.getAccessToken().getTokenValue());
-
-        YouTube youtube = new YouTube.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, credential)
-                .setApplicationName(APPLICATION_NAME)
-                .build();
-
-        InputStreamContent mediaContent = new InputStreamContent("application/octet-stream", thumbnailStream);
-        youtube.thumbnails().set(videoId, mediaContent).execute();
-        log.info("Uploaded thumbnail for video ID: {}", videoId);
-    }
-
-    private Authentication createPrincipal(String username) {
-        return new UsernamePasswordAuthenticationToken(username, "N/A", AuthorityUtils.NO_AUTHORITIES);
     }
 }

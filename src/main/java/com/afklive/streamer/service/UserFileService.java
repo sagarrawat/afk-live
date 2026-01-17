@@ -13,10 +13,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@Getter
-@Slf4j
 @Service
 public class UserFileService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserFileService.class);
 
     private final Path baseUploadDir = Paths.get("uploads");
     private final VideoConversionService videoConversionService;

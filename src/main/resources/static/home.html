@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AFK Live - Grow your audience</title>
+    <meta name="description" content="AFK Live helps you schedule videos, stream continuously 24/7, and grow your audience on YouTube.">
+    <meta name="keywords" content="youtube scheduler, live streaming, 24/7 stream, lofi radio, video scheduling, social media tools">
+    <meta property="og:title" content="AFK Live - Grow your audience">
+    <meta property="og:description" content="Schedule videos and stream 24/7 to YouTube.">
+    <meta property="og:type" content="website">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/landing.css">
@@ -16,8 +21,8 @@
         <div class="nav-links">
             <a href="/features">Features</a>
             <a href="/pricing">Pricing</a>
-            <a href="/studio" class="btn-login">Log In</a>
-            <a href="/oauth2/authorization/google" class="btn btn-primary">Get Started</a>
+            <a href="/login" class="btn-login">Log In</a>
+            <a href="/register" class="btn btn-primary">Get Started</a>
         </div>
     </div>
 </nav>
@@ -28,7 +33,7 @@
             <h1>Grow your audience on social and beyond</h1>
             <p>AFK Live helps you schedule videos, stream continuously, and track your performance. All in one place.</p>
             <div class="hero-actions">
-                <a href="/oauth2/authorization/google" class="btn btn-lg btn-primary">Get Started for Free</a>
+                <a href="/register" class="btn btn-lg btn-primary">Get Started for Free</a>
                 <a href="/features" class="btn btn-lg btn-outline">See How It Works</a>
             </div>
         </div>
@@ -38,11 +43,32 @@
                 <div class="fake-ui-header">
                     <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
                 </div>
-                <div class="fake-ui-body">
-                    <div class="fake-sidebar"></div>
-                    <div class="fake-content">
-                        <div class="fake-post"></div>
-                        <div class="fake-post"></div>
+                <div class="fake-ui-body" style="display:flex;">
+                    <div class="fake-sidebar" style="width: 200px; background: #f4f5f7; padding: 15px;">
+                        <div style="width: 30px; height: 30px; background: #2c68f6; border-radius: 50%; margin-bottom: 20px;"></div>
+                        <div style="height: 10px; width: 60%; background: #e0e0e0; margin-bottom: 10px; border-radius: 4px;"></div>
+                        <div style="height: 10px; width: 80%; background: #e0e0e0; margin-bottom: 10px; border-radius: 4px;"></div>
+                        <div style="height: 10px; width: 50%; background: #e0e0e0; margin-bottom: 10px; border-radius: 4px;"></div>
+                    </div>
+                    <div class="fake-content" style="flex:1; padding: 20px;">
+                        <div style="display:flex; justify-content: space-between; margin-bottom: 20px;">
+                            <div style="height: 20px; width: 100px; background: #eee; border-radius: 4px;"></div>
+                            <div style="height: 30px; width: 80px; background: #2c68f6; border-radius: 4px;"></div>
+                        </div>
+                        <div class="fake-post" style="display:flex; gap:15px; margin-bottom:15px;">
+                            <div style="width: 80px; height: 60px; background: #eee; border-radius: 4px;"></div>
+                            <div style="flex:1">
+                                <div style="height: 10px; width: 80%; background: #eee; margin-bottom: 8px;"></div>
+                                <div style="height: 10px; width: 40%; background: #eee;"></div>
+                            </div>
+                        </div>
+                        <div class="fake-post" style="display:flex; gap:15px;">
+                            <div style="width: 80px; height: 60px; background: #eee; border-radius: 4px;"></div>
+                            <div style="flex:1">
+                                <div style="height: 10px; width: 70%; background: #eee; margin-bottom: 8px;"></div>
+                                <div style="height: 10px; width: 30%; background: #eee;"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -95,6 +121,26 @@
     </div>
 </section>
 
+<section class="faq-section" style="padding: 80px 0; background: #f9f9f9;">
+    <div class="container">
+        <h2 style="text-align: center; margin-bottom: 50px;">Frequently Asked Questions</h2>
+        <div style="max-width: 800px; margin: 0 auto;">
+            <div style="margin-bottom: 30px;">
+                <h4 style="margin-bottom: 10px;">Can I cancel anytime?</h4>
+                <p style="color: #666;">Yes, you can cancel your subscription at any time from your account settings.</p>
+            </div>
+            <div style="margin-bottom: 30px;">
+                <h4 style="margin-bottom: 10px;">Do you offer a free trial?</h4>
+                <p style="color: #666;">We offer a generous Free tier. You can upgrade to paid plans to unlock more features.</p>
+            </div>
+            <div style="margin-bottom: 30px;">
+                <h4 style="margin-bottom: 10px;">Which platforms are supported?</h4>
+                <p style="color: #666;">Currently we support YouTube. We are working on adding Twitch and Facebook soon.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
 <footer class="footer">
     <div class="container">
         <div class="footer-col">
@@ -115,7 +161,7 @@
         <div class="footer-col">
             <h4>Company</h4>
             <a href="#">About</a>
-            <a href="#">Careers</a>
+            <a href="mailto:support@afklive.com">Contact Support</a>
         </div>
     </div>
 </footer>

@@ -1,17 +1,22 @@
 package com.afklive.streamer.endpoint;
 
+import com.afklive.streamer.model.PlanType;
+import com.afklive.streamer.model.User;
+import com.afklive.streamer.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
+@RequiredArgsConstructor
 public class PricingController {
+
+    private final UserService userService;
 
     @GetMapping("/pricing")
     public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "US") String country) {
@@ -19,6 +24,7 @@ public class PricingController {
 
         // Tier 1: Free
         Map<String, Object> free = Map.of(
+            "id", "FREE",
             "title", "Free",
             "price", isIndia ? "₹0" : "$0",
             "period", "/mo",
@@ -27,6 +33,7 @@ public class PricingController {
 
         // Tier 2: Essentials
         Map<String, Object> essentials = Map.of(
+            "id", "ESSENTIALS",
             "title", "Essentials",
             "price", isIndia ? "₹499" : "$6",
             "period", "/mo",
@@ -35,6 +42,7 @@ public class PricingController {
 
         // Tier 3: Team
         Map<String, Object> team = Map.of(
+            "id", "TEAM",
             "title", "Team",
             "price", isIndia ? "₹999" : "$12",
             "period", "/mo",
@@ -45,5 +53,28 @@ public class PricingController {
             "currency", isIndia ? "INR" : "USD",
             "plans", List.of(free, essentials, team)
         ));
+    }
+
+    @PostMapping("/pricing/upgrade")
+    public ResponseEntity<?> upgradePlan(@RequestBody Map<String, String> body, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+
+        String planId = body.get("planId");
+        if (planId == null) return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
+
+        try {
+            PlanType plan = PlanType.valueOf(planId);
+            userService.updatePlan(principal.getName(), plan);
+            return ResponseEntity.ok(Map.of("success", true, "message", "Plan upgraded to " + plan.getDisplayName()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
+        }
+    }
+
+    @PostMapping("/pricing/cancel")
+    public ResponseEntity<?> cancelPlan(Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        userService.updatePlan(principal.getName(), PlanType.FREE);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Subscription cancelled. You are now on the Free plan."));
     }
 }

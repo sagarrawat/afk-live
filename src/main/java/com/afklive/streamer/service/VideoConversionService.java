@@ -12,10 +12,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class VideoConversionService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VideoConversionService.class);
 
     private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
 

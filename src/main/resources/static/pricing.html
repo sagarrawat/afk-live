@@ -4,20 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pricing - AFK Live</title>
+    <meta name="description" content="Simple pricing for YouTube scheduling and streaming. Start for free and upgrade as you grow.">
+    <meta property="og:title" content="Pricing - AFK Live">
+    <meta property="og:description" content="Simple pricing for YouTube scheduling and streaming.">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/landing.css">
-    <meta name="description" content="Simple pricing for YouTube scheduling and streaming.">
-    <meta property="og:title" content="Pricing - AFK Live">
+    <link rel="stylesheet" href="css/theme.css">
     <style>
         .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 50px; }
-        .price-card { border: 1px solid #eee; padding: 40px; border-radius: 8px; text-align: center; }
+        .price-card { border: 1px solid #eee; padding: 40px; border-radius: 8px; text-align: center; background: white; transition: transform 0.2s; }
+        .price-card:hover { transform: translateY(-5px); }
         .price-card.popular { border-color: var(--primary); box-shadow: 0 10px 40px rgba(44, 104, 246, 0.1); position: relative; }
         .price-card.popular::before { content: "Most Popular"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
-        .price { font-size: 3rem; font-weight: 800; margin: 20px 0; }
-        .price span { font-size: 1rem; font-weight: 500; color: var(--text-muted); }
+        .price { font-size: 3rem; font-weight: 800; margin: 20px 0; color: #1a1a1a; }
+        .price span { font-size: 1rem; font-weight: 500; color: #666; }
         .features-list { list-style: none; padding: 0; margin: 30px 0; text-align: left; }
-        .features-list li { margin-bottom: 12px; color: var(--text-muted); }
+        .features-list li { margin-bottom: 12px; color: #555; }
         .features-list li i { color: #27c93f; margin-right: 10px; }
 
         .country-toggle { text-align: center; margin-bottom: 20px; }
@@ -27,18 +30,27 @@
         .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--primary); }
         input:checked + .slider:before { -webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px); }
+
+        /* Modal for Payment */
+        .payment-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 2000; backdrop-filter: blur(4px); }
+        .payment-box { background: white; padding: 30px; border-radius: 12px; width: 400px; max-width: 90%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+        .payment-spinner { font-size: 3rem; color: var(--primary); margin: 20px 0; }
+
+        @media (max-width: 768px) {
+            .pricing-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
 
 <nav class="navbar">
     <div class="container">
-        <div class="logo"><a href="/">🔴 AFK Live</a></div>
+        <div class="logo"><a href="/" style="text-decoration:none; color:inherit;">🔴 AFK Live</a></div>
         <div class="nav-links">
             <a href="/features">Features</a>
             <a href="/pricing" class="active">Pricing</a>
-            <a href="/app" class="btn-login">Log In</a>
-            <a href="/oauth2/authorization/google" class="btn btn-primary">Get Started</a>
+            <a href="/login" class="btn-login">Log In</a>
+            <a href="/register" class="btn btn-primary">Get Started</a>
         </div>
     </div>
 </nav>
@@ -64,7 +76,78 @@
     </div>
 </div>
 
+<section class="faq-section" style="padding: 80px 0; background: #f9f9f9;">
+    <div class="container">
+        <h2 style="text-align: center; margin-bottom: 50px;">Frequently Asked Questions</h2>
+        <div style="max-width: 800px; margin: 0 auto;">
+            <div style="margin-bottom: 30px;">
+                <h4 style="margin-bottom: 10px;">Can I cancel anytime?</h4>
+                <p style="color: #666;">Yes, you can cancel your subscription at any time from your account settings. You will remain on the plan until the end of your billing cycle.</p>
+            </div>
+            <div style="margin-bottom: 30px;">
+                <h4 style="margin-bottom: 10px;">Is there a free trial?</h4>
+                <p style="color: #666;">We offer a generous Free tier forever. You can upgrade to paid plans whenever you need more storage or channels.</p>
+            </div>
+            <div style="margin-bottom: 30px;">
+                <h4 style="margin-bottom: 10px;">What payment methods do you accept?</h4>
+                <p style="color: #666;">We accept all major credit cards including Visa, Mastercard, and American Express.</p>
+            </div>
+            <div style="margin-bottom: 30px;">
+                <h4 style="margin-bottom: 10px;">Can I change plans later?</h4>
+                <p style="color: #666;">Absolutely. You can upgrade or downgrade your plan at any time from the dashboard.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="container">
+        <div class="footer-col">
+            <h3>AFK Live</h3>
+            <p>The all-you-need social media toolkit for small businesses.</p>
+        </div>
+        <div class="footer-col">
+            <h4>Tools</h4>
+            <a href="#">Publishing</a>
+            <a href="#">Analytics</a>
+            <a href="#">Engagement</a>
+        </div>
+        <div class="footer-col">
+            <h4>Resources</h4>
+            <a href="#">Blog</a>
+            <a href="#">Help Center</a>
+        </div>
+        <div class="footer-col">
+            <h4>Company</h4>
+            <a href="#">About</a>
+            <a href="mailto:support@afklive.com">Contact Support</a>
+        </div>
+    </div>
+</footer>
+
+<!-- Mock Payment Modal -->
+<div id="paymentModal" class="payment-modal">
+    <div class="payment-box">
+        <h2>Confirm Subscription</h2>
+        <p id="paymentPlanName">Upgrade Plan</p>
+        <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
+                <span>Total due today:</span>
+                <strong id="paymentAmount">$0.00</strong>
+            </div>
+            <div style="font-size: 0.9rem; color: #666;">
+                <i class="fa-solid fa-credit-card"></i> **** **** **** 4242
+            </div>
+        </div>
+        <button id="btnConfirmPayment" class="btn btn-primary btn-block btn-lg" onclick="processPayment()">Pay & Upgrade</button>
+        <button class="btn btn-text" onclick="closePaymentModal()" style="margin-top: 10px;">Cancel</button>
+    </div>
+</div>
+
+<script src="js/toast.js"></script>
 <script>
+    let selectedPlanId = null;
+
     async function loadPricing(country) {
         try {
             const res = await fetch(`/api/pricing?country=${country}`);
@@ -72,17 +155,50 @@
             const grid = document.getElementById('pricingGrid');
             grid.innerHTML = '';
 
+            // Check if user is logged in
+            let user = null;
+            try {
+                const uRes = await fetch('/api/user-info');
+                user = await uRes.json();
+            } catch(e) {}
+
+            // Helper to get Plan Rank (Order in enum usually)
+            const planRanks = { 'FREE': 0, 'ESSENTIALS': 1, 'TEAM': 2 };
+            const currentRank = user && user.plan ? (planRanks[user.plan.id] || 0) : -1;
+
             data.plans.forEach((plan, index) => {
                 const isPop = index === 1 ? 'popular' : '';
                 const btnClass = index === 1 ? 'btn-primary' : 'btn-outline';
                 const featuresHtml = plan.features.map(f => `<li><i class="fa-solid fa-check"></i> ${f}</li>`).join('');
+
+                let btnHtml = '';
+
+                if (user && user.email) {
+                    const planRank = planRanks[plan.id] || 0;
+
+                    if (user.plan && user.plan.id === plan.id) {
+                        // Current Plan
+                        btnHtml = `<button class="btn btn-outline btn-block" disabled style="opacity:0.6; cursor:default; background: #eee;">Current Plan</button>`;
+                    } else if (currentRank > planRank) {
+                        // Lower Tier (Hide as per request)
+                        // "they should not see lower tier as upgrade option"
+                        // We can either hide the button or the whole card. Hiding the button is safer to keep grid layout.
+                        btnHtml = `<button class="btn btn-outline btn-block" disabled style="visibility: hidden;">Included</button>`;
+                    } else {
+                        // Upgrade Option
+                        btnHtml = `<button class="btn ${btnClass} btn-block" onclick="openPaymentModal('${plan.id}', '${plan.title}', '${plan.price}')">Upgrade</button>`;
+                    }
+                } else {
+                    // Not logged in
+                    btnHtml = `<a href="/register" class="btn ${btnClass} btn-block">Get Started</a>`;
+                }
 
                 grid.innerHTML += `
                     <div class="price-card ${isPop}">
                         <h3>${plan.title}</h3>
                         <div class="price">${plan.price}<span>${plan.period}</span></div>
                         <p>For individuals getting started.</p>
-                        <a href="/oauth2/authorization/google" class="btn ${btnClass} btn-block">Get Started</a>
+                        ${btnHtml}
                         <ul class="features-list">
                             ${featuresHtml}
                         </ul>
@@ -91,6 +207,53 @@
             });
         } catch (e) {
             console.error(e);
+        }
+    }
+
+    function openPaymentModal(id, title, price) {
+        selectedPlanId = id;
+        document.getElementById('paymentPlanName').innerText = `Upgrading to ${title}`;
+        document.getElementById('paymentAmount').innerText = price;
+        document.getElementById('paymentModal').style.display = 'flex';
+    }
+
+    function closePaymentModal() {
+        document.getElementById('paymentModal').style.display = 'none';
+        selectedPlanId = null;
+    }
+
+    async function processPayment() {
+        if(!selectedPlanId) return;
+
+        const btn = document.getElementById('btnConfirmPayment');
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+        // Mock delay
+        await new Promise(r => setTimeout(r, 1500));
+
+        try {
+            const res = await fetch('/api/pricing/upgrade', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ planId: selectedPlanId })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                showToast("Payment Successful! Plan Upgraded.", "success");
+                closePaymentModal();
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(data.message || "Upgrade failed", "error");
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        } catch(e) {
+            showToast("Network Error", "error");
+            btn.disabled = false;
+            btn.innerText = originalText;
         }
     }
 

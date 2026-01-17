@@ -19,6 +19,7 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 
 import java.util.function.Consumer;
@@ -33,18 +34,22 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
-                                           ClientRegistrationRepository clientRegistrationRepository) throws Exception {
+                                           ClientRegistrationRepository clientRegistrationRepository,
+                                           OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // 1. PUBLIC: Landing page, assets, and user-check API
+                        // 1. PUBLIC: Landing page, assets
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
 
-                        // 2. PROTECTED: The Studio URL and internal index file
-                        .requestMatchers("/studio", "/app.html").permitAll()
+                        // 2. ADMIN
+                        .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
 
-                        // 3. CATCH-ALL
+                        // 3. PROTECTED: The Studio URL and internal index file
+                        // Removed /studio and /app.html from permitAll to force login
+
+                        // 4. CATCH-ALL
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
@@ -58,8 +63,7 @@ public class SecurityConfig {
                         .authorizationEndpoint(authorization -> authorization
                                 .authorizationRequestResolver(authorizationRequestResolver(clientRegistrationRepository))
                         )
-                        // CHANGE: Redirect to /studio after login, not index.html
-                        .defaultSuccessUrl("/studio", true)
+                        .successHandler(oAuth2LoginSuccessHandler)
                 )
                 .logout(logout -> logout
                         .logoutSuccessUrl("/") // Back to Home after logout

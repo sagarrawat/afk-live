@@ -47,7 +47,8 @@ public class StreamService {
             String streamKey,
             String videoKey,
             String musicName,
-            String musicVolume
+            String musicVolume,
+            int loopCount
     ) throws IOException {
         
         log.info("username [{}]", username);
@@ -90,7 +91,7 @@ public class StreamService {
         log.info("musicPath [{}]", musicPath);
         
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume, loopCount);
         
         log.info("command : [{}]", String.join(" ", command));
 
