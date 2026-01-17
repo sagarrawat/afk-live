@@ -48,7 +48,7 @@ public class UserService {
         }
     }
 
-    public void registerUser(String email, String password, String name) {
+    public void registerUser(String email, String password, String name, String baseUrl) {
         if (userRepository.existsById(email)) {
             throw new IllegalArgumentException("User already exists");
         }
@@ -60,7 +60,7 @@ public class UserService {
         user.setPlanType(PlanType.FREE); // Default to Free plan
         userRepository.save(user);
 
-        String link = "http://localhost:8080/verify-email?token=" + user.getVerificationToken();
+        String link = baseUrl + "/verify-email?token=" + user.getVerificationToken();
         emailService.sendVerificationEmail(email, link);
     }
 
@@ -76,11 +76,11 @@ public class UserService {
         return false;
     }
 
-    public void requestPasswordReset(String email) {
+    public void requestPasswordReset(String email, String baseUrl) {
         userRepository.findById(email).ifPresent(user -> {
             user.setResetToken(UUID.randomUUID().toString());
             userRepository.save(user);
-            String link = "http://localhost:8080/reset-password?token=" + user.getResetToken();
+            String link = baseUrl + "/reset-password?token=" + user.getResetToken();
             emailService.sendPasswordResetEmail(email, link);
         });
     }

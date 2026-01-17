@@ -1,12 +1,14 @@
 package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @Controller
 @RequiredArgsConstructor
@@ -25,9 +27,13 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public String registerUser(@RequestParam String email, @RequestParam String password, @RequestParam String name, Model model) {
+    public String registerUser(@RequestParam String email, @RequestParam String password, @RequestParam String name, Model model, HttpServletRequest request) {
         try {
-            userService.registerUser(email, password, name);
+            String baseUrl = ServletUriComponentsBuilder.fromRequestUri(request)
+                    .replacePath(null)
+                    .build()
+                    .toUriString();
+            userService.registerUser(email, password, name, baseUrl);
             model.addAttribute("success", "Registration successful. Please check your email to verify your account.");
             return "login";
         } catch (Exception e) {
@@ -52,8 +58,12 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public String processForgotPassword(@RequestParam String email, Model model) {
-        userService.requestPasswordReset(email);
+    public String processForgotPassword(@RequestParam String email, Model model, HttpServletRequest request) {
+        String baseUrl = ServletUriComponentsBuilder.fromRequestUri(request)
+                .replacePath(null)
+                .build()
+                .toUriString();
+        userService.requestPasswordReset(email, baseUrl);
         model.addAttribute("success", "If an account exists, a password reset link has been sent.");
         return "login";
     }

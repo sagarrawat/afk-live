@@ -32,21 +32,26 @@ public class EngagementController {
 
             for (CommentThread thread : threads) {
                 String commentText = thread.getSnippet().getTopLevelComment().getSnippet().getTextDisplay();
-                List<String> suggestions = aiService.generateReplySuggestions(commentText);
+                // Don't generate suggestions automatically for all to avoid rate limits
 
                 result.add(Map.of(
                     "id", thread.getId(),
                     "author", thread.getSnippet().getTopLevelComment().getSnippet().getAuthorDisplayName(),
                     "text", commentText,
                     "publishedAt", thread.getSnippet().getTopLevelComment().getSnippet().getPublishedAt().toString(),
-                    "videoId", thread.getSnippet().getVideoId(),
-                    "suggestions", suggestions
+                    "videoId", thread.getSnippet().getVideoId()
                 ));
             }
             return ResponseEntity.ok(result);
         } catch (Exception e) {
              return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @GetMapping("/suggest")
+    public ResponseEntity<?> getReplySuggestions(@RequestParam String text, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(Map.of("suggestions", aiService.generateReplySuggestions(text)));
     }
 
     @GetMapping("/settings")
