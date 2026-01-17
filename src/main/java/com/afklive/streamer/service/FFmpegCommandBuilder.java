@@ -100,10 +100,11 @@ public class FFmpegCommandBuilder {
 
     public static List<String> buildStreamCommand(
             Path videoPath,
-            String streamKey,
+            List<String> streamKeys,
             Path musicPath,
             String musicVolume,
-            int loopCount
+            int loopCount,
+            Path watermarkPath
     ) {
         List<String> command = new ArrayList<>();
         command.add("nice");
@@ -111,14 +112,14 @@ public class FFmpegCommandBuilder {
         command.add("19");
         command.add("ffmpeg");
 
-        // Video input
+        // Video input (Index 0)
         command.add("-re");
         command.add("-stream_loop");
         command.add(String.valueOf(loopCount));
         command.add("-i");
         command.add(videoPath.toString());
 
-        // Music input if provided
+        // Music input (Index 1) if provided
         boolean hasMusic = musicPath != null;
         if (hasMusic) {
             command.add("-stream_loop");
@@ -127,18 +128,78 @@ public class FFmpegCommandBuilder {
             command.add(musicPath.toString());
         }
 
-        // Video stream mapping
-        command.add("-map");
-        command.add("0:v:0");
-        command.add("-c:v");
-        command.add("copy");
+        // Watermark input (Index 1 or 2) if provided
+        boolean hasWatermark = watermarkPath != null;
+        if (hasWatermark) {
+            command.add("-i");
+            command.add(watermarkPath.toString());
+        }
 
-        // Audio handling
+        // --- FILTER COMPLEX ---
+        // We need to handle Overlay and Audio Mixing in one complex filter chain
+        // If hasWatermark, we MUST transcode video.
+        // If hasMusic, we mix audio.
+
+        List<String> filterChains = new ArrayList<>();
+        String videoLabel = "0:v";
+        String audioLabel = "0:a";
+
+        if (hasWatermark) {
+            // Overlay watermark (assume watermark is the last input)
+            // Inputs: 0:v and {last_input_index}:v
+            int watermarkIndex = hasMusic ? 2 : 1;
+            // Scale watermark to 15% of width, position top-right with 20px padding
+            String overlayFilter = String.format("[%d:v]scale=iw*0.15:-1[wm];[0:v][wm]overlay=main_w-overlay_w-20:20", watermarkIndex);
+            filterChains.add(overlayFilter + "[vout]");
+            videoLabel = "[vout]";
+        }
+
+        if (hasMusic) {
+            // Mix audio
+            // Inputs: 0:a and 1:a
+            String mixFilter = String.format("[1:a]volume=%s[a1];[0:a][a1]amix=inputs=2:duration=first[aout]", musicVolume);
+            filterChains.add(mixFilter);
+            audioLabel = "[aout]";
+        }
+
+        if (!filterChains.isEmpty()) {
+            command.add("-filter_complex");
+            command.add(String.join(";", filterChains));
+        }
+
+        // --- ENCODING OPTIONS ---
+
+        // Video Encoding
+        if (hasWatermark) {
+            // Must re-encode
+            command.add("-map");
+            command.add(videoLabel);
+            command.add("-c:v");
+            command.add("libx264");
+            command.add("-preset");
+            command.add("veryfast");
+            command.add("-b:v");
+            command.add("4000k");
+            command.add("-maxrate");
+            command.add("4500k");
+            command.add("-bufsize");
+            command.add("9000k");
+            command.add("-pix_fmt");
+            command.add("yuv420p");
+            command.add("-g");
+            command.add("60");
+        } else {
+            // Copy stream (Efficient)
+            command.add("-map");
+            command.add("0:v");
+            command.add("-c:v");
+            command.add("copy");
+        }
+
+        // Audio Encoding
         if (hasMusic) {
             command.add("-map");
-            command.add("1:a:0");
-            command.add("-filter:a");
-            command.add("volume=" + musicVolume);
+            command.add(audioLabel);
             command.add("-c:a");
             command.add("aac");
             command.add("-b:a");
@@ -150,16 +211,23 @@ public class FFmpegCommandBuilder {
             command.add("aac");
         }
 
-        // Output configuration
         if (hasMusic) {
             command.add("-shortest");
         }
 
-        command.add("-f");
-        command.add("flv");
-        command.add("-flvflags");
-        command.add("no_duration_filesize");
-        command.add("rtmps://a.rtmp.youtube.com:443/live2/" + streamKey);
+        // --- OUTPUTS (Multi-streaming) ---
+        for (String key : streamKeys) {
+            command.add("-f");
+            command.add("flv");
+            command.add("-flvflags");
+            command.add("no_duration_filesize");
+
+            if (key.startsWith("rtmp")) {
+                 command.add(key);
+            } else {
+                 command.add("rtmps://a.rtmp.youtube.com:443/live2/" + key);
+            }
+        }
 
         return command;
     }

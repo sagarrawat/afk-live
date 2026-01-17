@@ -633,19 +633,23 @@ function selectStreamVideo(video) {
 }
 
 async function submitJob() {
-    const key = document.getElementById('streamKey').value;
+    // Gather all selected keys
+    const selectedKeys = destinations.filter(d => d.selected).map(d => d.key);
+
     const loopInfinite = document.getElementById('streamLoopInfinite').checked;
     const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
 
     if(!selectedStreamVideo) return showToast("Please select a video source", "error");
-    if(!key) return showToast("Please select a destination or enter stream key", "error");
+    if(selectedKeys.length === 0) return showToast("Please select at least one destination", "error");
 
     const btn = document.getElementById('btnGoLive');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Starting...';
 
     const fd = new FormData();
-    fd.append("streamKey", key);
+    // Append each key (Spring will treat same-name keys as a List<String>)
+    selectedKeys.forEach(k => fd.append("streamKey", k));
+
     fd.append("videoKey", selectedStreamVideo.s3Key);
     fd.append("loopCount", loopCount);
 
@@ -660,6 +664,11 @@ async function submitJob() {
     } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
         fd.append("musicName", "stock:" + musicStock);
         fd.append("musicVolume", musicVol);
+    }
+
+    // Watermark
+    if(window.uploadedWatermarkFile) {
+        fd.append("watermarkFile", window.uploadedWatermarkFile);
     }
 
     try {
@@ -815,21 +824,29 @@ function renderDestinations() {
     destinations.forEach(d => {
         const div = document.createElement('div');
         div.className = 'destination-item';
-        div.onclick = () => selectDestination(d.id);
+        // Multi-select toggle
+        if (d.selected) div.classList.add('active');
+
+        div.onclick = () => toggleDestination(d.id);
         div.dataset.id = d.id;
         div.innerHTML = `
-            <div class="dest-icon"><i class="fa-solid fa-key"></i></div>
+            <div class="dest-icon" style="color: ${d.selected ? 'var(--primary)' : '#999'}">
+                <i class="fa-solid ${d.selected ? 'fa-circle-check' : 'fa-circle'}"></i>
+            </div>
             <div style="flex:1"><b>${d.name}</b></div>
             <button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)" title="Remove"><i class="fa-solid fa-trash"></i></button>
         `;
         list.appendChild(div);
     });
+}
 
-    // Auto-select first if none selected
-    const active = document.querySelector('.destination-item.active');
-    if(!active && destinations.length > 0) {
-        selectDestination(destinations[0].id);
+function toggleDestination(id) {
+    const dest = destinations.find(d => d.id === id);
+    if(dest) {
+        dest.selected = !dest.selected;
+        saveDestinations(); // Save to local storage
+        renderDestinations(); // Re-render
     }
 }
 
@@ -847,16 +864,7 @@ function editDestination(id, e) {
     document.getElementById('newDestName').focus();
 }
 
-function selectDestination(id) {
-    const dest = destinations.find(d => d.id === id);
-    if(!dest) return;
-
-    document.getElementById('streamKey').value = dest.key;
-    document.querySelectorAll('.destination-item').forEach(el => {
-        el.classList.remove('active');
-        if(parseInt(el.dataset.id) === id) el.classList.add('active');
-    });
-}
+// function selectDestination(id) removed in favor of toggleDestination
 
 /* --- TIMER --- */
 function startTimer() {
@@ -1699,6 +1707,28 @@ function switchStreamAudioTab(tab) {
         secLib.classList.remove('hidden');
         loadStreamAudioLibrary();
     }
+}
+
+/* --- WATERMARK --- */
+function handleWatermarkUpload(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        window.uploadedWatermarkFile = file;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('watermarkImg').src = e.target.result;
+            document.getElementById('watermarkName').innerText = file.name;
+            document.getElementById('watermarkPreview').classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function clearWatermark() {
+    window.uploadedWatermarkFile = null;
+    document.getElementById('streamWatermarkFile').value = '';
+    document.getElementById('watermarkPreview').classList.add('hidden');
 }
 
 async function loadStreamAudioLibrary() {

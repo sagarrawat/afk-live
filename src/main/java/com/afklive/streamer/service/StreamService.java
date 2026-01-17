@@ -8,10 +8,12 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,14 +48,19 @@ public class StreamService {
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
             String username,
-            String streamKey,
+            List<String> streamKeys,
             String videoKey,
             String musicName,
             String musicVolume,
-            int loopCount
+            int loopCount,
+            MultipartFile watermarkFile
     ) throws IOException {
         
         log.info("username [{}]", username);
+
+        if (streamKeys == null || streamKeys.isEmpty()) {
+             throw new IllegalArgumentException("At least one destination is required.");
+        }
 
         // 1. SAFETY CHECK: Check DB to see if this user is already live
         // Also check quota limits
@@ -97,10 +104,19 @@ public class StreamService {
             }
         }
 
+        Path watermarkPath = null;
+        if (watermarkFile != null && !watermarkFile.isEmpty()) {
+             // Create temp file for watermark
+             watermarkPath = Files.createTempFile("watermark_", ".png");
+             watermarkFile.transferTo(watermarkPath);
+             // Note: Temp file will linger until OS cleans up, or we can track it to delete on exit.
+             // Ideally we should manage lifecycle, but for now this works.
+        }
+
         log.info("musicPath [{}]", musicPath);
         
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume, loopCount);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath);
         
         log.info("command : [{}]", String.join(" ", command));
 
@@ -129,8 +145,9 @@ public class StreamService {
 
         // 5. SAVE STATE TO DATABASE
         // We save the 'pid' so we can kill specifically THIS process later
+        String primaryKey = streamKeys.getFirst();
         StreamJob job =
-                new StreamJob(username, streamKey, videoKey, musicName, musicVolume, true, process.pid());
+                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid());
         streamJobRepo.save(job);
 
         // Store reference in memory map as backup (optional, but good for speed)
@@ -154,9 +171,9 @@ public class StreamService {
 
         return ApiResponse.success("Stream started", new StreamResponse(
                 String.valueOf(process.pid()),
-                streamKey,
+                primaryKey,
                 "RUNNING",
-                "Stream is now live"
+                "Stream is now live to " + streamKeys.size() + " destinations"
         ));
     }
 

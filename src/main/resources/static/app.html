@@ -160,6 +160,28 @@
                         </div>
                     </div>
 
+                    <!-- Branding / Watermark -->
+                    <div class="card" style="margin-top: 15px;">
+                        <div class="card-header">
+                            <h3 style="margin:0">Branding</h3>
+                        </div>
+                        <div class="form-group" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                            <div>
+                                <label style="margin:0">Watermark Overlay</label>
+                                <div style="font-size:0.8rem; color:#666;">Adds logo to top-right. <span style="color:red">(Forces Re-encoding)</span></div>
+                            </div>
+                            <button class="btn btn-sm btn-outline" onclick="document.getElementById('streamWatermarkFile').click()">
+                                <i class="fa-solid fa-upload"></i> Upload Logo
+                            </button>
+                            <input type="file" id="streamWatermarkFile" accept=".png,.jpg" hidden onchange="handleWatermarkUpload(this)">
+                        </div>
+                        <div id="watermarkPreview" class="hidden" style="display:flex; align-items:center; gap:10px; background:#f0f8ff; padding:8px; border-radius:4px;">
+                            <img id="watermarkImg" src="" style="height:30px; border-radius:4px;">
+                            <div style="flex:1; font-size:0.85rem;" id="watermarkName">logo.png</div>
+                            <button class="btn btn-sm btn-text" onclick="clearWatermark()"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                    </div>
+
                     <!-- Music Selection for Live Stream -->
                     <div class="card" style="margin-top: 15px;">
                         <div class="card-header">
