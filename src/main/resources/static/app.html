@@ -331,6 +331,7 @@
                 <div class="settings-sidebar">
                     <div class="settings-nav-item active" onclick="switchSettingsTab('general')">General</div>
                     <div class="settings-nav-item" onclick="switchSettingsTab('channels')">Channels</div>
+                    <div class="settings-nav-item" onclick="switchSettingsTab('benefits')">My Benefits</div>
                     <div class="settings-nav-item" onclick="switchSettingsTab('plans')">Plans & Billing</div>
                 </div>
                 <div class="settings-content">
@@ -358,6 +359,12 @@
                             <button class="btn btn-primary btn-sm" onclick="addMockChannel()">+ Add Channel</button>
                         </div>
                         <div id="channelListSettings" class="queue-list"></div>
+                    </div>
+
+                    <!-- TAB: BENEFITS -->
+                    <div id="tab-benefits" class="settings-section hidden">
+                        <h2>My Benefits</h2>
+                        <div id="benefitsContent">Loading...</div>
                     </div>
 
                     <!-- TAB: PLANS -->

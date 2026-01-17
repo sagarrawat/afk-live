@@ -782,15 +782,38 @@ async function loadLibraryVideos() {
         const res = await apiFetch(`${API_URL}/library`);
         const data = await res.json();
         list.innerHTML = '';
+        if(!data.data || !data.data.length) {
+            list.innerHTML = '<div class="empty-state">Library is empty. Upload videos to get started.</div>';
+            return;
+        }
+
         data.data.forEach(v => {
-            list.innerHTML += `
-                <div class="queue-item">
-                     <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
-                     <div>${v.title}</div>
-                </div>
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.innerHTML = `
+                 <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
+                 <div style="flex:1">${v.title}</div>
+                 <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo('${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
             `;
+            list.appendChild(div);
         });
     } catch(e){}
+}
+
+async function deleteLibraryVideo(filename) {
+    if(!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+
+    try {
+        const res = await apiFetch(`${API_URL}/delete?fileName=${encodeURIComponent(filename)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if(res.ok && data.success) {
+            showToast("File deleted", "success");
+            loadLibraryVideos();
+            fetchUserInfo(); // Update storage usage
+        } else {
+            showToast(data.message || "Delete failed", "error");
+        }
+    } catch(e) { showToast("Error deleting file", "error"); }
 }
 
 async function handleBulkUpload(e) {
@@ -867,11 +890,22 @@ async function aiGenerate(type) {
 /* --- SETTINGS --- */
 function renderPlanInfo(plan) {
     document.getElementById('planName').innerText = plan.name;
-    const used = (plan.storageUsed / 1024 / 1024).toFixed(1);
-    const limit = (plan.storageLimit / 1024 / 1024).toFixed(0);
-    document.getElementById('storageText').innerText = `${used}/${limit} MB`;
+    const usedMB = plan.storageUsed / 1024 / 1024;
+    const limitMB = plan.storageLimit / 1024 / 1024;
+    const freeMB = limitMB - usedMB;
+
+    document.getElementById('storageText').innerText = `${usedMB.toFixed(1)}/${limitMB.toFixed(0)} MB`;
     const pct = Math.min(100, (plan.storageUsed / plan.storageLimit) * 100);
-    document.getElementById('storageBar').style.width = pct + "%";
+
+    const bar = document.getElementById('storageBar');
+    bar.style.width = pct + "%";
+    bar.className = 'progress-fill'; // reset
+
+    if (freeMB < 100) {
+        bar.classList.add('danger');
+    } else if (freeMB < 500) { // e.g. 500MB warning threshold
+        bar.classList.add('warning');
+    }
 }
 
 async function checkYoutubeStatus() {
@@ -1088,6 +1122,26 @@ function switchSettingsTab(tabName) {
     if(content) content.classList.remove('hidden');
 
     if(tabName === 'plans') loadInternalPricing();
+    if(tabName === 'benefits') loadBenefits();
+}
+
+function loadBenefits() {
+    if (!currentUser || !currentUser.plan) return;
+
+    const p = currentUser.plan;
+    const storageLimitMB = (p.storageLimit / 1024 / 1024).toFixed(0);
+
+    document.getElementById('benefitsContent').innerHTML = `
+        <div class="card">
+            <h3>Current Plan: <span style="color:var(--primary)">${p.name}</span></h3>
+            <ul style="margin-top:20px; line-height:2;">
+                <li><i class="fa-solid fa-hard-drive"></i> <b>${storageLimitMB} MB</b> Storage Limit</li>
+                <li><i class="fa-solid fa-video"></i> <b>${p.maxStreams}</b> Concurrent Streams</li>
+                <li><i class="fa-solid fa-users"></i> ${p.name === 'FREE' ? 'Single User' : 'Team Access'}</li>
+                <li><i class="fa-solid fa-robot"></i> ${p.name === 'FREE' ? 'Basic AI' : 'Advanced AI'} Features</li>
+            </ul>
+        </div>
+    `;
 }
 
 async function loadInternalPricing() {
@@ -1266,7 +1320,8 @@ async function loadAudioLibrary() {
                 actions += `<a href="${t.ytUrl}" target="_blank" class="btn btn-sm btn-outline" onclick="event.stopPropagation()" title="Create in YouTube App"><i class="fa-brands fa-youtube" style="color:red"></i> Use</a>`;
             }
             if (isMixable) {
-                actions += `<button class="btn btn-sm btn-text" onclick="event.stopPropagation(); new Audio('${t.url}').play()"><i class="fa-solid fa-play"></i></button>`;
+                // Audio Preview with Toggle
+                actions += `<button class="btn btn-sm btn-text preview-audio-btn" data-url="${t.url}" onclick="event.stopPropagation(); toggleAudioPreview(this, '${t.url}')"><i class="fa-solid fa-play"></i></button>`;
             }
 
             div.innerHTML = `
@@ -1284,6 +1339,33 @@ async function loadAudioLibrary() {
         list.dataset.loaded = "true";
     } catch(e) {
         list.innerHTML = "Failed to load music.";
+    }
+}
+
+let currentAudio = null;
+let currentAudioBtn = null;
+
+function toggleAudioPreview(btn, url) {
+    if (currentAudio && currentAudio.src === url && !currentAudio.paused) {
+        currentAudio.pause();
+        btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        currentAudio = null;
+        currentAudioBtn = null;
+    } else {
+        if (currentAudio) {
+            currentAudio.pause();
+            if(currentAudioBtn) currentAudioBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        }
+        currentAudio = new Audio(url);
+        currentAudio.play();
+        btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        currentAudioBtn = btn;
+
+        currentAudio.onended = () => {
+            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            currentAudio = null;
+            currentAudioBtn = null;
+        };
     }
 }
 

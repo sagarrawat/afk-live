@@ -330,7 +330,9 @@ body {
 .progress-bar-container { margin-top: 10px; }
 .progress-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
 .progress-track { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+.progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s, background-color 0.3s; }
+.progress-fill.warning { background-color: #ffab00; }
+.progress-fill.danger { background-color: var(--danger); }
 .modal-box { background: white; padding: 24px; border-radius: 8px; min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
 .scroll-list { max-height: 300px; overflow-y: auto; }
 
