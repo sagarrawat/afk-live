@@ -77,6 +77,7 @@ async function handleStreamVideoUpload(e) {
             showToast("Video uploaded successfully!", "success");
             // Auto-refresh library modal content
             openLibraryModalForStream();
+            fetchUserInfo(); // Refresh storage
         } else {
             showToast("Upload failed.", "error");
         }
@@ -828,6 +829,7 @@ async function handleBulkUpload(e) {
         if(res.ok) {
             showToast("Uploaded!", "success");
             loadLibraryVideos();
+            fetchUserInfo(); // Refresh storage
         }
     } catch(e){ showToast("Failed", "error"); }
 }
@@ -965,12 +967,35 @@ function initCalendar() {
     }
 }
 
-/* --- COMMUNITY --- */
+/* --- COMMUNITY (Engagement) --- */
 let activeCommentThread = null;
+let currentCommTab = 'all';
+
+function filterCommTab(tab) {
+    currentCommTab = tab;
+    // Update nav active state
+    document.querySelectorAll('.comm-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.comm-nav-item[onclick*="'${tab}'"]`)?.classList.add('active');
+
+    // Show/Hide panels
+    if (tab === 'activity') {
+        document.getElementById('commListPanel').classList.add('hidden');
+        document.getElementById('commDetailView').classList.add('hidden');
+        document.getElementById('commActivityView').classList.remove('hidden');
+        loadActivityLog();
+    } else {
+        document.getElementById('commListPanel').classList.remove('hidden');
+        document.getElementById('commDetailView').classList.remove('hidden');
+        document.getElementById('commActivityView').classList.add('hidden');
+
+        if (tab === 'unreplied') loadUnrepliedComments();
+        else loadComments();
+    }
+}
 
 async function loadComments() {
     const list = document.getElementById('threadList');
-    list.innerHTML = "Loading...";
+    list.innerHTML = "<div style='padding:20px;text-align:center'>Loading...</div>";
     try {
         const res = await apiFetch(`${API_URL}/comments`);
         const data = await res.json();
@@ -980,51 +1005,58 @@ async function loadComments() {
 
 async function loadUnrepliedComments() {
     const list = document.getElementById('threadList');
-    list.innerHTML = "Loading Unreplied...";
+    list.innerHTML = "<div style='padding:20px;text-align:center'>Loading...</div>";
     try {
         const res = await apiFetch(`${API_URL}/engagement/unreplied`);
         const data = await res.json();
-        // The endpoint returns a simplified list, not standard YouTube API response structure.
-        // We need to adapt it or the backend should have returned standard objects?
-        // Backend returns: [{id, author, text, publishedAt, videoId}, ...]
-        // renderThreadList expects standard YouTube structure if possible, OR we adapt renderThreadList.
-        // Let's adapt renderThreadList to handle both.
         renderThreadList(data, true);
-    } catch(e) { list.innerHTML = "Failed to load unreplied."; }
+    } catch(e) { list.innerHTML = "Failed to load."; }
 }
 
 function renderThreadList(items, isSimplified = false) {
     const list = document.getElementById('threadList');
     list.innerHTML = '';
     if(!items || !items.length) {
-        list.innerHTML = "<div style='padding:20px;text-align:center'>No conversations.</div>";
+        list.innerHTML = "<div style='padding:20px;text-align:center;color:#666;'>No conversations found.</div>";
         return;
     }
 
     items.forEach(t => {
-        const div = document.createElement('div');
-        div.className = 'queue-item';
-        div.style.cursor = 'pointer';
+        let author, text, id, dateStr, avatarUrl;
 
-        let author, text, id;
         if (isSimplified) {
             author = t.author;
             text = t.text;
             id = t.id;
+            dateStr = new Date(t.publishedAt).toLocaleDateString();
+            avatarUrl = ""; // No avatar in simplified response
         } else {
             author = t.snippet.topLevelComment.snippet.authorDisplayName;
             text = t.snippet.topLevelComment.snippet.textDisplay;
             id = t.id;
+            dateStr = new Date(t.snippet.topLevelComment.snippet.publishedAt).toLocaleDateString();
+            avatarUrl = t.snippet.topLevelComment.snippet.authorProfileImageUrl;
         }
 
+        const div = document.createElement('div');
+        div.className = 'thread-item';
         div.innerHTML = `
-            <div style="width:32px;height:32px;border-radius:50%;background:#eee;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#555;">${author.charAt(0).toUpperCase()}</div>
-            <div style="flex:1;overflow:hidden;">
-                <div style="font-weight:600;font-size:0.85rem;">${author}</div>
-                <div style="font-size:0.8rem;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${text}</div>
+            <div class="thread-avatar">
+                ${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%">` : author.charAt(0).toUpperCase()}
+            </div>
+            <div style="flex:1; overflow:hidden;">
+                <div class="thread-meta">
+                    <strong>${author}</strong>
+                    <span>${dateStr}</span>
+                </div>
+                <div class="thread-preview">${text}</div>
             </div>
         `;
-        div.onclick = () => selectThread(t, isSimplified);
+        div.onclick = () => {
+            document.querySelectorAll('.thread-item').forEach(el => el.classList.remove('active'));
+            div.classList.add('active');
+            selectThread(t, isSimplified);
+        };
         list.appendChild(div);
     });
 }
@@ -1036,18 +1068,72 @@ function selectThread(thread, isSimplified) {
     document.getElementById('aiSuggestionsArea').classList.add('hidden');
     document.getElementById('replyInput').value = '';
 
-    let text;
+    let text, title, date;
     if (isSimplified) {
         text = thread.text;
+        title = "Video ID: " + thread.videoId; // Simplified doesn't have title yet, maybe fetch or ignore
+        date = new Date(thread.publishedAt).toLocaleString();
     } else {
         text = thread.snippet.topLevelComment.snippet.textDisplay;
+        title = "Comment on Video"; // Standard API structure is complex for video title mapping without extra call
+        date = new Date(thread.snippet.topLevelComment.snippet.publishedAt).toLocaleString();
     }
 
-    document.getElementById('threadMessages').innerHTML = `
-        <div style="padding:15px; background:#f9f9f9; border-radius:4px; margin-bottom:10px;">
-            <div style="font-size:1rem; margin-bottom:5px;">${text}</div>
+    document.getElementById('threadVideoTitle').innerText = title;
+
+    const container = document.getElementById('threadMessages');
+    container.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <div class="chat-bubble incoming">
+                <div style="font-weight:600; font-size:0.8rem; margin-bottom:4px; opacity:0.7;">${date}</div>
+                ${text}
+            </div>
         </div>
     `;
+
+    // Add replies if standard object and existing
+    if (!isSimplified && thread.replies) {
+        thread.replies.comments.forEach(r => {
+             container.innerHTML += `
+                <div class="chat-bubble outgoing">
+                    ${r.snippet.textDisplay}
+                </div>
+             `;
+        });
+    }
+}
+
+async function loadActivityLog() {
+    const list = document.getElementById('activityList');
+    list.innerHTML = "Loading...";
+    try {
+        const res = await apiFetch(`${API_URL}/engagement/activity`);
+        const data = await res.json();
+        list.innerHTML = '';
+
+        if(!data || !data.length) {
+            list.innerHTML = "No activity yet.";
+            return;
+        }
+
+        data.forEach(act => {
+            const date = new Date(act.timestamp).toLocaleString();
+            let icon = '<i class="fa-solid fa-check"></i>';
+            if(act.actionType === 'REPLY') icon = '<i class="fa-solid fa-reply"></i>';
+            if(act.actionType === 'DELETE') icon = '<i class="fa-solid fa-trash"></i>';
+
+            list.innerHTML += `
+                <div class="activity-item">
+                    <div class="act-icon ${act.actionType}">${icon}</div>
+                    <div class="act-content">
+                        <div><b>${act.actionType}</b> on comment ${act.commentId}</div>
+                        <div style="font-size:0.85rem; color:#555; margin-top:4px;">"${act.content}"</div>
+                    </div>
+                    <div class="act-time">${date}</div>
+                </div>
+            `;
+        });
+    } catch(e) { list.innerHTML = "Failed to load activity."; }
 }
 
 function toggleAiSuggestions() {
@@ -1157,14 +1243,21 @@ async function loadInternalPricing() {
 
         // Plan Ranks
         const planRanks = { 'FREE': 0, 'ESSENTIALS': 1, 'TEAM': 2 };
-        const currentRank = currentUser && currentUser.plan ? (planRanks[currentUser.plan.id] || 0) : -1;
+        // If current plan name (from user-info) matches ID in pricing, use it. But user-info returns "display name" sometimes.
+        // Let's assume user-info returns correct ID or map it.
+        // Actually, user-info returns `plan: { name: "Free", ... }`.
+        // We need to map display name back to ID or fix backend to return ID.
+        // Currently PricingController returns ID: "FREE". User-info returns name "Free".
+        // Simple map:
+        const currentPlanName = currentUser && currentUser.plan ? currentUser.plan.name.toUpperCase() : "FREE";
+        const currentRank = planRanks[currentPlanName] !== undefined ? planRanks[currentPlanName] : -1;
 
         data.plans.forEach(plan => {
             const planRank = planRanks[plan.id] || 0;
             let btn = '';
             let activeClass = '';
 
-            if(currentUser && currentUser.plan && currentUser.plan.id === plan.id) {
+            if(currentPlanName === plan.id) {
                 btn = `<button class="btn btn-outline btn-block" disabled style="opacity:0.6; cursor:default;">Current Plan</button>`;
                 activeClass = 'active-plan';
             } else if (currentRank > planRank) {
@@ -1321,7 +1414,7 @@ async function loadAudioLibrary() {
             }
             if (isMixable) {
                 // Audio Preview with Toggle
-                actions += `<button class="btn btn-sm btn-text preview-audio-btn" data-url="${t.url}" onclick="event.stopPropagation(); toggleAudioPreview(this, '${t.url}')"><i class="fa-solid fa-play"></i></button>`;
+                actions += `<button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '${t.url}')"><i class="fa-solid fa-play"></i></button>`;
             }
 
             div.innerHTML = `
