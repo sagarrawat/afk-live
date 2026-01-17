@@ -26,7 +26,7 @@ class FFmpegCommandBuilderTest {
         String streamKey = "live_12345";
         List<String> keys = List.of(streamKey);
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null);
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, false, "original");
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command).contains("rtmps://a.rtmp.youtube.com:443/live2/" + streamKey);
@@ -42,7 +42,7 @@ class FFmpegCommandBuilderTest {
         List<String> keys = List.of(streamKey);
         String musicVolume = "0.5";
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, musicPath, musicVolume, 1, null);
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, musicPath, musicVolume, 1, null, false, "original");
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command).contains("-i", musicPath.toString());
@@ -60,12 +60,30 @@ class FFmpegCommandBuilderTest {
         String streamKey = "live_12345";
         List<String> keys = List.of(streamKey);
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, 1, watermarkPath);
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, 1, watermarkPath, false, "original");
 
         assertThat(command).contains("-i", watermarkPath.toString());
         // Should contain filter complex for overlay
         assertThat(command.toString()).contains("overlay=");
         // Should force re-encode
         assertThat(command).contains("libx264");
+    }
+
+    @Test
+    void testBuildStreamCommandWithMuteAndScaling() {
+        Path videoPath = Paths.get("/tmp/video.mp4");
+        Path musicPath = Paths.get("/tmp/music.mp3");
+        String streamKey = "live_12345";
+        List<String> keys = List.of(streamKey);
+
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, musicPath, "1.0", 1, null, true, "force_landscape");
+
+        // Scaling Check
+        assertThat(command.toString()).contains("scale=1920:1080");
+
+        // Mute Check (Should not mix [0:a])
+        assertThat(command.toString()).doesNotContain("amix");
+        // Should use music only
+        assertThat(command.toString()).contains("[1:a]volume=1.0[aout]");
     }
 }

@@ -671,6 +671,14 @@ async function submitJob() {
         fd.append("watermarkFile", window.uploadedWatermarkFile);
     }
 
+    // Mute Original
+    const muteOriginal = document.getElementById('streamMuteOriginal').checked;
+    fd.append("muteVideoAudio", muteOriginal);
+
+    // Output Mode
+    const outputMode = document.getElementById('streamOutputMode').value;
+    fd.append("streamMode", outputMode);
+
     try {
         const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
         const data = await res.json();

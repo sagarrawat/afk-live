@@ -157,6 +157,15 @@
                                     24/7 (Infinite)
                                 </label>
                             </div>
+
+                            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee;">
+                                <div style="font-size: 0.9rem; margin-bottom: 5px; font-weight: 500;">Output Resolution (Fixes "Not Supported" errors)</div>
+                                <select id="streamOutputMode" class="form-input" style="width: 100%;">
+                                    <option value="original">Original (No Change)</option>
+                                    <option value="force_landscape">Force 1080p Landscape (16:9)</option>
+                                    <option value="force_portrait">Force 1080p Shorts (9:16)</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -214,6 +223,13 @@
                         <div class="form-group" style="margin-top: 10px;">
                             <label>Music Volume (<span id="streamVolVal">50%</span>)</label>
                             <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
+                        </div>
+
+                        <div class="form-group" style="margin-top: 5px;">
+                            <label style="display:flex; align-items:center; gap:8px; font-weight:400; cursor:pointer;">
+                                <input type="checkbox" id="streamMuteOriginal" checked>
+                                <span>Mute original video sound</span>
+                            </label>
                         </div>
                     </div>
                 </div>

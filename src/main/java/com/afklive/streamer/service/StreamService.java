@@ -53,7 +53,9 @@ public class StreamService {
             String musicName,
             String musicVolume,
             int loopCount,
-            MultipartFile watermarkFile
+            MultipartFile watermarkFile,
+            boolean muteVideoAudio,
+            String streamMode
     ) throws IOException {
         
         log.info("username [{}]", username);
@@ -116,7 +118,7 @@ public class StreamService {
         log.info("musicPath [{}]", musicPath);
         
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode);
         
         log.info("command : [{}]", String.join(" ", command));
 
