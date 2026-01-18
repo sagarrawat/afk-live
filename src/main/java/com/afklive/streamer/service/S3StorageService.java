@@ -16,6 +16,9 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.util.UUID;
 
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+
 @Service
 @ConditionalOnProperty(name = "app.storage.type", havingValue = "s3")
 public class S3StorageService implements FileStorageService {
@@ -67,5 +70,10 @@ public class S3StorageService implements FileStorageService {
                 .key(key)
                 .build();
         s3Client.getObject(getOb, software.amazon.awssdk.core.sync.ResponseTransformer.toFile(destination));
+    }
+
+    @Override
+    public Resource loadFileAsResource(String key) {
+        return new InputStreamResource(downloadFile(key));
     }
 }

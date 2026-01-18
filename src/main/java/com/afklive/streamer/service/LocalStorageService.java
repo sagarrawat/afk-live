@@ -13,6 +13,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+
 @Service
 @ConditionalOnProperty(name = "app.storage.type", havingValue = "local", matchIfMissing = true)
 public class LocalStorageService implements FileStorageService {
@@ -59,5 +62,14 @@ public class LocalStorageService implements FileStorageService {
         } catch (IOException e) {
             throw new RuntimeException("Failed to copy file", e);
         }
+    }
+
+    @Override
+    public Resource loadFileAsResource(String key) {
+        Path file = rootLocation.resolve(key);
+        if (!Files.exists(file)) {
+            throw new RuntimeException("File not found: " + key);
+        }
+        return new FileSystemResource(file);
     }
 }

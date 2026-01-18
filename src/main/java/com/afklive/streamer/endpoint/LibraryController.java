@@ -14,7 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 
 import java.io.InputStream;
@@ -118,7 +118,7 @@ public class LibraryController {
     }
 
     @GetMapping("/stream/{id}")
-    public ResponseEntity<InputStreamResource> streamVideo(@PathVariable Long id, java.security.Principal principal) {
+    public ResponseEntity<Resource> streamVideo(@PathVariable Long id, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         String username = principal.getName();
 
@@ -128,10 +128,10 @@ public class LibraryController {
         }
 
         try {
-            InputStream is = storageService.downloadFile(video.getS3Key());
+            Resource resource = storageService.loadFileAsResource(video.getS3Key());
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(AppConstants.MIME_VIDEO_MP4))
-                    .body(new InputStreamResource(is));
+                    .body(resource);
         } catch (Exception e) {
             log.error("Failed to stream video", e);
             return ResponseEntity.internalServerError().build();
