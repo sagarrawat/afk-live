@@ -47,24 +47,28 @@ public class VideoSchedulerService {
             InputStream fileStream = storageService.downloadFile(video.getS3Key());
             String videoId = null;
             String platform = AppConstants.PLATFORM_YOUTUBE;
+            String credentialId = video.getUsername(); // Default to owner
 
             if (video.getSocialChannelId() != null) {
                 SocialChannel channel = channelRepository.findById(video.getSocialChannelId()).orElse(null);
                 if (channel != null) {
                     platform = channel.getPlatform();
+                    if (channel.getCredentialId() != null) {
+                        credentialId = channel.getCredentialId();
+                    }
                 }
             }
 
             if (AppConstants.PLATFORM_INSTAGRAM.equals(platform)) {
                 videoId = instagramService.uploadVideo(
-                        video.getUsername(),
+                        credentialId,
                         fileStream,
                         video.getTitle(),
                         video.getDescription()
                 );
             } else if (AppConstants.PLATFORM_SNAPCHAT.equals(platform)) {
                 videoId = snapchatService.uploadVideo(
-                        video.getUsername(),
+                        credentialId,
                         fileStream,
                         video.getTitle(),
                         video.getDescription()
@@ -72,7 +76,7 @@ public class VideoSchedulerService {
             } else {
                 // Default to YouTube
                 videoId = youTubeService.uploadVideo(
-                        video.getUsername(),
+                        credentialId,
                         fileStream,
                         video.getTitle(),
                         video.getDescription(),
@@ -83,7 +87,7 @@ public class VideoSchedulerService {
 
                 if (video.getThumbnailS3Key() != null) {
                     try (InputStream thumbStream = storageService.downloadFile(video.getThumbnailS3Key())) {
-                        youTubeService.uploadThumbnail(video.getUsername(), videoId, thumbStream);
+                        youTubeService.uploadThumbnail(credentialId, videoId, thumbStream);
                     } catch (Exception e) {
                         log.error("Failed to upload thumbnail for video {}", video.getId(), e);
                     }
@@ -92,7 +96,7 @@ public class VideoSchedulerService {
                 // Post First Comment if set (YouTube only for now)
                 if (video.getFirstComment() != null && !video.getFirstComment().isEmpty()) {
                     try {
-                        youTubeService.addComment(video.getUsername(), videoId, video.getFirstComment());
+                        youTubeService.addComment(credentialId, videoId, video.getFirstComment());
                         log.info("Posted first comment for video ID: {}", video.getId());
                     } catch (Exception e) {
                         log.error("Failed to post first comment for video ID: {}", video.getId(), e);

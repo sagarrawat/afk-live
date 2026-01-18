@@ -9,7 +9,10 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
@@ -33,6 +36,42 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
         String name = oauthUser.getAttribute("name");
         String picture = oauthUser.getAttribute("picture");
 
+        // Check for linking
+        String linkingUser = (String) request.getSession().getAttribute("LINKING_USER");
+        if (linkingUser != null) {
+            request.getSession().removeAttribute("LINKING_USER");
+            // Perform Linking
+            try {
+                // Here 'email' is the NEW google account credential ID
+                // 'linkingUser' is the ORIGINAL user
+                channelService.syncChannelFromGoogle(email, linkingUser);
+
+                // Restore Original Session
+                Optional<User> originalUserOpt = userRepository.findById(linkingUser);
+                if (originalUserOpt.isPresent()) {
+                    User original = originalUserOpt.get();
+                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                            original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
+
+                getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
+                return;
+            } catch (Exception e) {
+                // Restore session anyway to prevent stuck on wrong user
+                Optional<User> originalUserOpt = userRepository.findById(linkingUser);
+                if (originalUserOpt.isPresent()) {
+                    User original = originalUserOpt.get();
+                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                            original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
+                getRedirectStrategy().sendRedirect(request, response, "/studio?error=channel_sync_failed");
+                return;
+            }
+        }
+
+        // Standard Login
         Optional<User> userOpt = userRepository.findById(email);
         User user;
         if (userOpt.isPresent()) {
@@ -54,17 +93,15 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
         }
         userRepository.save(user);
 
-        // Specific Handling for Channel Connection
-        if (AppConstants.OAUTH_GOOGLE_YOUTUBE.equals(token.getAuthorizedClientRegistrationId())) {
+        // Specific Handling for Channel Connection (Legacy or Direct Login with Scope)
+        boolean hasYoutube = token.getAuthorizedClientRegistrationId().equals(AppConstants.OAUTH_GOOGLE_YOUTUBE)
+                             || token.getAuthorities().stream().anyMatch(a -> a.getAuthority().contains("youtube"));
+
+        if (hasYoutube) {
             try {
                 channelService.syncChannelFromGoogle(email);
-                getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
-                return;
             } catch (Exception e) {
-                // Log and maybe redirect with error
-                // For now, just fall through to normal redirect, or error param
-                getRedirectStrategy().sendRedirect(request, response, "/studio?error=channel_sync_failed");
-                return;
+                // ignore
             }
         }
 

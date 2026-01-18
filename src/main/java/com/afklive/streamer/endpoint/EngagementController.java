@@ -4,6 +4,7 @@ import com.afklive.streamer.model.User;
 import com.afklive.streamer.service.AiService;
 import com.afklive.streamer.model.EngagementActivity;
 import com.afklive.streamer.repository.EngagementActivityRepository;
+import com.afklive.streamer.service.ChannelService;
 import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.service.YouTubeService;
 import com.afklive.streamer.util.SecurityUtils;
@@ -26,12 +27,15 @@ public class EngagementController {
     private final YouTubeService youTubeService;
     private final AiService aiService;
     private final EngagementActivityRepository activityRepository;
+    private final ChannelService channelService;
 
     @GetMapping("/unreplied")
     public ResponseEntity<?> getUnrepliedComments(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         try {
-            List<CommentThread> threads = youTubeService.getUnrepliedComments(SecurityUtils.getEmail(principal));
+            String username = SecurityUtils.getEmail(principal);
+            String credentialId = channelService.getCredentialId(username);
+            List<CommentThread> threads = youTubeService.getUnrepliedComments(credentialId);
             List<Map<String, Object>> result = new ArrayList<>();
 
             for (CommentThread thread : threads) {
@@ -102,7 +106,8 @@ public class EngagementController {
         if ("REPLY".equals(activity.getActionType())) {
             try {
                 if (activity.getCreatedCommentId() != null) {
-                    youTubeService.deleteComment(email, activity.getCreatedCommentId());
+                    String credentialId = channelService.getCredentialId(email);
+                    youTubeService.deleteComment(credentialId, activity.getCreatedCommentId());
                     activity.setActionType("REVERTED_REPLY");
                     activityRepository.save(activity);
                     return ResponseEntity.ok(Map.of("success", true, "message", "Reply deleted"));

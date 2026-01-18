@@ -13,6 +13,7 @@ public class SocialChannel {
     private String name;
     private String platform; // e.g., "YOUTUBE"
     private String profileUrl;
+    private String credentialId;
 
     @ManyToOne
     @JoinColumn(name = "user_id")
@@ -39,6 +40,9 @@ public class SocialChannel {
 
     public String getProfileUrl() { return profileUrl; }
     public void setProfileUrl(String profileUrl) { this.profileUrl = profileUrl; }
+
+    public String getCredentialId() { return credentialId; }
+    public void setCredentialId(String credentialId) { this.credentialId = credentialId; }
 
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }

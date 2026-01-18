@@ -191,8 +191,8 @@ body {
     background: black; border-radius: 8px; overflow: hidden; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; position: relative;
     box-shadow: 0 4px 20px rgba(0,0,0,0.1);
 }
-.preview-player { width: 100%; height: 100%; object-fit: contain; display: block; position: relative; z-index: 1; }
-.preview-placeholder { color: rgba(255,255,255,0.5); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.preview-player { width: 100%; height: 100%; object-fit: contain; display: block; position: relative; z-index: 1; background: black; }
+.preview-placeholder { color: rgba(255,255,255,0.5); display: flex; flex-direction: column; align-items: center; gap: 10px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 0; }
 .preview-overlay { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; pointer-events: none; }
 
 .control-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; }

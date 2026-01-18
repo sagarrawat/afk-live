@@ -5,7 +5,7 @@ public class AppConstants {
     public static final String STORAGE_TYPE_S3 = "s3";
 
     public static final String OAUTH_GOOGLE = "google";
-    public static final String OAUTH_GOOGLE_YOUTUBE = "google-youtube";
+    public static final String OAUTH_GOOGLE_YOUTUBE = "google";
 
     public static final String PRIVACY_PRIVATE = "private";
     public static final String PRIVACY_PUBLIC = "public";
