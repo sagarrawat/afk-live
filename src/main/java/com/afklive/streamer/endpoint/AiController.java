@@ -25,11 +25,10 @@ public class AiController {
             return ResponseEntity.badRequest().body(Map.of("message", "Type and context required"));
         }
 
-        String result = "";
-        try {
-            Thread.sleep(1500); // Simulate network latency/thinking
-        } catch (InterruptedException e) {}
+        // Mock latency removed for better UX or kept short
+        try { Thread.sleep(500); } catch (InterruptedException e) {}
 
+        String result = "";
         switch (type) {
             case "title":
                 result = aiService.generateTitle(context);
@@ -45,5 +44,14 @@ public class AiController {
         }
 
         return ResponseEntity.ok(Map.of("result", result));
+    }
+
+    @PostMapping("/stream-metadata")
+    public ResponseEntity<?> generateStreamMetadata(@RequestBody Map<String, String> body) {
+        String context = body.get("context");
+        if (context == null || context.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Context required"));
+        }
+        return ResponseEntity.ok(aiService.generateStreamMetadata(context));
     }
 }

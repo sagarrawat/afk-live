@@ -700,6 +700,12 @@ function selectStreamVideo(video) {
     selectedStreamVideo = video;
     document.getElementById('selectedVideoTitle').innerText = video.title;
 
+    // Auto-fill AI Topic
+    const topicInput = document.getElementById('aiStreamTopic');
+    if(topicInput && !topicInput.value) {
+        topicInput.value = video.title.replace(/\.[^/.]+$/, ""); // remove extension
+    }
+
     // Preview
     const player = document.getElementById('previewPlayer');
     document.getElementById('previewPlaceholder').classList.add('hidden');
@@ -724,6 +730,44 @@ function selectStreamVideo(video) {
         console.error("Preview Error", player.error);
         showToast("Failed to load preview", "error");
     };
+}
+
+async function generateStreamMetadata() {
+    const topic = document.getElementById('aiStreamTopic').value;
+    if(!topic) return showToast("Please enter a topic", "error");
+
+    const container = document.getElementById('aiMetadataResults');
+    container.classList.remove('hidden');
+    document.getElementById('aiStreamTip').innerText = "Generating...";
+
+    try {
+        const res = await apiFetch(`${API_URL}/ai/stream-metadata`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({context: topic})
+        });
+        const data = await res.json();
+
+        document.getElementById('aiStreamTitle').value = data.title;
+        document.getElementById('aiStreamDesc').value = data.description;
+        document.getElementById('aiStreamTags').value = data.tags;
+        document.getElementById('aiStreamTip').innerText = data.tip;
+
+    } catch(e) {
+        showToast("AI Generation Failed", "error");
+    }
+}
+
+function copyToClipboard(elementId) {
+    const el = document.getElementById(elementId);
+    if(el) {
+        el.select();
+        document.execCommand('copy'); // Fallback for older browsers
+        if(navigator.clipboard) {
+            navigator.clipboard.writeText(el.value);
+        }
+        showToast("Copied!", "success");
+    }
 }
 
 async function submitJob() {
