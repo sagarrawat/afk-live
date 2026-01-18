@@ -16,17 +16,7 @@ spring:
             scope:
               - profile
               - email
-          google-youtube:
-            provider: google
-            client-id: ${GOOGLE_CLIENT_ID}
-            client-secret: ${GOOGLE_CLIENT_SECRET}
-            user-name-attribute: email
-            scope:
-              - profile
-              - email
-              - https://www.googleapis.com/auth/youtube.upload
-              - https://www.googleapis.com/auth/youtube.readonly
-              - https://www.googleapis.com/auth/youtube.force-ssl
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
   datasource:
     url: jdbc:h2:file:./data/afklive;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver

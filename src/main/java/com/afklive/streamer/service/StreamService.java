@@ -116,9 +116,12 @@ public class StreamService {
         }
 
         log.info("musicPath [{}]", musicPath);
+
+        // Get User Plan Limits
+        int maxHeight = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
         
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight);
         
         log.info("command : [{}]", String.join(" ", command));
 
@@ -127,7 +130,7 @@ public class StreamService {
 
         // Redirect logs to console so you can debug "Connection Failed" errors
         builder.redirectErrorStream(true);
-        builder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        // builder.redirectOutput(ProcessBuilder.Redirect.INHERIT); // Removing INHERIT to capture logs in getInputStream
 
         Process process = builder.start();
 

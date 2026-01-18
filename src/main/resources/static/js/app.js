@@ -360,7 +360,8 @@ function selectPlatform(platform, el) {
 
 async function submitConnectChannel() {
     if (selectedPlatform === 'YOUTUBE') {
-        window.location.href = '/oauth2/authorization/google-youtube';
+        // Use standard google client but with special action parameter
+        window.location.href = '/oauth2/authorization/google?action=connect_youtube';
         return;
     }
 
@@ -707,12 +708,21 @@ function selectStreamVideo(video) {
 
     // Use the streaming endpoint
     player.src = `${API_URL}/library/stream/${video.id}`;
+    player.style.visibility = 'visible';
+
+    player.onloadedmetadata = () => {
+        console.log(`Video Loaded: ${player.videoWidth}x${player.videoHeight}`);
+        if(player.videoWidth > 0) {
+             player.style.display = 'block'; // Ensure block
+        }
+    };
+
     player.load();
     player.play().catch(e => console.log("Autoplay blocked/failed:", e));
 
     player.onerror = () => {
         console.error("Preview Error", player.error);
-        // showToast("Failed to load preview", "error");
+        showToast("Failed to load preview", "error");
     };
 }
 

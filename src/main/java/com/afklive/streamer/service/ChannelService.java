@@ -24,20 +24,37 @@ public class ChannelService {
 
     @Transactional
     public void syncChannelFromGoogle(String username) {
+        syncChannelFromGoogle(username, username);
+    }
+
+    @Transactional
+    public void syncChannelFromGoogle(String credentialId, String targetUsername) {
         try {
-            String channelName = youTubeService.getChannelName(username);
+            String channelName = youTubeService.getChannelName(credentialId);
 
             // Check if already exists
-            User user = userService.getOrCreateUser(username);
+            User user = userService.getOrCreateUser(targetUsername);
             boolean exists = user.getChannels().stream()
                     .anyMatch(c -> c.getName().equals(channelName) && "YOUTUBE".equals(c.getPlatform()));
 
             if (!exists) {
-                addChannel(username, channelName);
+                SocialChannel ch = addChannel(targetUsername, channelName);
+                ch.setCredentialId(credentialId);
+                userRepository.save(user); // Cascade update
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to sync YouTube channel: " + e.getMessage());
         }
+    }
+
+    @Transactional(readOnly = true)
+    public String getCredentialId(String username) {
+        User user = userService.getOrCreateUser(username);
+        return user.getChannels().stream()
+                .filter(c -> "YOUTUBE".equals(c.getPlatform()) && c.getCredentialId() != null)
+                .findFirst()
+                .map(SocialChannel::getCredentialId)
+                .orElse(username);
     }
 
     @Transactional

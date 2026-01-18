@@ -1,5 +1,6 @@
 package com.afklive.streamer.endpoint;
 
+import com.afklive.streamer.service.ChannelService;
 import com.afklive.streamer.service.YouTubeService;
 import com.afklive.streamer.util.SecurityUtils;
 import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
@@ -25,6 +26,7 @@ public class AnalyticsController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AnalyticsController.class);
 
     private final YouTubeService youTubeService;
+    private final ChannelService channelService;
 
     @GetMapping
     public Map<String, Object> getAnalytics(
@@ -36,6 +38,7 @@ public class AnalyticsController {
             throw new IllegalStateException("Not authenticated");
         }
         String username = SecurityUtils.getEmail(principal);
+        String credentialId = channelService.getCredentialId(username);
 
         // Default to last 28 days if not provided
         if (startDate == null) {
@@ -46,7 +49,7 @@ public class AnalyticsController {
         }
 
         try {
-            QueryResponse response = youTubeService.getChannelAnalytics(username, startDate, endDate);
+            QueryResponse response = youTubeService.getChannelAnalytics(credentialId, startDate, endDate);
 
             // Transform for Frontend (Chart.js)
             // Response rows are: [day, views, subsGained, minWatched]
