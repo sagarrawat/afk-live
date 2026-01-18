@@ -86,4 +86,21 @@ class FFmpegCommandBuilderTest {
         // Should use music only
         assertThat(command.toString()).contains("[1:a]volume=1.0[aout]");
     }
+
+    @Test
+    void testBuildStreamCommandWithSilence() {
+        Path videoPath = Paths.get("/tmp/video.mp4");
+        String streamKey = "live_12345";
+        List<String> keys = List.of(streamKey);
+
+        // Mute video audio, but NO music provided
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, true, "original");
+
+        // Should generate silence
+        assertThat(command).contains("anullsrc=channel_layout=stereo:sample_rate=44100");
+        // Should map silence input (index 1) to audio
+        assertThat(command).contains("-map", "1:a");
+        // Should loop video
+        assertThat(command).contains("-stream_loop", "-1");
+    }
 }
