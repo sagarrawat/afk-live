@@ -16,6 +16,7 @@ spring:
             scope:
               - profile
               - email
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
   datasource:
     url: jdbc:h2:file:./data/afklive;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
