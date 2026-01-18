@@ -3,6 +3,8 @@ package com.afklive.streamer.security;
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.UserRepository;
+import com.afklive.streamer.service.ChannelService;
+import com.afklive.streamer.util.AppConstants;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,6 +23,7 @@ import java.util.Optional;
 public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final UserRepository userRepository;
+    private final ChannelService channelService;
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
@@ -50,6 +53,20 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             user.setPlanType(PlanType.FREE);
         }
         userRepository.save(user);
+
+        // Specific Handling for Channel Connection
+        if (AppConstants.OAUTH_GOOGLE_YOUTUBE.equals(token.getAuthorizedClientRegistrationId())) {
+            try {
+                channelService.syncChannelFromGoogle(email);
+                getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
+                return;
+            } catch (Exception e) {
+                // Log and maybe redirect with error
+                // For now, just fall through to normal redirect, or error param
+                getRedirectStrategy().sendRedirect(request, response, "/studio?error=channel_sync_failed");
+                return;
+            }
+        }
 
         // Redirect to Studio
         getRedirectStrategy().sendRedirect(request, response, "/studio");

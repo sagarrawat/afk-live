@@ -14,10 +14,30 @@ public class ChannelService {
 
     private final UserRepository userRepository;
     private final UserService userService;
+    private final YouTubeService youTubeService;
 
-    public ChannelService(UserRepository userRepository, UserService userService) {
+    public ChannelService(UserRepository userRepository, UserService userService, YouTubeService youTubeService) {
         this.userRepository = userRepository;
         this.userService = userService;
+        this.youTubeService = youTubeService;
+    }
+
+    @Transactional
+    public void syncChannelFromGoogle(String username) {
+        try {
+            String channelName = youTubeService.getChannelName(username);
+
+            // Check if already exists
+            User user = userService.getOrCreateUser(username);
+            boolean exists = user.getChannels().stream()
+                    .anyMatch(c -> c.getName().equals(channelName) && "YOUTUBE".equals(c.getPlatform()));
+
+            if (!exists) {
+                addChannel(username, channelName);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to sync YouTube channel: " + e.getMessage());
+        }
     }
 
     @Transactional

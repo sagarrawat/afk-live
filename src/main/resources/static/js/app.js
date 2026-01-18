@@ -203,6 +203,18 @@ async function fetchUserInfo() {
 
             // Resume Stream State
             checkInitialStatus();
+
+            // Check if just connected channel
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('connected')) {
+                showToast("Channel Connected Successfully!", "success");
+                window.history.replaceState({}, document.title, window.location.pathname);
+                loadUserChannels();
+            } else if (urlParams.get('error') === 'channel_sync_failed') {
+                 showToast("Channel connection failed. Please try again.", "error");
+                 window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
         } else {
             // Not logged in?
             window.location.href = '/login';
@@ -292,44 +304,9 @@ function filterViewByChannel(channel) {
     showToast(`Switched to ${channel.name}`, 'info');
 }
 
-function addMockChannel() {
-    document.getElementById('newChannelName').value = '';
-    document.getElementById('addChannelModal').classList.remove('hidden');
-    document.getElementById('newChannelName').focus();
-}
-
-async function submitAddChannel() {
-    const name = document.getElementById('newChannelName').value;
-    if(!name) {
-        showToast("Please enter a channel name", "error");
-        return;
-    }
-
-    // Simulate API call delay for realism
-    const btn = document.querySelector('#addChannelModal .btn-primary');
-    const originalText = btn.innerText;
-    btn.innerText = "Connecting...";
-    btn.disabled = true;
-
-    try {
-        const res = await fetch(`${API_URL}/channels`, {
-             method: 'POST',
-             headers: {'Content-Type': 'application/json'},
-             body: JSON.stringify({name: name})
-        });
-        if(res.ok) {
-            showToast("Channel Connected Successfully", "success");
-            document.getElementById('addChannelModal').classList.add('hidden');
-            loadUserChannels();
-        } else {
-             showToast("Connection failed", "error");
-        }
-    } catch(e) {
-        showToast("Error adding channel", "error");
-    } finally {
-        btn.innerText = originalText;
-        btn.disabled = false;
-    }
+function connectGoogleChannel() {
+    // Redirect to the special OAuth2 client registration that has YouTube scopes
+    window.location.href = '/oauth2/authorization/google-youtube';
 }
 
 /* --- PUBLISHING --- */
