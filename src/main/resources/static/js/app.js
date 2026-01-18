@@ -640,9 +640,14 @@ async function loadScheduledQueue() {
 
         videos.forEach(v => {
             const statusClass = v.status === 'UPLOADED' ? 'color:#00875a' : (v.status === 'FAILED' ? 'color:#e02424' : 'color:#6b778c');
+            const thumbUrl = v.thumbnailS3Key ? `${API_URL}/videos/${v.id}/thumbnail` : null;
+            const thumbHtml = thumbUrl
+                ? `<img src="${thumbUrl}" style="width:100%;height:100%;object-fit:cover;">`
+                : `<i class="fa-solid fa-film"></i>`;
+
             list.innerHTML += `
                 <div class="queue-item">
-                    <div class="queue-thumb"><i class="fa-solid fa-film"></i></div>
+                    <div class="queue-thumb">${thumbHtml}</div>
                     <div style="flex:1">
                         <div style="font-weight:600">${v.title}</div>
                         <div style="font-size:0.85rem; color:#666">

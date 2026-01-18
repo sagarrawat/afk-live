@@ -9,6 +9,9 @@ import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.service.YouTubeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,6 +23,7 @@ import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api")
@@ -171,5 +175,29 @@ public class VideoController {
         String username = principal.getName();
         boolean connected = youTubeService.isConnected(username);
         return ResponseEntity.ok(Map.of("connected", connected));
+    }
+
+    @GetMapping("/videos/{id}/thumbnail")
+    public ResponseEntity<Resource> getVideoThumbnail(@PathVariable Long id, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        String username = principal.getName();
+
+        Optional<ScheduledVideo> videoOpt = repository.findById(id);
+        if (videoOpt.isEmpty()) return ResponseEntity.notFound().build();
+
+        ScheduledVideo video = videoOpt.get();
+        if (!video.getUsername().equals(username)) return ResponseEntity.status(403).build();
+
+        if (video.getThumbnailS3Key() == null) return ResponseEntity.notFound().build();
+
+        try {
+            InputStream is = storageService.downloadFile(video.getThumbnailS3Key());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_JPEG) // Assuming JPEG, or guess? Most uploads are.
+                    .body(new InputStreamResource(is));
+        } catch (Exception e) {
+            log.error("Failed to fetch thumbnail", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
