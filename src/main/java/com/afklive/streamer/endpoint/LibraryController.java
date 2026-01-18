@@ -7,6 +7,7 @@ import com.afklive.streamer.service.AiService;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.util.AppConstants;
+import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -44,7 +45,7 @@ public class LibraryController {
             java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
 
         try {
             int successCount = 0;
@@ -108,7 +109,7 @@ public class LibraryController {
     @GetMapping
     public ResponseEntity<?> getLibraryVideos(java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
 
         List<ScheduledVideo> videos = repository.findByUsername(username).stream()
                 .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
@@ -120,7 +121,7 @@ public class LibraryController {
     @GetMapping("/stream/{id}")
     public ResponseEntity<Resource> streamVideo(@PathVariable Long id, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
 
         ScheduledVideo video = repository.findById(id).orElse(null);
         if (video == null || !video.getUsername().equals(username)) {
@@ -144,7 +145,7 @@ public class LibraryController {
             java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
 
         try {
             List<String> timeSlots = (List<String>) payload.get("timeSlots"); // e.g. ["10:00", "14:00"]

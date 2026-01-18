@@ -1,6 +1,7 @@
 package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.service.YouTubeService;
+import com.afklive.streamer.util.SecurityUtils;
 import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +35,7 @@ public class AnalyticsController {
         if (principal == null) {
             throw new IllegalStateException("Not authenticated");
         }
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
 
         // Default to last 28 days if not provided
         if (startDate == null) {

@@ -3,6 +3,7 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.service.*;
+import com.afklive.streamer.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -35,14 +36,14 @@ public class StreamController {
     @PostMapping("/upload")
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file, Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        return ResponseEntity.ok(ApiResponse.success("SUCCESS", fileUploadService.handleFileUpload(file, principal.getName())));
+        return ResponseEntity.ok(ApiResponse.success("SUCCESS", fileUploadService.handleFileUpload(file, SecurityUtils.getEmail(principal))));
     }
 
     @GetMapping("/status")
     public ResponseEntity<?> getStatus(Principal principal) {
         if (principal == null) return ResponseEntity.ok(ApiResponse.success("Guest", Map.of("live", false)));
 
-        StreamJob job = streamService.getCurrentStatus(principal.getName());
+        StreamJob job = streamService.getCurrentStatus(SecurityUtils.getEmail(principal));
         if (job == null) {
             return ResponseEntity.ok(ApiResponse.success("OFFLINE", Map.of("live", false)));
         }
@@ -61,9 +62,10 @@ public class StreamController {
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
-        if (streamManager.tryStartStream(principal.getName())) {
+        String email = SecurityUtils.getEmail(principal);
+        if (streamManager.tryStartStream(email)) {
             try {
-                return ResponseEntity.ok(streamService.startStream(principal.getName(), streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode));
+                return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode));
             } catch (Exception e) {
                 return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
             }
@@ -74,34 +76,37 @@ public class StreamController {
     @PostMapping("/stop")
     public ResponseEntity<?> stop(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        streamManager.endStream(principal.getName());
-        return ResponseEntity.ok(streamService.stopStream(principal.getName()));
+        String email = SecurityUtils.getEmail(principal);
+        streamManager.endStream(email);
+        return ResponseEntity.ok(streamService.stopStream(email));
     }
 
     @PostMapping("/convert")
     public ResponseEntity<?> startConversion(@RequestParam String fileName, Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        videoConversionService.convertVideo(userFileService.getUserUploadDir(principal.getName()), principal.getName(), fileName);
+        String email = SecurityUtils.getEmail(principal);
+        videoConversionService.convertVideo(userFileService.getUserUploadDir(email), email, fileName);
         return ResponseEntity.ok("Conversion Started");
     }
 
     @GetMapping("/convert/status")
     public ResponseEntity<?> getConversionStatus(@RequestParam String fileName, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(0);
-        return ResponseEntity.ok(videoConversionService.getProgress(principal.getName(), fileName).orElse(0));
+        return ResponseEntity.ok(videoConversionService.getProgress(SecurityUtils.getEmail(principal), fileName).orElse(0));
     }
 
     @PostMapping("/convert/shorts")
     public ResponseEntity<?> convertToShort(@RequestParam String fileName, Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        videoConversionService.convertToShort(userFileService.getUserUploadDir(principal.getName()), principal.getName(), fileName);
+        String email = SecurityUtils.getEmail(principal);
+        videoConversionService.convertToShort(userFileService.getUserUploadDir(email), email, fileName);
         return ResponseEntity.ok(Map.of("success", true, "message", "Conversion started"));
     }
 
     @GetMapping("/stream-library")
     public ResponseEntity<?> getLibrary(Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(userFileService.listConvertedVideos(principal.getName()));
+        return ResponseEntity.ok(userFileService.listConvertedVideos(SecurityUtils.getEmail(principal)));
     }
 
     @DeleteMapping("/api/delete")

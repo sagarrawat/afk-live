@@ -2,6 +2,7 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.service.ChannelService;
+import com.afklive.streamer.util.SecurityUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +22,7 @@ public class ChannelController {
 
     @GetMapping
     public List<SocialChannel> getChannels(Principal principal) {
-        return channelService.getChannels(principal.getName());
+        return channelService.getChannels(SecurityUtils.getEmail(principal));
     }
 
     @PostMapping
@@ -32,7 +33,7 @@ public class ChannelController {
             return ResponseEntity.badRequest().body(Map.of("message", "Channel name required"));
         }
         try {
-            SocialChannel channel = channelService.addChannel(principal.getName(), name, platform);
+            SocialChannel channel = channelService.addChannel(SecurityUtils.getEmail(principal), name, platform);
             return ResponseEntity.ok(channel);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));
@@ -41,7 +42,7 @@ public class ChannelController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> removeChannel(@PathVariable Long id, Principal principal) {
-        channelService.removeChannel(principal.getName(), id);
+        channelService.removeChannel(SecurityUtils.getEmail(principal), id);
         return ResponseEntity.ok(Map.of("success", true));
     }
 }
