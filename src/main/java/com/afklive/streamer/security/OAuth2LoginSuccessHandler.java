@@ -4,18 +4,23 @@ import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.service.ChannelService;
+import com.afklive.streamer.service.CustomUserDetailsService;
 import com.afklive.streamer.util.AppConstants;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -23,10 +28,13 @@ import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final UserRepository userRepository;
     private final ChannelService channelService;
+    private final CustomUserDetailsService customUserDetailsService;
+    private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
@@ -38,33 +46,57 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
         // Check for linking
         String linkingUser = (String) request.getSession().getAttribute("LINKING_USER");
+        log.info("OAuth success. Email: {}. LinkingUser: {}", email, linkingUser);
+
         if (linkingUser != null) {
             request.getSession().removeAttribute("LINKING_USER");
             // Perform Linking
             try {
-                // Here 'email' is the NEW google account credential ID
-                // 'linkingUser' is the ORIGINAL user
-                channelService.syncChannelFromGoogle(email, linkingUser);
+                // Here 'token.getName()' is the credential ID (likely Google ID)
+                // 'linkingUser' is the ORIGINAL user (Email)
+                log.info("Linking channel {} to user {}", token.getName(), linkingUser);
+                channelService.syncChannelFromGoogle(token.getName(), linkingUser);
 
                 // Restore Original Session
-                Optional<User> originalUserOpt = userRepository.findById(linkingUser);
-                if (originalUserOpt.isPresent()) {
-                    User original = originalUserOpt.get();
+                try {
+                    UserDetails originalUserDetails = customUserDetailsService.loadUserByUsername(linkingUser);
+
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                            originalUserDetails, null, originalUserDetails.getAuthorities());
+
                     SecurityContextHolder.getContext().setAuthentication(auth);
+                    securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+
+                    // Explicitly set in session as fallback
+                    request.getSession().setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, SecurityContextHolder.getContext());
+
+                    log.info("Restored session for {}", linkingUser);
+                } catch (Exception e) {
+                    log.error("Failed to restore session for {}: {}", linkingUser, e.getMessage());
+                    // Fallback to manual token if service fails, though unlikely
+                     Optional<User> originalUserOpt = userRepository.findById(linkingUser);
+                     if (originalUserOpt.isPresent()) {
+                         User original = originalUserOpt.get();
+                         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                                 original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                         SecurityContextHolder.getContext().setAuthentication(auth);
+                         securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+                     }
                 }
 
                 getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
                 return;
             } catch (Exception e) {
+                log.error("Failed to link channel", e);
                 // Restore session anyway to prevent stuck on wrong user
-                Optional<User> originalUserOpt = userRepository.findById(linkingUser);
-                if (originalUserOpt.isPresent()) {
-                    User original = originalUserOpt.get();
+                 try {
+                    UserDetails originalUserDetails = customUserDetailsService.loadUserByUsername(linkingUser);
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                            originalUserDetails, null, originalUserDetails.getAuthorities());
                     SecurityContextHolder.getContext().setAuthentication(auth);
+                    securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+                } catch (Exception ex) {
+                    log.error("Failed to restore session after error", ex);
                 }
                 getRedirectStrategy().sendRedirect(request, response, "/studio?error=channel_sync_failed");
                 return;
@@ -99,7 +131,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
         if (hasYoutube) {
             try {
-                channelService.syncChannelFromGoogle(email);
+                channelService.syncChannelFromGoogle(token.getName(), email);
             } catch (Exception e) {
                 // ignore
             }

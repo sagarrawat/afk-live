@@ -34,21 +34,31 @@ public class EngagementController {
         if (principal == null) return ResponseEntity.status(401).build();
         try {
             String username = SecurityUtils.getEmail(principal);
-            String credentialId = channelService.getCredentialId(username);
-            List<CommentThread> threads = youTubeService.getUnrepliedComments(credentialId);
+            User user = userService.getOrCreateUser(username);
+
             List<Map<String, Object>> result = new ArrayList<>();
 
-            for (CommentThread thread : threads) {
-                String commentText = thread.getSnippet().getTopLevelComment().getSnippet().getTextDisplay();
-                // Don't generate suggestions automatically for all to avoid rate limits
-
-                result.add(Map.of(
-                    "id", thread.getId(),
-                    "author", thread.getSnippet().getTopLevelComment().getSnippet().getAuthorDisplayName(),
-                    "text", commentText,
-                    "publishedAt", thread.getSnippet().getTopLevelComment().getSnippet().getPublishedAt().toString(),
-                    "videoId", thread.getSnippet().getVideoId()
-                ));
+            // Iterate over all YouTube channels with credentials
+            for (com.afklive.streamer.model.SocialChannel channel : user.getChannels()) {
+                if ("YOUTUBE".equals(channel.getPlatform()) && channel.getCredentialId() != null) {
+                    try {
+                        List<CommentThread> threads = youTubeService.getUnrepliedComments(channel.getCredentialId());
+                        for (CommentThread thread : threads) {
+                            String commentText = thread.getSnippet().getTopLevelComment().getSnippet().getTextDisplay();
+                            result.add(Map.of(
+                                "id", thread.getId(),
+                                "author", thread.getSnippet().getTopLevelComment().getSnippet().getAuthorDisplayName(),
+                                "text", commentText,
+                                "publishedAt", thread.getSnippet().getTopLevelComment().getSnippet().getPublishedAt().toString(),
+                                "videoId", thread.getSnippet().getVideoId(),
+                                "channelName", channel.getName()
+                            ));
+                        }
+                    } catch (Exception e) {
+                        // Log error but continue to next channel
+                        System.err.println("Failed to fetch comments for channel " + channel.getName() + ": " + e.getMessage());
+                    }
+                }
             }
             return ResponseEntity.ok(result);
         } catch (Exception e) {

@@ -102,7 +102,8 @@ public class AiService {
 
     private String callGemini(String prompt) {
         try {
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + geminiKey;
+            // Using gemini-1.5-flash-latest to avoid 404s with generic version
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + geminiKey;
 
             Map<String, Object> requestBody = Map.of(
                 "contents", List.of(
@@ -130,7 +131,8 @@ public class AiService {
             }
         } catch (Exception e) {
             System.err.println("Gemini API failed: " + e.getMessage());
+            // In a real production app, we would log the full response body if it's a 4xx error
         }
-        return prompt; // Fallback or throw? Fallback for now.
+        return prompt; // Fallback
     }
 }
