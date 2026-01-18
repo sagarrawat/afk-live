@@ -158,6 +158,21 @@ function toggleMobileMenu() {
     }
 }
 
+function formatDate(dateString) {
+    if (!dateString) return "";
+    try {
+        const d = new Date(dateString);
+        if (isNaN(d.getTime())) return "";
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    } catch(e) { return ""; }
+}
+
+function handleDisconnect() {
+    if(confirm("Are you sure you want to disconnect? You will be logged out.")) {
+        window.location.href = "/logout";
+    }
+}
+
 /* --- API HELPER --- */
 async function apiFetch(url, options = {}) {
     try {
@@ -1381,13 +1396,13 @@ function renderThreadList(items, isSimplified = false) {
             author = t.author;
             text = t.text;
             id = t.id;
-            dateStr = new Date(t.publishedAt).toLocaleDateString();
+            dateStr = formatDate(t.publishedAt);
             avatarUrl = ""; // No avatar in simplified response
         } else {
             author = t.snippet.topLevelComment.snippet.authorDisplayName;
             text = t.snippet.topLevelComment.snippet.textDisplay;
             id = t.id;
-            dateStr = new Date(t.snippet.topLevelComment.snippet.publishedAt).toLocaleDateString();
+            dateStr = formatDate(t.snippet.topLevelComment.snippet.publishedAt);
             avatarUrl = t.snippet.topLevelComment.snippet.authorProfileImageUrl;
         }
 

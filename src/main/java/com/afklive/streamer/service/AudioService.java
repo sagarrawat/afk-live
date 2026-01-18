@@ -91,12 +91,19 @@ public class AudioService {
             throw new IllegalArgumentException("This track cannot be mixed (Trending Audio). Please use the YouTube App.");
         }
 
-        Path tempFile = Files.createTempFile("audio_" + trackId, ".mp3");
+        // Caching: Check if file exists in temp dir
+        Path tempDir = Path.of(System.getProperty("java.io.tmpdir"));
+        Path cachedFile = tempDir.resolve("afk_audio_" + trackId + ".mp3");
+
+        if (Files.exists(cachedFile)) {
+            return cachedFile;
+        }
+
         // Download
         restTemplate.execute(url, org.springframework.http.HttpMethod.GET, null, clientHttpResponse -> {
-            Files.copy(clientHttpResponse.getBody(), tempFile, StandardCopyOption.REPLACE_EXISTING);
-            return tempFile;
+            Files.copy(clientHttpResponse.getBody(), cachedFile, StandardCopyOption.REPLACE_EXISTING);
+            return cachedFile;
         });
-        return tempFile;
+        return cachedFile;
     }
 }
