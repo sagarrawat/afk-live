@@ -978,6 +978,20 @@ function editDestination(id, e) {
     document.getElementById('newDestName').focus();
 }
 
+function toggleStreamKeyVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
 // function selectDestination(id) removed in favor of toggleDestination
 
 /* --- TIMER --- */

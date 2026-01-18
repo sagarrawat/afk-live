@@ -32,15 +32,19 @@ public class ChannelService {
         try {
             String channelName = youTubeService.getChannelName(credentialId);
 
-            // Check if already exists
             User user = userService.getOrCreateUser(targetUsername);
-            boolean exists = user.getChannels().stream()
-                    .anyMatch(c -> c.getName().equals(channelName) && "YOUTUBE".equals(c.getPlatform()));
+            Optional<SocialChannel> existing = user.getChannels().stream()
+                    .filter(c -> c.getName().equals(channelName) && "YOUTUBE".equals(c.getPlatform()))
+                    .findFirst();
 
-            if (!exists) {
+            if (existing.isPresent()) {
+                // Update credential for existing channel (re-link)
+                existing.get().setCredentialId(credentialId);
+                userRepository.save(user);
+            } else {
                 SocialChannel ch = addChannel(targetUsername, channelName);
                 ch.setCredentialId(credentialId);
-                userRepository.save(user); // Cascade update
+                userRepository.save(user);
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to sync YouTube channel: " + e.getMessage());
