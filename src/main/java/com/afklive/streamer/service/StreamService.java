@@ -116,9 +116,12 @@ public class StreamService {
         }
 
         log.info("musicPath [{}]", musicPath);
+
+        // Get User Plan Limits
+        int maxHeight = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
         
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight);
         
         log.info("command : [{}]", String.join(" ", command));
 

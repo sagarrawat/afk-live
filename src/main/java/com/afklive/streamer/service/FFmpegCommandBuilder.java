@@ -106,7 +106,8 @@ public class FFmpegCommandBuilder {
             int loopCount,
             Path watermarkPath,
             boolean muteVideoAudio,
-            String streamMode
+            String streamMode,
+            int maxHeight
     ) {
         List<String> command = new ArrayList<>();
         command.add("nice");
@@ -153,20 +154,56 @@ public class FFmpegCommandBuilder {
         // Determine if we need video scaling/transcoding
         boolean forceTranscode = false;
 
-        // Handle "streamMode" scaling first
+        // Handle "streamMode" and Quality Limiting
+        // If maxHeight is enforced, adjust target resolutions
+        int targetH = (streamMode != null && streamMode.equals("force_landscape")) ? 1080 : 720;
+        // Logic refinement:
+        // if force_landscape (1080p target), but limit is 720, use 720.
+        // if force_portrait (1080w target?), no, force_portrait is 1080x1920. If limit 720, usually means 720x1280.
+
         if (streamMode != null && !streamMode.equals("original")) {
             forceTranscode = true;
             String scaleFilter = "";
             if (streamMode.equals("force_landscape")) {
-                // Force 1920x1080 (16:9), padding if necessary
-                scaleFilter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2";
+                // Target: 1920x1080 (16:9) OR smaller if restricted
+                int h = Math.min(1080, maxHeight);
+                int w = (h * 16) / 9;
+                // Ensure even dimensions
+                if (w % 2 != 0) w--;
+
+                scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h);
             } else if (streamMode.equals("force_portrait")) {
-                // Force 1080x1920 (9:16), padding if necessary (Shorts)
-                scaleFilter = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2";
+                // Target: 1080x1920 (9:16) OR smaller
+                // Portrait limit is usually width? If Plan says "720p", it means 720p (landscape).
+                // For vertical, 720p equivalent is 720x1280.
+                // So we assume maxHeight applies to the shorter dimension (width in portrait).
+                // Actually maxHeight usually refers to vertical lines.
+                // But for 9:16, "1080p" means 1080x1920 (1080 wide).
+                // So if maxHeight=720, we want 720x1280.
+
+                int w = Math.min(1080, maxHeight);
+                int h = (w * 16) / 9;
+                if (h % 2 != 0) h--;
+
+                scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h);
             }
 
             // We apply this scale to [0:v] immediately
             filterChains.add("[0:v]" + scaleFilter + "[scaled]");
+            videoLabel = "[scaled]";
+        } else {
+            // Original Mode: Enforce Max Height if input exceeds it
+            // Logic: scale='if(gt(iw,ih),-2,min(iw,MAX))':'if(gt(iw,ih),min(ih,MAX),-2)'
+            // Explanation:
+            // If Landscape (iw > ih): Scale Height to min(ih, MAX), Width -2 (auto).
+            // If Portrait (iw <= ih): Scale Width to min(iw, MAX), Height -2 (auto).
+            // This ensures the short dimension never exceeds MAX.
+
+            // We ALWAYS add this filter to ensure compliance, forcing transcode.
+            // (Optimization: we could skip if we knew dimensions, but we don't here).
+            forceTranscode = true;
+            String limitFilter = String.format("scale='if(gt(iw,ih),-2,min(iw,%d))':'if(gt(iw,ih),min(ih,%d),-2)'", maxHeight, maxHeight);
+            filterChains.add("[0:v]" + limitFilter + "[scaled]");
             videoLabel = "[scaled]";
         }
 

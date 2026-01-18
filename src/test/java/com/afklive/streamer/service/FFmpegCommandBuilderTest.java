@@ -26,12 +26,14 @@ class FFmpegCommandBuilderTest {
         String streamKey = "live_12345";
         List<String> keys = List.of(streamKey);
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, false, "original");
+        // Max Height 1080
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, false, "original", 1080);
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command).contains("rtmps://a.rtmp.youtube.com:443/live2/" + streamKey);
-        // We expect default audio handling when no music is present
         assertThat(command).contains("-map", "0:a?");
+        // Should have scaling limit filter now
+        assertThat(command.toString()).contains("scale='if(gt(iw,ih),-2,min(iw,1080))'");
     }
 
     @Test
@@ -42,7 +44,7 @@ class FFmpegCommandBuilderTest {
         List<String> keys = List.of(streamKey);
         String musicVolume = "0.5";
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, musicPath, musicVolume, 1, null, false, "original");
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, musicPath, musicVolume, 1, null, false, "original", 1080);
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command).contains("-i", musicPath.toString());
@@ -60,7 +62,7 @@ class FFmpegCommandBuilderTest {
         String streamKey = "live_12345";
         List<String> keys = List.of(streamKey);
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, 1, watermarkPath, false, "original");
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, 1, watermarkPath, false, "original", 1080);
 
         assertThat(command).contains("-i", watermarkPath.toString());
         // Should contain filter complex for overlay
@@ -76,10 +78,11 @@ class FFmpegCommandBuilderTest {
         String streamKey = "live_12345";
         List<String> keys = List.of(streamKey);
 
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, musicPath, "1.0", 1, null, true, "force_landscape");
+        // Enforce 720p limit even if force_landscape (1080p target)
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, musicPath, "1.0", 1, null, true, "force_landscape", 720);
 
-        // Scaling Check
-        assertThat(command.toString()).contains("scale=1920:1080");
+        // Scaling Check: Should be 1280:720 because 720 < 1080
+        assertThat(command.toString()).contains("scale=1280:720");
 
         // Mute Check (Should not mix [0:a])
         assertThat(command.toString()).doesNotContain("amix");
@@ -94,7 +97,7 @@ class FFmpegCommandBuilderTest {
         List<String> keys = List.of(streamKey);
 
         // Mute video audio, but NO music provided
-        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, true, "original");
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, true, "original", 1080);
 
         // Should generate silence
         assertThat(command).contains("anullsrc=channel_layout=stereo:sample_rate=44100");
