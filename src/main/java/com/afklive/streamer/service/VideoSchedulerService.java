@@ -58,6 +58,17 @@ public class VideoSchedulerService {
             }
 
             video.setYoutubeVideoId(videoId);
+
+            // Post First Comment if set
+            if (video.getFirstComment() != null && !video.getFirstComment().isEmpty()) {
+                try {
+                    youTubeService.addComment(video.getUsername(), videoId, video.getFirstComment());
+                    log.info("Posted first comment for video ID: {}", video.getId());
+                } catch (Exception e) {
+                    log.error("Failed to post first comment for video ID: {}", video.getId(), e);
+                }
+            }
+
             video.setStatus(ScheduledVideo.VideoStatus.UPLOADED);
             log.info("Successfully uploaded video ID: {}", video.getId());
             emailService.sendUploadNotification(video.getUsername(), video.getTitle(), "UPLOADED");

@@ -157,10 +157,59 @@ public class YouTubeService {
         if (response.getItems() == null || response.getItems().isEmpty()) {
             throw new IllegalStateException("No channel found for user.");
         }
-        return response.getItems().get(0).getId();
+        return response.getItems().getFirst().getId();
     }
 
-    public void replyToComment(String username, String parentId, String text) throws Exception {
+    public void addComment(String username, String videoId, String text) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+
+        CommentThread thread = new CommentThread();
+        CommentThreadSnippet snippet = new CommentThreadSnippet();
+        snippet.setVideoId(videoId);
+
+        Comment topLevelComment = new Comment();
+        CommentSnippet commentSnippet = new CommentSnippet();
+        commentSnippet.setTextOriginal(text);
+        topLevelComment.setSnippet(commentSnippet);
+
+        snippet.setTopLevelComment(topLevelComment);
+        thread.setSnippet(snippet);
+
+        youtube.commentThreads().insert(Collections.singletonList("snippet"), thread).execute();
+    }
+
+    public List<CommentThread> getUnrepliedComments(String username) throws Exception {
+        CommentThreadListResponse response = getCommentThreads(username);
+        if (response.getItems() == null) return Collections.emptyList();
+
+        // Filter: Keep threads where replies is empty OR none of the replies are from the channel owner
+        // Note: 'replies' field in CommentThread might be null if reply count is 0
+        // We'll simplify: if totalReplyCount == 0, it's unreplied.
+        // If > 0, we need to check if we replied.
+
+        String channelId = getChannelId(username);
+        List<CommentThread> unreplied = new java.util.ArrayList<>();
+
+        for (CommentThread thread : response.getItems()) {
+            boolean repliedByOwner = false;
+            if (thread.getSnippet().getTotalReplyCount() > 0 && thread.getReplies() != null) {
+                for (Comment reply : thread.getReplies().getComments()) {
+                   // Check author channel ID
+                   if (reply.getSnippet().getAuthorChannelId().getValue().equals(channelId)) {
+                       repliedByOwner = true;
+                       break;
+                   }
+                }
+            }
+
+            if (!repliedByOwner) {
+                unreplied.add(thread);
+            }
+        }
+        return unreplied;
+    }
+
+    public String replyToComment(String username, String parentId, String text) throws Exception {
         YouTube youtube = getYouTubeClient(username);
 
         Comment comment = new Comment();
@@ -169,7 +218,8 @@ public class YouTubeService {
         snippet.setTextOriginal(text);
         comment.setSnippet(snippet);
 
-        youtube.comments().insert(Collections.singletonList("snippet"), comment).execute();
+        Comment inserted = youtube.comments().insert(Collections.singletonList("snippet"), comment).execute();
+        return inserted.getId();
     }
 
     public void deleteComment(String username, String commentId) throws Exception {

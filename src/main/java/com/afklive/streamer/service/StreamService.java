@@ -8,10 +8,12 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,18 +42,27 @@ public class StreamService {
     private FileStorageService storageService;
     @Autowired
     private UserService userService;
+    @Autowired
+    private AudioService audioService;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
             String username,
-            String streamKey,
+            List<String> streamKeys,
             String videoKey,
             String musicName,
             String musicVolume,
-            int loopCount
+            int loopCount,
+            MultipartFile watermarkFile,
+            boolean muteVideoAudio,
+            String streamMode
     ) throws IOException {
         
         log.info("username [{}]", username);
+
+        if (streamKeys == null || streamKeys.isEmpty()) {
+             throw new IllegalArgumentException("At least one destination is required.");
+        }
 
         // 1. SAFETY CHECK: Check DB to see if this user is already live
         // Also check quota limits
@@ -85,13 +96,29 @@ public class StreamService {
         log.info("videoPath [{}]", videoPath);
 
         // 3. Build the FFmpeg Command
-        Path musicPath =
-                (musicName != null && !musicName.isEmpty()) ? userDir.resolve(musicName).toAbsolutePath() : null;
+        Path musicPath = null;
+        if (musicName != null && !musicName.isEmpty()) {
+            if (musicName.startsWith("stock:")) {
+                String trackId = musicName.substring(6); // remove "stock:"
+                musicPath = audioService.getAudioPath(trackId);
+            } else {
+                musicPath = userDir.resolve(musicName).toAbsolutePath();
+            }
+        }
+
+        Path watermarkPath = null;
+        if (watermarkFile != null && !watermarkFile.isEmpty()) {
+             // Create temp file for watermark
+             watermarkPath = Files.createTempFile("watermark_", ".png");
+             watermarkFile.transferTo(watermarkPath);
+             // Note: Temp file will linger until OS cleans up, or we can track it to delete on exit.
+             // Ideally we should manage lifecycle, but for now this works.
+        }
 
         log.info("musicPath [{}]", musicPath);
         
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKey, musicPath, musicVolume, loopCount);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode);
         
         log.info("command : [{}]", String.join(" ", command));
 
@@ -106,7 +133,7 @@ public class StreamService {
 
         clearLogs();
 
-        CompletableFuture.runAsync(() -> {
+        Thread.ofVirtual().start(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while (process.isAlive() && (line = reader.readLine()) != null) {
@@ -120,8 +147,9 @@ public class StreamService {
 
         // 5. SAVE STATE TO DATABASE
         // We save the 'pid' so we can kill specifically THIS process later
+        String primaryKey = streamKeys.getFirst();
         StreamJob job =
-                new StreamJob(username, streamKey, videoKey, musicName, musicVolume, true, process.pid());
+                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid());
         streamJobRepo.save(job);
 
         // Store reference in memory map as backup (optional, but good for speed)
@@ -145,9 +173,9 @@ public class StreamService {
 
         return ApiResponse.success("Stream started", new StreamResponse(
                 String.valueOf(process.pid()),
-                streamKey,
+                primaryKey,
                 "RUNNING",
-                "Stream is now live"
+                "Stream is now live to " + streamKeys.size() + " destinations"
         ));
     }
 

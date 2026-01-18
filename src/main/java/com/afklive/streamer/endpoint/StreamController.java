@@ -50,14 +50,20 @@ public class StreamController {
     }
 
     @PostMapping("/start")
-    public ResponseEntity<ApiResponse<?>> start(@RequestParam String streamKey, @RequestParam String videoKey, @RequestParam(required = false) String musicName, @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
+    public ResponseEntity<ApiResponse<?>> start(@RequestParam("streamKey") List<String> streamKeys,
+                                                @RequestParam String videoKey,
+                                                @RequestParam(required = false) String musicName,
+                                                @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
                                                 @RequestParam(required = false, defaultValue = "-1") int loopCount,
+                                                @RequestParam(required = false) MultipartFile watermarkFile,
+                                                @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
+                                                @RequestParam(required = false, defaultValue = "original") String streamMode,
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
         if (streamManager.tryStartStream(principal.getName())) {
             try {
-                return ResponseEntity.ok(streamService.startStream(principal.getName(), streamKey, videoKey, musicName, musicVolume, loopCount));
+                return ResponseEntity.ok(streamService.startStream(principal.getName(), streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode));
             } catch (Exception e) {
                 return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
             }
@@ -83,6 +89,13 @@ public class StreamController {
     public ResponseEntity<?> getConversionStatus(@RequestParam String fileName, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(0);
         return ResponseEntity.ok(videoConversionService.getProgress(principal.getName(), fileName).orElse(0));
+    }
+
+    @PostMapping("/convert/shorts")
+    public ResponseEntity<?> convertToShort(@RequestParam String fileName, Principal principal) throws IOException {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
+        videoConversionService.convertToShort(userFileService.getUserUploadDir(principal.getName()), principal.getName(), fileName);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Conversion started"));
     }
 
     @GetMapping("/stream-library")
