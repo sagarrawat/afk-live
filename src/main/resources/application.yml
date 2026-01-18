@@ -62,6 +62,7 @@ rate-limiter:
   refill-tokens: 1
 
 app:
+  base-url: ${APP_BASE_URL:http://localhost:8080}
   gemini:
     key: ${GEMINI_API_KEY:}
   storage:

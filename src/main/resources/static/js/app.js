@@ -708,6 +708,12 @@ function selectStreamVideo(video) {
     // Use the streaming endpoint
     player.src = `${API_URL}/library/stream/${video.id}`;
     player.load();
+    player.play().catch(e => console.log("Autoplay blocked/failed:", e));
+
+    player.onerror = () => {
+        console.error("Preview Error", player.error);
+        // showToast("Failed to load preview", "error");
+    };
 }
 
 async function submitJob() {

@@ -15,6 +15,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class PricingController {
 
     private final UserService userService;
@@ -62,23 +63,31 @@ public class PricingController {
         if (principal == null) return ResponseEntity.status(401).build();
 
         String planId = body.get("planId");
+        log.info("Upgrade request for user {} to plan {}", principal.getName(), planId);
+
         if (planId == null) return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
 
         try {
             PlanType plan = PlanType.valueOf(planId);
             userService.updatePlan(principal.getName(), plan);
+            log.info("Plan updated successfully for {}", principal.getName());
 
             // Send email
             try {
                  User user = userService.getOrCreateUser(principal.getName());
                  emailService.sendUpgradeEmail(user.getUsername(), plan.getDisplayName());
             } catch(Exception ex) {
+                log.error("Failed to send upgrade email", ex);
                 // log error but don't fail upgrade
             }
 
             return ResponseEntity.ok(Map.of("success", true, "message", "Plan upgraded to " + plan.getDisplayName()));
         } catch (IllegalArgumentException e) {
+            log.error("Invalid plan ID provided: {}", planId);
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
+        } catch (Exception e) {
+            log.error("Upgrade failed for user " + principal.getName(), e);
+            return ResponseEntity.internalServerError().body(Map.of("message", "Upgrade failed: " + e.getMessage()));
         }
     }
 
