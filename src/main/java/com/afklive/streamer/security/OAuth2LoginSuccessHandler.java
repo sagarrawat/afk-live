@@ -16,6 +16,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -27,6 +29,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
     private final UserRepository userRepository;
     private final ChannelService channelService;
+    private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
@@ -53,6 +56,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                             original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
                     SecurityContextHolder.getContext().setAuthentication(auth);
+                    securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
                 }
 
                 getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
@@ -65,6 +69,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                             original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
                     SecurityContextHolder.getContext().setAuthentication(auth);
+                    securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
                 }
                 getRedirectStrategy().sendRedirect(request, response, "/studio?error=channel_sync_failed");
                 return;
