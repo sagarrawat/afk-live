@@ -4,6 +4,7 @@ import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.service.ChannelService;
+import com.afklive.streamer.service.CustomUserDetailsService;
 import com.afklive.streamer.util.AppConstants;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +15,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
@@ -31,6 +33,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
     private final UserRepository userRepository;
     private final ChannelService channelService;
+    private final CustomUserDetailsService customUserDetailsService;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     @Override
@@ -55,16 +58,30 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                 channelService.syncChannelFromGoogle(token.getName(), linkingUser);
 
                 // Restore Original Session
-                Optional<User> originalUserOpt = userRepository.findById(linkingUser);
-                if (originalUserOpt.isPresent()) {
-                    User original = originalUserOpt.get();
+                try {
+                    UserDetails originalUserDetails = customUserDetailsService.loadUserByUsername(linkingUser);
+
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                            originalUserDetails, null, originalUserDetails.getAuthorities());
+
                     SecurityContextHolder.getContext().setAuthentication(auth);
                     securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+
+                    // Explicitly set in session as fallback
+                    request.getSession().setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, SecurityContextHolder.getContext());
+
                     log.info("Restored session for {}", linkingUser);
-                } else {
-                    log.error("Original user not found: {}", linkingUser);
+                } catch (Exception e) {
+                    log.error("Failed to restore session for {}: {}", linkingUser, e.getMessage());
+                    // Fallback to manual token if service fails, though unlikely
+                     Optional<User> originalUserOpt = userRepository.findById(linkingUser);
+                     if (originalUserOpt.isPresent()) {
+                         User original = originalUserOpt.get();
+                         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                                 original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                         SecurityContextHolder.getContext().setAuthentication(auth);
+                         securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+                     }
                 }
 
                 getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
@@ -72,13 +89,14 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             } catch (Exception e) {
                 log.error("Failed to link channel", e);
                 // Restore session anyway to prevent stuck on wrong user
-                Optional<User> originalUserOpt = userRepository.findById(linkingUser);
-                if (originalUserOpt.isPresent()) {
-                    User original = originalUserOpt.get();
+                 try {
+                    UserDetails originalUserDetails = customUserDetailsService.loadUserByUsername(linkingUser);
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
+                            originalUserDetails, null, originalUserDetails.getAuthorities());
                     SecurityContextHolder.getContext().setAuthentication(auth);
                     securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+                } catch (Exception ex) {
+                    log.error("Failed to restore session after error", ex);
                 }
                 getRedirectStrategy().sendRedirect(request, response, "/studio?error=channel_sync_failed");
                 return;
