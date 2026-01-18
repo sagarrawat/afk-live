@@ -703,7 +703,7 @@ function selectStreamVideo(video) {
     const player = document.getElementById('previewPlayer');
     document.getElementById('previewPlaceholder').classList.add('hidden');
     player.classList.remove('hidden');
-    player.style.display = 'block'; // Force visibility
+    // player.style.display = 'block'; // Removed, handled by CSS
 
     // Use the streaming endpoint
     player.src = `${API_URL}/library/stream/${video.id}`;
