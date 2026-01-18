@@ -1,5 +1,6 @@
 package com.afklive.streamer.security;
 
+import com.afklive.streamer.util.SecurityUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -53,7 +54,7 @@ public class CustomOAuth2AuthorizationRequestResolver implements OAuth2Authoriza
             // Store current user for linking
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-                String username = auth.getName();
+                String username = SecurityUtils.getEmail(auth);
                 log.info("Setting LINKING_USER in session: {}", username);
                 request.getSession().setAttribute("LINKING_USER", username);
             } else {

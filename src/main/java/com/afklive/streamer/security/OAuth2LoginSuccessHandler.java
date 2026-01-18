@@ -49,10 +49,10 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             request.getSession().removeAttribute("LINKING_USER");
             // Perform Linking
             try {
-                // Here 'email' is the NEW google account credential ID
-                // 'linkingUser' is the ORIGINAL user
-                log.info("Linking channel {} to user {}", email, linkingUser);
-                channelService.syncChannelFromGoogle(email, linkingUser);
+                // Here 'token.getName()' is the credential ID (likely Google ID)
+                // 'linkingUser' is the ORIGINAL user (Email)
+                log.info("Linking channel {} to user {}", token.getName(), linkingUser);
+                channelService.syncChannelFromGoogle(token.getName(), linkingUser);
 
                 // Restore Original Session
                 Optional<User> originalUserOpt = userRepository.findById(linkingUser);
@@ -113,7 +113,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
         if (hasYoutube) {
             try {
-                channelService.syncChannelFromGoogle(email);
+                channelService.syncChannelFromGoogle(token.getName(), email);
             } catch (Exception e) {
                 // ignore
             }
