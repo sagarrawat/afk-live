@@ -1235,23 +1235,71 @@ async function cancelSubscription() {
 }
 
 /* --- ANALYTICS & CALENDAR --- */
-function initAnalytics() {
-    // Chart.js init
+async function initAnalytics() {
     const ctx = document.getElementById('analyticsChart');
-    if(ctx && !window.myChart) {
+    const range = document.getElementById('analyticsRange').value;
+
+    if (!ctx) return;
+
+    // Show loading?
+    // Destroy previous chart if exists
+    if (window.myChart) {
+        window.myChart.destroy();
+        window.myChart = null;
+    }
+
+    try {
+        const res = await apiFetch(`${API_URL}/analytics?range=${range}`);
+        const data = await res.json();
+
+        // Update Summary
+        if (data.summary) {
+            document.getElementById('totalViews').innerText = data.summary.totalViews.toLocaleString();
+            document.getElementById('totalSubs').innerText = data.summary.totalSubs.toLocaleString();
+            const mins = data.summary.totalWatchTime;
+            const hours = (mins / 60).toFixed(1);
+            document.getElementById('totalWatchTime').innerText = `${hours} hrs`;
+        }
+
+        // Render Chart
         window.myChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-                datasets: [{
-                    label: 'Views',
-                    data: [12, 19, 3, 5, 2, 3, 15],
-                    borderColor: '#2c68f6',
-                    tension: 0.4
-                }]
+                labels: data.labels,
+                datasets: [
+                    {
+                        label: 'Views',
+                        data: data.views,
+                        borderColor: '#2c68f6',
+                        backgroundColor: 'rgba(44, 104, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Subscribers',
+                        data: data.subs,
+                        borderColor: '#00875a',
+                        backgroundColor: 'rgba(0, 135, 90, 0.1)',
+                        hidden: true, // Hide by default
+                        tension: 0.4
+                    }
+                ]
             },
-            options: { responsive: true, maintainAspectRatio: false }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: { position: 'top' }
+                }
+            }
         });
+
+    } catch (e) {
+        console.error("Analytics Load Failed", e);
     }
 }
 
