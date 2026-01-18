@@ -127,7 +127,7 @@ public class StreamService {
 
         // Redirect logs to console so you can debug "Connection Failed" errors
         builder.redirectErrorStream(true);
-        builder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        // builder.redirectOutput(ProcessBuilder.Redirect.INHERIT); // Removing INHERIT to capture logs in getInputStream
 
         Process process = builder.start();
 

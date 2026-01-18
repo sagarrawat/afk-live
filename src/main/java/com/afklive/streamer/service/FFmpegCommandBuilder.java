@@ -130,9 +130,15 @@ public class FFmpegCommandBuilder {
             command.add("-1");
             command.add("-i");
             command.add(musicPath.toString());
+        } else if (muteVideoAudio) {
+            // Generate Silence if muted and no music
+            command.add("-f");
+            command.add("lavfi");
+            command.add("-i");
+            command.add("anullsrc=channel_layout=stereo:sample_rate=44100");
         }
 
-        // Watermark input (Index 1 or 2) if provided
+        // Watermark input (Index 1, 2, or 3) if provided
         boolean hasWatermark = watermarkPath != null;
         if (hasWatermark) {
             command.add("-i");
@@ -167,7 +173,7 @@ public class FFmpegCommandBuilder {
         // Handle Watermark
         if (hasWatermark) {
             forceTranscode = true;
-            int watermarkIndex = hasMusic ? 2 : 1;
+            int watermarkIndex = (hasMusic || muteVideoAudio) ? 2 : 1; // Index shifts if silence is inserted
             // Overlay on whatever current videoLabel is (original or scaled)
             String overlayFilter = String.format("[%s][%d:v]overlay=main_w-overlay_w-20:20", videoLabel.equals("0:v") ? "0:v" : videoLabel, watermarkIndex);
 
@@ -240,14 +246,15 @@ public class FFmpegCommandBuilder {
             command.add("128k");
         } else {
             if (muteVideoAudio) {
-                // User explicitly muted original, and no music provided -> Silent stream
-                // We should probably generate silence or just omit audio stream?
-                // Omit audio stream is risky for RTMP/YouTube (might be rejected).
-                // Safest: -an (no audio) but YouTube wants audio.
-                // Let's generate silence? Or simply map nothing and hope YouTube takes video only.
-                // Actually, if muteVideoAudio=true and no music, let's map nothing (video only).
-                // ffmpeg behavior: if no audio mapped, no audio stream.
-                // We will NOT add audio mapping.
+                // Map the silence generated at index 1
+                command.add("-map");
+                command.add("1:a");
+                command.add("-c:a");
+                command.add("aac");
+                command.add("-b:a");
+                command.add("128k");
+                // IMPORTANT: -shortest to stop when video ends (silence is infinite)
+                command.add("-shortest");
             } else {
                  command.add("-map");
                  command.add("0:a?");
