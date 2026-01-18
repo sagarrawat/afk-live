@@ -53,9 +53,9 @@ spring:
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${SMTP_AUTH:true}
           starttls:
-            enable: true
+            enable: ${SMTP_STARTTLS_ENABLE:true}
       
 rate-limiter:
   capacity: 10
