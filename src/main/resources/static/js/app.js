@@ -11,6 +11,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Event Listeners
     setupEventListeners();
+
+    // Global Click for Dropdown
+    window.addEventListener('click', (e) => {
+        if (!e.target.closest('.sidebar-header')) {
+            const menu = document.getElementById('channelDropdownMenu');
+            if (menu && menu.classList.contains('show')) menu.classList.remove('show');
+        }
+    });
 });
 
 function setupEventListeners() {
@@ -179,7 +187,7 @@ async function apiFetch(url, options = {}) {
 /* --- USER & CHANNELS --- */
 async function fetchUserInfo() {
     try {
-        const res = await apiFetch('/api/user-info');
+        const res = await apiFetch(`/api/user-info?_=${new Date().getTime()}`);
         const data = await res.json();
         if (data.email) {
             currentUser = data;
@@ -231,9 +239,30 @@ async function loadUserChannels() {
         userChannels = await res.json();
 
         renderChannelList(userChannels);
+        renderChannelDropdown(userChannels);
     } catch(e) {
         console.error("Failed to load channels", e);
     }
+}
+
+function renderChannelDropdown(channels) {
+    const menu = document.getElementById('channelDropdownMenu');
+    if(!menu) return;
+    menu.innerHTML = '<div class="dropdown-item" onclick="filterViewByChannel({name:\'All Channels\'})">All Channels</div>';
+    channels.forEach(c => {
+        // Escape quotes in name
+        const safeName = c.name.replace(/'/g, "\\'");
+        menu.innerHTML += `
+            <div class="dropdown-item" onclick="filterViewByChannel({name:'${safeName}'})">
+                <img src="${c.profileUrl}"> ${c.name}
+            </div>
+        `;
+    });
+}
+
+function toggleChannelDropdown() {
+    const menu = document.getElementById('channelDropdownMenu');
+    if(menu) menu.classList.toggle('show');
 }
 
 function renderChannelList(channels) {
@@ -609,6 +638,7 @@ function selectStreamVideo(video) {
     const player = document.getElementById('previewPlayer');
     document.getElementById('previewPlaceholder').classList.add('hidden');
     player.classList.remove('hidden');
+    player.style.display = 'block'; // Force visibility
 
     // Use the streaming endpoint
     player.src = `${API_URL}/library/stream/${video.id}`;

@@ -40,8 +40,12 @@
     <nav class="sub-sidebar" id="subSidebar">
         <div class="sidebar-header">
             <h2 id="sidebarTitle">Publishing</h2>
-            <div class="dropdown-trigger">
+            <div class="dropdown-trigger" onclick="toggleChannelDropdown()">
                  <span id="currentChannelName">All Channels</span> <i class="fa-solid fa-chevron-down"></i>
+            </div>
+            <!-- Dropdown Menu -->
+            <div id="channelDropdownMenu" class="dropdown-menu">
+                <!-- Populated via JS -->
             </div>
         </div>
 
