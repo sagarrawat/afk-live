@@ -27,11 +27,12 @@ public class ChannelController {
     @PostMapping
     public ResponseEntity<?> addChannel(@RequestBody Map<String, String> body, Principal principal) {
         String name = body.get("name");
+        String platform = body.get("platform");
         if (name == null || name.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Channel name required"));
         }
         try {
-            SocialChannel channel = channelService.addChannel(principal.getName(), name);
+            SocialChannel channel = channelService.addChannel(principal.getName(), name, platform);
             return ResponseEntity.ok(channel);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(403).body(Map.of("message", e.getMessage()));

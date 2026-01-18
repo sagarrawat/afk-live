@@ -41,7 +41,7 @@ public class ChannelService {
     }
 
     @Transactional
-    public SocialChannel addChannel(String username, String channelName) {
+    public SocialChannel addChannel(String username, String channelName, String platform) {
         User user = userService.getOrCreateUser(username);
 
         int limit = user.getPlanType().getMaxChannels();
@@ -49,10 +49,19 @@ public class ChannelService {
             throw new IllegalStateException("Plan limit reached. Upgrade to add more channels.");
         }
 
-        SocialChannel channel = new SocialChannel(channelName, "YOUTUBE", user);
+        if (platform == null || platform.isEmpty()) {
+            platform = "YOUTUBE";
+        }
+
+        SocialChannel channel = new SocialChannel(channelName, platform, user);
         user.getChannels().add(channel);
         userRepository.save(user);
         return channel;
+    }
+
+    @Transactional
+    public SocialChannel addChannel(String username, String channelName) {
+        return addChannel(username, channelName, "YOUTUBE");
     }
 
     @Transactional(readOnly = true)

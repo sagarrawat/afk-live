@@ -333,9 +333,69 @@ function filterViewByChannel(channel) {
     showToast(`Switched to ${channel.name}`, 'info');
 }
 
-function connectGoogleChannel() {
-    // Redirect to the special OAuth2 client registration that has YouTube scopes
-    window.location.href = '/oauth2/authorization/google-youtube';
+let selectedPlatform = 'YOUTUBE';
+
+function openConnectModal() {
+    document.getElementById('connectChannelModal').classList.remove('hidden');
+    selectPlatform('YOUTUBE', document.querySelector('.platform-option.selected'));
+}
+
+function selectPlatform(platform, el) {
+    selectedPlatform = platform;
+    document.querySelectorAll('#connectChannelModal .platform-option').forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+
+    const manualInput = document.getElementById('manualChannelInput');
+    const btn = document.getElementById('btnConnect');
+
+    if (platform === 'YOUTUBE') {
+        manualInput.classList.add('hidden');
+        btn.innerText = 'Connect with Google';
+    } else {
+        manualInput.classList.remove('hidden');
+        btn.innerText = 'Connect ' + platform.charAt(0) + platform.slice(1).toLowerCase();
+        document.getElementById('connectChannelName').focus();
+    }
+}
+
+async function submitConnectChannel() {
+    if (selectedPlatform === 'YOUTUBE') {
+        window.location.href = '/oauth2/authorization/google-youtube';
+        return;
+    }
+
+    const name = document.getElementById('connectChannelName').value;
+    if (!name) {
+        showToast("Please enter a channel handle", "error");
+        return;
+    }
+
+    const btn = document.getElementById('btnConnect');
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "Connecting...";
+
+    try {
+        const res = await apiFetch(`${API_URL}/channels`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, platform: selectedPlatform })
+        });
+
+        if (res.ok) {
+            showToast(selectedPlatform + " Channel Connected!", "success");
+            document.getElementById('connectChannelModal').classList.add('hidden');
+            loadUserChannels();
+        } else {
+            const data = await res.json();
+            showToast(data.message || "Connection failed", "error");
+        }
+    } catch (e) {
+        showToast("Error connecting channel", "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
 }
 
 /* --- PUBLISHING --- */

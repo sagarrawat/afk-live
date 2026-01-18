@@ -24,7 +24,7 @@
             <!-- Populated via JS -->
         </div>
 
-        <button class="icon-btn add-btn" onclick="connectGoogleChannel()" title="Add Channel">
+        <button class="icon-btn add-btn" onclick="openConnectModal()" title="Add Channel">
             <i class="fa-solid fa-plus"></i>
         </button>
 
@@ -407,7 +407,7 @@
                     <div id="tab-channels" class="settings-section hidden">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
                             <h2>Channels</h2>
-                            <button class="btn btn-primary btn-sm" onclick="connectGoogleChannel()">+ Add Channel</button>
+                            <button class="btn btn-primary btn-sm" onclick="openConnectModal()">+ Add Channel</button>
                         </div>
                         <div id="channelListSettings" class="queue-list"></div>
                     </div>
@@ -448,6 +448,44 @@
 </div>
 
 <!-- MODALS -->
+
+<!-- Connect Channel Modal -->
+<div id="connectChannelModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 450px;">
+        <div class="modal-header" style="padding: 0 0 20px 0; border: none;">
+            <h2>Connect Channel</h2>
+            <button onclick="document.getElementById('connectChannelModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="form-group">
+            <label>Select Platform</label>
+            <div class="platform-select">
+                <div class="platform-option selected" onclick="selectPlatform('YOUTUBE', this)">
+                    <i class="fa-brands fa-youtube" style="color: red;"></i> YouTube
+                </div>
+                <div class="platform-option" onclick="selectPlatform('INSTAGRAM', this)">
+                    <i class="fa-brands fa-instagram" style="color: #E1306C;"></i> Instagram
+                </div>
+                <div class="platform-option" onclick="selectPlatform('SNAPCHAT', this)">
+                    <i class="fa-brands fa-snapchat" style="color: #FFFC00; -webkit-text-stroke: 1px black;"></i> Snapchat
+                </div>
+            </div>
+        </div>
+
+        <div id="manualChannelInput" class="hidden">
+            <div class="form-group">
+                <label>Channel Name / Handle</label>
+                <input type="text" id="connectChannelName" class="form-input" placeholder="@handle">
+                <small style="color:#666">Enter your handle to link this account.</small>
+            </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-text" onclick="document.getElementById('connectChannelModal').classList.add('hidden')">Cancel</button>
+            <button id="btnConnect" class="btn btn-primary" onclick="submitConnectChannel()">Connect</button>
+        </div>
+    </div>
+</div>
 
 <!-- Add Destination Modal -->
 <div id="addDestinationModal" class="modal-overlay hidden">

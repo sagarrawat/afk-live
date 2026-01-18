@@ -46,10 +46,10 @@ spring:
     init:
       mode: always
   mail:
-    host: localhost
-    port: 1025
-    username: user
-    password: password
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:user}
+    password: ${SMTP_PASSWORD:password}
     properties:
       mail:
         smtp:

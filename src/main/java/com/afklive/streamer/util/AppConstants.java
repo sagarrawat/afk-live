@@ -11,6 +11,8 @@ public class AppConstants {
     public static final String PRIVACY_PUBLIC = "public";
 
     public static final String PLATFORM_YOUTUBE = "YOUTUBE";
+    public static final String PLATFORM_INSTAGRAM = "INSTAGRAM";
+    public static final String PLATFORM_SNAPCHAT = "SNAPCHAT";
 
     public static final String MIME_VIDEO_MP4 = "video/mp4";
     public static final String PARAM_FILES = "files";
