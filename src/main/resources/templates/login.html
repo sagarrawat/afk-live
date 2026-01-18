@@ -61,6 +61,7 @@
 
         <div th:if="${param.error}" class="alert alert-error">Invalid email or password.</div>
         <div th:if="${error}" class="alert alert-error" th:text="${error}"></div>
+        <div th:if="${success}" class="alert" style="background: #e3f2fd; color: #0052cc; border: 1px solid #b3d4fc; margin-bottom: 20px;" th:text="${success}"></div>
 
         <a href="/oauth2/authorization/google" class="btn btn-google">
             <i class="fa-brands fa-google"></i> Log in with Google
