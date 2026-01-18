@@ -360,8 +360,8 @@ function selectPlatform(platform, el) {
 
 async function submitConnectChannel() {
     if (selectedPlatform === 'YOUTUBE') {
-        // Use standard google client but with special action parameter
-        window.location.href = '/oauth2/authorization/google?action=connect_youtube';
+        // Use dedicated google-youtube client
+        window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
         return;
     }
 
