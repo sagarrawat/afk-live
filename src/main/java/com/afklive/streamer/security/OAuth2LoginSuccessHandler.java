@@ -9,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
@@ -25,6 +26,7 @@ import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final UserRepository userRepository;
@@ -41,12 +43,15 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
         // Check for linking
         String linkingUser = (String) request.getSession().getAttribute("LINKING_USER");
+        log.info("OAuth success. Email: {}. LinkingUser: {}", email, linkingUser);
+
         if (linkingUser != null) {
             request.getSession().removeAttribute("LINKING_USER");
             // Perform Linking
             try {
                 // Here 'email' is the NEW google account credential ID
                 // 'linkingUser' is the ORIGINAL user
+                log.info("Linking channel {} to user {}", email, linkingUser);
                 channelService.syncChannelFromGoogle(email, linkingUser);
 
                 // Restore Original Session
@@ -57,11 +62,15 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                             original.getUsername(), null, AuthorityUtils.createAuthorityList("ROLE_USER"));
                     SecurityContextHolder.getContext().setAuthentication(auth);
                     securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+                    log.info("Restored session for {}", linkingUser);
+                } else {
+                    log.error("Original user not found: {}", linkingUser);
                 }
 
                 getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
                 return;
             } catch (Exception e) {
+                log.error("Failed to link channel", e);
                 // Restore session anyway to prevent stuck on wrong user
                 Optional<User> originalUserOpt = userRepository.findById(linkingUser);
                 if (originalUserOpt.isPresent()) {

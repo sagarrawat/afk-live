@@ -10,9 +10,11 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 
 import java.util.HashMap;
 import java.util.HashSet;
+import lombok.extern.slf4j.Slf4j;
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 public class CustomOAuth2AuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
 
     private final OAuth2AuthorizationRequestResolver defaultResolver;
@@ -38,6 +40,7 @@ public class CustomOAuth2AuthorizationRequestResolver implements OAuth2Authoriza
 
         String action = request.getParameter("action");
         if ("connect_youtube".equals(action)) {
+            log.info("Resolving OAuth2 request for connect_youtube");
             Set<String> scopes = new HashSet<>(req.getScopes());
             scopes.add("https://www.googleapis.com/auth/youtube.upload");
             scopes.add("https://www.googleapis.com/auth/youtube.readonly");
@@ -50,7 +53,11 @@ public class CustomOAuth2AuthorizationRequestResolver implements OAuth2Authoriza
             // Store current user for linking
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-                request.getSession().setAttribute("LINKING_USER", auth.getName());
+                String username = auth.getName();
+                log.info("Setting LINKING_USER in session: {}", username);
+                request.getSession().setAttribute("LINKING_USER", username);
+            } else {
+                log.warn("Connect requested but user not authenticated or anonymous");
             }
 
             return OAuth2AuthorizationRequest.from(req)
