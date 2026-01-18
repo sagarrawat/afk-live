@@ -3,11 +3,10 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.service.AiService;
 import com.afklive.streamer.model.EngagementActivity;
-import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.EngagementActivityRepository;
-import com.afklive.streamer.service.AiService;
 import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.service.YouTubeService;
+import com.afklive.streamer.util.SecurityUtils;
 import com.google.api.services.youtube.model.CommentThread;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +31,7 @@ public class EngagementController {
     public ResponseEntity<?> getUnrepliedComments(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         try {
-            List<CommentThread> threads = youTubeService.getUnrepliedComments(principal.getName());
+            List<CommentThread> threads = youTubeService.getUnrepliedComments(SecurityUtils.getEmail(principal));
             List<Map<String, Object>> result = new ArrayList<>();
 
             for (CommentThread thread : threads) {
@@ -62,7 +61,7 @@ public class EngagementController {
     @GetMapping("/settings")
     public ResponseEntity<?> getSettings(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        User user = userService.getOrCreateUser(principal.getName());
+        User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
         return ResponseEntity.ok(Map.of(
             "autoReplyEnabled", user.isAutoReplyEnabled(),
             "deleteNegativeComments", user.isDeleteNegativeComments()
@@ -72,7 +71,7 @@ public class EngagementController {
     @PostMapping("/settings")
     public ResponseEntity<?> updateSettings(@RequestBody Map<String, Boolean> payload, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        User user = userService.getOrCreateUser(principal.getName());
+        User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
 
         if (payload.containsKey("autoReplyEnabled")) {
             user.setAutoReplyEnabled(payload.get("autoReplyEnabled"));
@@ -87,22 +86,23 @@ public class EngagementController {
     @GetMapping("/activity")
     public ResponseEntity<?> getActivityLog(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(activityRepository.findByUsernameOrderByTimestampDesc(principal.getName()));
+        return ResponseEntity.ok(activityRepository.findByUsernameOrderByTimestampDesc(SecurityUtils.getEmail(principal)));
     }
 
     @PostMapping("/revert/{activityId}")
     public ResponseEntity<?> revertAction(@PathVariable Long activityId, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
+        String email = SecurityUtils.getEmail(principal);
 
         EngagementActivity activity = activityRepository.findById(activityId).orElse(null);
-        if (activity == null || !activity.getUsername().equals(principal.getName())) {
+        if (activity == null || !activity.getUsername().equals(email)) {
             return ResponseEntity.notFound().build();
         }
 
         if ("REPLY".equals(activity.getActionType())) {
             try {
                 if (activity.getCreatedCommentId() != null) {
-                    youTubeService.deleteComment(principal.getName(), activity.getCreatedCommentId());
+                    youTubeService.deleteComment(email, activity.getCreatedCommentId());
                     activity.setActionType("REVERTED_REPLY");
                     activityRepository.save(activity);
                     return ResponseEntity.ok(Map.of("success", true, "message", "Reply deleted"));

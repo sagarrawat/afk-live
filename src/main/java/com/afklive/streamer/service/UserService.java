@@ -13,6 +13,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class UserService {
 
     private final UserRepository userRepository;
@@ -133,9 +134,11 @@ public class UserService {
 
     @Transactional
     public void updatePlan(String username, PlanType newPlan) {
+        log.info("Updating plan for user {} to {}", username, newPlan);
         User user = getOrCreateUser(username);
         user.setPlanType(newPlan);
         userRepository.save(user);
+        log.info("Plan updated saved to DB for {}", username);
     }
 
     public void saveUser(User user) {

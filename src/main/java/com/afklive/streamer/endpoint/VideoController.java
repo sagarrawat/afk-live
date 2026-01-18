@@ -7,8 +7,12 @@ import com.afklive.streamer.service.FFmpegCommandBuilder;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.service.YouTubeService;
+import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,6 +24,7 @@ import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api")
@@ -43,7 +48,7 @@ public class VideoController {
     public ResponseEntity<?> getVideoCategories(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         try {
-            return ResponseEntity.ok(youTubeService.getVideoCategories(principal.getName(), "US"));
+            return ResponseEntity.ok(youTubeService.getVideoCategories(SecurityUtils.getEmail(principal), "US"));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
@@ -66,7 +71,7 @@ public class VideoController {
             Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
 
         try {
             log.info("Scheduling video for user: {}", username);
@@ -159,7 +164,7 @@ public class VideoController {
     @GetMapping("/videos")
     public ResponseEntity<?> getScheduledVideos(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
 
         List<ScheduledVideo> videos = repository.findByUsername(username);
         return ResponseEntity.ok(videos);
@@ -168,8 +173,32 @@ public class VideoController {
     @GetMapping("/youtube/status")
     public ResponseEntity<?> getYouTubeStatus(Principal principal) {
         if (principal == null) return ResponseEntity.ok(Map.of("connected", false));
-        String username = principal.getName();
+        String username = SecurityUtils.getEmail(principal);
         boolean connected = youTubeService.isConnected(username);
         return ResponseEntity.ok(Map.of("connected", connected));
+    }
+
+    @GetMapping("/videos/{id}/thumbnail")
+    public ResponseEntity<Resource> getVideoThumbnail(@PathVariable Long id, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        String username = SecurityUtils.getEmail(principal);
+
+        Optional<ScheduledVideo> videoOpt = repository.findById(id);
+        if (videoOpt.isEmpty()) return ResponseEntity.notFound().build();
+
+        ScheduledVideo video = videoOpt.get();
+        if (!video.getUsername().equals(username)) return ResponseEntity.status(403).build();
+
+        if (video.getThumbnailS3Key() == null) return ResponseEntity.notFound().build();
+
+        try {
+            InputStream is = storageService.downloadFile(video.getThumbnailS3Key());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_JPEG) // Assuming JPEG, or guess? Most uploads are.
+                    .body(new InputStreamResource(is));
+        } catch (Exception e) {
+            log.error("Failed to fetch thumbnail", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

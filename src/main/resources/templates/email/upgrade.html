@@ -19,7 +19,7 @@
         <p>Thanks for upgrading to the <strong th:text="${planName}">Plan</strong> plan.</p>
         <p>You now have access to increased storage, more concurrent streams, and advanced AI features.</p>
 
-        <a href="http://localhost:8080/studio" class="btn">Explore New Features</a>
+        <a th:href="${baseUrl} + '/studio'" class="btn">Explore New Features</a>
 
         <div class="footer">
             &copy; 2024 AFK Live. All rights reserved.

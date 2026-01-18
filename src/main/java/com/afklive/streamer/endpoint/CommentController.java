@@ -1,6 +1,7 @@
 package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.service.YouTubeService;
+import com.afklive.streamer.util.SecurityUtils;
 import com.google.api.services.youtube.model.CommentThreadListResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +23,7 @@ public class CommentController {
     public ResponseEntity<?> getComments(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
         try {
-            return ResponseEntity.ok(youTubeService.getCommentThreads(principal.getName()));
+            return ResponseEntity.ok(youTubeService.getCommentThreads(SecurityUtils.getEmail(principal)));
         } catch (Exception e) {
             if (e.getMessage().contains("not connected") || e.getMessage().contains("Authentication failed")) {
                 return ResponseEntity.status(403).body(Map.of("message", "YouTube not connected. Please connect in Settings."));
@@ -46,7 +47,7 @@ public class CommentController {
         }
 
         try {
-            youTubeService.replyToComment(principal.getName(), parentId, text);
+            youTubeService.replyToComment(SecurityUtils.getEmail(principal), parentId, text);
             return ResponseEntity.ok(Map.of("success", true, "message", "Reply posted"));
         } catch (Exception e) {
             log.error("Failed to reply", e);
@@ -62,7 +63,7 @@ public class CommentController {
         if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
 
         try {
-            youTubeService.deleteComment(principal.getName(), id);
+            youTubeService.deleteComment(SecurityUtils.getEmail(principal), id);
             return ResponseEntity.ok(Map.of("success", true, "message", "Comment deleted"));
         } catch (Exception e) {
             log.error("Failed to delete", e);

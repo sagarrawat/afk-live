@@ -11,6 +11,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Event Listeners
     setupEventListeners();
+
+    // Global Click for Dropdown
+    window.addEventListener('click', (e) => {
+        if (!e.target.closest('.sidebar-header')) {
+            const menu = document.getElementById('channelDropdownMenu');
+            if (menu && menu.classList.contains('show')) menu.classList.remove('show');
+        }
+    });
 });
 
 function setupEventListeners() {
@@ -179,7 +187,7 @@ async function apiFetch(url, options = {}) {
 /* --- USER & CHANNELS --- */
 async function fetchUserInfo() {
     try {
-        const res = await apiFetch('/api/user-info');
+        const res = await apiFetch(`/api/user-info?_=${new Date().getTime()}`);
         const data = await res.json();
         if (data.email) {
             currentUser = data;
@@ -203,6 +211,18 @@ async function fetchUserInfo() {
 
             // Resume Stream State
             checkInitialStatus();
+
+            // Check if just connected channel
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('connected')) {
+                showToast("Channel Connected Successfully!", "success");
+                window.history.replaceState({}, document.title, window.location.pathname);
+                loadUserChannels();
+            } else if (urlParams.get('error') === 'channel_sync_failed') {
+                 showToast("Channel connection failed. Please try again.", "error");
+                 window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
         } else {
             // Not logged in?
             window.location.href = '/login';
@@ -219,9 +239,30 @@ async function loadUserChannels() {
         userChannels = await res.json();
 
         renderChannelList(userChannels);
+        renderChannelDropdown(userChannels);
     } catch(e) {
         console.error("Failed to load channels", e);
     }
+}
+
+function renderChannelDropdown(channels) {
+    const menu = document.getElementById('channelDropdownMenu');
+    if(!menu) return;
+    menu.innerHTML = '<div class="dropdown-item" onclick="filterViewByChannel({name:\'All Channels\'})">All Channels</div>';
+    channels.forEach(c => {
+        // Escape quotes in name
+        const safeName = c.name.replace(/'/g, "\\'");
+        menu.innerHTML += `
+            <div class="dropdown-item" onclick="filterViewByChannel({name:'${safeName}'})">
+                <img src="${c.profileUrl}"> ${c.name}
+            </div>
+        `;
+    });
+}
+
+function toggleChannelDropdown() {
+    const menu = document.getElementById('channelDropdownMenu');
+    if(menu) menu.classList.toggle('show');
 }
 
 function renderChannelList(channels) {
@@ -292,43 +333,68 @@ function filterViewByChannel(channel) {
     showToast(`Switched to ${channel.name}`, 'info');
 }
 
-function addMockChannel() {
-    document.getElementById('newChannelName').value = '';
-    document.getElementById('addChannelModal').classList.remove('hidden');
-    document.getElementById('newChannelName').focus();
+let selectedPlatform = 'YOUTUBE';
+
+function openConnectModal() {
+    document.getElementById('connectChannelModal').classList.remove('hidden');
+    selectPlatform('YOUTUBE', document.querySelector('.platform-option.selected'));
 }
 
-async function submitAddChannel() {
-    const name = document.getElementById('newChannelName').value;
-    if(!name) {
-        showToast("Please enter a channel name", "error");
+function selectPlatform(platform, el) {
+    selectedPlatform = platform;
+    document.querySelectorAll('#connectChannelModal .platform-option').forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+
+    const manualInput = document.getElementById('manualChannelInput');
+    const btn = document.getElementById('btnConnect');
+
+    if (platform === 'YOUTUBE') {
+        manualInput.classList.add('hidden');
+        btn.innerText = 'Connect with Google';
+    } else {
+        manualInput.classList.remove('hidden');
+        btn.innerText = 'Connect ' + platform.charAt(0) + platform.slice(1).toLowerCase();
+        document.getElementById('connectChannelName').focus();
+    }
+}
+
+async function submitConnectChannel() {
+    if (selectedPlatform === 'YOUTUBE') {
+        window.location.href = '/oauth2/authorization/google-youtube';
         return;
     }
 
-    // Simulate API call delay for realism
-    const btn = document.querySelector('#addChannelModal .btn-primary');
+    const name = document.getElementById('connectChannelName').value;
+    if (!name) {
+        showToast("Please enter a channel handle", "error");
+        return;
+    }
+
+    const btn = document.getElementById('btnConnect');
     const originalText = btn.innerText;
-    btn.innerText = "Connecting...";
     btn.disabled = true;
+    btn.innerText = "Connecting...";
 
     try {
-        const res = await fetch(`${API_URL}/channels`, {
-             method: 'POST',
-             headers: {'Content-Type': 'application/json'},
-             body: JSON.stringify({name: name})
+        const res = await apiFetch(`${API_URL}/channels`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, platform: selectedPlatform })
         });
-        if(res.ok) {
-            showToast("Channel Connected Successfully", "success");
-            document.getElementById('addChannelModal').classList.add('hidden');
+
+        if (res.ok) {
+            showToast(selectedPlatform + " Channel Connected!", "success");
+            document.getElementById('connectChannelModal').classList.add('hidden');
             loadUserChannels();
         } else {
-             showToast("Connection failed", "error");
+            const data = await res.json();
+            showToast(data.message || "Connection failed", "error");
         }
-    } catch(e) {
-        showToast("Error adding channel", "error");
+    } catch (e) {
+        showToast("Error connecting channel", "error");
     } finally {
-        btn.innerText = originalText;
         btn.disabled = false;
+        btn.innerText = originalText;
     }
 }
 
@@ -574,9 +640,14 @@ async function loadScheduledQueue() {
 
         videos.forEach(v => {
             const statusClass = v.status === 'UPLOADED' ? 'color:#00875a' : (v.status === 'FAILED' ? 'color:#e02424' : 'color:#6b778c');
+            const thumbUrl = v.thumbnailS3Key ? `${API_URL}/videos/${v.id}/thumbnail` : null;
+            const thumbHtml = thumbUrl
+                ? `<img src="${thumbUrl}" style="width:100%;height:100%;object-fit:cover;">`
+                : `<i class="fa-solid fa-film"></i>`;
+
             list.innerHTML += `
                 <div class="queue-item">
-                    <div class="queue-thumb"><i class="fa-solid fa-film"></i></div>
+                    <div class="queue-thumb">${thumbHtml}</div>
                     <div style="flex:1">
                         <div style="font-weight:600">${v.title}</div>
                         <div style="font-size:0.85rem; color:#666">
@@ -632,10 +703,17 @@ function selectStreamVideo(video) {
     const player = document.getElementById('previewPlayer');
     document.getElementById('previewPlaceholder').classList.add('hidden');
     player.classList.remove('hidden');
+    // player.style.display = 'block'; // Removed, handled by CSS
 
     // Use the streaming endpoint
     player.src = `${API_URL}/library/stream/${video.id}`;
     player.load();
+    player.play().catch(e => console.log("Autoplay blocked/failed:", e));
+
+    player.onerror = () => {
+        console.error("Preview Error", player.error);
+        // showToast("Failed to load preview", "error");
+    };
 }
 
 async function submitJob() {

@@ -4,6 +4,7 @@ import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.service.EmailService;
 import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class PricingController {
 
     private final UserService userService;
@@ -61,31 +63,40 @@ public class PricingController {
     public ResponseEntity<?> upgradePlan(@RequestBody Map<String, String> body, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
 
+        String email = SecurityUtils.getEmail(principal);
         String planId = body.get("planId");
+        log.info("Upgrade request for user {} to plan {}", email, planId);
+
         if (planId == null) return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
 
         try {
             PlanType plan = PlanType.valueOf(planId);
-            userService.updatePlan(principal.getName(), plan);
+            userService.updatePlan(email, plan);
+            log.info("Plan updated successfully for {}", email);
 
             // Send email
             try {
-                 User user = userService.getOrCreateUser(principal.getName());
+                 User user = userService.getOrCreateUser(email);
                  emailService.sendUpgradeEmail(user.getUsername(), plan.getDisplayName());
             } catch(Exception ex) {
+                log.error("Failed to send upgrade email", ex);
                 // log error but don't fail upgrade
             }
 
             return ResponseEntity.ok(Map.of("success", true, "message", "Plan upgraded to " + plan.getDisplayName()));
         } catch (IllegalArgumentException e) {
+            log.error("Invalid plan ID provided: {}", planId);
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
+        } catch (Exception e) {
+            log.error("Upgrade failed for user " + email, e);
+            return ResponseEntity.internalServerError().body(Map.of("message", "Upgrade failed: " + e.getMessage()));
         }
     }
 
     @PostMapping("/pricing/cancel")
     public ResponseEntity<?> cancelPlan(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        userService.updatePlan(principal.getName(), PlanType.FREE);
+        userService.updatePlan(SecurityUtils.getEmail(principal), PlanType.FREE);
         return ResponseEntity.ok(Map.of("success", true, "message", "Subscription cancelled. You are now on the Free plan."));
     }
 }

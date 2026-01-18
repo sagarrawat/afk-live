@@ -1,6 +1,7 @@
 package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.util.SecurityUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
@@ -95,7 +96,7 @@ public class AuthController {
                     .replacePath(null)
                     .build()
                     .toUriString();
-            userService.resendVerification(principal.getName(), baseUrl);
+            userService.resendVerification(SecurityUtils.getEmail(principal), baseUrl);
             return org.springframework.http.ResponseEntity.ok(java.util.Map.of("success", true, "message", "Verification email sent."));
         } catch (Exception e) {
              return org.springframework.http.ResponseEntity.badRequest().body(java.util.Map.of("message", e.getMessage()));

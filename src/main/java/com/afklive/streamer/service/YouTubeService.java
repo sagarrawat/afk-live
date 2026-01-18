@@ -45,7 +45,7 @@ public class YouTubeService {
     private Credential getCredential(String username) {
         try {
             Authentication principal = createPrincipal(username);
-            OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE)
+            OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
                     .principal(principal)
                     .build();
 
@@ -147,6 +147,17 @@ public class YouTubeService {
                 .setAllThreadsRelatedToChannelId(getChannelId(username))
                 .setMaxResults(20L)
                 .execute();
+    }
+
+    public String getChannelName(String username) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        ChannelListResponse response = youtube.channels().list(Collections.singletonList("snippet"))
+                .setMine(true)
+                .execute();
+        if (response.getItems() == null || response.getItems().isEmpty()) {
+            throw new IllegalStateException("No channel found for user.");
+        }
+        return response.getItems().getFirst().getSnippet().getTitle();
     }
 
     private String getChannelId(String username) throws Exception {

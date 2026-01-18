@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
@@ -13,6 +14,9 @@ import org.thymeleaf.context.Context;
 @RequiredArgsConstructor
 @Slf4j
 public class EmailService {
+
+    @Value("${app.base-url}")
+    private String baseUrl;
 
     private final JavaMailSender emailSender;
     private final TemplateEngine templateEngine;
@@ -41,6 +45,7 @@ public class EmailService {
 
     public void sendWelcomeEmail(String to) {
         Context context = new Context();
+        context.setVariable("baseUrl", baseUrl);
         String html = templateEngine.process("email/welcome", context);
         sendEmail(to, "Welcome to AFK Live! 🚀", html);
     }
@@ -48,6 +53,7 @@ public class EmailService {
     public void sendUpgradeEmail(String to, String planName) {
         Context context = new Context();
         context.setVariable("planName", planName);
+        context.setVariable("baseUrl", baseUrl);
         String html = templateEngine.process("email/upgrade", context);
         sendEmail(to, "You've upgraded to " + planName + "!", html);
     }

@@ -14,14 +14,34 @@ public class ChannelService {
 
     private final UserRepository userRepository;
     private final UserService userService;
+    private final YouTubeService youTubeService;
 
-    public ChannelService(UserRepository userRepository, UserService userService) {
+    public ChannelService(UserRepository userRepository, UserService userService, YouTubeService youTubeService) {
         this.userRepository = userRepository;
         this.userService = userService;
+        this.youTubeService = youTubeService;
     }
 
     @Transactional
-    public SocialChannel addChannel(String username, String channelName) {
+    public void syncChannelFromGoogle(String username) {
+        try {
+            String channelName = youTubeService.getChannelName(username);
+
+            // Check if already exists
+            User user = userService.getOrCreateUser(username);
+            boolean exists = user.getChannels().stream()
+                    .anyMatch(c -> c.getName().equals(channelName) && "YOUTUBE".equals(c.getPlatform()));
+
+            if (!exists) {
+                addChannel(username, channelName);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to sync YouTube channel: " + e.getMessage());
+        }
+    }
+
+    @Transactional
+    public SocialChannel addChannel(String username, String channelName, String platform) {
         User user = userService.getOrCreateUser(username);
 
         int limit = user.getPlanType().getMaxChannels();
@@ -29,10 +49,19 @@ public class ChannelService {
             throw new IllegalStateException("Plan limit reached. Upgrade to add more channels.");
         }
 
-        SocialChannel channel = new SocialChannel(channelName, "YOUTUBE", user);
+        if (platform == null || platform.isEmpty()) {
+            platform = "YOUTUBE";
+        }
+
+        SocialChannel channel = new SocialChannel(channelName, platform, user);
         user.getChannels().add(channel);
         userRepository.save(user);
         return channel;
+    }
+
+    @Transactional
+    public SocialChannel addChannel(String username, String channelName) {
+        return addChannel(username, channelName, "YOUTUBE");
     }
 
     @Transactional(readOnly = true)
