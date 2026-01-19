@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class VideoConversionService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VideoConversionService.class);
 
+    private final FileStorageService storageService;
     private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
 
     @Async
@@ -84,11 +85,23 @@ public class VideoConversionService {
 
     @Async
     public void optimizeVideo(Path userDir, String username, String fileName) {
+        // Prevent path traversal
+        if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+             log.error("Invalid filename for optimization: {}", fileName);
+             return;
+        }
+
         try {
             Path source = userDir.resolve(fileName);
             if (!Files.exists(source)) {
-                log.error("Source file not found for optimization: {}", source);
-                return;
+                log.warn("Source file not found locally: {}. Attempting download from storage.", source.toAbsolutePath());
+                try {
+                    storageService.downloadFileToPath(fileName, source);
+                    log.info("Downloaded file from storage: {}", fileName);
+                } catch (Exception e) {
+                    log.error("Failed to find file locally or in storage: {}", fileName, e);
+                    return;
+                }
             }
 
             // Target: video_optimized.mp4
