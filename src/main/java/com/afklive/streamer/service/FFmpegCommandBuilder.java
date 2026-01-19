@@ -8,9 +8,6 @@ public class FFmpegCommandBuilder {
 
     public static List<String> buildConversionCommand(Path source, Path target) {
         return List.of(
-                "nice",
-                "-n",
-                "19",
                 "ffmpeg",
                 "-threads",
                 "1",
@@ -110,9 +107,6 @@ public class FFmpegCommandBuilder {
             int maxHeight
     ) {
         List<String> command = new ArrayList<>();
-        command.add("nice");
-        command.add("-n");
-        command.add("19");
         command.add("ffmpeg");
 
         // Video input (Index 0)
@@ -317,6 +311,45 @@ public class FFmpegCommandBuilder {
                  command.add("rtmps://a.rtmp.youtube.com:443/live2/" + key);
             }
         }
+
+        return command;
+    }
+
+    public static List<String> buildMergeCommand(List<Path> inputs, Path output) {
+        // [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]
+        List<String> command = new ArrayList<>();
+        command.add("ffmpeg");
+
+        for (Path input : inputs) {
+            command.add("-i");
+            command.add(input.toString());
+        }
+
+        StringBuilder filterComplex = new StringBuilder();
+        for (int i = 0; i < inputs.size(); i++) {
+            filterComplex.append("[").append(i).append(":v]")
+                    .append("[").append(i).append(":a]");
+        }
+        filterComplex.append("concat=n=").append(inputs.size()).append(":v=1:a=1[v][a]");
+
+        command.add("-filter_complex");
+        command.add(filterComplex.toString());
+        command.add("-map");
+        command.add("[v]");
+        command.add("-map");
+        command.add("[a]");
+
+        command.add("-c:v");
+        command.add("libx264");
+        command.add("-preset");
+        command.add("ultrafast"); // fast merge
+        command.add("-c:a");
+        command.add("aac");
+        command.add("-b:a");
+        command.add("192k");
+
+        command.add("-y");
+        command.add(output.toString());
 
         return command;
     }
