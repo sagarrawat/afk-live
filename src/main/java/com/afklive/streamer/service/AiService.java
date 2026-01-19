@@ -51,6 +51,34 @@ public class AiService {
         return base + ",viral,trending,2024,guide,tutorial,review";
     }
 
+    public Map<String, String> generateStreamMetadata(String context) {
+        if (isAiEnabled()) {
+            // Ideally we'd ask for JSON, but Gemini Text generation is freer.
+            // We'll make parallel calls or one big call and split. One big call is risky for parsing.
+            // Parallel is fine.
+
+            // Note: In production we'd use CompletableFuture to run these in parallel.
+            String title = generateTitle(context);
+            String desc = generateDescription(title);
+            String tags = generateTags(context);
+            String tip = callGemini("Give one short, engaging tip for a streamer streaming about: " + context + ". e.g. 'Ask chat to...'");
+
+            return Map.of(
+                "title", title,
+                "description", desc,
+                "tags", tags,
+                "tip", tip
+            );
+        }
+
+        return Map.of(
+            "title", generateTitle(context),
+            "description", generateDescription(context),
+            "tags", generateTags(context),
+            "tip", "Ask chat where they are watching from!"
+        );
+    }
+
     public String analyzeSentiment(String text) {
         if (isAiEnabled()) {
             return callGemini("Analyze sentiment of this comment: '" + text + "'. Return only one word: POSITIVE, NEGATIVE, or NEUTRAL.");

@@ -267,6 +267,43 @@
                         <input type="hidden" id="streamKey">
                     </div>
 
+                    <!-- AI Assistant -->
+                    <div class="control-card">
+                        <h3 style="display:flex; align-items:center; gap:8px;">
+                            <i class="fa-solid fa-wand-magic-sparkles" style="color:#8e44ad;"></i> AI Assistant
+                        </h3>
+                        <div style="display:flex; gap:5px; margin-bottom:10px;">
+                            <input type="text" id="aiStreamTopic" class="form-input" placeholder="What are you streaming?" style="flex:1; font-size:0.9rem;">
+                            <button class="btn btn-sm btn-outline" onclick="generateStreamMetadata()">Generate</button>
+                        </div>
+                        <div id="aiMetadataResults" class="hidden">
+                            <div class="form-group" style="margin-bottom:8px;">
+                                <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                                    <label style="font-size:0.75rem;">Title</label>
+                                    <button class="btn btn-xs btn-text" onclick="copyToClipboard('aiStreamTitle')">Copy</button>
+                                </div>
+                                <input type="text" id="aiStreamTitle" class="form-input" readonly style="font-size:0.85rem;">
+                            </div>
+                            <div class="form-group" style="margin-bottom:8px;">
+                                <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                                    <label style="font-size:0.75rem;">Description</label>
+                                    <button class="btn btn-xs btn-text" onclick="copyToClipboard('aiStreamDesc')">Copy</button>
+                                </div>
+                                <textarea id="aiStreamDesc" class="form-input" rows="3" readonly style="font-size:0.85rem;"></textarea>
+                            </div>
+                            <div class="form-group" style="margin-bottom:8px;">
+                                <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                                    <label style="font-size:0.75rem;">Tags</label>
+                                    <button class="btn btn-xs btn-text" onclick="copyToClipboard('aiStreamTags')">Copy</button>
+                                </div>
+                                <input type="text" id="aiStreamTags" class="form-input" readonly style="font-size:0.85rem;">
+                            </div>
+                            <div style="background:#f3e5f5; padding:8px; border-radius:4px; border-left:3px solid #8e44ad; font-size:0.8rem; margin-top:10px;">
+                                <strong>💡 Engagement Tip:</strong> <span id="aiStreamTip">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Logs -->
                     <div class="control-card" style="flex:1; display:flex; flex-direction:column; min-height: 200px;">
                         <h3>Logs</h3>
