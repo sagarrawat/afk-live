@@ -250,10 +250,32 @@
 
                     <!-- Action -->
                     <div class="control-card">
-                         <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
-                            <i class="fa-solid fa-tower-broadcast"></i> Go Live
-                         </button>
-                         <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
+                         <div style="display:flex; gap:10px; margin-bottom:10px;">
+                             <button id="tabGoLiveNow" class="btn btn-sm btn-primary" style="flex:1;" onclick="switchStreamTab('now')">Go Live Now</button>
+                             <button id="tabScheduleStream" class="btn btn-sm btn-outline" style="flex:1;" onclick="switchStreamTab('schedule')">Schedule</button>
+                         </div>
+
+                         <!-- GO LIVE NOW -->
+                         <div id="streamActionNow">
+                             <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
+                                <i class="fa-solid fa-tower-broadcast"></i> Go Live
+                             </button>
+                             <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
+                         </div>
+
+                         <!-- SCHEDULE STREAM -->
+                         <div id="streamActionSchedule" class="hidden">
+                             <div class="form-group">
+                                 <label>Start Time</label>
+                                 <input type="datetime-local" id="streamScheduleTime" class="form-input">
+                             </div>
+                             <button class="btn btn-primary btn-block" onclick="submitScheduledStream()">
+                                <i class="fa-regular fa-clock"></i> Schedule Stream
+                             </button>
+                             <div style="margin-top:10px; font-size:0.8rem; text-align:center;">
+                                 <a href="#" onclick="showScheduledStreamsModal()">View Scheduled Streams</a>
+                             </div>
+                         </div>
                     </div>
 
                     <!-- Destinations -->
@@ -854,6 +876,19 @@
             <button onclick="document.getElementById('streamLibraryModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div id="streamLibraryList" class="scroll-list" style="height: 300px; padding: 0;"></div>
+    </div>
+</div>
+
+<!-- Scheduled Streams List Modal -->
+<div id="scheduledStreamsModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 600px;">
+        <div class="modal-header" style="border:none; padding-bottom: 10px;">
+            <h2>Scheduled Streams</h2>
+            <button onclick="document.getElementById('scheduledStreamsModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="scheduledStreamsList" class="scroll-list" style="max-height: 400px; overflow-y:auto; padding: 0;">
+            Loading...
+        </div>
     </div>
 </div>
 

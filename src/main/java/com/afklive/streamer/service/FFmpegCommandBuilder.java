@@ -73,6 +73,54 @@ public class FFmpegCommandBuilder {
         return command;
     }
 
+    public static List<String> buildOptimizeCommand(Path input, Path output) {
+        List<String> command = new ArrayList<>();
+        command.add("nice");
+        command.add("-n");
+        command.add("15");
+        command.add("ffmpeg");
+        command.add("-i");
+        command.add(input.toString());
+
+        // Video: Standardize to 1080p 30fps H.264
+        command.add("-vf");
+        command.add("scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2");
+
+        command.add("-c:v");
+        command.add("libx264");
+        command.add("-preset");
+        command.add("medium"); // Higher quality per bitrate for offline processing
+        command.add("-profile:v");
+        command.add("high");
+        command.add("-b:v");
+        command.add("4500k");
+        command.add("-maxrate");
+        command.add("4500k");
+        command.add("-bufsize");
+        command.add("9000k");
+        command.add("-pix_fmt");
+        command.add("yuv420p");
+        command.add("-r");
+        command.add("30");
+        command.add("-g");
+        command.add("60"); // 2-second GOP
+
+        // Audio: AAC 128k
+        command.add("-c:a");
+        command.add("aac");
+        command.add("-b:a");
+        command.add("128k");
+        command.add("-ar");
+        command.add("44100");
+
+        command.add("-movflags");
+        command.add("+faststart");
+
+        command.add("-y");
+        command.add(output.toString());
+        return command;
+    }
+
     public static List<String> buildMixCommand(Path videoPath, Path audioPath, String volume, Path outputPath) {
         // ffmpeg -i video.mp4 -stream_loop -1 -i audio.mp3 -filter_complex "[1:a]volume=0.5[a1];[0:a][a1]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -y out.mp4
         List<String> command = new ArrayList<>();
@@ -108,6 +156,21 @@ public class FFmpegCommandBuilder {
             boolean muteVideoAudio,
             String streamMode,
             int maxHeight
+    ) {
+        return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, false);
+    }
+
+    public static List<String> buildStreamCommand(
+            Path videoPath,
+            List<String> streamKeys,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized
     ) {
         List<String> command = new ArrayList<>();
         command.add("nice");
@@ -249,7 +312,14 @@ public class FFmpegCommandBuilder {
         // --- ENCODING OPTIONS ---
 
         // Video Encoding
-        if (forceTranscode || hasWatermark) { // hasWatermark implies forceTranscode, but explicit is fine
+        // If optimized and no filters, use copy.
+        // Note: forceTranscode is true if streamMode != original OR watermark exists.
+        // So checking forceTranscode covers those cases.
+        // We only check isOptimized to confirm we CAN copy safely if forceTranscode is false.
+        // (Actually, the previous logic tried to copy if !forceTranscode, but didn't guarantee input quality).
+        // With isOptimized, we are more confident in copying.
+
+        if (forceTranscode || hasWatermark) {
             command.add("-map");
             command.add(videoLabel);
             command.add("-c:v");
@@ -271,6 +341,7 @@ public class FFmpegCommandBuilder {
             command.add("0:v");
             command.add("-c:v");
             command.add("copy");
+            // If isOptimized is true, this is ideal.
         }
 
         // Audio Encoding
