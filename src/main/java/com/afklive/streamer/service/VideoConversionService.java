@@ -94,13 +94,21 @@ public class VideoConversionService {
         try {
             Path source = userDir.resolve(fileName);
             if (!Files.exists(source)) {
-                log.warn("Source file not found locally: {}. Attempting download from storage.", source.toAbsolutePath());
-                try {
-                    storageService.downloadFileToPath(fileName, source);
-                    log.info("Downloaded file from storage: {}", fileName);
-                } catch (Exception e) {
-                    log.error("Failed to find file locally or in storage: {}", fileName, e);
-                    return;
+                // Check for _raw variant (common upload pattern)
+                String rawName = fileName.replace(".mp4", "_raw.mp4");
+                Path rawSource = userDir.resolve(rawName);
+                if (Files.exists(rawSource)) {
+                    log.info("Found raw source file: {}", rawSource);
+                    source = rawSource;
+                } else {
+                    log.warn("Source file not found locally: {}. Attempting download from storage.", source.toAbsolutePath());
+                    try {
+                        storageService.downloadFileToPath(fileName, source);
+                        log.info("Downloaded file from storage: {}", fileName);
+                    } catch (Exception e) {
+                        log.error("Failed to find file locally or in storage: {}", fileName, e);
+                        return;
+                    }
                 }
             }
 
