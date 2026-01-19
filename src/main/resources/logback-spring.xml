@@ -36,7 +36,7 @@
                 <pattern>app=${APP_NAME},host=${HOSTNAME},level=%level</pattern>
             </label>
             <message>
-                <pattern>l=%level h=${HOSTNAME} c=%logger{20} t=%thread | %msg %ex</pattern>
+                <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
             </message>
             <sortByTime>true</sortByTime>
         </format>
