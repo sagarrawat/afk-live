@@ -553,14 +553,18 @@ async function submitSchedule() {
     const title = document.getElementById('scheduleTitle').value;
     const time = document.getElementById('scheduleTime').value;
 
-    if(!file || !title || !time) return showToast("Please fill Title, Time and select a Video.", "error");
+    if((!file && !selectedLibraryVideoId) || !title || !time) return showToast("Please fill Title, Time and select a Video.", "error");
 
     const btn = document.getElementById('btnSchedule');
     btn.disabled = true;
     btn.innerText = "Uploading...";
 
     const formData = new FormData();
-    formData.append("file", file);
+    if (selectedLibraryVideoId) {
+        formData.append("libraryVideoId", selectedLibraryVideoId);
+    } else {
+        formData.append("file", file);
+    }
     formData.append("title", title);
     formData.append("scheduledTime", time);
     formData.append("description", document.getElementById('scheduleDescription').value);
@@ -1168,6 +1172,8 @@ async function loadLibraryVideos() {
 
             const actions = document.createElement('div');
             actions.innerHTML = `
+                <button class="btn btn-sm btn-text" onclick="scheduleFromLibrary(${v.id}, '${v.title.replace(/'/g, "\\'")}')" title="Schedule Post"><i class="fa-regular fa-calendar-plus"></i></button>
+                <button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title}')" title="Optimize"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
                 <button class="btn btn-sm btn-text" onclick="openPreviewModal(${v.id})" title="Preview"><i class="fa-solid fa-play"></i></button>
                 <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo(${v.id}, '${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
             `;
@@ -1192,6 +1198,35 @@ function openPreviewModal(id) {
     video.src = `${API_URL}/library/stream/${id}`;
     document.getElementById('previewModal').classList.remove('hidden');
     video.play();
+}
+
+let selectedLibraryVideoId = null;
+
+function scheduleFromLibrary(id, title) {
+    selectedLibraryVideoId = id;
+    showScheduleModal();
+
+    // UI updates
+    document.getElementById('mediaPlaceholder').classList.add('hidden');
+    document.getElementById('selectedFileDisplay').classList.remove('hidden');
+    document.getElementById('fileName').innerText = "Library: " + title;
+
+    const titleInput = document.getElementById('scheduleTitle');
+    if(!titleInput.value) titleInput.value = title.replace(/\.[^/.]+$/, "");
+}
+
+async function optimizeVideo(filename) {
+    showToast("Starting optimization...", "info");
+    try {
+        const res = await apiFetch(`${API_URL}/convert?fileName=${encodeURIComponent(filename)}`, { method: 'POST' });
+        if(res.ok) {
+            showToast("Optimization started", "success");
+        } else {
+            showToast("Optimization failed", "error");
+        }
+    } catch(e) {
+        showToast("Error requesting optimization", "error");
+    }
 }
 
 function openYouTubeImportModal() {
