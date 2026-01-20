@@ -28,6 +28,8 @@ import java.util.stream.Collectors;
 public class StreamService {
     @Autowired
     private StreamJobRepository streamJobRepo;
+    @Autowired
+    private com.afklive.streamer.repository.ScheduledVideoRepository scheduledVideoRepo;
 
     public final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
     private final List<String> logBuffer =
@@ -36,8 +38,7 @@ public class StreamService {
     // Store active streams: StreamKey -> Process
     // (In a real app, use a Database ID or User ID as the key, not the stream key itself)
     private final ConcurrentHashMap<String, Process> activeStreams = new ConcurrentHashMap<>();
-    @Autowired
-    private UserFileService userFileService;
+    // UserFileService removed as requested for startStream
     @Autowired
     private FileStorageService storageService;
     @Autowired
@@ -73,26 +74,25 @@ public class StreamService {
             throw new IllegalStateException("You already have an active stream running!");
         }
 
-        // 2. Resolve Paths & Download from S3
-        Path userDir = userFileService.getUserUploadDir(username);
-        // We use the key as filename prefix to avoid collisions
-        Path videoPath = userDir.resolve("stream_" + videoKey).toAbsolutePath();
+        // 2. Resolve Paths & Download from S3 (Using DB)
+        // Verify Video Existence in DB
+        var videoEntity = scheduledVideoRepo.findByS3KeyAndUsername(videoKey, username)
+                .orElseThrow(() -> new IllegalArgumentException("Video not found or access denied: " + videoKey));
 
-        if (!java.nio.file.Files.exists(videoPath)) {
+        // Define Local Cache Directory
+        Path cacheDir = java.nio.file.Paths.get("data/stream_cache");
+        if (!Files.exists(cacheDir)) {
+            Files.createDirectories(cacheDir);
+        }
+
+        // Resolve Video Path
+        Path videoPath = cacheDir.resolve(videoEntity.getS3Key()).toAbsolutePath();
+
+        if (!Files.exists(videoPath)) {
             log.info("Downloading video from Storage: {}", videoKey);
-            try {
-                storageService.downloadFileToPath(videoKey, videoPath);
-            } catch (Exception e) {
-                log.error("Failed to download video from Storage", e);
-                // Fallback: Check if it's a local file (legacy support)
-                videoPath = userDir.resolve(videoKey).toAbsolutePath();
-                if (!java.nio.file.Files.exists(videoPath)) {
-                    throw new IOException("Video not found in Storage or local storage: " + videoKey);
-                }
-            }
+            storageService.downloadFileToPath(videoKey, videoPath);
         }
         
-        log.info("userDir [{}]", userDir);
         log.info("videoPath [{}]", videoPath);
 
         // 3. Build the FFmpeg Command
@@ -102,7 +102,15 @@ public class StreamService {
                 String trackId = musicName.substring(6); // remove "stock:"
                 musicPath = audioService.getAudioPath(trackId);
             } else {
-                musicPath = userDir.resolve(musicName).toAbsolutePath();
+                // Verify Music in DB
+                var musicEntity = scheduledVideoRepo.findByS3KeyAndUsername(musicName, username)
+                        .orElseThrow(() -> new IllegalArgumentException("Music file not found or access denied: " + musicName));
+
+                musicPath = cacheDir.resolve(musicEntity.getS3Key()).toAbsolutePath();
+                if (!Files.exists(musicPath)) {
+                    log.info("Downloading music from Storage: {}", musicName);
+                    storageService.downloadFileToPath(musicName, musicPath);
+                }
             }
         }
 
