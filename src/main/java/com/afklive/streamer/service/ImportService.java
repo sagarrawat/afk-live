@@ -36,19 +36,35 @@ public class ImportService {
 
             // Determine yt-dlp path
             String ytDlpPath = new File("bin/yt-dlp").getAbsolutePath();
-            if (!new File(ytDlpPath).exists()) {
+            boolean localExists = new File(ytDlpPath).exists();
+            if (!localExists) {
                 ytDlpPath = "yt-dlp"; // Try system path
             }
 
             log.info("Using yt-dlp at: {}", ytDlpPath);
+            log.info("Working Directory: {}", System.getProperty("user.dir"));
 
-            ProcessBuilder pb = new ProcessBuilder(
-                    ytDlpPath,
-                    "--no-playlist",
-                    "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                    "-o", outputTemplate,
-                    url
-            );
+            ProcessBuilder pb;
+            if (localExists) {
+                // If using local script, invoke with python3 explicitly
+                pb = new ProcessBuilder(
+                        "python3",
+                        ytDlpPath,
+                        "--no-playlist",
+                        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                        "-o", outputTemplate,
+                        url
+                );
+            } else {
+                // System command
+                pb = new ProcessBuilder(
+                        ytDlpPath,
+                        "--no-playlist",
+                        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                        "-o", outputTemplate,
+                        url
+                );
+            }
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
