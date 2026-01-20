@@ -20,7 +20,7 @@ import com.afklive.streamer.repository.ScheduledVideoRepository;
 public class UserFileService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserFileService.class);
 
-    private final Path baseUploadDir = Paths.get("uploads");
+    private final Path baseUploadDir = Paths.get("data/storage");
     private final VideoConversionService videoConversionService;
     private final ScheduledVideoRepository scheduledVideoRepository;
 

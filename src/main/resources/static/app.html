@@ -248,20 +248,20 @@
 
                 <!-- RIGHT: Controls -->
                 <div class="stream-control-panel">
-                    <!-- Status -->
-                    <div class="stream-status-box">
-                        <div class="status-label">Stream Status</div>
-                        <div class="status-timer" id="streamTimer">00:00:00</div>
-                        <span class="badge hidden" id="liveBadge">LIVE</span>
-                        <span class="badge" id="offlineBadge" style="background:#445; color:#aaa;">OFFLINE</span>
-                    </div>
-
                     <!-- Action -->
                     <div class="control-card">
                          <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
-                            <i class="fa-solid fa-tower-broadcast"></i> Go Live
+                            <i class="fa-solid fa-tower-broadcast"></i> Start New Stream
                          </button>
-                         <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
+                    </div>
+
+                    <!-- Active Streams -->
+                    <div class="control-card">
+                        <h3>Active Streams</h3>
+                        <div id="activeStreamsList" class="destination-list">
+                            <!-- Populated via JS -->
+                            <div class="empty-state" style="padding: 10px; font-size: 0.9rem;">No active streams.</div>
+                        </div>
                     </div>
 
                     <!-- Destinations -->

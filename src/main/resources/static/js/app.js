@@ -668,8 +668,6 @@ async function loadScheduledQueue() {
 
 /* --- STREAMING --- */
 let selectedStreamVideo = null;
-let streamTimerInterval = null;
-let streamStartTime = null;
 
 async function openLibraryModalForStream() {
     document.getElementById('streamLibraryModal').classList.remove('hidden');
@@ -835,61 +833,60 @@ async function submitJob() {
         const data = await res.json();
         if(data.success) {
             showToast("Stream Started Successfully!", "success");
-            setLiveState(true);
-            streamStartTime = new Date();
-            startTimer();
-
-            // Save state
-            localStorage.setItem('afk_stream_state', JSON.stringify({
-                startTime: streamStartTime.toISOString(),
-                videoTitle: selectedStreamVideo ? selectedStreamVideo.title : "Unknown Video",
-                videoId: selectedStreamVideo ? selectedStreamVideo.id : null
-            }));
+            loadActiveStreams(); // Refresh list
         } else {
             showToast(data.message, "error");
         }
     } catch(e) { showToast("Failed to start stream", "error"); }
     finally {
         btn.disabled = false;
-        if(!document.getElementById('liveBadge').classList.contains('hidden')) {
-             btn.classList.add('hidden');
-        } else {
-             btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Go Live';
-        }
+        btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Start New Stream';
     }
 }
 
-async function stopStream() {
-    showConfirmModal("End Stream", "Are you sure you want to stop the live stream?", async () => {
+async function stopStream(jobId) {
+    showConfirmModal("End Stream", "Are you sure you want to stop this stream?", async () => {
         try {
-            await apiFetch(`${API_URL}/stop`, {method:'POST'});
-            setLiveState(false);
+            const formData = new FormData();
+            formData.append("jobId", jobId);
+            await apiFetch(`${API_URL}/stop`, {method:'POST', body: formData});
             showToast("Stream Stopped", "info");
-            stopTimer();
-            localStorage.removeItem('afk_stream_state');
+            loadActiveStreams(); // Refresh list
         } catch(e) {}
     });
 }
 
-function setLiveState(isLive) {
-    const badge = document.getElementById('liveBadge');
-    const offlineBadge = document.getElementById('offlineBadge');
-    const btnGo = document.getElementById('btnGoLive');
-    const btnStop = document.getElementById('btnStop');
+async function loadActiveStreams() {
+    const list = document.getElementById('activeStreamsList');
+    list.innerHTML = "Loading...";
 
-    if(isLive) {
-        badge.classList.remove('hidden');
-        offlineBadge.classList.add('hidden');
-        btnGo.classList.add('hidden');
-        btnStop.classList.remove('hidden');
-        log("Stream is LIVE");
-    } else {
-        badge.classList.add('hidden');
-        offlineBadge.classList.remove('hidden');
-        btnGo.classList.remove('hidden');
-        btnStop.classList.add('hidden');
-        log("Stream Offline");
-        stopTimer();
+    try {
+        const res = await apiFetch(`${API_URL}/status`);
+        const data = await res.json();
+
+        list.innerHTML = '';
+        const streams = data.data; // Now returns a list
+
+        if (!streams || streams.length === 0) {
+            list.innerHTML = '<div class="empty-state" style="padding: 10px; font-size: 0.9rem;">No active streams.</div>';
+            return;
+        }
+
+        streams.forEach(job => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.innerHTML = `
+                <div style="flex:1">
+                    <div style="font-weight:600; font-size:0.9rem;">${job.fileName || "Unknown Video"}</div>
+                    <div style="font-size:0.75rem; color:#666;">ID: ${job.id} <span style="color:#00875a; font-weight:600;">LIVE</span></div>
+                </div>
+                <button class="btn btn-sm btn-danger" onclick="stopStream(${job.id})">Stop</button>
+            `;
+            list.appendChild(div);
+        });
+
+    } catch(e) {
+        list.innerHTML = "Failed to load streams.";
     }
 }
 
@@ -1051,65 +1048,9 @@ function toggleStreamKeyVisibility(inputId, btn) {
 
 // function selectDestination(id) removed in favor of toggleDestination
 
-/* --- TIMER --- */
-function startTimer() {
-    stopTimer();
-    const el = document.getElementById('streamTimer');
-    if(!el) return;
-
-    streamTimerInterval = setInterval(() => {
-        if(!streamStartTime) return;
-        const diff = Math.floor((new Date() - streamStartTime) / 1000);
-        const h = Math.floor(diff / 3600).toString().padStart(2, '0');
-        const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
-        const s = (diff % 60).toString().padStart(2, '0');
-        el.innerText = `${h}:${m}:${s}`;
-    }, 1000);
-}
-
-function stopTimer() {
-    if(streamTimerInterval) clearInterval(streamTimerInterval);
-    const el = document.getElementById('streamTimer');
-    if(el) el.innerText = "00:00:00";
-}
-
 async function checkInitialStatus() {
-    try {
-        const res = await apiFetch(`${API_URL}/status`);
-        const data = await res.json();
-
-        const savedState = localStorage.getItem('afk_stream_state');
-        let stateObj = savedState ? JSON.parse(savedState) : null;
-
-        if(data.success && data.data.live) {
-            setLiveState(true);
-            // If we have saved start time, use it
-            if (stateObj && stateObj.startTime) {
-                streamStartTime = new Date(stateObj.startTime);
-            } else {
-                streamStartTime = new Date();
-            }
-            startTimer();
-
-            // Restore UI selection if possible
-            if (stateObj) {
-                if (stateObj.videoTitle) {
-                    document.getElementById('selectedVideoTitle').innerText = stateObj.videoTitle;
-                    document.getElementById('previewPlaceholder').classList.add('hidden');
-                    const player = document.getElementById('previewPlayer');
-                    player.classList.remove('hidden');
-                    // We can't easily restore the exact video src without the ID,
-                    // but we can try if state has it.
-                    // Assuming stateObj has videoId if we save it.
-                }
-            }
-        } else {
-            // Backend says offline, clear local state
-            if (stateObj) {
-                localStorage.removeItem('afk_stream_state');
-            }
-        }
-    } catch(e){}
+    // Just load active streams list
+    loadActiveStreams();
 }
 
 async function checkYoutubeStatus() {

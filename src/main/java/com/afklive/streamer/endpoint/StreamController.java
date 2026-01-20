@@ -43,11 +43,11 @@ public class StreamController {
     public ResponseEntity<?> getStatus(Principal principal) {
         if (principal == null) return ResponseEntity.ok(ApiResponse.success("Guest", Map.of("live", false)));
 
-        StreamJob job = streamService.getCurrentStatus(SecurityUtils.getEmail(principal));
-        if (job == null) {
-            return ResponseEntity.ok(ApiResponse.success("OFFLINE", Map.of("live", false)));
+        List<StreamJob> jobs = streamService.getCurrentStatus(SecurityUtils.getEmail(principal));
+        if (jobs == null || jobs.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("OFFLINE", List.of()));
         }
-        return ResponseEntity.ok(ApiResponse.success("ONLINE", job));
+        return ResponseEntity.ok(ApiResponse.success("ONLINE", jobs));
     }
 
     @PostMapping("/start")
@@ -63,10 +63,14 @@ public class StreamController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
         String email = SecurityUtils.getEmail(principal);
-        if (streamManager.tryStartStream(email)) {
+        // Generate a unique token for this stream instance to handle concurrency limiting in Manager
+        String jobToken = email + "_" + System.nanoTime();
+
+        if (streamManager.tryStartStream(jobToken)) {
             try {
-                return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode));
+                return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, jobToken));
             } catch (Exception e) {
+                streamManager.endStream(jobToken); // Release token on failure
                 return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
             }
         }
@@ -74,11 +78,13 @@ public class StreamController {
     }
 
     @PostMapping("/stop")
-    public ResponseEntity<?> stop(Principal principal) {
+    public ResponseEntity<?> stop(@RequestParam Long jobId, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
-        streamManager.endStream(email);
-        return ResponseEntity.ok(streamService.stopStream(email));
+        // streamManager.endStream is now handled inside StreamService via callback or we need to map jobId back to token?
+        // Actually, StreamService handles token release on exit.
+        // We just stop the process.
+        return ResponseEntity.ok(streamService.stopStream(email, jobId));
     }
 
     @PostMapping("/convert")
