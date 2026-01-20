@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,16 +30,23 @@ public class VideoConversionService {
 
     @Async
     public void convertVideo(Path userDir, String username, String fileName) {
+        ScheduledVideo scheduledVideo = repository.findByUsernameAndTitle(username, fileName)
+                .orElse(null);
+
+        userDir = Path.of("data/storage");
+
         try {
             // Replicate FileUploadService logic to find the source file path
+            fileName = scheduledVideo.getS3Key();
             String sourceFileName = fileName;
+            String targetFileName = fileName;
             if (fileName != null && fileName.contains(".mp4")) {
                 int dotIndex = fileName.lastIndexOf(".");
-                sourceFileName = fileName.substring(0, dotIndex) + "_raw" + fileName.substring(dotIndex);
+                targetFileName = fileName.substring(0, dotIndex) + "_optimized" + fileName.substring(dotIndex);
             }
 
             Path source = userDir.resolve(sourceFileName);
-            Path target = userDir.resolve(fileName); // Target is the original requested name
+            Path target = userDir.resolve(targetFileName); // Target is the original requested name
 
             List<String> command = FFmpegCommandBuilder.buildConversionCommand(source, target);
             String progressKey = username + ":" + fileName;
@@ -52,7 +60,7 @@ public class VideoConversionService {
             if (exitCode == 0) {
                 log.info("Conversion completed successfully for {}: {}", username, fileName);
                 conversionProgress.remove(progressKey);
-                Files.delete(source);
+                Files.move(target, source, StandardCopyOption.REPLACE_EXISTING);
             } else {
                 log.error("Conversion failed for {}: {} (exit code {})", username, fileName, exitCode);
                 conversionProgress.put(progressKey, -1);

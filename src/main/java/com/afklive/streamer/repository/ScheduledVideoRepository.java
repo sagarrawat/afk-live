@@ -6,9 +6,11 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ScheduledVideoRepository extends JpaRepository<ScheduledVideo, Long> {
     List<ScheduledVideo> findByUsername(String username);
     List<ScheduledVideo> findByStatusAndScheduledTimeLessThanEqual(ScheduledVideo.VideoStatus status, LocalDateTime time);
+    Optional<ScheduledVideo> findByUsernameAndTitle(String username, String filename);
 }
