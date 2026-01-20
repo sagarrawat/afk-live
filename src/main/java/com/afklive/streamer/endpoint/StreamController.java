@@ -109,6 +109,12 @@ public class StreamController {
         return ResponseEntity.ok(userFileService.listConvertedVideos(SecurityUtils.getEmail(principal)));
     }
 
+    @GetMapping("/audio/my-library")
+    public ResponseEntity<?> getAudioLibrary(Principal principal) throws IOException {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(userFileService.listAudioFiles(SecurityUtils.getEmail(principal)));
+    }
+
     @DeleteMapping("/delete")
     public ResponseEntity<?> deleteFile(@RequestParam String fileName) {
         try {

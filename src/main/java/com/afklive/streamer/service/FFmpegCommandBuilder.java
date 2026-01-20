@@ -218,7 +218,8 @@ public class FFmpegCommandBuilder {
             // We ALWAYS add this filter to ensure compliance, forcing transcode.
             // (Optimization: we could skip if we knew dimensions, but we don't here).
             forceTranscode = true;
-            String limitFilter = String.format("scale='if(gt(iw,ih),-2,min(iw,%d))':'if(gt(iw,ih),min(ih,%d),-2)'", maxHeight, maxHeight);
+            // Removed single quotes and escaped commas for correct ProcessBuilder/FFmpeg parsing
+            String limitFilter = String.format("scale=if(gt(iw\\,ih)\\, -2\\, min(iw\\,%d)):if(gt(iw\\,ih)\\, min(ih\\,%d)\\, -2)", maxHeight, maxHeight);
             filterChains.add("[0:v]" + limitFilter + "[scaled]");
             videoLabel = "[scaled]";
         }

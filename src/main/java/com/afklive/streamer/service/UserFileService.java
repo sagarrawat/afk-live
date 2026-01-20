@@ -56,4 +56,24 @@ public class UserFileService {
     private boolean isVideoFile(String filename) {
         return filename.toLowerCase().endsWith(".mp4");
     }
+
+    public List<String> listAudioFiles(String username) throws IOException {
+        Path userDir = getUserUploadDir(username);
+        if (!Files.exists(userDir)) {
+            return List.of();
+        }
+        try (Stream<Path> stream = Files.list(userDir)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(Path::getFileName)
+                    .map(Path::toString)
+                    .filter(this::isAudioFile)
+                    .collect(Collectors.toList());
+        }
+    }
+
+    private boolean isAudioFile(String filename) {
+        String n = filename.toLowerCase();
+        return n.endsWith(".mp3") || n.endsWith(".wav");
+    }
 }

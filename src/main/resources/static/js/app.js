@@ -2081,22 +2081,81 @@ function toggleAudioPreview(btn, url) {
 /* --- STREAM MUSIC --- */
 function switchStreamAudioTab(tab) {
     const btnUpload = document.getElementById('tabStreamAudioUpload');
+    const btnMyLib = document.getElementById('tabStreamAudioMyLib');
     const btnLib = document.getElementById('tabStreamAudioLib');
+
     const secUpload = document.getElementById('streamAudioUploadSection');
+    const secMyLib = document.getElementById('streamAudioMyLibSection');
     const secLib = document.getElementById('streamAudioLibSection');
+
+    // Reset all
+    btnUpload.className = "btn btn-sm btn-outline";
+    btnMyLib.className = "btn btn-sm btn-outline";
+    btnLib.className = "btn btn-sm btn-outline";
+
+    secUpload.classList.add('hidden');
+    secMyLib.classList.add('hidden');
+    secLib.classList.add('hidden');
 
     if (tab === 'upload') {
         btnUpload.className = "btn btn-sm btn-primary";
-        btnLib.className = "btn btn-sm btn-outline";
         secUpload.classList.remove('hidden');
-        secLib.classList.add('hidden');
+    } else if (tab === 'mylib') {
+        btnMyLib.className = "btn btn-sm btn-primary";
+        secMyLib.classList.remove('hidden');
+        loadMyStreamAudioLibrary();
     } else {
-        btnUpload.className = "btn btn-sm btn-outline";
         btnLib.className = "btn btn-sm btn-primary";
-        secUpload.classList.add('hidden');
         secLib.classList.remove('hidden');
         loadStreamAudioLibrary();
     }
+}
+
+async function loadMyStreamAudioLibrary() {
+    const list = document.getElementById('streamAudioMyTrackList');
+    list.innerHTML = "Loading...";
+    try {
+        const res = await apiFetch(`${API_URL}/audio/my-library`);
+        const tracks = await res.json();
+        list.innerHTML = '';
+
+        if (!tracks || tracks.length === 0) {
+            list.innerHTML = "No audio files found in uploads.";
+            return;
+        }
+
+        tracks.forEach(filename => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.onclick = () => {
+                // Set the uploaded name hidden field (StreamService looks for file in user dir)
+                document.getElementById('uploadedStreamMusicName').value = filename;
+                // Clear stock selection
+                document.getElementById('selectedStreamStockId').value = '';
+
+                // Visual feedback
+                document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(el => el.style.background = '');
+                div.style.background = '#e3f2fd';
+            };
+            div.innerHTML = `
+                <div style="flex:1; font-weight:600; font-size:0.9rem;">${filename}</div>
+                <button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '/api/library/stream/audio/' + encodeURIComponent('${filename}'))"><i class="fa-solid fa-play"></i></button>
+            `;
+            // Note: Preview URL needs to be valid. Currently StreamController doesn't expose raw file access easily via /library/stream/audio...
+            // Actually LibraryController has /stream/{id} for videos.
+            // We might need a raw file access endpoint for previews if we want to preview 'my library' audio.
+            // But for now, user just wants to SELECT it. I will disable preview button or make it generic.
+            // Let's remove the preview button for now to avoid broken feature, or add it if we have an endpoint.
+            // UserFileService.getUserUploadDir is protected.
+            // Let's just list it.
+
+            // Re-render without preview for safety
+            div.innerHTML = `<div style="flex:1; font-weight:600; font-size:0.9rem;">${filename}</div>`;
+
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "Failed."; }
 }
 
 /* --- WATERMARK --- */
