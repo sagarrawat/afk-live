@@ -33,8 +33,15 @@ public class ScheduledVideo {
 
     private String errorMessage;
 
+    @Enumerated(EnumType.STRING)
+    private OptimizationStatus optimizationStatus = OptimizationStatus.NOT_OPTIMIZED;
+
     public enum VideoStatus {
         PENDING, PROCESSING, UPLOADED, FAILED, LIBRARY
+    }
+
+    public enum OptimizationStatus {
+        NOT_OPTIMIZED, IN_PROGRESS, COMPLETED, FAILED
     }
 
     // Getters and Setters
@@ -165,5 +172,13 @@ public class ScheduledVideo {
 
     public void setSocialChannelId(Long socialChannelId) {
         this.socialChannelId = socialChannelId;
+    }
+
+    public OptimizationStatus getOptimizationStatus() {
+        return optimizationStatus;
+    }
+
+    public void setOptimizationStatus(OptimizationStatus optimizationStatus) {
+        this.optimizationStatus = optimizationStatus;
     }
 }

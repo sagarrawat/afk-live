@@ -17,7 +17,7 @@ class FFmpegCommandBuilderTest {
         List<String> command = FFmpegCommandBuilder.buildConversionCommand(source, target);
 
         assertThat(command).contains("ffmpeg", "-i", source.toString(), target.toString());
-        assertThat(command).contains("libx264", "ultrafast", "aac");
+        assertThat(command).contains("libx264", "veryfast", "aac", "yuv420p", "+faststart");
     }
 
     @Test

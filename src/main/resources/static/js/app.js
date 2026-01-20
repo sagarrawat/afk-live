@@ -784,6 +784,15 @@ async function submitJob() {
     if(!selectedStreamVideo) return showToast("Please select a video source", "error");
     if(selectedKeys.length === 0) return showToast("Please select at least one destination", "error");
 
+    if (selectedStreamVideo.optimizationStatus !== 'COMPLETED') {
+        showConfirmModal("Optimize Video?",
+            "This video is not optimized for streaming. Performance might be poor. Convert now?",
+            () => optimizeVideo(selectedStreamVideo.title)
+        );
+        // Return to prevent immediate start, allowing user to choose optimization
+        return;
+    }
+
     const btn = document.getElementById('btnGoLive');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Starting...';
@@ -1137,6 +1146,7 @@ async function loadLibraryVideos() {
 
         // Header stats
         let totalSize = 0;
+        let hasInProgress = false;
         data.data.forEach(v => totalSize += (v.fileSize || 0));
         const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
 
@@ -1171,9 +1181,20 @@ async function loadLibraryVideos() {
             `;
 
             const actions = document.createElement('div');
+
+            let optimizeBtn = '';
+            if (v.optimizationStatus === 'COMPLETED') {
+                optimizeBtn = `<span class="badge" style="background:#00875a; color:white; margin-right:5px; font-size:0.7rem;">OPTIMIZED</span>`;
+            } else if (v.optimizationStatus === 'IN_PROGRESS') {
+                optimizeBtn = `<button class="btn btn-sm btn-text" disabled><i class="fa-solid fa-spinner fa-spin"></i></button>`;
+                hasInProgress = true;
+            } else {
+                optimizeBtn = `<button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title}')" title="Optimize for Stream"><i class="fa-solid fa-wand-magic-sparkles"></i></button>`;
+            }
+
             actions.innerHTML = `
+                ${optimizeBtn}
                 <button class="btn btn-sm btn-text" onclick="scheduleFromLibrary(${v.id}, '${v.title.replace(/'/g, "\\'")}')" title="Schedule Post"><i class="fa-regular fa-calendar-plus"></i></button>
-                <button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title}')" title="Optimize"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
                 <button class="btn btn-sm btn-text" onclick="openPreviewModal(${v.id})" title="Preview"><i class="fa-solid fa-play"></i></button>
                 <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo(${v.id}, '${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
             `;
@@ -1185,6 +1206,10 @@ async function loadLibraryVideos() {
 
             list.appendChild(div);
         });
+
+        if (hasInProgress) {
+            setTimeout(loadLibraryVideos, 5000);
+        }
     } catch(e){}
 }
 
@@ -1221,6 +1246,8 @@ async function optimizeVideo(filename) {
         const res = await apiFetch(`${API_URL}/convert?fileName=${encodeURIComponent(filename)}`, { method: 'POST' });
         if(res.ok) {
             showToast("Optimization started", "success");
+            // Refresh logic handled by polling in loadLibraryVideos or manual refresh
+            loadLibraryVideos();
         } else {
             showToast("Optimization failed", "error");
         }
