@@ -19,10 +19,12 @@ public class UserFileService {
 
     private final Path baseUploadDir = Paths.get("uploads");
     private final VideoConversionService videoConversionService;
+    private final ScheduledVideoRepository scheduledVideoRepository;
 
     @Autowired
-    public UserFileService(VideoConversionService videoConversionService) throws IOException {
+    public UserFileService(VideoConversionService videoConversionService, ScheduledVideoRepository scheduledVideoRepository) throws IOException {
         this.videoConversionService = videoConversionService;
+        this.scheduledVideoRepository = scheduledVideoRepository;
         if (!Files.exists(baseUploadDir)) {
             log.info("Creating base upload directory: {}", baseUploadDir);
             Files.createDirectories(baseUploadDir);
@@ -57,19 +59,14 @@ public class UserFileService {
         return filename.toLowerCase().endsWith(".mp4");
     }
 
-    public List<String> listAudioFiles(String username) throws IOException {
-        Path userDir = getUserUploadDir(username);
-        if (!Files.exists(userDir)) {
-            return List.of();
-        }
-        try (Stream<Path> stream = Files.list(userDir)) {
-            return stream
-                    .filter(Files::isRegularFile)
-                    .map(Path::getFileName)
-                    .map(Path::toString)
-                    .filter(this::isAudioFile)
-                    .collect(Collectors.toList());
-        }
+    public List<Map<String, String>> listAudioFiles(String username) {
+        return scheduledVideoRepository.findByUsername(username).stream()
+                .filter(v -> isAudioFile(v.getTitle())) // Assuming title has extension or we check s3Key
+                .map(v -> Map.of(
+                        "title", v.getTitle(),
+                        "filename", v.getS3Key() // Use s3Key which has the UUID
+                ))
+                .collect(Collectors.toList());
     }
 
     private boolean isAudioFile(String filename) {

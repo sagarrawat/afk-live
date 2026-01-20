@@ -2124,13 +2124,13 @@ async function loadMyStreamAudioLibrary() {
             return;
         }
 
-        tracks.forEach(filename => {
+        tracks.forEach(track => {
             const div = document.createElement('div');
             div.className = 'queue-item';
             div.style.cursor = 'pointer';
             div.onclick = () => {
                 // Set the uploaded name hidden field (StreamService looks for file in user dir)
-                document.getElementById('uploadedStreamMusicName').value = filename;
+                document.getElementById('uploadedStreamMusicName').value = track.filename;
                 // Clear stock selection
                 document.getElementById('selectedStreamStockId').value = '';
 
@@ -2138,20 +2138,7 @@ async function loadMyStreamAudioLibrary() {
                 document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(el => el.style.background = '');
                 div.style.background = '#e3f2fd';
             };
-            div.innerHTML = `
-                <div style="flex:1; font-weight:600; font-size:0.9rem;">${filename}</div>
-                <button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '/api/library/stream/audio/' + encodeURIComponent('${filename}'))"><i class="fa-solid fa-play"></i></button>
-            `;
-            // Note: Preview URL needs to be valid. Currently StreamController doesn't expose raw file access easily via /library/stream/audio...
-            // Actually LibraryController has /stream/{id} for videos.
-            // We might need a raw file access endpoint for previews if we want to preview 'my library' audio.
-            // But for now, user just wants to SELECT it. I will disable preview button or make it generic.
-            // Let's remove the preview button for now to avoid broken feature, or add it if we have an endpoint.
-            // UserFileService.getUserUploadDir is protected.
-            // Let's just list it.
-
-            // Re-render without preview for safety
-            div.innerHTML = `<div style="flex:1; font-weight:600; font-size:0.9rem;">${filename}</div>`;
+            div.innerHTML = `<div style="flex:1; font-weight:600; font-size:0.9rem;">${track.title}</div>`;
 
             list.appendChild(div);
         });
