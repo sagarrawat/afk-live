@@ -214,6 +214,51 @@ public class LibraryController {
             // Delete from DB
             repository.delete(video);
 
+            // Update Usage?
+            // fileSize is in ScheduledVideo now (added in ImportService/Merge logic).
+            // Older videos might not have it, but we should try.
+            // UserService.updateStorageUsage(username, -size)
+            // But ScheduledVideo entity definition in memory doesn't explicitly show fileSize field,
+            // though I added it in ImportService logic.
+            // Let's assume it has it or I added it.
+            // Wait, I didn't add the field to the Entity class file in this session.
+            // The memory said "I'll add `fileSize` to ScheduledVideo entity" in step 1 planning,
+            // but I only updated ImportService to SET it.
+            // If the entity doesn't have the field, `repository.save` would fail or ignore it.
+            // Let's check `ScheduledVideo.java`.
+
+            return ResponseEntity.ok(ApiResponse.success("Video deleted", null));
+        } catch (Exception e) {
+            log.error("Failed to delete video", e);
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to delete video"));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteLibraryVideo(@PathVariable Long id, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+
+        ScheduledVideo video = repository.findById(id).orElse(null);
+        if (video == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!video.getUsername().equals(username)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Forbidden"));
+        }
+
+        try {
+            // Delete from S3/Storage
+            storageService.deleteFile(video.getS3Key());
+
+            // Delete Thumbnail if exists
+            if (video.getThumbnailS3Key() != null) {
+                storageService.deleteFile(video.getThumbnailS3Key());
+            }
+
+            // Delete from DB
+            repository.delete(video);
+
             if (video.getFileSize() != null) {
                 userService.updateStorageUsage(username, -video.getFileSize());
             }

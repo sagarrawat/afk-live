@@ -45,25 +45,51 @@ public class ImportService {
             log.info("Working Directory: {}", System.getProperty("user.dir"));
 
             ProcessBuilder pb;
+            String ffmpegPath = new File("bin/ffmpeg").getAbsolutePath();
+            boolean hasLocalFfmpeg = new File(ffmpegPath).exists();
+
             if (localExists) {
                 // If using local script, invoke with python3 explicitly
-                pb = new ProcessBuilder(
-                        "python3",
-                        ytDlpPath,
-                        "--no-playlist",
-                        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                        "-o", outputTemplate,
-                        url
-                );
+                if (hasLocalFfmpeg) {
+                    pb = new ProcessBuilder(
+                            "python3",
+                            ytDlpPath,
+                            "--ffmpeg-location", ffmpegPath,
+                            "--no-playlist",
+                            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                            "-o", outputTemplate,
+                            url
+                    );
+                } else {
+                    pb = new ProcessBuilder(
+                            "python3",
+                            ytDlpPath,
+                            "--no-playlist",
+                            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                            "-o", outputTemplate,
+                            url
+                    );
+                }
             } else {
                 // System command
-                pb = new ProcessBuilder(
-                        ytDlpPath,
-                        "--no-playlist",
-                        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                        "-o", outputTemplate,
-                        url
-                );
+                if (hasLocalFfmpeg) {
+                    pb = new ProcessBuilder(
+                            ytDlpPath,
+                            "--ffmpeg-location", ffmpegPath,
+                            "--no-playlist",
+                            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                            "-o", outputTemplate,
+                            url
+                    );
+                } else {
+                    pb = new ProcessBuilder(
+                            ytDlpPath,
+                            "--no-playlist",
+                            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                            "-o", outputTemplate,
+                            url
+                    );
+                }
             }
             pb.redirectErrorStream(true);
             Process p = pb.start();
