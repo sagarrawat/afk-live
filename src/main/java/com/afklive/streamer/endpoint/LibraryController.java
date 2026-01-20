@@ -107,15 +107,21 @@ public class LibraryController {
                     try (ZipInputStream zis = new ZipInputStream(file.getInputStream())) {
                         ZipEntry entry;
                         while ((entry = zis.getNextEntry()) != null) {
-                            if (entry.isDirectory() || !isVideo(entry.getName())) continue;
+                            String entryName = entry.getName();
+                            if (entry.isDirectory() || entryName.contains("__MACOSX") || entryName.startsWith("._") || entryName.contains("/._") || !isVideo(entryName)) {
+                                continue;
+                            }
+
+                            // Flatten directory structure
+                            String fileName = java.nio.file.Paths.get(entryName).getFileName().toString();
 
                             // Approx size check (entry.getSize() is -1 if unknown)
                             long size = entry.getSize() > 0 ? entry.getSize() : file.getSize(); // Fallback to zip size (imperfect)
                             userService.checkStorageQuota(username, size);
 
-                            String s3Key = storageService.uploadFile(zis, entry.getName(), size);
+                            String s3Key = storageService.uploadFile(zis, fileName, size);
                             userService.updateStorageUsage(username, size);
-                            createLibraryEntry(username, entry.getName(), s3Key, size);
+                            createLibraryEntry(username, fileName, s3Key, size);
                             successCount++;
                         }
                     }

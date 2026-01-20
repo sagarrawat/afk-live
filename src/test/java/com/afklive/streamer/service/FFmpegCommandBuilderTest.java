@@ -33,7 +33,7 @@ class FFmpegCommandBuilderTest {
         assertThat(command).contains("rtmps://a.rtmp.youtube.com:443/live2/" + streamKey);
         assertThat(command).contains("-map", "0:a?");
         // Should have scaling limit filter now
-        assertThat(command.toString()).contains("scale='if(gt(iw,ih),-2,min(iw,1080))'");
+        assertThat(command.toString()).contains("scale=if(gt(iw\\,ih)\\, -2\\, min(iw\\,1080))");
     }
 
     @Test
