@@ -33,41 +33,71 @@ public class VideoConversionService {
         ScheduledVideo scheduledVideo = repository.findByUsernameAndTitle(username, fileName)
                 .orElse(null);
 
+        if (scheduledVideo == null) {
+            log.error("Video not found for conversion: {}", fileName);
+            return;
+        }
+
+        scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.IN_PROGRESS);
+        repository.save(scheduledVideo);
+
         userDir = Path.of("data/storage");
 
         try {
             // Replicate FileUploadService logic to find the source file path
-            fileName = scheduledVideo.getS3Key();
-            String sourceFileName = fileName;
-            String targetFileName = fileName;
-            if (fileName != null && fileName.contains(".mp4")) {
-                int dotIndex = fileName.lastIndexOf(".");
-                targetFileName = fileName.substring(0, dotIndex) + "_optimized" + fileName.substring(dotIndex);
+            // Note: scheduledVideo.getS3Key() stores the actual file name
+            String sourceFileName = scheduledVideo.getS3Key();
+            String targetFileName = sourceFileName;
+
+            if (sourceFileName != null && sourceFileName.contains(".mp4")) {
+                int dotIndex = sourceFileName.lastIndexOf(".");
+                targetFileName = sourceFileName.substring(0, dotIndex) + "_optimized" + sourceFileName.substring(dotIndex);
+            } else {
+                targetFileName = sourceFileName + "_optimized.mp4";
             }
 
             Path source = userDir.resolve(sourceFileName);
-            Path target = userDir.resolve(targetFileName); // Target is the original requested name
+            Path target = userDir.resolve(targetFileName);
 
             List<String> command = FFmpegCommandBuilder.buildConversionCommand(source, target);
             String progressKey = username + ":" + fileName;
 
-            log.info("Starting conversion for {}: source={} target={}", username, sourceFileName, fileName);
+            log.info("Starting conversion for {}: source={} target={}", username, sourceFileName, targetFileName);
             conversionProgress.put(progressKey, 0);
 
             Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+            // process.getInputStream().transferTo(System.out); // Optional logging
 
             int exitCode = process.waitFor();
             if (exitCode == 0) {
                 log.info("Conversion completed successfully for {}: {}", username, fileName);
                 conversionProgress.remove(progressKey);
+
+                // Replace original file with optimized version
                 Files.move(target, source, StandardCopyOption.REPLACE_EXISTING);
+
+                // Update DB
+                scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.COMPLETED);
+                // We might want to update file size here if we knew it easily without IO
+                try {
+                    long newSize = Files.size(source);
+                    scheduledVideo.setFileSize(newSize);
+                    userService.updateStorageUsage(username, newSize - (scheduledVideo.getFileSize() != null ? scheduledVideo.getFileSize() : 0)); // Adjust quota if needed
+                } catch (Exception ignored) {}
+
+                repository.save(scheduledVideo);
+
             } else {
                 log.error("Conversion failed for {}: {} (exit code {})", username, fileName, exitCode);
                 conversionProgress.put(progressKey, -1);
+                scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.FAILED);
+                repository.save(scheduledVideo);
             }
         } catch (IOException | InterruptedException e) {
             log.error("Conversion error for {}: {} - {}", username, fileName, e.getMessage(), e);
             conversionProgress.put(username + ":" + fileName, -1);
+            scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.FAILED);
+            repository.save(scheduledVideo);
             Thread.currentThread().interrupt();
         }
     }
