@@ -189,6 +189,42 @@ public class LibraryController {
         }
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteLibraryVideo(@PathVariable Long id, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+
+        ScheduledVideo video = repository.findById(id).orElse(null);
+        if (video == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!video.getUsername().equals(username)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Forbidden"));
+        }
+
+        try {
+            // Delete from S3/Storage
+            storageService.deleteFile(video.getS3Key());
+
+            // Delete Thumbnail if exists
+            if (video.getThumbnailS3Key() != null) {
+                storageService.deleteFile(video.getThumbnailS3Key());
+            }
+
+            // Delete from DB
+            repository.delete(video);
+
+            if (video.getFileSize() != null) {
+                userService.updateStorageUsage(username, -video.getFileSize());
+            }
+
+            return ResponseEntity.ok(ApiResponse.success("Video deleted", null));
+        } catch (Exception e) {
+            log.error("Failed to delete video", e);
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to delete video"));
+        }
+    }
+
     @PostMapping("/auto-schedule")
     public ResponseEntity<?> autoSchedule(
             @RequestBody Map<String, Object> payload,

@@ -35,10 +35,12 @@ public class ImportService {
             String outputTemplate = tempDir.resolve(uniqueId + "_%(title)s.%(ext)s").toString();
 
             // Determine yt-dlp path
-            String ytDlpPath = "./bin/yt-dlp";
+            String ytDlpPath = new File("bin/yt-dlp").getAbsolutePath();
             if (!new File(ytDlpPath).exists()) {
                 ytDlpPath = "yt-dlp"; // Try system path
             }
+
+            log.info("Using yt-dlp at: {}", ytDlpPath);
 
             ProcessBuilder pb = new ProcessBuilder(
                     ytDlpPath,

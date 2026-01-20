@@ -1169,7 +1169,7 @@ async function loadLibraryVideos() {
             const actions = document.createElement('div');
             actions.innerHTML = `
                 <button class="btn btn-sm btn-text" onclick="openPreviewModal(${v.id})" title="Preview"><i class="fa-solid fa-play"></i></button>
-                <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo('${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo(${v.id}, '${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
             `;
 
             div.prepend(checkbox);
@@ -1250,10 +1250,11 @@ async function mergeSelectedVideos() {
     });
 }
 
-async function deleteLibraryVideo(filename) {
+async function deleteLibraryVideo(id, filename) {
     showConfirmModal("Delete Video", `Delete "${filename}"? This cannot be undone.`, async () => {
         try {
-            const res = await apiFetch(`${API_URL}/delete?fileName=${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            // New endpoint using ID
+            const res = await apiFetch(`${API_URL}/library/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if(res.ok && data.success) {
                 showToast("File deleted", "success");
