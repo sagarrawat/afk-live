@@ -109,7 +109,7 @@ public class StreamController {
         return ResponseEntity.ok(userFileService.listConvertedVideos(SecurityUtils.getEmail(principal)));
     }
 
-    @DeleteMapping("/api/delete")
+    @DeleteMapping("/delete")
     public ResponseEntity<?> deleteFile(@RequestParam String fileName) {
         try {
             // Assuming files are stored in a "uploads" folder

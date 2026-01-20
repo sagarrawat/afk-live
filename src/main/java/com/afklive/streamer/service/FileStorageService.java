@@ -9,4 +9,5 @@ public interface FileStorageService {
     InputStream downloadFile(String key);
     void downloadFileToPath(String key, Path destination);
     Resource loadFileAsResource(String key);
+    void deleteFile(String key);
 }

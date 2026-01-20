@@ -8,6 +8,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
@@ -75,5 +76,14 @@ public class S3StorageService implements FileStorageService {
     @Override
     public Resource loadFileAsResource(String key) {
         return new InputStreamResource(downloadFile(key));
+    }
+
+    @Override
+    public void deleteFile(String key) {
+        DeleteObjectRequest deleteOb = DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+        s3Client.deleteObject(deleteOb);
     }
 }

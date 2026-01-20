@@ -72,4 +72,14 @@ public class LocalStorageService implements FileStorageService {
         }
         return new FileSystemResource(file);
     }
+
+    @Override
+    public void deleteFile(String key) {
+        try {
+            Path file = rootLocation.resolve(key);
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete file", e);
+        }
+    }
 }

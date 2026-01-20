@@ -553,14 +553,18 @@ async function submitSchedule() {
     const title = document.getElementById('scheduleTitle').value;
     const time = document.getElementById('scheduleTime').value;
 
-    if(!file || !title || !time) return showToast("Please fill Title, Time and select a Video.", "error");
+    if((!file && !selectedLibraryVideoId) || !title || !time) return showToast("Please fill Title, Time and select a Video.", "error");
 
     const btn = document.getElementById('btnSchedule');
     btn.disabled = true;
     btn.innerText = "Uploading...";
 
     const formData = new FormData();
-    formData.append("file", file);
+    if (selectedLibraryVideoId) {
+        formData.append("libraryVideoId", selectedLibraryVideoId);
+    } else {
+        formData.append("file", file);
+    }
     formData.append("title", title);
     formData.append("scheduledTime", time);
     formData.append("description", document.getElementById('scheduleDescription').value);
@@ -1115,8 +1119,13 @@ function loadGlobalSettings() {
 }
 
 /* --- LIBRARY --- */
+let selectedLibraryVideos = new Set();
+
 async function loadLibraryVideos() {
     const list = document.getElementById('libraryList');
+    selectedLibraryVideos.clear();
+    updateMergeButton();
+
     try {
         const res = await apiFetch(`${API_URL}/library`);
         const data = await res.json();
@@ -1137,23 +1146,150 @@ async function loadLibraryVideos() {
             const sizeMB = v.fileSize ? (v.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown';
             const div = document.createElement('div');
             div.className = 'queue-item';
-            div.innerHTML = `
-                 <div class="queue-thumb"><i class="fa-solid fa-file-video"></i></div>
-                 <div style="flex:1">
-                    <div style="font-weight:600;">${v.title}</div>
-                    <div style="font-size:0.8rem; color:#888;">${sizeMB}</div>
-                 </div>
-                 <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo('${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+
+            // Generate checkboxes
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.style.marginRight = '10px';
+            checkbox.onchange = (e) => {
+                if(e.target.checked) selectedLibraryVideos.add(v.title);
+                else selectedLibraryVideos.delete(v.title);
+                updateMergeButton();
+            };
+
+            const thumb = document.createElement('div');
+            thumb.className = 'queue-thumb';
+            thumb.innerHTML = `<i class="fa-solid fa-file-video"></i>`;
+            thumb.style.cursor = 'pointer';
+            thumb.onclick = () => openPreviewModal(v.id);
+
+            const content = document.createElement('div');
+            content.style.flex = '1';
+            content.innerHTML = `
+                <div style="font-weight:600; cursor:pointer" onclick="openPreviewModal(${v.id})">${v.title}</div>
+                <div style="font-size:0.8rem; color:#888;">${sizeMB}</div>
             `;
+
+            const actions = document.createElement('div');
+            actions.innerHTML = `
+                <button class="btn btn-sm btn-text" onclick="scheduleFromLibrary(${v.id}, '${v.title.replace(/'/g, "\\'")}')" title="Schedule Post"><i class="fa-regular fa-calendar-plus"></i></button>
+                <button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title}')" title="Optimize"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+                <button class="btn btn-sm btn-text" onclick="openPreviewModal(${v.id})" title="Preview"><i class="fa-solid fa-play"></i></button>
+                <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo(${v.id}, '${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            `;
+
+            div.prepend(checkbox);
+            div.appendChild(thumb);
+            div.appendChild(content);
+            div.appendChild(actions);
+
             list.appendChild(div);
         });
     } catch(e){}
 }
 
-async function deleteLibraryVideo(filename) {
+function updateMergeButton() {
+    const btn = document.getElementById('btnMerge');
+    if(btn) btn.disabled = selectedLibraryVideos.size < 2;
+}
+
+function openPreviewModal(id) {
+    const video = document.getElementById('mainPreviewVideo');
+    video.src = `${API_URL}/library/stream/${id}`;
+    document.getElementById('previewModal').classList.remove('hidden');
+    video.play();
+}
+
+let selectedLibraryVideoId = null;
+
+function scheduleFromLibrary(id, title) {
+    selectedLibraryVideoId = id;
+    showScheduleModal();
+
+    // UI updates
+    document.getElementById('mediaPlaceholder').classList.add('hidden');
+    document.getElementById('selectedFileDisplay').classList.remove('hidden');
+    document.getElementById('fileName').innerText = "Library: " + title;
+
+    const titleInput = document.getElementById('scheduleTitle');
+    if(!titleInput.value) titleInput.value = title.replace(/\.[^/.]+$/, "");
+}
+
+async function optimizeVideo(filename) {
+    showToast("Starting optimization...", "info");
+    try {
+        const res = await apiFetch(`${API_URL}/convert?fileName=${encodeURIComponent(filename)}`, { method: 'POST' });
+        if(res.ok) {
+            showToast("Optimization started", "success");
+        } else {
+            showToast("Optimization failed", "error");
+        }
+    } catch(e) {
+        showToast("Error requesting optimization", "error");
+    }
+}
+
+function openYouTubeImportModal() {
+    document.getElementById('ytImportUrl').value = '';
+    document.getElementById('youtubeImportModal').classList.remove('hidden');
+}
+
+async function submitYouTubeImport() {
+    const url = document.getElementById('ytImportUrl').value;
+    if(!url) return showToast("Please enter a URL", "error");
+
+    showToast("Importing...", "info");
+    document.getElementById('youtubeImportModal').classList.add('hidden');
+
+    try {
+        const res = await apiFetch(`${API_URL}/library/import-youtube`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({url})
+        });
+        const data = await res.json();
+        if(res.ok) {
+            showToast(data.message, "success");
+            // Reload library after delay
+            setTimeout(loadLibraryVideos, 2000);
+        } else {
+            showToast(data.message, "error");
+        }
+    } catch(e) {
+        showToast("Import failed", "error");
+    }
+}
+
+async function mergeSelectedVideos() {
+    if(selectedLibraryVideos.size < 2) return;
+    const files = Array.from(selectedLibraryVideos);
+
+    showConfirmModal("Merge Videos", `Merge ${files.length} videos? This will create a new file.`, async () => {
+        showToast("Merging started... This may take a while.", "info");
+        try {
+            const res = await apiFetch(`${API_URL}/library/merge`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({files})
+            });
+            const data = await res.json();
+            if(res.ok) {
+                showToast("Merge Successful!", "success");
+                loadLibraryVideos();
+            } else {
+                showToast(data.message || "Merge failed", "error");
+            }
+        } catch(e) {
+            showToast("Merge request failed", "error");
+        }
+    });
+}
+
+async function deleteLibraryVideo(id, filename) {
     showConfirmModal("Delete Video", `Delete "${filename}"? This cannot be undone.`, async () => {
         try {
-            const res = await apiFetch(`${API_URL}/delete?fileName=${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            // New endpoint using ID
+            const res = await apiFetch(`${API_URL}/library/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if(res.ok && data.success) {
                 showToast("File deleted", "success");

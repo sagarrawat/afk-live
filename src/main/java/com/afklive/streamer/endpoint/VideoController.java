@@ -56,7 +56,8 @@ public class VideoController {
 
     @PostMapping("/videos/schedule")
     public ResponseEntity<?> scheduleVideo(
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "libraryVideoId", required = false) Long libraryVideoId,
             @RequestParam(value = "thumbnail", required = false) MultipartFile thumbnail,
             @RequestParam("title") String title,
             @RequestParam("description") String description,
@@ -76,51 +77,70 @@ public class VideoController {
         try {
             log.info("Scheduling video for user: {}", username);
 
-            userService.checkStorageQuota(username, file.getSize());
-
             String s3Key;
-            long finalSize = file.getSize();
+            long finalSize = 0;
 
-            if ((audioFile != null && !audioFile.isEmpty()) || (audioTrackId != null && !audioTrackId.isEmpty())) {
-                // Mix Audio
-                Path tempVideo = Files.createTempFile("vid", ".mp4");
-                Path tempAudio = Files.createTempFile("aud", ".mp3");
-                Path tempOut = Files.createTempFile("mix", ".mp4");
+            if (libraryVideoId != null) {
+                // Schedule from Library
+                Optional<ScheduledVideo> libVideoOpt = repository.findById(libraryVideoId);
+                if (libVideoOpt.isEmpty()) return ResponseEntity.badRequest().body("Library video not found");
+                ScheduledVideo libVideo = libVideoOpt.get();
+                if (!libVideo.getUsername().equals(username)) return ResponseEntity.status(403).body("Forbidden");
 
-                try {
-                    file.transferTo(tempVideo);
+                // Check quota for the COPY
+                // If we copy, we use more storage.
+                long size = libVideo.getFileSize() != null ? libVideo.getFileSize() : 0;
+                userService.checkStorageQuota(username, size);
 
-                    if (audioFile != null && !audioFile.isEmpty()) {
-                        audioFile.transferTo(tempAudio);
-                    } else if (audioTrackId != null) {
-                        Path fetchedAudio = audioService.getAudioPath(audioTrackId);
-                        Files.copy(fetchedAudio, tempAudio, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                        Files.deleteIfExists(fetchedAudio);
+                // Copy file in S3 (by download/upload for simplicity as we don't have S3 copy exposed)
+                try (InputStream is = storageService.downloadFile(libVideo.getS3Key())) {
+                    s3Key = storageService.uploadFile(is, libVideo.getTitle(), size);
+                }
+                finalSize = size;
+
+            } else if (file != null && !file.isEmpty()) {
+                // Normal Upload
+                userService.checkStorageQuota(username, file.getSize());
+                finalSize = file.getSize();
+
+                if ((audioFile != null && !audioFile.isEmpty()) || (audioTrackId != null && !audioTrackId.isEmpty())) {
+                    // Mix Audio
+                    Path tempVideo = Files.createTempFile("vid", ".mp4");
+                    Path tempAudio = Files.createTempFile("aud", ".mp3");
+                    Path tempOut = Files.createTempFile("mix", ".mp4");
+
+                    try {
+                        file.transferTo(tempVideo);
+
+                        if (audioFile != null && !audioFile.isEmpty()) {
+                            audioFile.transferTo(tempAudio);
+                        } else if (audioTrackId != null) {
+                            Path fetchedAudio = audioService.getAudioPath(audioTrackId);
+                            Files.copy(fetchedAudio, tempAudio, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            Files.deleteIfExists(fetchedAudio);
+                        }
+
+                        List<String> cmd = FFmpegCommandBuilder.buildMixCommand(tempVideo, tempAudio, audioVolume, tempOut);
+                        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+                        p.getInputStream().transferTo(System.out); // Pipe to stdout log
+
+                        int exit = p.waitFor();
+                        if (exit != 0) throw new RuntimeException("FFmpeg audio mix failed with exit code " + exit);
+
+                        finalSize = Files.size(tempOut);
+                        try (InputStream is = Files.newInputStream(tempOut)) {
+                            s3Key = storageService.uploadFile(is, file.getOriginalFilename(), finalSize);
+                        }
+                    } finally {
+                        Files.deleteIfExists(tempVideo);
+                        Files.deleteIfExists(tempAudio);
+                        Files.deleteIfExists(tempOut);
                     }
-
-                    List<String> cmd = FFmpegCommandBuilder.buildMixCommand(tempVideo, tempAudio, audioVolume, tempOut);
-                    Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-                    // Read output to avoid blocking?
-                    // Simple wait for now as we redirect error stream but don't read it?
-                    // ProcessBuilder.inheritIO() might be better for debugging but we want to capture logs.
-                    // Let's just wait. If buffer fills it blocks. `redirectErrorStream` merges stderr to stdout.
-                    // We should read the stream.
-                    p.getInputStream().transferTo(System.out); // Pipe to stdout log
-
-                    int exit = p.waitFor();
-                    if (exit != 0) throw new RuntimeException("FFmpeg audio mix failed with exit code " + exit);
-
-                    finalSize = Files.size(tempOut);
-                    try (InputStream is = Files.newInputStream(tempOut)) {
-                        s3Key = storageService.uploadFile(is, file.getOriginalFilename(), finalSize);
-                    }
-                } finally {
-                    Files.deleteIfExists(tempVideo);
-                    Files.deleteIfExists(tempAudio);
-                    Files.deleteIfExists(tempOut);
+                } else {
+                    s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
                 }
             } else {
-                s3Key = storageService.uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getSize());
+                return ResponseEntity.badRequest().body("File or Library Video required");
             }
 
             userService.updateStorageUsage(username, finalSize);

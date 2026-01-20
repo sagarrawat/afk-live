@@ -49,7 +49,9 @@ public class CommentController {
             }
 
             if (!atLeastOneConnected) {
-                return ResponseEntity.status(403).body(Map.of("message", "YouTube not connected. Please connect in Settings."));
+                // Return empty list instead of 403 to avoid UI error
+                result.put("items", java.util.Collections.emptyList());
+                return ResponseEntity.ok(result);
             }
 
             result.put("items", allItems);
