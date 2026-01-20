@@ -10,8 +10,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import com.afklive.streamer.repository.ScheduledVideoRepository;
 
 @Service
 public class UserFileService {
@@ -59,13 +62,17 @@ public class UserFileService {
         return filename.toLowerCase().endsWith(".mp4");
     }
 
-    public List<Map<String, String>> listAudioFiles(String username) {
+    public List<Map<String, Object>> listAudioFiles(String username) {
         return scheduledVideoRepository.findByUsername(username).stream()
+                .filter(v -> v.getTitle() != null && v.getS3Key() != null)
                 .filter(v -> isAudioFile(v.getTitle())) // Assuming title has extension or we check s3Key
-                .map(v -> Map.of(
-                        "title", v.getTitle(),
-                        "filename", v.getS3Key() // Use s3Key which has the UUID
-                ))
+                .map(v -> {
+                    Map<String, Object> map = new java.util.HashMap<>();
+                    map.put("id", v.getId());
+                    map.put("title", v.getTitle());
+                    map.put("filename", v.getS3Key());
+                    return map;
+                })
                 .collect(Collectors.toList());
     }
 

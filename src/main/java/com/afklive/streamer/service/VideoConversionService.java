@@ -41,7 +41,8 @@ public class VideoConversionService {
         scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.IN_PROGRESS);
         repository.save(scheduledVideo);
 
-        userDir = Path.of("data/storage");
+        // userDir is passed as argument, do not overwrite with hardcoded path
+        // userDir = Path.of("data/storage");
 
         try {
             // Replicate FileUploadService logic to find the source file path

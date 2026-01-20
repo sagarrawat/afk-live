@@ -809,7 +809,7 @@ async function submitJob() {
     const musicStock = document.getElementById('selectedStreamStockId').value;
     const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
 
-    if (musicUpload && !document.getElementById('streamAudioUploadSection').classList.contains('hidden')) {
+    if (musicUpload && (!document.getElementById('streamAudioUploadSection').classList.contains('hidden') || !document.getElementById('streamAudioMyLibSection').classList.contains('hidden'))) {
         fd.append("musicName", musicUpload);
         fd.append("musicVolume", musicVol);
     } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
@@ -1189,7 +1189,7 @@ async function loadLibraryVideos() {
                 optimizeBtn = `<button class="btn btn-sm btn-text" disabled><i class="fa-solid fa-spinner fa-spin"></i></button>`;
                 hasInProgress = true;
             } else {
-                optimizeBtn = `<button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title}')" title="Optimize for Stream"><i class="fa-solid fa-wand-magic-sparkles"></i></button>`;
+                optimizeBtn = `<button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title.replace(/'/g, "\\'")}')" title="Optimize for Stream"><i class="fa-solid fa-wand-magic-sparkles"></i></button>`;
             }
 
             actions.innerHTML = `
@@ -2138,7 +2138,24 @@ async function loadMyStreamAudioLibrary() {
                 document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(el => el.style.background = '');
                 div.style.background = '#e3f2fd';
             };
-            div.innerHTML = `<div style="flex:1; font-weight:600; font-size:0.9rem;">${track.title}</div>`;
+            // Add play button if we had a stream endpoint for it (e.g. video preview reused?)
+            // Assuming we can stream it via /api/library/stream/{id} if we have ID.
+            // But listAudioFiles returns filename (key) and title. It doesn't return ID.
+            // I should have asked backend to return ID.
+            // Wait, I updated backend to return Map<String, String>. I can add "id" there.
+            // If I add "id", I can use it here.
+
+            // Assuming backend returns "id" (I will update backend next step to ensure it)
+            // If ID is available:
+            let actionBtn = '';
+            if (track.id) {
+                 actionBtn = `<button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '${API_URL}/library/stream/${track.id}')"><i class="fa-solid fa-play"></i></button>`;
+            }
+
+            div.innerHTML = `
+                <div style="flex:1; font-weight:600; font-size:0.9rem;">${track.title}</div>
+                ${actionBtn}
+            `;
 
             list.appendChild(div);
         });
