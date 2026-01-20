@@ -30,16 +30,20 @@ public class VideoConversionService {
     @Async
     public void convertVideo(Path userDir, String username, String fileName) {
         try {
-            fileName = fileName.replace(".mp4", "_raw.mp4");
-            Path source = userDir.resolve(fileName);
-            String targetFileName = fileName.replace("_raw", "");
+            // Replicate FileUploadService logic to find the source file path
+            String sourceFileName = fileName;
+            if (fileName != null && fileName.contains(".mp4")) {
+                int dotIndex = fileName.lastIndexOf(".");
+                sourceFileName = fileName.substring(0, dotIndex) + "_raw" + fileName.substring(dotIndex);
+            }
 
-            Path target = userDir.resolve(targetFileName);
+            Path source = userDir.resolve(sourceFileName);
+            Path target = userDir.resolve(fileName); // Target is the original requested name
 
             List<String> command = FFmpegCommandBuilder.buildConversionCommand(source, target);
-            String progressKey = username + ":" + targetFileName;
+            String progressKey = username + ":" + fileName;
 
-            log.info("Starting conversion for {}: {}", username, targetFileName);
+            log.info("Starting conversion for {}: source={} target={}", username, sourceFileName, fileName);
             conversionProgress.put(progressKey, 0);
 
             Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
