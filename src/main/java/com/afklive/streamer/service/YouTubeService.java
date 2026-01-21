@@ -29,11 +29,14 @@ public class YouTubeService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(YouTubeService.class);
 
     private final AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager;
+    private final com.afklive.streamer.service.ChannelService channelService;
     private static final String APPLICATION_NAME = "AFK Live Streamer";
     private static final GsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
-    public YouTubeService(@Qualifier("serviceAuthorizedClientManager") AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager) {
+    public YouTubeService(@Qualifier("serviceAuthorizedClientManager") AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager,
+                          @org.springframework.context.annotation.Lazy com.afklive.streamer.service.ChannelService channelService) {
         this.authorizedClientManager = authorizedClientManager;
+        this.channelService = channelService;
     }
 
     // --- HELPER METHODS ---
@@ -44,7 +47,12 @@ public class YouTubeService {
 
     private Credential getCredential(String username) {
         try {
-            Authentication principal = createPrincipal(username);
+            // Resolve the correct Credential ID (Google Subject ID) if possible
+            // If the user has linked a YouTube channel, the token is stored under the Google Subject ID.
+            // If we just use 'username' (email), it might fail if the token is keyed by Subject ID.
+            String credentialId = channelService.getCredentialId(username);
+
+            Authentication principal = createPrincipal(credentialId);
             OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
                     .principal(principal)
                     .build();
@@ -52,7 +60,18 @@ public class YouTubeService {
             OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
 
             if (client == null || client.getAccessToken() == null) {
-                throw new IllegalStateException("User " + username + " is not connected to YouTube.");
+                // Try fallback to username if credentialId didn't work (backward compatibility or direct login)
+                if (!credentialId.equals(username)) {
+                     principal = createPrincipal(username);
+                     authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
+                            .principal(principal)
+                            .build();
+                     client = authorizedClientManager.authorize(authorizeRequest);
+                }
+
+                if (client == null || client.getAccessToken() == null) {
+                    throw new IllegalStateException("User " + username + " is not connected to YouTube.");
+                }
             }
 
             return new Credential(BearerToken.authorizationHeaderAccessMethod())

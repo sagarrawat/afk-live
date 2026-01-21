@@ -6,6 +6,7 @@ import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.service.*;
 import com.afklive.streamer.util.SecurityUtils;
+import com.afklive.streamer.service.YouTubeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
