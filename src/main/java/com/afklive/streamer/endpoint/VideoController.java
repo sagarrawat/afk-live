@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -199,7 +201,7 @@ public class VideoController {
     }
 
     @GetMapping("/videos/{id}/thumbnail")
-    public ResponseEntity<Resource> getVideoThumbnail(@PathVariable Long id, Principal principal) {
+    public ResponseEntity<?> getVideoThumbnail(@PathVariable Long id, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         String username = SecurityUtils.getEmail(principal);
 
@@ -211,10 +213,18 @@ public class VideoController {
 
         if (video.getThumbnailS3Key() == null) return ResponseEntity.notFound().build();
 
+        // Try Presigned URL
+        Optional<String> presignedUrl = storageService.generatePresignedUrl(video.getThumbnailS3Key());
+        if (presignedUrl.isPresent()) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, presignedUrl.get())
+                    .build();
+        }
+
         try {
             InputStream is = storageService.downloadFile(video.getThumbnailS3Key());
             return ResponseEntity.ok()
-                    .contentType(MediaType.IMAGE_JPEG) // Assuming JPEG, or guess? Most uploads are.
+                    .contentType(MediaType.IMAGE_JPEG) // Assuming JPEG
                     .body(new InputStreamResource(is));
         } catch (Exception e) {
             log.error("Failed to fetch thumbnail", e);
