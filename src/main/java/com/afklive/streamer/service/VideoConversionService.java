@@ -49,7 +49,8 @@ public class VideoConversionService {
             String sourceKey = scheduledVideo.getS3Key();
             long oldSize = scheduledVideo.getFileSize() != null ? scheduledVideo.getFileSize() : 0;
 
-            log.info("Starting conversion for {}: sourceKey={}", username, sourceKey);
+            // Updated Log Message to confirm new code running
+            log.info("Starting S3-compatible conversion for {}: sourceKey={}", username, sourceKey);
             conversionProgress.put(progressKey, 0);
 
             // Download source
@@ -70,9 +71,6 @@ public class VideoConversionService {
 
                 // Upload optimized file
                 long newSize = Files.size(targetPath);
-
-                // Check quota? Optimization usually reduces size, but not guaranteed.
-                // However, we are replacing, so we just update usage later.
 
                 String newKey = storageService.uploadFile(Files.newInputStream(targetPath), fileName, newSize);
 
