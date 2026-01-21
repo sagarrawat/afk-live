@@ -42,7 +42,13 @@ public class VideoConversionService {
         repository.save(scheduledVideo);
 
         // userDir is passed as argument, do not overwrite with hardcoded path
-        // userDir = Path.of("data/storage");
+        if (userDir == null) {
+            // Fallback if null passed (e.g. storage type S3)
+            userDir = Path.of("data/storage");
+        }
+        if (!Files.exists(userDir)) {
+             try { Files.createDirectories(userDir); } catch(IOException e) { log.error("Failed to create userDir", e); }
+        }
 
         try {
             // Replicate FileUploadService logic to find the source file path

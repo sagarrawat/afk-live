@@ -40,6 +40,8 @@ public class S3StorageService implements FileStorageService {
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(accessKey, secretKey)))
+                .overrideConfiguration(c -> c.apiCallTimeout(java.time.Duration.ofMinutes(30))
+                        .apiCallAttemptTimeout(java.time.Duration.ofMinutes(30)))
                 .build();
     }
 
