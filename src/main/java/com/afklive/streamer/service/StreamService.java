@@ -139,7 +139,7 @@ public class StreamService {
         }
 
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight);
         
         log.info("command : [{}]", String.join(" ", command));
 

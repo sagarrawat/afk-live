@@ -27,7 +27,6 @@ public class VideoConversionService {
 
     private final FileStorageService storageService;
     private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
-    private final FileStorageService storageService;
     private final UserService userService;
     private final ScheduledVideoRepository repository;
 
