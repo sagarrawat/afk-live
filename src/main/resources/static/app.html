@@ -280,7 +280,7 @@
 
                     <!-- Destinations -->
                     <div class="control-card">
-                        <h3>Destinations <button class="btn btn-text btn-sm" onclick="addDestination()"><i class="fa-solid fa-plus"></i></button></h3>
+                        <h3>Destinations <button class="btn btn-text btn-sm" onclick="openAddDestinationChoiceModal()"><i class="fa-solid fa-plus"></i></button></h3>
                         <div id="destinationList" class="destination-list">
                             <!-- Populated via JS -->
                             <div class="empty-state" style="padding: 10px; font-size: 0.9rem;">No destinations.</div>
@@ -550,7 +550,53 @@
     </div>
 </div>
 
-<!-- Add Destination Modal -->
+<!-- Destination Choice Modal -->
+<div id="destChoiceModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 550px;">
+        <div class="modal-header" style="border:none; padding-bottom: 5px;">
+            <h2 style="font-size: 1.2rem;">Login to YouTube or setup stream manually</h2>
+            <button onclick="document.getElementById('destChoiceModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div style="padding: 10px 0;">
+            <!-- Dynamic Channel List Container -->
+            <div id="ytChannelList">
+                <!-- Populated via JS -->
+            </div>
+
+            <div id="defaultYtFetchOption" onclick="connectYouTubeDestination()" class="queue-item hidden" style="cursor: pointer; border: 2px solid var(--primary); background: #f0f7ff; margin-bottom: 15px;">
+                <div style="background: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    <i class="fa-brands fa-youtube" style="color: red; font-size: 1.5rem;"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; color: var(--primary-dark);">
+                        Fetch from YouTube
+                        <span style="background: var(--success); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">RECOMMENDED</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">Get Stream Key from connected account</div>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color: var(--primary);"></i>
+            </div>
+
+            <!-- Manual Option -->
+            <div onclick="openManualDestinationModal()" class="queue-item" style="cursor: pointer;">
+                 <div style="background: #f4f5f7; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;">
+                    <i class="fa-solid fa-sliders" style="color: var(--text-muted); font-size: 1.2rem;"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 10px;">
+                        Manual setup
+                        <span style="background: #eee; color: #666; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">CLASSIC</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">Create and enter stream and key manually</div>
+                </div>
+                 <i class="fa-solid fa-chevron-right" style="color: var(--text-muted);"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Destination Modal (Manual) -->
 <div id="addDestinationModal" class="modal-overlay hidden">
     <div class="modal-box" style="width: 400px;">
         <div class="modal-header" style="padding: 0 0 20px 0; border: none;">

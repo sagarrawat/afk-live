@@ -29,11 +29,14 @@ public class YouTubeService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(YouTubeService.class);
 
     private final AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager;
+    private final com.afklive.streamer.service.ChannelService channelService;
     private static final String APPLICATION_NAME = "AFK Live Streamer";
     private static final GsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
-    public YouTubeService(@Qualifier("serviceAuthorizedClientManager") AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager) {
+    public YouTubeService(@Qualifier("serviceAuthorizedClientManager") AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager,
+                          @org.springframework.context.annotation.Lazy com.afklive.streamer.service.ChannelService channelService) {
         this.authorizedClientManager = authorizedClientManager;
+        this.channelService = channelService;
     }
 
     // --- HELPER METHODS ---
@@ -44,7 +47,16 @@ public class YouTubeService {
 
     private Credential getCredential(String username) {
         try {
-            Authentication principal = createPrincipal(username);
+            String credentialId;
+            // Heuristic: If input contains '@', treat as email and try to resolve default channel
+            if (username.contains("@")) {
+                credentialId = channelService.getCredentialId(username);
+            } else {
+                // Assume it is already the Google Subject ID
+                credentialId = username;
+            }
+
+            Authentication principal = createPrincipal(credentialId);
             OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
                     .principal(principal)
                     .build();
@@ -52,7 +64,19 @@ public class YouTubeService {
             OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
 
             if (client == null || client.getAccessToken() == null) {
-                throw new IllegalStateException("User " + username + " is not connected to YouTube.");
+                // Try fallback to username if credentialId didn't work AND we resolved it (meaning we tried an ID)
+                // If original input was email, and resolved ID failed, try email itself.
+                if (username.contains("@") && !credentialId.equals(username)) {
+                     principal = createPrincipal(username);
+                     authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
+                            .principal(principal)
+                            .build();
+                     client = authorizedClientManager.authorize(authorizeRequest);
+                }
+
+                if (client == null || client.getAccessToken() == null) {
+                    throw new IllegalStateException("User " + username + " is not connected to YouTube.");
+                }
             }
 
             return new Credential(BearerToken.authorizationHeaderAccessMethod())
@@ -247,5 +271,22 @@ public class YouTubeService {
                 .setRegionCode(regionCode != null ? regionCode : "US")
                 .execute();
         return response.getItems();
+    }
+
+    // --- STREAM KEYS ---
+
+    public String getStreamKey(String username) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        // "cdn" part contains the ingestion info (stream name/key)
+        LiveStreamListResponse response = youtube.liveStreams().list(Collections.singletonList("cdn"))
+                .setMine(true)
+                .execute();
+
+        if (response.getItems() == null || response.getItems().isEmpty()) {
+            throw new IllegalStateException("No live streams found for this channel. Please enable live streaming in YouTube Studio.");
+        }
+
+        // Usually the default stream is the first one or we pick the first available
+        return response.getItems().get(0).getCdn().getIngestionInfo().getStreamName();
     }
 }

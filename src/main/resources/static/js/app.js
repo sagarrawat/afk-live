@@ -1018,11 +1018,103 @@ function loadDestinations() {
     renderDestinations();
 }
 
-function addDestination() {
+function openAddDestinationChoiceModal() {
+    const list = document.getElementById('ytChannelList');
+    list.innerHTML = '';
+
+    // Filter connected YouTube channels
+    const ytChannels = userChannels.filter(c => c.platform === 'YOUTUBE');
+
+    if (ytChannels.length > 0) {
+        document.getElementById('defaultYtFetchOption').classList.add('hidden'); // Hide default
+
+        ytChannels.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cssText = 'cursor: pointer; border: 2px solid var(--primary); background: #f0f7ff; margin-bottom: 10px;';
+            div.onclick = () => connectYouTubeDestination(c.id);
+
+            div.innerHTML = `
+                <div style="background: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    <img src="${c.profileUrl}" style="width:100%; height:100%; border-radius:50%;">
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 10px; color: var(--primary-dark);">
+                        Fetch for ${c.name}
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">Get Stream Key</div>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color: var(--primary);"></i>
+            `;
+            list.appendChild(div);
+        });
+
+        // Add "Connect New" option
+        const addNewDiv = document.createElement('div');
+        addNewDiv.className = 'queue-item';
+        addNewDiv.style.cssText = 'cursor: pointer; background: #fff; border: 1px dashed #ccc; margin-bottom: 15px; justify-content: center; color: var(--primary);';
+        addNewDiv.innerHTML = '<i class="fa-solid fa-plus"></i> Connect another YouTube Channel';
+        addNewDiv.onclick = () => window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
+        list.appendChild(addNewDiv);
+
+    } else {
+        // No channels, show default behavior (which redirects to connect)
+        document.getElementById('defaultYtFetchOption').classList.remove('hidden');
+    }
+
+    document.getElementById('destChoiceModal').classList.remove('hidden');
+}
+
+function openManualDestinationModal() {
+    document.getElementById('destChoiceModal').classList.add('hidden');
     document.getElementById('newDestName').value = '';
     document.getElementById('newDestKey').value = '';
     document.getElementById('addDestinationModal').classList.remove('hidden');
     document.getElementById('newDestName').focus();
+}
+
+async function connectYouTubeDestination(channelId = null) {
+    document.getElementById('destChoiceModal').classList.add('hidden');
+    showToast("Connecting to YouTube...", "info");
+
+    try {
+        let url = `${API_URL}/youtube/key`;
+        if (channelId) url += `?channelId=${channelId}`;
+
+        const res = await fetch(url);
+
+        if (res.status === 401) {
+             window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
+             return;
+        }
+
+        const data = await res.json();
+
+        if (res.ok && data.key) {
+            // Auto add
+            const existing = destinations.find(d => d.key === data.key);
+            if(existing) {
+                showToast("YouTube Destination already exists!", "info");
+                return;
+            }
+
+            const newId = Date.now();
+            const name = data.name || "YouTube (Auto)";
+            destinations.push({ id: newId, name: name, key: data.key, type: 'youtube_auto', selected: true });
+            saveDestinations();
+            renderDestinations();
+            showToast("YouTube Connected Successfully!", "success");
+        } else {
+            showToast(data.message || "Failed to get stream key", "error");
+        }
+    } catch (e) {
+        showToast("Error connecting to YouTube", "error");
+    }
+}
+
+// Legacy function kept if called elsewhere, but we use openManualDestinationModal now
+function addDestination() {
+    openAddDestinationChoiceModal();
 }
 
 function submitDestination() {
@@ -1080,7 +1172,7 @@ function renderDestinations() {
         list.innerHTML = `
             <div class="empty-state" style="padding: 20px; text-align: center;">
                 <p style="margin-bottom: 10px; color: #666;">No stream destinations added.</p>
-                <button class="btn btn-outline btn-sm" onclick="addDestination()">
+                <button class="btn btn-outline btn-sm" onclick="openAddDestinationChoiceModal()">
                     <i class="fa-solid fa-plus"></i> Add Stream Key
                 </button>
             </div>
@@ -1096,11 +1188,28 @@ function renderDestinations() {
 
         div.onclick = () => toggleDestination(d.id);
         div.dataset.id = d.id;
-        // XSS Fix: Use textContent for name
+
+        // Icon based on type
+        let iconHtml = '';
+        if (d.type === 'youtube_auto') {
+            iconHtml = `<i class="fa-brands fa-youtube" style="color:red; margin-right:8px;"></i>`;
+        }
+
         const nameDiv = document.createElement('div');
         nameDiv.style.flex = '1';
+        nameDiv.style.display = 'flex';
+        nameDiv.style.alignItems = 'center';
+
         const nameB = document.createElement('b');
         nameB.textContent = d.name;
+
+        // Insert icon before name
+        if (d.type === 'youtube_auto') {
+             const iconSpan = document.createElement('span');
+             iconSpan.innerHTML = iconHtml;
+             nameDiv.appendChild(iconSpan);
+        }
+
         nameDiv.appendChild(nameB);
 
         div.innerHTML = `
@@ -1111,8 +1220,11 @@ function renderDestinations() {
         div.appendChild(nameDiv);
 
         const actionsDiv = document.createElement('div');
+        // Disable edit for auto keys?
+        const editBtn = d.type === 'youtube_auto' ? '' : `<button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>`;
+
         actionsDiv.innerHTML = `
-            <button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            ${editBtn}
             <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)" title="Remove"><i class="fa-solid fa-trash"></i></button>
         `;
         div.appendChild(actionsDiv);
@@ -1127,6 +1239,20 @@ function toggleDestination(id) {
         saveDestinations(); // Save to local storage
         renderDestinations(); // Re-render
     }
+}
+
+function removeChannel(id) {
+    showConfirmModal("Disconnect Channel", "Are you sure you want to remove this channel?", async () => {
+        try {
+            const res = await apiFetch(`${API_URL}/channels/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast("Channel removed", "success");
+                loadUserChannels();
+            } else {
+                showToast("Failed to remove channel", "error");
+            }
+        } catch(e) { showToast("Error", "error"); }
+    });
 }
 
 function editDestination(id, e) {

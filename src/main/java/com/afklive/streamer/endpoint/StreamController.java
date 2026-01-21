@@ -5,7 +5,10 @@ import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.service.*;
+import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.util.SecurityUtils;
+import com.afklive.streamer.service.ChannelService;
+import com.afklive.streamer.service.YouTubeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -39,6 +42,10 @@ public class StreamController {
     private ScheduledVideoRepository scheduledVideoRepository;
     @Autowired
     private UserService userService;
+    @Autowired
+    private YouTubeService youTubeService;
+    @Autowired
+    private ChannelService channelService;
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file, Principal principal) throws IOException {
@@ -200,6 +207,60 @@ public class StreamController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
         return ResponseEntity.ok(ApiResponse.success("Success", scheduledStreamRepo.findByUsername(email)));
+    }
+
+    @GetMapping("/youtube/key")
+    public ResponseEntity<?> getYouTubeStreamKey(Principal principal, @RequestParam(required = false) Long channelId) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+
+        try {
+            String targetCredentialId;
+            String channelName = null;
+
+            if (channelId != null) {
+                // Fetch specific channel
+                List<SocialChannel> channels = channelService.getChannels(username);
+                SocialChannel channel = channels.stream()
+                        .filter(c -> c.getId().equals(channelId) && "YOUTUBE".equals(c.getPlatform()))
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException("Channel not found or not YouTube"));
+
+                targetCredentialId = channel.getCredentialId();
+                channelName = channel.getName();
+
+                if (targetCredentialId == null) {
+                    // Fallback to username if credential ID is missing (legacy)
+                    targetCredentialId = username;
+                }
+            } else {
+                // Default behavior (first channel/email)
+                targetCredentialId = username;
+            }
+
+            String key = youTubeService.getStreamKey(targetCredentialId);
+
+            // If name wasn't resolved from DB, try fetching or default
+            if (channelName == null) {
+                // We could fetch it, or just let frontend handle default.
+                // But user asked to show name.
+                // If we used default (email), we don't easily know the channel name without an extra call.
+                // Let's assume frontend logic handles default labeling, or we return null name.
+            }
+
+            return ResponseEntity.ok(Map.of("key", key, "name", channelName != null ? channelName : "YouTube (Default)"));
+
+        } catch (IllegalStateException e) {
+            if (e.getMessage().contains("not connected")) {
+                return ResponseEntity.status(401).body(Map.of("message", e.getMessage()));
+            }
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            if (e.getMessage().contains("401") || e.getMessage().contains("token")) {
+                return ResponseEntity.status(401).body(Map.of("message", "Not connected to YouTube"));
+            }
+            return ResponseEntity.status(500).body(Map.of("message", "Failed: " + e.getMessage()));
+        }
     }
 
     @DeleteMapping("/stream/scheduled/{id}")
