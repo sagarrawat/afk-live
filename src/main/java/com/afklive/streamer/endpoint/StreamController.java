@@ -42,7 +42,6 @@ public class StreamController {
     @PostMapping("/upload")
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file, Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        // TODO: Update FileUploadService to support S3 if needed, but for now we focus on Conversion code fixes.
         return ResponseEntity.ok(ApiResponse.success("SUCCESS", fileUploadService.handleFileUpload(file, SecurityUtils.getEmail(principal))));
     }
 

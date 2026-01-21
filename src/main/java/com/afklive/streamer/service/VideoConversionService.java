@@ -11,7 +11,9 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Comparator;
+import java.util.stream.Stream;
 
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
@@ -243,12 +245,9 @@ public class VideoConversionService {
 
     private void cleanupTempDir(Path tempDir) {
         if (tempDir != null) {
-            try {
-                Files.walk(tempDir)
-                        .sorted(Comparator.reverseOrder())
-                        .forEach(p -> {
-                            try { Files.delete(p); } catch (Exception ignored) {}
-                        });
+            try (Stream<Path> walk = Files.walk(tempDir)) {
+                walk.sorted(Comparator.reverseOrder())
+                    .forEach(p -> { try { Files.delete(p); } catch (Exception ignored) {} });
             } catch (Exception ignored) {}
         }
     }
