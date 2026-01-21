@@ -1019,6 +1019,49 @@ function loadDestinations() {
 }
 
 function openAddDestinationChoiceModal() {
+    const list = document.getElementById('ytChannelList');
+    list.innerHTML = '';
+
+    // Filter connected YouTube channels
+    const ytChannels = userChannels.filter(c => c.platform === 'YOUTUBE');
+
+    if (ytChannels.length > 0) {
+        document.getElementById('defaultYtFetchOption').classList.add('hidden'); // Hide default
+
+        ytChannels.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cssText = 'cursor: pointer; border: 2px solid var(--primary); background: #f0f7ff; margin-bottom: 10px;';
+            div.onclick = () => connectYouTubeDestination(c.id);
+
+            div.innerHTML = `
+                <div style="background: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    <img src="${c.profileUrl}" style="width:100%; height:100%; border-radius:50%;">
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: 10px; color: var(--primary-dark);">
+                        Fetch for ${c.name}
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">Get Stream Key</div>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color: var(--primary);"></i>
+            `;
+            list.appendChild(div);
+        });
+
+        // Add "Connect New" option
+        const addNewDiv = document.createElement('div');
+        addNewDiv.className = 'queue-item';
+        addNewDiv.style.cssText = 'cursor: pointer; background: #fff; border: 1px dashed #ccc; margin-bottom: 15px; justify-content: center; color: var(--primary);';
+        addNewDiv.innerHTML = '<i class="fa-solid fa-plus"></i> Connect another YouTube Channel';
+        addNewDiv.onclick = () => window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
+        list.appendChild(addNewDiv);
+
+    } else {
+        // No channels, show default behavior (which redirects to connect)
+        document.getElementById('defaultYtFetchOption').classList.remove('hidden');
+    }
+
     document.getElementById('destChoiceModal').classList.remove('hidden');
 }
 
@@ -1030,33 +1073,17 @@ function openManualDestinationModal() {
     document.getElementById('newDestName').focus();
 }
 
-async function connectYouTubeDestination() {
+async function connectYouTubeDestination(channelId = null) {
     document.getElementById('destChoiceModal').classList.add('hidden');
     showToast("Connecting to YouTube...", "info");
 
     try {
-        // We call directly, if apiFetch intercepts 401 it handles it.
-        // But apiFetch intercepts 401/403 and redirects to /login OR connect channel.
-        // Since we updated the backend to return 401 on "Not Connected", apiFetch logic might suffice.
-        // However, apiFetch logic is generic. Let's handle it manually to be safe or ensure apiFetch does the right thing.
+        let url = `${API_URL}/youtube/key`;
+        if (channelId) url += `?channelId=${channelId}`;
 
-        // We use plain fetch to bypass global interceptor for precise control if needed,
-        // OR we trust apiFetch. Given the complexity, let's use apiFetch but catch the specific case if apiFetch throws.
-        // Actually apiFetch throws "Authentication required" on 401.
-
-        // Let's use apiFetch. If it sees 401, it does `window.location.href = '/login'` usually, unless message has "YouTube".
-        // The backend returns 401 with message "User ... is not connected to YouTube".
-        // apiFetch checks: if (body.message && (body.message.includes("YouTube") || ...)) -> showToast + modal?
-        // Wait, apiFetch opens 'addChannelModal' which we might have replaced or it doesn't exist.
-        // Let's modify apiFetch or handle it here.
-
-        // Since I can't easily modify apiFetch reliably without potentially breaking other things (though I should),
-        // I will use fetch directly here to ensure the redirect goes to the correct OAuth endpoint.
-
-        const res = await fetch(`${API_URL}/youtube/key`);
+        const res = await fetch(url);
 
         if (res.status === 401) {
-             // Redirect to connect
              window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
              return;
         }
@@ -1072,7 +1099,7 @@ async function connectYouTubeDestination() {
             }
 
             const newId = Date.now();
-            const name = "YouTube (Auto)";
+            const name = data.name || "YouTube (Auto)";
             destinations.push({ id: newId, name: name, key: data.key, type: 'youtube_auto', selected: true });
             saveDestinations();
             renderDestinations();

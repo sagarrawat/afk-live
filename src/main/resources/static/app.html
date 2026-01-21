@@ -559,8 +559,12 @@
         </div>
 
         <div style="padding: 10px 0;">
-            <!-- Fetch YouTube Option -->
-            <div onclick="connectYouTubeDestination()" class="queue-item" style="cursor: pointer; border: 2px solid var(--primary); background: #f0f7ff; margin-bottom: 15px;">
+            <!-- Dynamic Channel List Container -->
+            <div id="ytChannelList">
+                <!-- Populated via JS -->
+            </div>
+
+            <div id="defaultYtFetchOption" onclick="connectYouTubeDestination()" class="queue-item hidden" style="cursor: pointer; border: 2px solid var(--primary); background: #f0f7ff; margin-bottom: 15px;">
                 <div style="background: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
                     <i class="fa-brands fa-youtube" style="color: red; font-size: 1.5rem;"></i>
                 </div>
@@ -569,7 +573,7 @@
                         Fetch from YouTube
                         <span style="background: var(--success); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">RECOMMENDED</span>
                     </div>
-                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">Get Stream Key from YouTube</div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">Get Stream Key from connected account</div>
                 </div>
                 <i class="fa-solid fa-chevron-right" style="color: var(--primary);"></i>
             </div>

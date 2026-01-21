@@ -2,9 +2,7 @@ package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.model.User;
-import com.afklive.streamer.repository.SocialChannelRepository;
 import com.afklive.streamer.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,13 +10,17 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 public class ChannelService {
 
     private final UserRepository userRepository;
     private final UserService userService;
     private final YouTubeService youTubeService;
-    private final SocialChannelRepository socialChannelRepository;
+
+    public ChannelService(UserRepository userRepository, UserService userService, YouTubeService youTubeService) {
+        this.userRepository = userRepository;
+        this.userService = userService;
+        this.youTubeService = youTubeService;
+    }
 
     @Transactional
     public void syncChannelFromGoogle(String username) {
@@ -40,7 +42,8 @@ public class ChannelService {
                 existing.get().setCredentialId(credentialId);
                 userRepository.save(user);
             } else {
-                addChannel(targetUsername, channelName, credentialId);
+                SocialChannel ch = addChannel(targetUsername, channelName);
+                ch.setCredentialId(credentialId);
                 userRepository.save(user);
             }
         } catch (Exception e) {
@@ -59,7 +62,7 @@ public class ChannelService {
     }
 
     @Transactional
-    public SocialChannel addChannel(String username, String channelName, String credentialId, String platform) {
+    public SocialChannel addChannel(String username, String channelName, String platform) {
         User user = userService.getOrCreateUser(username);
 
         int limit = user.getPlanType().getMaxChannels();
@@ -71,15 +74,15 @@ public class ChannelService {
             platform = "YOUTUBE";
         }
 
-        SocialChannel channel = new SocialChannel(channelName, platform, credentialId, user);
+        SocialChannel channel = new SocialChannel(channelName, platform, user);
         user.getChannels().add(channel);
         userRepository.save(user);
         return channel;
     }
 
     @Transactional
-    public SocialChannel addChannel(String username, String channelName, String credentialId) {
-        return addChannel(username, channelName, credentialId, "YOUTUBE");
+    public SocialChannel addChannel(String username, String channelName) {
+        return addChannel(username, channelName, "YOUTUBE");
     }
 
     @Transactional(readOnly = true)

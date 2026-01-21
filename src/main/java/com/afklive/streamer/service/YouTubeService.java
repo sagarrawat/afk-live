@@ -47,10 +47,14 @@ public class YouTubeService {
 
     private Credential getCredential(String username) {
         try {
-            // Resolve the correct Credential ID (Google Subject ID) if possible
-            // If the user has linked a YouTube channel, the token is stored under the Google Subject ID.
-            // If we just use 'username' (email), it might fail if the token is keyed by Subject ID.
-            String credentialId = channelService.getCredentialId(username);
+            String credentialId;
+            // Heuristic: If input contains '@', treat as email and try to resolve default channel
+            if (username.contains("@")) {
+                credentialId = channelService.getCredentialId(username);
+            } else {
+                // Assume it is already the Google Subject ID
+                credentialId = username;
+            }
 
             Authentication principal = createPrincipal(credentialId);
             OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
@@ -60,8 +64,9 @@ public class YouTubeService {
             OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
 
             if (client == null || client.getAccessToken() == null) {
-                // Try fallback to username if credentialId didn't work (backward compatibility or direct login)
-                if (!credentialId.equals(username)) {
+                // Try fallback to username if credentialId didn't work AND we resolved it (meaning we tried an ID)
+                // If original input was email, and resolved ID failed, try email itself.
+                if (username.contains("@") && !credentialId.equals(username)) {
                      principal = createPrincipal(username);
                      authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
                             .principal(principal)
