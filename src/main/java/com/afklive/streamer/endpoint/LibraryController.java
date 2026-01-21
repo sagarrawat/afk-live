@@ -11,6 +11,8 @@ import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +26,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -169,7 +172,7 @@ public class LibraryController {
     }
 
     @GetMapping("/stream/{id}")
-    public ResponseEntity<Resource> streamVideo(@PathVariable Long id, java.security.Principal principal) {
+    public ResponseEntity<?> streamVideo(@PathVariable Long id, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         String username = SecurityUtils.getEmail(principal);
 
@@ -178,6 +181,15 @@ public class LibraryController {
             return ResponseEntity.notFound().build();
         }
 
+        // Try Presigned URL first (Optimization for S3)
+        Optional<String> presignedUrl = storageService.generatePresignedUrl(video.getS3Key());
+        if (presignedUrl.isPresent()) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, presignedUrl.get())
+                    .build();
+        }
+
+        // Fallback to streaming through backend (e.g. Local Storage)
         try {
             Resource resource = storageService.loadFileAsResource(video.getS3Key());
             return ResponseEntity.ok()
