@@ -1018,11 +1018,57 @@ function loadDestinations() {
     renderDestinations();
 }
 
-function addDestination() {
+function openAddDestinationChoiceModal() {
+    document.getElementById('destChoiceModal').classList.remove('hidden');
+}
+
+function openManualDestinationModal() {
+    document.getElementById('destChoiceModal').classList.add('hidden');
     document.getElementById('newDestName').value = '';
     document.getElementById('newDestKey').value = '';
     document.getElementById('addDestinationModal').classList.remove('hidden');
     document.getElementById('newDestName').focus();
+}
+
+async function connectYouTubeDestination() {
+    document.getElementById('destChoiceModal').classList.add('hidden');
+    showToast("Connecting to YouTube...", "info");
+
+    try {
+        const res = await apiFetch(`${API_URL}/youtube/key`);
+        const data = await res.json();
+
+        if (res.ok && data.key) {
+            // Auto add
+            const existing = destinations.find(d => d.key === data.key);
+            if(existing) {
+                showToast("YouTube Destination already exists!", "info");
+                return;
+            }
+
+            const newId = Date.now();
+            const name = "YouTube (Auto)";
+            destinations.push({ id: newId, name: name, key: data.key, type: 'youtube_auto', selected: true });
+            saveDestinations();
+            renderDestinations();
+            showToast("YouTube Connected Successfully!", "success");
+        } else {
+            // Check message
+            if(data.message && data.message.includes("Not connected")) {
+                // Redirect to auth
+                window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
+            } else {
+                showToast(data.message || "Failed to get stream key", "error");
+            }
+        }
+    } catch (e) {
+        showToast("Error connecting to YouTube", "error");
+    }
+}
+
+// Legacy function kept if called elsewhere, but we use openManualDestinationModal now
+function addDestination() {
+    openAddDestinationChoiceModal();
 }
 
 function submitDestination() {
@@ -1080,7 +1126,7 @@ function renderDestinations() {
         list.innerHTML = `
             <div class="empty-state" style="padding: 20px; text-align: center;">
                 <p style="margin-bottom: 10px; color: #666;">No stream destinations added.</p>
-                <button class="btn btn-outline btn-sm" onclick="addDestination()">
+                <button class="btn btn-outline btn-sm" onclick="openAddDestinationChoiceModal()">
                     <i class="fa-solid fa-plus"></i> Add Stream Key
                 </button>
             </div>
@@ -1096,11 +1142,28 @@ function renderDestinations() {
 
         div.onclick = () => toggleDestination(d.id);
         div.dataset.id = d.id;
-        // XSS Fix: Use textContent for name
+
+        // Icon based on type
+        let iconHtml = '';
+        if (d.type === 'youtube_auto') {
+            iconHtml = `<i class="fa-brands fa-youtube" style="color:red; margin-right:8px;"></i>`;
+        }
+
         const nameDiv = document.createElement('div');
         nameDiv.style.flex = '1';
+        nameDiv.style.display = 'flex';
+        nameDiv.style.alignItems = 'center';
+
         const nameB = document.createElement('b');
         nameB.textContent = d.name;
+
+        // Insert icon before name
+        if (d.type === 'youtube_auto') {
+             const iconSpan = document.createElement('span');
+             iconSpan.innerHTML = iconHtml;
+             nameDiv.appendChild(iconSpan);
+        }
+
         nameDiv.appendChild(nameB);
 
         div.innerHTML = `
@@ -1111,8 +1174,11 @@ function renderDestinations() {
         div.appendChild(nameDiv);
 
         const actionsDiv = document.createElement('div');
+        // Disable edit for auto keys?
+        const editBtn = d.type === 'youtube_auto' ? '' : `<button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>`;
+
         actionsDiv.innerHTML = `
-            <button class="btn btn-sm btn-text" onclick="editDestination(${d.id}, event)" title="Edit"><i class="fa-solid fa-pen"></i></button>
+            ${editBtn}
             <button class="btn btn-sm btn-text" onclick="removeDestination(${d.id}, event)" title="Remove"><i class="fa-solid fa-trash"></i></button>
         `;
         div.appendChild(actionsDiv);

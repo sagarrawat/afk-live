@@ -248,4 +248,21 @@ public class YouTubeService {
                 .execute();
         return response.getItems();
     }
+
+    // --- STREAM KEYS ---
+
+    public String getStreamKey(String username) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        // "cdn" part contains the ingestion info (stream name/key)
+        LiveStreamListResponse response = youtube.liveStreams().list(Collections.singletonList("cdn"))
+                .setMine(true)
+                .execute();
+
+        if (response.getItems() == null || response.getItems().isEmpty()) {
+            throw new IllegalStateException("No live streams found for this channel. Please enable live streaming in YouTube Studio.");
+        }
+
+        // Usually the default stream is the first one or we pick the first available
+        return response.getItems().get(0).getCdn().getIngestionInfo().getStreamName();
+    }
 }

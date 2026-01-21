@@ -39,6 +39,8 @@ public class StreamController {
     private ScheduledVideoRepository scheduledVideoRepository;
     @Autowired
     private UserService userService;
+    @Autowired
+    private YouTubeService youTubeService;
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file, Principal principal) throws IOException {
@@ -200,6 +202,23 @@ public class StreamController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
         return ResponseEntity.ok(ApiResponse.success("Success", scheduledStreamRepo.findByUsername(email)));
+    }
+
+    @GetMapping("/youtube/key")
+    public ResponseEntity<?> getYouTubeStreamKey(Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        try {
+            String key = youTubeService.getStreamKey(SecurityUtils.getEmail(principal));
+            return ResponseEntity.ok(Map.of("key", key));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            // Check if it's an auth error (401 from Google)
+            if (e.getMessage().contains("401") || e.getMessage().contains("token")) {
+                return ResponseEntity.status(401).body(Map.of("message", "Not connected to YouTube"));
+            }
+            return ResponseEntity.status(500).body(Map.of("message", "Failed to retrieve stream key: " + e.getMessage()));
+        }
     }
 
     @DeleteMapping("/stream/scheduled/{id}")
