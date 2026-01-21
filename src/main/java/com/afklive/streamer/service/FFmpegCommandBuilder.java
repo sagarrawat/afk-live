@@ -287,8 +287,19 @@ public class FFmpegCommandBuilder {
             command.add("9000k");
             command.add("-pix_fmt");
             command.add("yuv420p");
+
+            // STRICT YOUTUBE STANDARDS
+            command.add("-r");
+            command.add("30");
             command.add("-g");
             command.add("60");
+            command.add("-keyint_min");
+            command.add("60");
+            command.add("-sc_threshold");
+            command.add("0");
+            command.add("-tune");
+            command.add("zerolatency");
+
         } else {
             command.add("-map");
             command.add("0:v");
@@ -304,6 +315,10 @@ public class FFmpegCommandBuilder {
             command.add("aac");
             command.add("-b:a");
             command.add("128k");
+            command.add("-ar");
+            command.add("44100");
+            command.add("-ac");
+            command.add("2");
         } else {
             if (muteVideoAudio) {
                 // Map the silence generated at index 1
@@ -313,6 +328,10 @@ public class FFmpegCommandBuilder {
                 command.add("aac");
                 command.add("-b:a");
                 command.add("128k");
+                command.add("-ar");
+                command.add("44100");
+                command.add("-ac");
+                command.add("2");
                 // IMPORTANT: -shortest to stop when video ends (silence is infinite)
                 command.add("-shortest");
             } else {
@@ -320,6 +339,16 @@ public class FFmpegCommandBuilder {
                  command.add("0:a?");
                  command.add("-c:a");
                  command.add("aac");
+                 // If original audio, we might want to enforce 44100/stereo too if transcoding video
+                 // But typically copy is safer if video is copy.
+                 // Wait, we only enter this block if forceTranscode is true?
+                 // No, audio block is separate.
+                 // If video is transcoded, audio SHOULD probably be standardized too if not copied.
+                 // But here we set -c:a aac, so we ARE transcoding audio.
+                 command.add("-ar");
+                 command.add("44100");
+                 command.add("-ac");
+                 command.add("2");
             }
         }
 
