@@ -211,6 +211,10 @@ public class StreamController {
             String key = youTubeService.getStreamKey(SecurityUtils.getEmail(principal));
             return ResponseEntity.ok(Map.of("key", key));
         } catch (IllegalStateException e) {
+            // If the user is definitely not connected (no credentials), return 401 so frontend redirects
+            if (e.getMessage().contains("not connected")) {
+                return ResponseEntity.status(401).body(Map.of("message", e.getMessage()));
+            }
             return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             // Check if it's an auth error (401 from Google)

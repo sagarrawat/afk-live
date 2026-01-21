@@ -1035,7 +1035,32 @@ async function connectYouTubeDestination() {
     showToast("Connecting to YouTube...", "info");
 
     try {
-        const res = await apiFetch(`${API_URL}/youtube/key`);
+        // We call directly, if apiFetch intercepts 401 it handles it.
+        // But apiFetch intercepts 401/403 and redirects to /login OR connect channel.
+        // Since we updated the backend to return 401 on "Not Connected", apiFetch logic might suffice.
+        // However, apiFetch logic is generic. Let's handle it manually to be safe or ensure apiFetch does the right thing.
+
+        // We use plain fetch to bypass global interceptor for precise control if needed,
+        // OR we trust apiFetch. Given the complexity, let's use apiFetch but catch the specific case if apiFetch throws.
+        // Actually apiFetch throws "Authentication required" on 401.
+
+        // Let's use apiFetch. If it sees 401, it does `window.location.href = '/login'` usually, unless message has "YouTube".
+        // The backend returns 401 with message "User ... is not connected to YouTube".
+        // apiFetch checks: if (body.message && (body.message.includes("YouTube") || ...)) -> showToast + modal?
+        // Wait, apiFetch opens 'addChannelModal' which we might have replaced or it doesn't exist.
+        // Let's modify apiFetch or handle it here.
+
+        // Since I can't easily modify apiFetch reliably without potentially breaking other things (though I should),
+        // I will use fetch directly here to ensure the redirect goes to the correct OAuth endpoint.
+
+        const res = await fetch(`${API_URL}/youtube/key`);
+
+        if (res.status === 401) {
+             // Redirect to connect
+             window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
+             return;
+        }
+
         const data = await res.json();
 
         if (res.ok && data.key) {
@@ -1053,13 +1078,7 @@ async function connectYouTubeDestination() {
             renderDestinations();
             showToast("YouTube Connected Successfully!", "success");
         } else {
-            // Check message
-            if(data.message && data.message.includes("Not connected")) {
-                // Redirect to auth
-                window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube';
-            } else {
-                showToast(data.message || "Failed to get stream key", "error");
-            }
+            showToast(data.message || "Failed to get stream key", "error");
         }
     } catch (e) {
         showToast("Error connecting to YouTube", "error");
