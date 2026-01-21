@@ -65,7 +65,7 @@ public class UserFileService {
     public List<Map<String, Object>> listAudioFiles(String username) {
         return scheduledVideoRepository.findByUsername(username).stream()
                 .filter(v -> v.getTitle() != null && v.getS3Key() != null)
-                .filter(v -> isAudioFile(v.getTitle())) // Assuming title has extension or we check s3Key
+                .filter(v -> isAudioFile(v.getS3Key())) // Check filename (S3Key) for extension
                 .map(v -> {
                     Map<String, Object> map = new java.util.HashMap<>();
                     map.put("id", v.getId());

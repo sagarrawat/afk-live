@@ -206,12 +206,14 @@
                             <button class="btn btn-sm btn-outline" id="tabStreamAudioLib" onclick="switchStreamAudioTab('lib')">Stock Library</button>
                         </div>
 
+                        <!-- Hidden Input for Selected Music (Shared) -->
+                        <input type="hidden" id="uploadedStreamMusicName">
+
                         <!-- Upload Tab -->
                         <div id="streamAudioUploadSection">
                             <div class="form-group">
                                 <label>Upload MP3</label>
                                 <input type="file" id="streamAudioFile" accept=".mp3,.wav" class="form-control" style="font-size:0.9rem;">
-                                <input type="hidden" id="uploadedStreamMusicName">
                                 <small id="streamAudioUploadStatus" style="color: #666;"></small>
                             </div>
                         </div>

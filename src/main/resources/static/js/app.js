@@ -807,10 +807,15 @@ async function submitJob() {
     const musicStock = document.getElementById('selectedStreamStockId').value;
     const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
 
-    if (musicUpload && (!document.getElementById('streamAudioUploadSection').classList.contains('hidden') || !document.getElementById('streamAudioMyLibSection').classList.contains('hidden'))) {
+    const isUploadTab = !document.getElementById('streamAudioUploadSection').classList.contains('hidden');
+    const isMyLibTab = !document.getElementById('streamAudioMyLibSection').classList.contains('hidden');
+    const isStockTab = !document.getElementById('streamAudioLibSection').classList.contains('hidden');
+
+    if (musicUpload && (isUploadTab || isMyLibTab)) {
+        console.log("Attaching Music:", musicUpload);
         fd.append("musicName", musicUpload);
         fd.append("musicVolume", musicVol);
-    } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
+    } else if (musicStock && isStockTab) {
         fd.append("musicName", "stock:" + musicStock);
         fd.append("musicVolume", musicVol);
     }

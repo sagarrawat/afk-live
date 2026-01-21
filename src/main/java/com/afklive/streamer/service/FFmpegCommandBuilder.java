@@ -11,6 +11,8 @@ public class FFmpegCommandBuilder {
         java.io.File local = new java.io.File("bin/ffmpeg");
         if (local.exists()) ffmpeg = local.getAbsolutePath();
 
+        // Optimized for Web Streaming & Preview
+        // CRF 26 for smaller size, maxrate to cap spikes
         return List.of(
                 ffmpeg,
                 "-threads",
@@ -22,13 +24,17 @@ public class FFmpegCommandBuilder {
                 "-preset",
                 "veryfast",
                 "-crf",
-                "23",
+                "26",
+                "-maxrate",
+                "4500k",
+                "-bufsize",
+                "9000k",
                 "-pix_fmt",
                 "yuv420p",
                 "-movflags",
                 "+faststart",
                 "-vf",
-                "scale=1280:-2",
+                "scale='min(1280,iw)':-2", // Downscale to 720p if larger, else keep
                 "-c:a",
                 "aac",
                 "-b:a",
