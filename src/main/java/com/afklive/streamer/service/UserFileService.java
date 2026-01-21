@@ -63,4 +63,26 @@ public class UserFileService {
     private boolean isVideoFile(String filename) {
         return filename.toLowerCase().endsWith(".mp4");
     }
+
+    public List<java.util.Map<String, Object>> listAudioFiles(String username) {
+        List<ScheduledVideo> videos = scheduledVideoRepository.findByUsername(username);
+        return videos.stream()
+                .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
+                .filter(v -> isAudioFile(v.getTitle()) || isAudioFile(v.getS3Key()))
+                .map(v -> {
+                    java.util.Map<String, Object> map = new java.util.HashMap<>();
+                    map.put("id", v.getId());
+                    map.put("title", v.getTitle() != null ? v.getTitle() : "Unknown");
+                    map.put("filename", v.getS3Key() != null ? v.getS3Key() : v.getTitle());
+                    map.put("fileSize", v.getFileSize() != null ? v.getFileSize() : 0L);
+                    return map;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private boolean isAudioFile(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase();
+        return lower.endsWith(".mp3") || lower.endsWith(".wav");
+    }
 }

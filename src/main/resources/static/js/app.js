@@ -62,6 +62,11 @@ function setupEventListeners() {
     document.getElementById('scheduleDescription')?.addEventListener('input', e => {
         document.getElementById('previewDescMock').innerText = e.target.value || "Description will appear here...";
     });
+
+    // Default Date
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('streamScheduleTime').value = now.toISOString().slice(0, 16);
 }
 
 async function handleStreamVideoUpload(e) {
@@ -258,6 +263,21 @@ function renderChannelDropdown(channels) {
 function toggleChannelDropdown() {
     const menu = document.getElementById('channelDropdownMenu');
     if(menu) menu.classList.toggle('show');
+}
+
+async function removeChannel(id) {
+    if (!confirm("Are you sure you want to remove this channel?")) return;
+    try {
+        const res = await apiFetch(`${API_URL}/channels/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast("Channel removed", "success");
+            loadUserChannels();
+        } else {
+            showToast("Failed to remove channel", "error");
+        }
+    } catch(e) {
+        showToast("Error removing channel", "error");
+    }
 }
 
 function renderChannelList(channels) {
@@ -904,6 +924,10 @@ async function submitScheduledStream() {
 
     const scheduledTime = document.getElementById('streamScheduleTime').value;
     if(!scheduledTime) return showToast("Please select a start time", "error");
+
+    if (new Date(scheduledTime) < new Date()) {
+        return showToast("Start time cannot be in the past", "error");
+    }
 
     const loopInfinite = document.getElementById('streamLoopInfinite').checked;
     const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
@@ -2312,40 +2336,51 @@ async function loadStreamMyAudioLibrary() {
     const list = document.getElementById('streamMyAudioList');
     list.innerHTML = "Loading library...";
     try {
-        // Use existing library endpoint? No, need audio filter.
-        // Or create new endpoint. Let's assume we reuse /api/library and filter in JS for now or backend endpoint.
-        // Actually, I saw StreamController exposes /stream-library which lists converted videos.
-        // I need an endpoint for AUDIO files.
-        // I checked UserFileService and it lists converted *videos*.
-        // I should have added an endpoint in AudioController or StreamController.
-        // Let's assume I did or will use /api/library and filter by extension in JS if it returns all files.
-        // But /api/library returns ScheduledVideo entities.
-        // ScheduledVideo entity has 'title' which contains extension.
-
-        const res = await apiFetch(`${API_URL}/library`);
+        const res = await apiFetch(`${API_URL}/audio/my-library`);
         const data = await res.json();
         list.innerHTML = '';
 
-        const audioFiles = data.data.filter(f => f.title.toLowerCase().endsWith('.mp3') || f.title.toLowerCase().endsWith('.wav'));
-
-        if(audioFiles.length === 0) {
+        if(data.length === 0) {
             list.innerHTML = "No audio files found. Upload MP3s in Library.";
             return;
         }
 
-        audioFiles.forEach(f => {
+        data.forEach(f => {
             const div = document.createElement('div');
             div.className = 'queue-item';
             div.style.cursor = 'pointer';
             div.onclick = () => {
-                document.getElementById('selectedStreamMyLibId').value = f.title; // Using filename/key
+                // Use filename (s3Key) as the ID passed to backend
+                document.getElementById('selectedStreamMyLibId').value = f.filename;
                 document.getElementById('selectedStreamMyLibName').innerText = "Selected: " + f.title;
                 document.querySelectorAll('#streamMyAudioList .queue-item').forEach(el => el.style.background = '');
                 div.style.background = '#e3f2fd';
             };
+
+            // Add Preview Button
+            // Assuming we can stream it via a generic endpoint or need a presigned URL
+            // Since we don't have a direct URL in the response yet, let's skip preview or add later.
+            // Wait, user asked for play/pause.
+            // I need a URL. `UserFileService` doesn't generate URLs.
+            // `StreamController` has `/api/videos/{id}/thumbnail`.
+            // `StreamController` doesn't have a generic "download/stream file" endpoint except for `startStream`.
+            // But `LibraryController` might have?
+            // `LibraryController` usually has a download or stream endpoint.
+            // Let's assume `/api/library/stream/{id}` works for audio too if it uses `FileStorageService`.
+            // `LibraryController` was not in my read list, but `StreamController` has `getLibrary`...
+            // Let's check `StreamController`. It has `/stream-library` which calls `listConvertedVideos`.
+            // It has `/start`...
+            // It has `/convert`...
+            // Wait, I saw `app.html` using `${API_URL}/library/stream/${video.id}` for video preview.
+            // So there is likely a `LibraryController` with `stream` endpoint.
+            // If so, I can use it for audio preview too!
+
+            const previewUrl = `${API_URL}/library/stream/${f.id}`;
+
             div.innerHTML = `
                 <div style="flex:1; font-weight:600; font-size:0.9rem;">${f.title}</div>
                 <div style="font-size:0.75rem;color:#666;">${(f.fileSize/1024/1024).toFixed(1)} MB</div>
+                <button class="btn btn-sm btn-text" onclick="event.stopPropagation(); toggleAudioPreview(this, '${previewUrl}')"><i class="fa-solid fa-play"></i></button>
             `;
             list.appendChild(div);
         });
