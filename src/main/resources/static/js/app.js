@@ -670,6 +670,22 @@ async function loadScheduledQueue() {
 let selectedStreamVideo = null;
 let streamTimerInterval = null;
 let streamStartTime = null;
+let streamTabMode = 'now'; // 'now' or 'schedule'
+
+function switchStreamTab(mode) {
+    streamTabMode = mode;
+    if (mode === 'now') {
+        document.getElementById('tabGoLiveNow').classList.replace('btn-outline', 'btn-primary');
+        document.getElementById('tabScheduleStream').classList.replace('btn-primary', 'btn-outline');
+        document.getElementById('streamActionNow').classList.remove('hidden');
+        document.getElementById('streamActionSchedule').classList.add('hidden');
+    } else {
+        document.getElementById('tabGoLiveNow').classList.replace('btn-primary', 'btn-outline');
+        document.getElementById('tabScheduleStream').classList.replace('btn-outline', 'btn-primary');
+        document.getElementById('streamActionNow').classList.add('hidden');
+        document.getElementById('streamActionSchedule').classList.remove('hidden');
+    }
+}
 
 async function openLibraryModalForStream() {
     document.getElementById('streamLibraryModal').classList.remove('hidden');
@@ -857,6 +873,98 @@ async function submitJob() {
              btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Go Live';
         }
     }
+}
+
+async function submitScheduledStream() {
+    const selectedKeys = destinations.filter(d => d.selected).map(d => d.key);
+    if(!selectedStreamVideo) return showToast("Please select a video source", "error");
+    if(selectedKeys.length === 0) return showToast("Please select at least one destination", "error");
+
+    const scheduledTime = document.getElementById('streamScheduleTime').value;
+    if(!scheduledTime) return showToast("Please select a start time", "error");
+
+    const loopInfinite = document.getElementById('streamLoopInfinite').checked;
+    const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
+
+    const payload = {
+        videoKey: selectedStreamVideo.s3Key, // Filename essentially
+        streamKeys: selectedKeys,
+        scheduledTime: scheduledTime,
+        loopCount: loopCount,
+        streamMode: document.getElementById('streamOutputMode').value,
+        muteVideoAudio: document.getElementById('streamMuteOriginal').checked
+    };
+
+    // Music logic (Simplified for JSON payload, logic duplicated from submitJob)
+    const musicUpload = document.getElementById('uploadedStreamMusicName').value;
+    const musicStock = document.getElementById('selectedStreamStockId').value;
+    const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
+
+    if (musicUpload && !document.getElementById('streamAudioUploadSection').classList.contains('hidden')) {
+        payload.musicName = musicUpload;
+        payload.musicVolume = musicVol;
+    } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
+        payload.musicName = "stock:" + musicStock;
+        payload.musicVolume = musicVol;
+    }
+
+    // Note: Watermark file cannot be uploaded in JSON schedule easily without separate upload flow.
+    // For now, scheduling ignores fresh watermark uploads.
+
+    try {
+        const res = await apiFetch(`${API_URL}/stream/schedule`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if(res.ok) {
+            showToast("Stream Scheduled!", "success");
+            // Clear or reset UI?
+        } else {
+            showToast(data.message || "Scheduling failed", "error");
+        }
+    } catch(e) { showToast("Error scheduling", "error"); }
+}
+
+async function showScheduledStreamsModal() {
+    document.getElementById('scheduledStreamsModal').classList.remove('hidden');
+    const list = document.getElementById('scheduledStreamsList');
+    list.innerHTML = "Loading...";
+
+    try {
+        const res = await apiFetch(`${API_URL}/stream/scheduled`);
+        const data = await res.json();
+
+        list.innerHTML = '';
+        if(!data.data || data.data.length === 0) {
+            list.innerHTML = "No upcoming streams.";
+            return;
+        }
+
+        data.data.forEach(s => {
+            const date = new Date(s.scheduledTime).toLocaleString();
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.innerHTML = `
+                <div style="flex:1">
+                    <div style="font-weight:600">Video: ${s.videoKey}</div>
+                    <div style="font-size:0.85rem; color:#666">Start: ${date}</div>
+                    <div style="font-size:0.8rem; color:${s.status==='FAILED'?'red':'#00875a'}">${s.status}</div>
+                </div>
+                <button class="btn btn-sm btn-text" onclick="cancelScheduledStream(${s.id})" title="Cancel"><i class="fa-solid fa-trash"></i></button>
+            `;
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "Failed to load."; }
+}
+
+async function cancelScheduledStream(id) {
+    if(!confirm("Cancel this stream?")) return;
+    try {
+        await apiFetch(`${API_URL}/stream/scheduled/${id}`, { method: 'DELETE' });
+        showScheduledStreamsModal(); // reload
+    } catch(e) { showToast("Failed to cancel", "error"); }
 }
 
 async function stopStream() {
@@ -1154,6 +1262,11 @@ async function loadLibraryVideos() {
 
         data.data.forEach(v => {
             const sizeMB = v.fileSize ? (v.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown';
+            const isOptimized = v.title.includes("_optimized"); // Basic check, better if backend flag
+
+            // Don't show optimized files as main items if we want to hide clutter, but user might want to see them.
+            // For now, let's show them but maybe different icon.
+
             const div = document.createElement('div');
             div.className = 'queue-item';
 
@@ -1344,6 +1457,19 @@ async function handleBulkUpload(e) {
             fetchUserInfo(); // Refresh storage
         }
     } catch(e){ showToast("Failed", "error"); }
+}
+
+async function optimizeVideo(filename) {
+    showToast("Starting optimization...", "info");
+    try {
+        const res = await apiFetch(`${API_URL}/convert/optimize?fileName=${encodeURIComponent(filename)}`, { method: 'POST' });
+        const data = await res.json();
+        if(res.ok) {
+            showToast("Optimization started. Check back soon.", "success");
+        } else {
+            showToast(data.message || "Error", "error");
+        }
+    } catch(e) { showToast("Request failed", "error"); }
 }
 
 function showAutoScheduleModal() {

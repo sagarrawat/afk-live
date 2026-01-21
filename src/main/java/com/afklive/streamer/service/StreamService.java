@@ -119,9 +119,27 @@ public class StreamService {
 
         // Get User Plan Limits
         int maxHeight = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
-        
+
+        // CHECK FOR OPTIMIZED VERSION
+        // Logic: If user wants "original" stream mode, no watermark, no music, AND an optimized version exists,
+        // we can use it and potentially copy the stream.
+        boolean isOptimized = false;
+        if (streamMode.equals("original") && watermarkPath == null && musicPath == null) {
+            String originalFileName = videoPath.getFileName().toString();
+            // Assuming optimized file follows "name_optimized.mp4" convention
+            // We need to resolve it in the same directory.
+            String baseName = originalFileName.toLowerCase().endsWith(".mp4") ? originalFileName.substring(0, originalFileName.length() - 4) : originalFileName;
+            Path optimizedPath = videoPath.resolveSibling(baseName + "_optimized.mp4");
+
+            if (Files.exists(optimizedPath)) {
+                log.info("Found optimized video version: {}", optimizedPath);
+                videoPath = optimizedPath;
+                isOptimized = true;
+            }
+        }
+
         List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight);
+                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized);
         
         log.info("command : [{}]", String.join(" ", command));
 

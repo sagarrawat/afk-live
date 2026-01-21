@@ -25,6 +25,7 @@ import java.io.InputStream;
 @Slf4j
 public class VideoConversionService {
 
+    private final FileStorageService storageService;
     private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
     private final FileStorageService storageService;
     private final UserService userService;
@@ -174,6 +175,67 @@ public class VideoConversionService {
             conversionProgress.put(progressKey, -1);
         } finally {
             cleanupTempDir(tempDir);
+        }
+    }
+
+    @Async
+    public void optimizeVideo(Path userDir, String username, String fileName) {
+        // Prevent path traversal
+        if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+             log.error("Invalid filename for optimization: {}", fileName);
+             return;
+        }
+
+        try {
+            Path source = userDir.resolve(fileName);
+            if (!Files.exists(source)) {
+                // Check for _raw variant (common upload pattern)
+                String rawName = fileName.replace(".mp4", "_raw.mp4");
+                Path rawSource = userDir.resolve(rawName);
+                if (Files.exists(rawSource)) {
+                    log.info("Found raw source file: {}", rawSource);
+                    source = rawSource;
+                } else {
+                    log.warn("Source file not found locally: {}. Attempting download from storage.", source.toAbsolutePath());
+                    try {
+                        storageService.downloadFileToPath(fileName, source);
+                        log.info("Downloaded file from storage: {}", fileName);
+                    } catch (Exception e) {
+                        log.error("Failed to find file locally or in storage: {}", fileName, e);
+                        return;
+                    }
+                }
+            }
+
+            // Target: video_optimized.mp4
+            String baseName = fileName.toLowerCase().endsWith(".mp4") ? fileName.substring(0, fileName.length() - 4) : fileName;
+            String targetFileName = baseName + "_optimized.mp4";
+            Path target = userDir.resolve(targetFileName);
+
+            List<String> command = FFmpegCommandBuilder.buildOptimizeCommand(source, target);
+
+            // Key for progress tracking. We use a prefix to distinguish from normal conversion if needed,
+            // but for simplicity in getProgress, we might want to pass the target filename or a special key.
+            // Let's use "optimize:" + fileName
+            String progressKey = username + ":optimize:" + fileName;
+
+            log.info("Starting optimization for {}: {}", username, fileName);
+            conversionProgress.put(progressKey, 0);
+
+            Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+            process.getInputStream().transferTo(System.out); // Log output to avoid blocking
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                log.info("Optimization completed: {}", targetFileName);
+                conversionProgress.put(progressKey, 100);
+            } else {
+                log.error("Optimization failed (code {})", exitCode);
+                conversionProgress.put(progressKey, -1);
+            }
+        } catch (Exception e) {
+            log.error("Optimization error", e);
+            conversionProgress.put(username + ":optimize:" + fileName, -1);
         }
     }
 

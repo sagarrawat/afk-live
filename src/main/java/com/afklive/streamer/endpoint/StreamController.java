@@ -33,6 +33,7 @@ public class StreamController {
     @Autowired
     private StreamManagerService streamManager;
     @Autowired
+    private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepo;
     private FileStorageService storageService;
     @Autowired
     private ScheduledVideoRepository scheduledVideoRepository;
@@ -110,6 +111,14 @@ public class StreamController {
         return ResponseEntity.ok(Map.of("success", true, "message", "Conversion started"));
     }
 
+    @PostMapping("/convert/optimize")
+    public ResponseEntity<?> optimizeVideo(@RequestParam String fileName, Principal principal) throws IOException {
+        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
+        String email = SecurityUtils.getEmail(principal);
+        videoConversionService.optimizeVideo(userFileService.getUserUploadDir(email), email, fileName);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Optimization started"));
+    }
+
     @GetMapping("/stream-library")
     public ResponseEntity<?> getLibrary(Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).build();
@@ -165,4 +174,47 @@ public class StreamController {
     public ResponseEntity<List<String>> getFfmpegLogs() {
         return ResponseEntity.ok(streamService.getLogs());
     }
+
+    @PostMapping("/stream/schedule")
+    public ResponseEntity<?> scheduleStream(@RequestBody com.afklive.streamer.model.ScheduledStream stream, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String email = SecurityUtils.getEmail(principal);
+
+        stream.setUsername(email);
+        stream.setStatus(com.afklive.streamer.model.ScheduledStream.StreamStatus.PENDING);
+
+        // Basic validation
+        if (stream.getStreamKeys() == null || stream.getStreamKeys().isEmpty()) {
+             return ResponseEntity.badRequest().body(ApiResponse.error("At least one destination required"));
+        }
+        if (stream.getScheduledTime() == null || stream.getScheduledTime().isBefore(java.time.LocalDateTime.now())) {
+             return ResponseEntity.badRequest().body(ApiResponse.error("Scheduled time must be in the future"));
+        }
+
+        scheduledStreamRepo.save(stream);
+        return ResponseEntity.ok(ApiResponse.success("Stream Scheduled", stream));
+    }
+
+    @GetMapping("/stream/scheduled")
+    public ResponseEntity<?> getScheduledStreams(Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String email = SecurityUtils.getEmail(principal);
+        return ResponseEntity.ok(ApiResponse.success("Success", scheduledStreamRepo.findByUsername(email)));
+    }
+
+    @DeleteMapping("/stream/scheduled/{id}")
+    public ResponseEntity<?> cancelScheduledStream(@PathVariable Long id, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String email = SecurityUtils.getEmail(principal);
+
+        var opt = scheduledStreamRepo.findById(id);
+        if (opt.isPresent()) {
+            var s = opt.get();
+            if (!s.getUsername().equals(email)) return ResponseEntity.status(403).build();
+            scheduledStreamRepo.delete(s);
+            return ResponseEntity.ok(ApiResponse.success("Deleted", null));
+        }
+        return ResponseEntity.notFound().build();
+    }
+}
 }
