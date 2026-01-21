@@ -76,6 +76,14 @@ public class AudioService {
                 "artist", "Movie Scores",
                 "cover", "https://ui-avatars.com/api/?name=CE&background=C62828&color=fff",
                 "url", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3"
+            ),
+            Map.of(
+                "id", "rain_thunder_1",
+                "type", "ROYALTY_FREE",
+                "title", "Rain & Thunder",
+                "artist", "Nature Sounds",
+                "cover", "https://ui-avatars.com/api/?name=RT&background=5D4037&color=fff",
+                "url", "https://actions.google.com/sounds/v1/weather/thunderstorm.ogg"
             )
         );
     }
