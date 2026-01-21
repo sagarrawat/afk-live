@@ -2377,7 +2377,11 @@ async function loadStreamAudioMyLibrary() {
                  document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(el => el.style.background = '');
                  div.style.background = '#e3f2fd';
              };
-             div.innerHTML = `<i class="fa-solid fa-music" style="color:var(--primary); margin-right:8px;"></i> ${t.title}`;
+             div.innerHTML = `
+                <div style="width:30px; display:flex; justify-content:center;"><i class="fa-solid fa-music" style="color:var(--primary);"></i></div>
+                <div style="flex:1; font-weight:600; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 10px;">${t.title}</div>
+                <button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '${API_URL}/library/stream/${t.id}')"><i class="fa-solid fa-play"></i></button>
+             `;
              list.appendChild(div);
         });
     } catch(e) { list.innerHTML = "Failed to load library."; }
