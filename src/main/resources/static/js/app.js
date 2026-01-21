@@ -823,10 +823,14 @@ async function submitJob() {
     // Music
     const musicUpload = document.getElementById('uploadedStreamMusicName').value;
     const musicStock = document.getElementById('selectedStreamStockId').value;
+    const musicMyLib = document.getElementById('selectedMyLibMusicName').value;
     const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
 
     if (musicUpload && !document.getElementById('streamAudioUploadSection').classList.contains('hidden')) {
         fd.append("musicName", musicUpload);
+        fd.append("musicVolume", musicVol);
+    } else if (musicMyLib && !document.getElementById('streamAudioMyLibSection').classList.contains('hidden')) {
+        fd.append("musicName", musicMyLib);
         fd.append("musicVolume", musicVol);
     } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
         fd.append("musicName", "stock:" + musicStock);
@@ -898,10 +902,14 @@ async function submitScheduledStream() {
     // Music logic (Simplified for JSON payload, logic duplicated from submitJob)
     const musicUpload = document.getElementById('uploadedStreamMusicName').value;
     const musicStock = document.getElementById('selectedStreamStockId').value;
+    const musicMyLib = document.getElementById('selectedMyLibMusicName').value;
     const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
 
     if (musicUpload && !document.getElementById('streamAudioUploadSection').classList.contains('hidden')) {
         payload.musicName = musicUpload;
+        payload.musicVolume = musicVol;
+    } else if (musicMyLib && !document.getElementById('streamAudioMyLibSection').classList.contains('hidden')) {
+        payload.musicName = musicMyLib;
         payload.musicVolume = musicVol;
     } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
         payload.musicName = "stock:" + musicStock;
@@ -1479,21 +1487,7 @@ function scheduleFromLibrary(id, title) {
     if(!titleInput.value) titleInput.value = title.replace(/\.[^/.]+$/, "");
 }
 
-async function optimizeVideo(filename) {
-    showToast("Starting optimization...", "info");
-    try {
-        const res = await apiFetch(`${API_URL}/convert?fileName=${encodeURIComponent(filename)}`, { method: 'POST' });
-        if(res.ok) {
-            showToast("Optimization started", "success");
-            // Refresh logic handled by polling in loadLibraryVideos or manual refresh
-            loadLibraryVideos();
-        } else {
-            showToast("Optimization failed", "error");
-        }
-    } catch(e) {
-        showToast("Error requesting optimization", "error");
-    }
-}
+// optimizeVideo definition moved/merged below
 
 function openYouTubeImportModal() {
     document.getElementById('ytImportUrl').value = '';
@@ -1592,6 +1586,7 @@ async function optimizeVideo(filename) {
         const data = await res.json();
         if(res.ok) {
             showToast("Optimization started. Check back soon.", "success");
+            loadLibraryVideos();
         } else {
             showToast(data.message || "Error", "error");
         }
@@ -2333,22 +2328,59 @@ function toggleAudioPreview(btn, url) {
 /* --- STREAM MUSIC --- */
 function switchStreamAudioTab(tab) {
     const btnUpload = document.getElementById('tabStreamAudioUpload');
+    const btnMyLib = document.getElementById('tabStreamAudioMyLib');
     const btnLib = document.getElementById('tabStreamAudioLib');
+
     const secUpload = document.getElementById('streamAudioUploadSection');
+    const secMyLib = document.getElementById('streamAudioMyLibSection');
     const secLib = document.getElementById('streamAudioLibSection');
+
+    // Reset
+    btnUpload.className = "btn btn-sm btn-outline";
+    btnMyLib.className = "btn btn-sm btn-outline";
+    btnLib.className = "btn btn-sm btn-outline";
+    secUpload.classList.add('hidden');
+    secMyLib.classList.add('hidden');
+    secLib.classList.add('hidden');
 
     if (tab === 'upload') {
         btnUpload.className = "btn btn-sm btn-primary";
-        btnLib.className = "btn btn-sm btn-outline";
         secUpload.classList.remove('hidden');
-        secLib.classList.add('hidden');
+    } else if (tab === 'mylib') {
+        btnMyLib.className = "btn btn-sm btn-primary";
+        secMyLib.classList.remove('hidden');
+        loadStreamAudioMyLibrary();
     } else {
-        btnUpload.className = "btn btn-sm btn-outline";
         btnLib.className = "btn btn-sm btn-primary";
-        secUpload.classList.add('hidden');
         secLib.classList.remove('hidden');
         loadStreamAudioLibrary();
     }
+}
+
+async function loadStreamAudioMyLibrary() {
+    const list = document.getElementById('streamAudioMyTrackList');
+    list.innerHTML = "Loading...";
+    try {
+        const res = await apiFetch(`${API_URL}/audio/my-library`);
+        const tracks = await res.json();
+        list.innerHTML = '';
+        if(!tracks.length) {
+            list.innerHTML = "<div class='empty-state' style='padding:10px;text-align:center;'>No audio files found.<br>Upload .mp3 files in Media Library.</div>";
+            return;
+        }
+        tracks.forEach(t => {
+             const div = document.createElement('div');
+             div.className = 'queue-item';
+             div.style.cursor = 'pointer';
+             div.onclick = () => {
+                 document.getElementById('selectedMyLibMusicName').value = t.title;
+                 document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(el => el.style.background = '');
+                 div.style.background = '#e3f2fd';
+             };
+             div.innerHTML = `<i class="fa-solid fa-music" style="color:var(--primary); margin-right:8px;"></i> ${t.title}`;
+             list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "Failed to load library."; }
 }
 
 /* --- WATERMARK --- */

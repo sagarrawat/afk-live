@@ -202,6 +202,7 @@
                         </div>
                         <div style="display:flex; gap:10px; margin-bottom:10px;">
                             <button class="btn btn-sm btn-primary" id="tabStreamAudioUpload" onclick="switchStreamAudioTab('upload')">Upload</button>
+                            <button class="btn btn-sm btn-outline" id="tabStreamAudioMyLib" onclick="switchStreamAudioTab('mylib')">My Library</button>
                             <button class="btn btn-sm btn-outline" id="tabStreamAudioLib" onclick="switchStreamAudioTab('lib')">Stock Library</button>
                         </div>
 
@@ -213,6 +214,14 @@
                                 <input type="hidden" id="uploadedStreamMusicName">
                                 <small id="streamAudioUploadStatus" style="color: #666;"></small>
                             </div>
+                        </div>
+
+                        <!-- My Library Tab -->
+                        <div id="streamAudioMyLibSection" class="hidden">
+                            <div id="streamAudioMyTrackList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">
+                                Loading...
+                            </div>
+                            <input type="hidden" id="selectedMyLibMusicName">
                         </div>
 
                         <!-- Library Tab -->
