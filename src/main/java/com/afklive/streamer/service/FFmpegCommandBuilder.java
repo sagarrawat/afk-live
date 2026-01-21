@@ -377,17 +377,23 @@ public class FFmpegCommandBuilder {
         }
 
         // --- OUTPUTS (Multi-streaming) ---
-        for (String key : streamKeys) {
+        if (!streamKeys.isEmpty()) {
             command.add("-f");
-            command.add("flv");
-            command.add("-flvflags");
-            command.add("no_duration_filesize");
+            command.add("tee");
+            command.add("-map");
+            command.add(videoLabel);
+            command.add("-map");
+            // If audioLabel is default "0:a", make it optional "0:a?" to prevent fail on silent video
+            command.add(audioLabel.equals("0:a") ? "0:a?" : audioLabel);
 
-            if (key.startsWith("rtmp")) {
-                 command.add(key);
-            } else {
-                 command.add("rtmps://a.rtmp.youtube.com:443/live2/" + key);
+            StringBuilder teePayload = new StringBuilder();
+            for (int i = 0; i < streamKeys.size(); i++) {
+                String key = streamKeys.get(i);
+                if (i > 0) teePayload.append("|");
+                String url = key.startsWith("rtmp") ? key : "rtmps://a.rtmp.youtube.com:443/live2/" + key;
+                teePayload.append("[f=flv:flvflags=no_duration_filesize]").append(url);
             }
+            command.add(teePayload.toString());
         }
 
         return command;

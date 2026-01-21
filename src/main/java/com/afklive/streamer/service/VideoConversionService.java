@@ -179,62 +179,78 @@ public class VideoConversionService {
 
     @Async
     public void optimizeVideo(Path userDir, String username, String fileName) {
-        // Prevent path traversal
-        if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
-             log.error("Invalid filename for optimization: {}", fileName);
-             return;
+        ScheduledVideo scheduledVideo = repository.findByUsernameAndTitle(username, fileName)
+                .orElse(null);
+
+        if (scheduledVideo == null) {
+            log.error("Video not found for optimization: {}", fileName);
+            return;
         }
 
+        scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.IN_PROGRESS);
+        repository.save(scheduledVideo);
+
+        String progressKey = username + ":optimize:" + fileName;
+        conversionProgress.put(progressKey, 0);
+
+        Path tempDir = null;
         try {
-            Path source = userDir.resolve(fileName);
-            if (!Files.exists(source)) {
-                // Check for _raw variant (common upload pattern)
-                String rawName = fileName.replace(".mp4", "_raw.mp4");
-                Path rawSource = userDir.resolve(rawName);
-                if (Files.exists(rawSource)) {
-                    log.info("Found raw source file: {}", rawSource);
-                    source = rawSource;
-                } else {
-                    log.warn("Source file not found locally: {}. Attempting download from storage.", source.toAbsolutePath());
-                    try {
-                        storageService.downloadFileToPath(fileName, source);
-                        log.info("Downloaded file from storage: {}", fileName);
-                    } catch (Exception e) {
-                        log.error("Failed to find file locally or in storage: {}", fileName, e);
-                        return;
-                    }
-                }
-            }
+            tempDir = Files.createTempDirectory("optimize_" + username + "_");
+            String sourceKey = scheduledVideo.getS3Key();
+            long oldSize = scheduledVideo.getFileSize() != null ? scheduledVideo.getFileSize() : 0;
 
-            // Target: video_optimized.mp4
-            String baseName = fileName.toLowerCase().endsWith(".mp4") ? fileName.substring(0, fileName.length() - 4) : fileName;
-            String targetFileName = baseName + "_optimized.mp4";
-            Path target = userDir.resolve(targetFileName);
+            log.info("Starting optimization for {}: sourceKey={}", username, sourceKey);
 
-            List<String> command = FFmpegCommandBuilder.buildOptimizeCommand(source, target);
+            Path sourcePath = tempDir.resolve("source.mp4");
+            storageService.downloadFileToPath(sourceKey, sourcePath);
 
-            // Key for progress tracking. We use a prefix to distinguish from normal conversion if needed,
-            // but for simplicity in getProgress, we might want to pass the target filename or a special key.
-            // Let's use "optimize:" + fileName
-            String progressKey = username + ":optimize:" + fileName;
+            Path targetPath = tempDir.resolve("optimized.mp4");
 
-            log.info("Starting optimization for {}: {}", username, fileName);
-            conversionProgress.put(progressKey, 0);
+            List<String> command = FFmpegCommandBuilder.buildOptimizeCommand(sourcePath, targetPath);
 
             Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
-            process.getInputStream().transferTo(System.out); // Log output to avoid blocking
+            // process.getInputStream().transferTo(System.out); // Optional logging
 
             int exitCode = process.waitFor();
             if (exitCode == 0) {
-                log.info("Optimization completed: {}", targetFileName);
+                log.info("Optimization completed for {}", fileName);
+
+                long newSize = Files.size(targetPath);
+
+                String newFileName = "optimized_" + fileName;
+                String newKey = storageService.uploadFile(Files.newInputStream(targetPath), newFileName, newSize);
+
+                // Update DB
+                scheduledVideo.setS3Key(newKey);
+                scheduledVideo.setFileSize(newSize);
+                scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.COMPLETED);
+
+                userService.updateStorageUsage(username, newSize - oldSize);
+
+                repository.save(scheduledVideo);
+
+                // Delete old file
+                try {
+                    storageService.deleteFile(sourceKey);
+                } catch (Exception e) {
+                    log.warn("Failed to delete old file {}: {}", sourceKey, e.getMessage());
+                }
+
                 conversionProgress.put(progressKey, 100);
             } else {
                 log.error("Optimization failed (code {})", exitCode);
+                scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.FAILED);
+                repository.save(scheduledVideo);
                 conversionProgress.put(progressKey, -1);
             }
+
         } catch (Exception e) {
             log.error("Optimization error", e);
-            conversionProgress.put(username + ":optimize:" + fileName, -1);
+            scheduledVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.FAILED);
+            repository.save(scheduledVideo);
+            conversionProgress.put(progressKey, -1);
+        } finally {
+            cleanupTempDir(tempDir);
         }
     }
 

@@ -63,4 +63,15 @@ public class UserFileService {
     private boolean isVideoFile(String filename) {
         return filename.toLowerCase().endsWith(".mp4");
     }
+
+    public List<ScheduledVideo> listAudioFiles(String username) {
+        List<ScheduledVideo> videos = scheduledVideoRepository.findByUsername(username);
+        return videos.stream()
+                .filter(v -> {
+                    if (v.getTitle() == null) return false;
+                    String lower = v.getTitle().toLowerCase();
+                    return lower.endsWith(".mp3") || lower.endsWith(".wav");
+                })
+                .collect(Collectors.toList());
+    }
 }
