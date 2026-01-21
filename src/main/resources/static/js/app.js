@@ -1214,6 +1214,20 @@ function toggleDestination(id) {
     }
 }
 
+function removeChannel(id) {
+    showConfirmModal("Disconnect Channel", "Are you sure you want to remove this channel?", async () => {
+        try {
+            const res = await apiFetch(`${API_URL}/channels/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast("Channel removed", "success");
+                loadUserChannels();
+            } else {
+                showToast("Failed to remove channel", "error");
+            }
+        } catch(e) { showToast("Error", "error"); }
+    });
+}
+
 function editDestination(id, e) {
     e.stopPropagation();
     const dest = destinations.find(d => d.id === id);
