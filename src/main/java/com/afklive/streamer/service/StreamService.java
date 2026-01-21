@@ -2,7 +2,9 @@ package com.afklive.streamer.service;
 
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.dto.StreamResponse;
+import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.model.StreamJob;
+import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +46,8 @@ public class StreamService {
     private UserService userService;
     @Autowired
     private AudioService audioService;
+    @Autowired
+    private ScheduledVideoRepository scheduledVideoRepository;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -102,7 +106,31 @@ public class StreamService {
                 String trackId = musicName.substring(6); // remove "stock:"
                 musicPath = audioService.getAudioPath(trackId);
             } else {
-                musicPath = userDir.resolve(musicName).toAbsolutePath();
+                // Resolve user audio file from DB/S3
+                String audioKey = musicName;
+                Optional<ScheduledVideo> audioFileOpt = scheduledVideoRepository.findByUsernameAndTitle(username, musicName);
+                if (audioFileOpt.isPresent()) {
+                    audioKey = audioFileOpt.get().getS3Key();
+                }
+
+                Path localAudioPath = userDir.resolve("audio_" + audioKey).toAbsolutePath();
+                if (!Files.exists(localAudioPath)) {
+                    log.info("Downloading audio from Storage: {}", audioKey);
+                    try {
+                        storageService.downloadFileToPath(audioKey, localAudioPath);
+                    } catch (Exception e) {
+                        log.error("Failed to download audio from Storage", e);
+                        // Fallback: check if it exists with original name
+                        localAudioPath = userDir.resolve(musicName).toAbsolutePath();
+                    }
+                }
+
+                if (Files.exists(localAudioPath)) {
+                    musicPath = localAudioPath;
+                } else {
+                    // Final fallback
+                    musicPath = userDir.resolve(musicName).toAbsolutePath();
+                }
             }
         }
 
