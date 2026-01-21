@@ -2,6 +2,7 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.model.ScheduledVideo;
+import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.service.*;
@@ -39,6 +40,10 @@ public class StreamController {
     private ScheduledVideoRepository scheduledVideoRepository;
     @Autowired
     private UserService userService;
+    @Autowired
+    private YouTubeService youTubeService;
+    @Autowired
+    private ChannelService channelService;
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file, Principal principal) throws IOException {
@@ -66,12 +71,25 @@ public class StreamController {
                                                 @RequestParam(required = false) MultipartFile watermarkFile,
                                                 @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
                                                 @RequestParam(required = false, defaultValue = "original") String streamMode,
+                                                @RequestParam(required = false) String title,
+                                                @RequestParam(required = false) String description,
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
         String email = SecurityUtils.getEmail(principal);
         if (streamManager.tryStartStream(email)) {
             try {
+                // Update YouTube Broadcast Metadata if provided
+                if (title != null || description != null) {
+                     // Try to update for all connected YouTube channels
+                     List<SocialChannel> channels = channelService.getChannels(email);
+                     for (SocialChannel ch : channels) {
+                         if ("YOUTUBE".equals(ch.getPlatform()) && ch.getCredentialId() != null) {
+                             youTubeService.updateBroadcast(ch.getCredentialId(), title, description);
+                         }
+                     }
+                }
+
                 return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode));
             } catch (Exception e) {
                 return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));

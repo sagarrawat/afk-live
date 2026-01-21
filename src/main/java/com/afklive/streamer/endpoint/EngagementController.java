@@ -42,6 +42,7 @@ public class EngagementController {
             for (com.afklive.streamer.model.SocialChannel channel : user.getChannels()) {
                 if ("YOUTUBE".equals(channel.getPlatform()) && channel.getCredentialId() != null) {
                     try {
+                        // FIX: Pass credentialId, not username
                         List<CommentThread> threads = youTubeService.getUnrepliedComments(channel.getCredentialId());
                         for (CommentThread thread : threads) {
                             String commentText = thread.getSnippet().getTopLevelComment().getSnippet().getTextDisplay();
@@ -116,6 +117,7 @@ public class EngagementController {
         if ("REPLY".equals(activity.getActionType())) {
             try {
                 if (activity.getCreatedCommentId() != null) {
+                    // FIX: Pass credentialId, not username
                     String credentialId = channelService.getCredentialId(email);
                     youTubeService.deleteComment(credentialId, activity.getCreatedCommentId());
                     activity.setActionType("REVERTED_REPLY");

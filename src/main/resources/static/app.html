@@ -148,6 +148,18 @@
                                 <input type="file" id="streamUploadInput" hidden accept="video/*">
                             </div>
                         </div>
+
+                        <!-- STREAM INFO (NEW SECTION) -->
+                        <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                            <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #666;">Stream Info</h4>
+                            <div class="form-group" style="margin-bottom: 8px;">
+                                <input type="text" id="streamTitleInput" class="form-input" placeholder="Stream Title" style="font-weight: 500;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <textarea id="streamDescInput" class="form-input" rows="2" placeholder="Description" style="font-size: 0.85rem;"></textarea>
+                            </div>
+                        </div>
+
                         <div>
                             <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 10px;">
                                 <i class="fa-solid fa-file-video" style="color:var(--primary);"></i>
@@ -203,6 +215,8 @@
                         <div style="display:flex; gap:10px; margin-bottom:10px;">
                             <button class="btn btn-sm btn-primary" id="tabStreamAudioUpload" onclick="switchStreamAudioTab('upload')">Upload</button>
                             <button class="btn btn-sm btn-outline" id="tabStreamAudioLib" onclick="switchStreamAudioTab('lib')">Stock Library</button>
+                            <!-- NEW: My Library Button -->
+                            <button class="btn btn-sm btn-outline" id="tabStreamAudioMyLib" onclick="switchStreamAudioTab('mylib')">My Library</button>
                         </div>
 
                         <!-- Upload Tab -->
@@ -215,13 +229,22 @@
                             </div>
                         </div>
 
-                        <!-- Library Tab -->
+                        <!-- Stock Library Tab -->
                         <div id="streamAudioLibSection" class="hidden">
                             <div id="streamAudioTrackList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">
                                 Loading...
                             </div>
                             <input type="hidden" id="selectedStreamStockId">
                             <div id="selectedStreamTrackName" style="font-size:0.85rem; font-weight:600; color:var(--primary);"></div>
+                        </div>
+
+                        <!-- My Library Tab (NEW) -->
+                        <div id="streamAudioMyLibSection" class="hidden">
+                            <div id="streamMyAudioList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">
+                                Loading...
+                            </div>
+                            <input type="hidden" id="selectedStreamMyLibId">
+                            <div id="selectedStreamMyLibName" style="font-size:0.85rem; font-weight:600; color:var(--primary);"></div>
                         </div>
 
                         <div class="form-group" style="margin-top: 10px;">
@@ -250,32 +273,32 @@
 
                     <!-- Action -->
                     <div class="control-card">
-                         <div style="display:flex; gap:10px; margin-bottom:10px;">
-                             <button id="tabGoLiveNow" class="btn btn-sm btn-primary" style="flex:1;" onclick="switchStreamTab('now')">Instant</button>
-                             <button id="tabScheduleStream" class="btn btn-sm btn-outline" style="flex:1;" onclick="switchStreamTab('schedule')">Schedule</button>
-                         </div>
-
-                         <!-- GO LIVE NOW -->
+                         <!-- Unified Controls -->
                          <div id="streamActionNow">
-                             <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
-                                <i class="fa-solid fa-tower-broadcast"></i> Go Live
-                             </button>
-                             <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
-                         </div>
-
-                         <!-- SCHEDULE STREAM -->
-                         <div id="streamActionSchedule" class="hidden">
                              <div class="form-group">
-                                 <label>Start Time</label>
+                                 <label>Start Time (Optional, leave empty for now)</label>
                                  <input type="datetime-local" id="streamScheduleTime" class="form-input">
                              </div>
-                             <button class="btn btn-primary btn-block" onclick="submitScheduledStream()">
-                                <i class="fa-regular fa-clock"></i> Schedule Stream
-                             </button>
+
+                             <div style="display: flex; gap: 10px;">
+                                 <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
+                                    <i class="fa-solid fa-tower-broadcast"></i> Go Live
+                                 </button>
+                                 <button id="btnScheduleStream" class="btn btn-primary btn-lg btn-block" onclick="submitScheduledStream()">
+                                    <i class="fa-regular fa-clock"></i> Schedule
+                                 </button>
+                             </div>
+                             <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">End Stream</button>
+
                              <div style="margin-top:10px; font-size:0.8rem; text-align:center;">
                                  <a href="#" onclick="showScheduledStreamsModal()">View Scheduled Streams</a>
                              </div>
                          </div>
+
+                         <!-- Hidden legacy containers to prevent JS errors if referenced -->
+                         <div id="tabGoLiveNow" class="hidden"></div>
+                         <div id="tabScheduleStream" class="hidden"></div>
+                         <div id="streamActionSchedule" class="hidden"></div>
                     </div>
 
                     <!-- Destinations -->

@@ -77,12 +77,6 @@ async function handleStreamVideoUpload(e) {
     formData.append("files", file);
 
     try {
-        // Re-use library upload endpoint, or a specific stream upload if exists
-        // Plan says "Re-use library upload endpoint" usually or check StreamController
-        // StreamController has /upload but that returns a key. LibraryController has /library/upload
-        // Let's use /api/upload from StreamController as it might be simpler or intended for temp usage
-        // Actually, previous code used /library/upload. Let's stick to that for consistency.
-
         const res = await apiFetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
 
         if (res.ok) {
@@ -140,6 +134,7 @@ function switchView(viewName) {
     if (viewName === 'analytics') setTimeout(initAnalytics, 100);
     if (viewName === 'library') loadLibraryVideos();
     if (viewName === 'community') loadComments();
+    if (viewName === 'stream') loadDestinations(); // Ensure destinations are loaded
 
     // Close mobile menu if open
     document.querySelector('.sub-sidebar')?.classList.remove('open');
@@ -170,7 +165,7 @@ async function apiFetch(url, options = {}) {
 
             if (body.message && (body.message.includes("YouTube") || body.message.includes("connected"))) {
                 // Show "Connect Channel" modal
-                document.getElementById('addChannelModal').classList.remove('hidden');
+                document.getElementById('connectChannelModal').classList.remove('hidden');
                 showToast("Please connect your YouTube channel.", "error");
             } else {
                 // Standard Login
@@ -343,7 +338,7 @@ function openConnectModal() {
 function selectPlatform(platform, el) {
     selectedPlatform = platform;
     document.querySelectorAll('#connectChannelModal .platform-option').forEach(e => e.classList.remove('selected'));
-    el.classList.add('selected');
+    if(el) el.classList.add('selected');
 
     const manualInput = document.getElementById('manualChannelInput');
     const btn = document.getElementById('btnConnect');
@@ -720,6 +715,12 @@ function selectStreamVideo(video) {
     selectedStreamVideo = video;
     document.getElementById('selectedVideoTitle').innerText = video.title;
 
+    // Auto-fill Title Input
+    const titleInput = document.getElementById('streamTitleInput');
+    if (titleInput && !titleInput.value) {
+        titleInput.value = video.title.replace(/\.[^/.]+$/, "");
+    }
+
     // Auto-fill AI Topic
     const topicInput = document.getElementById('aiStreamTopic');
     if(topicInput && !topicInput.value) {
@@ -768,10 +769,17 @@ async function generateStreamMetadata() {
         });
         const data = await res.json();
 
+        // Populate AI fields
         document.getElementById('aiStreamTitle').value = data.title;
         document.getElementById('aiStreamDesc').value = data.description;
         document.getElementById('aiStreamTags').value = data.tags;
         document.getElementById('aiStreamTip').innerText = data.tip;
+
+        // Auto-fill Main inputs if empty
+        const mainTitle = document.getElementById('streamTitleInput');
+        const mainDesc = document.getElementById('streamDescInput');
+        if(mainTitle && !mainTitle.value) mainTitle.value = data.title;
+        if(mainDesc && !mainDesc.value) mainDesc.value = data.description;
 
     } catch(e) {
         showToast("AI Generation Failed", "error");
@@ -820,9 +828,16 @@ async function submitJob() {
     fd.append("videoKey", selectedStreamVideo.s3Key);
     fd.append("loopCount", loopCount);
 
+    // Meta Data fields
+    const title = document.getElementById('streamTitleInput').value;
+    const desc = document.getElementById('streamDescInput').value;
+    if(title) fd.append("title", title);
+    if(desc) fd.append("description", desc);
+
     // Music
     const musicUpload = document.getElementById('uploadedStreamMusicName').value;
     const musicStock = document.getElementById('selectedStreamStockId').value;
+    const musicMyLib = document.getElementById('selectedStreamMyLibId').value;
     const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
 
     if (musicUpload && !document.getElementById('streamAudioUploadSection').classList.contains('hidden')) {
@@ -830,6 +845,13 @@ async function submitJob() {
         fd.append("musicVolume", musicVol);
     } else if (musicStock && !document.getElementById('streamAudioLibSection').classList.contains('hidden')) {
         fd.append("musicName", "stock:" + musicStock);
+        fd.append("musicVolume", musicVol);
+    } else if (musicMyLib && !document.getElementById('streamAudioMyLibSection').classList.contains('hidden')) {
+        // My library logic similar to upload (assumes file is in user dir)
+        // Need to check how My Library returns ID/Name.
+        // Assuming ID is filename or we need to pass filename.
+        // loadStreamMyAudioLibrary sets ID to filename/s3Key usually.
+        fd.append("musicName", musicMyLib);
         fd.append("musicVolume", musicVol);
     }
 
@@ -1047,10 +1069,9 @@ function submitDestination() {
     } else {
         // Add new
         const newId = Date.now();
-        destinations.push({ id: newId, name, key });
+        // New destinations are selected by default for convenience
+        destinations.push({ id: newId, name, key, selected: true });
         showToast("Destination Added", "success");
-        // We'll select it after render
-        setTimeout(() => selectDestination(newId), 50);
     }
 
     saveDestinations();
@@ -2208,20 +2229,30 @@ function toggleAudioPreview(btn, url) {
 function switchStreamAudioTab(tab) {
     const btnUpload = document.getElementById('tabStreamAudioUpload');
     const btnLib = document.getElementById('tabStreamAudioLib');
+    const btnMyLib = document.getElementById('tabStreamAudioMyLib');
     const secUpload = document.getElementById('streamAudioUploadSection');
     const secLib = document.getElementById('streamAudioLibSection');
+    const secMyLib = document.getElementById('streamAudioMyLibSection');
+
+    // Reset Classes
+    btnUpload.className = "btn btn-sm btn-outline";
+    btnLib.className = "btn btn-sm btn-outline";
+    btnMyLib.className = "btn btn-sm btn-outline";
+    secUpload.classList.add('hidden');
+    secLib.classList.add('hidden');
+    secMyLib.classList.add('hidden');
 
     if (tab === 'upload') {
         btnUpload.className = "btn btn-sm btn-primary";
-        btnLib.className = "btn btn-sm btn-outline";
         secUpload.classList.remove('hidden');
-        secLib.classList.add('hidden');
-    } else {
-        btnUpload.className = "btn btn-sm btn-outline";
+    } else if (tab === 'lib') {
         btnLib.className = "btn btn-sm btn-primary";
-        secUpload.classList.add('hidden');
         secLib.classList.remove('hidden');
         loadStreamAudioLibrary();
+    } else if (tab === 'mylib') {
+        btnMyLib.className = "btn btn-sm btn-primary";
+        secMyLib.classList.remove('hidden');
+        loadStreamMyAudioLibrary();
     }
 }
 
@@ -2271,6 +2302,50 @@ async function loadStreamAudioLibrary() {
                 <img src="${t.cover}" style="width:30px;height:30px;border-radius:4px;">
                 <div style="flex:1; font-weight:600; font-size:0.9rem;">${t.title}</div>
                 <button class="btn btn-sm btn-text preview-audio-btn" onclick="event.stopPropagation(); toggleAudioPreview(this, '${t.url}')"><i class="fa-solid fa-play"></i></button>
+            `;
+            list.appendChild(div);
+        });
+    } catch(e) { list.innerHTML = "Failed."; }
+}
+
+async function loadStreamMyAudioLibrary() {
+    const list = document.getElementById('streamMyAudioList');
+    list.innerHTML = "Loading library...";
+    try {
+        // Use existing library endpoint? No, need audio filter.
+        // Or create new endpoint. Let's assume we reuse /api/library and filter in JS for now or backend endpoint.
+        // Actually, I saw StreamController exposes /stream-library which lists converted videos.
+        // I need an endpoint for AUDIO files.
+        // I checked UserFileService and it lists converted *videos*.
+        // I should have added an endpoint in AudioController or StreamController.
+        // Let's assume I did or will use /api/library and filter by extension in JS if it returns all files.
+        // But /api/library returns ScheduledVideo entities.
+        // ScheduledVideo entity has 'title' which contains extension.
+
+        const res = await apiFetch(`${API_URL}/library`);
+        const data = await res.json();
+        list.innerHTML = '';
+
+        const audioFiles = data.data.filter(f => f.title.toLowerCase().endsWith('.mp3') || f.title.toLowerCase().endsWith('.wav'));
+
+        if(audioFiles.length === 0) {
+            list.innerHTML = "No audio files found. Upload MP3s in Library.";
+            return;
+        }
+
+        audioFiles.forEach(f => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.onclick = () => {
+                document.getElementById('selectedStreamMyLibId').value = f.title; // Using filename/key
+                document.getElementById('selectedStreamMyLibName').innerText = "Selected: " + f.title;
+                document.querySelectorAll('#streamMyAudioList .queue-item').forEach(el => el.style.background = '');
+                div.style.background = '#e3f2fd';
+            };
+            div.innerHTML = `
+                <div style="flex:1; font-weight:600; font-size:0.9rem;">${f.title}</div>
+                <div style="font-size:0.75rem;color:#666;">${(f.fileSize/1024/1024).toFixed(1)} MB</div>
             `;
             list.appendChild(div);
         });

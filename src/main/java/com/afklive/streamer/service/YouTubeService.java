@@ -25,8 +25,8 @@ import java.util.Collections;
 import java.util.List;
 
 @Service
+@Slf4j
 public class YouTubeService {
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(YouTubeService.class);
 
     private final AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager;
     private static final String APPLICATION_NAME = "AFK Live Streamer";
@@ -38,13 +38,15 @@ public class YouTubeService {
 
     // --- HELPER METHODS ---
 
-    private Authentication createPrincipal(String username) {
-        return new UsernamePasswordAuthenticationToken(username, "N/A", AuthorityUtils.NO_AUTHORITIES);
+    private Authentication createPrincipal(String credentialId) {
+        // The authorizedClientManager uses the principal name to look up the client.
+        // If the client was stored under the Google ID (sub), we must use that ID here.
+        return new UsernamePasswordAuthenticationToken(credentialId, "N/A", AuthorityUtils.NO_AUTHORITIES);
     }
 
-    private Credential getCredential(String username) {
+    private Credential getCredential(String credentialId) {
         try {
-            Authentication principal = createPrincipal(username);
+            Authentication principal = createPrincipal(credentialId);
             OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(AppConstants.OAUTH_GOOGLE_YOUTUBE)
                     .principal(principal)
                     .build();
@@ -52,34 +54,36 @@ public class YouTubeService {
             OAuth2AuthorizedClient client = authorizedClientManager.authorize(authorizeRequest);
 
             if (client == null || client.getAccessToken() == null) {
-                throw new IllegalStateException("User " + username + " is not connected to YouTube.");
+                // Try refreshing? The manager handles refresh if refresh token is present.
+                // If it returns null, it means no client found or re-auth required.
+                throw new IllegalStateException("Credential not found for ID: " + credentialId);
             }
 
             return new Credential(BearerToken.authorizationHeaderAccessMethod())
                     .setAccessToken(client.getAccessToken().getTokenValue());
         } catch (Exception e) {
-            log.error("Failed to get credential for user {}", username, e);
+            log.error("Failed to get credential for ID {}", credentialId, e);
             throw new RuntimeException("Authentication failed: " + e.getMessage());
         }
     }
 
-    private YouTube getYouTubeClient(String username) throws Exception {
-        return new YouTube.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(username))
+    private YouTube getYouTubeClient(String credentialId) throws Exception {
+        return new YouTube.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(credentialId))
                 .setApplicationName(APPLICATION_NAME)
                 .build();
     }
 
-    private YouTubeAnalytics getAnalyticsClient(String username) throws Exception {
-        return new YouTubeAnalytics.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(username))
+    private YouTubeAnalytics getAnalyticsClient(String credentialId) throws Exception {
+        return new YouTubeAnalytics.Builder(GoogleNetHttpTransport.newTrustedTransport(), JSON_FACTORY, getCredential(credentialId))
                 .setApplicationName(APPLICATION_NAME)
                 .build();
     }
 
     // --- CONNECTION CHECK ---
 
-    public boolean isConnected(String username) {
+    public boolean isConnected(String credentialId) {
         try {
-            getCredential(username);
+            getCredential(credentialId);
             return true;
         } catch (Exception e) {
             return false;
@@ -88,8 +92,8 @@ public class YouTubeService {
 
     // --- VIDEO UPLOAD ---
 
-    public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus, String categoryId) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public String uploadVideo(String credentialId, InputStream fileStream, String title, String description, String tags, String privacyStatus, String categoryId) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
 
         Video video = new Video();
 
@@ -117,8 +121,8 @@ public class YouTubeService {
         return returnedVideo.getId();
     }
 
-    public void uploadThumbnail(String username, String videoId, InputStream thumbnailStream) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public void uploadThumbnail(String credentialId, String videoId, InputStream thumbnailStream) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
         InputStreamContent mediaContent = new InputStreamContent("application/octet-stream", thumbnailStream);
         youtube.thumbnails().set(videoId, mediaContent).execute();
         log.info("Uploaded thumbnail for video ID: {}", videoId);
@@ -126,8 +130,8 @@ public class YouTubeService {
 
     // --- ANALYTICS ---
 
-    public QueryResponse getChannelAnalytics(String username, String startDate, String endDate) throws Exception {
-        YouTubeAnalytics analytics = getAnalyticsClient(username);
+    public QueryResponse getChannelAnalytics(String credentialId, String startDate, String endDate) throws Exception {
+        YouTubeAnalytics analytics = getAnalyticsClient(credentialId);
 
         return analytics.reports().query()
                 .setIds("channel==MINE")
@@ -141,38 +145,38 @@ public class YouTubeService {
 
     // --- COMMENTS ---
 
-    public CommentThreadListResponse getCommentThreads(String username) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public CommentThreadListResponse getCommentThreads(String credentialId) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
         return youtube.commentThreads().list(Collections.singletonList("snippet,replies"))
-                .setAllThreadsRelatedToChannelId(getChannelId(username))
+                .setAllThreadsRelatedToChannelId(getChannelId(credentialId))
                 .setMaxResults(20L)
                 .execute();
     }
 
-    public String getChannelName(String username) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public String getChannelName(String credentialId) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
         ChannelListResponse response = youtube.channels().list(Collections.singletonList("snippet"))
                 .setMine(true)
                 .execute();
         if (response.getItems() == null || response.getItems().isEmpty()) {
-            throw new IllegalStateException("No channel found for user.");
+            throw new IllegalStateException("No channel found for credential.");
         }
         return response.getItems().getFirst().getSnippet().getTitle();
     }
 
-    private String getChannelId(String username) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    private String getChannelId(String credentialId) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
         ChannelListResponse response = youtube.channels().list(Collections.singletonList("id"))
                 .setMine(true)
                 .execute();
         if (response.getItems() == null || response.getItems().isEmpty()) {
-            throw new IllegalStateException("No channel found for user.");
+            throw new IllegalStateException("No channel found for credential.");
         }
         return response.getItems().getFirst().getId();
     }
 
-    public void addComment(String username, String videoId, String text) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public void addComment(String credentialId, String videoId, String text) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
 
         CommentThread thread = new CommentThread();
         CommentThreadSnippet snippet = new CommentThreadSnippet();
@@ -189,16 +193,11 @@ public class YouTubeService {
         youtube.commentThreads().insert(Collections.singletonList("snippet"), thread).execute();
     }
 
-    public List<CommentThread> getUnrepliedComments(String username) throws Exception {
-        CommentThreadListResponse response = getCommentThreads(username);
+    public List<CommentThread> getUnrepliedComments(String credentialId) throws Exception {
+        CommentThreadListResponse response = getCommentThreads(credentialId);
         if (response.getItems() == null) return Collections.emptyList();
 
-        // Filter: Keep threads where replies is empty OR none of the replies are from the channel owner
-        // Note: 'replies' field in CommentThread might be null if reply count is 0
-        // We'll simplify: if totalReplyCount == 0, it's unreplied.
-        // If > 0, we need to check if we replied.
-
-        String channelId = getChannelId(username);
+        String channelId = getChannelId(credentialId);
         List<CommentThread> unreplied = new java.util.ArrayList<>();
 
         for (CommentThread thread : response.getItems()) {
@@ -220,8 +219,8 @@ public class YouTubeService {
         return unreplied;
     }
 
-    public String replyToComment(String username, String parentId, String text) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public String replyToComment(String credentialId, String parentId, String text) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
 
         Comment comment = new Comment();
         CommentSnippet snippet = new CommentSnippet();
@@ -233,19 +232,92 @@ public class YouTubeService {
         return inserted.getId();
     }
 
-    public void deleteComment(String username, String commentId) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public void deleteComment(String credentialId, String commentId) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
         youtube.comments().delete(commentId).execute();
     }
 
 
     // --- CATEGORIES ---
 
-    public List<VideoCategory> getVideoCategories(String username, String regionCode) throws Exception {
-        YouTube youtube = getYouTubeClient(username);
+    public List<VideoCategory> getVideoCategories(String credentialId, String regionCode) throws Exception {
+        YouTube youtube = getYouTubeClient(credentialId);
         VideoCategoryListResponse response = youtube.videoCategories().list(Collections.singletonList("snippet"))
                 .setRegionCode(regionCode != null ? regionCode : "US")
                 .execute();
         return response.getItems();
+    }
+
+    // --- BROADCASTS (Added for Title/Description updates) ---
+
+    public void updateBroadcast(String credentialId, String title, String description) {
+        try {
+            YouTube youtube = getYouTubeClient(credentialId);
+            // Search for active, upcoming, or all broadcasts
+            LiveBroadcastListResponse response = youtube.liveBroadcasts().list(Collections.singletonList("id,snippet,status"))
+                    .setBroadcastStatus("all") // Fetch all to find the relevant one
+                    .setMine(true)
+                    .setMaxResults(5L) // Limit to recent ones
+                    .execute();
+
+            List<LiveBroadcast> broadcasts = response.getItems();
+            if (broadcasts == null || broadcasts.isEmpty()) {
+                log.info("No broadcast found for user credential: {}", credentialId);
+                return;
+            }
+
+            // Heuristic: Update the most relevant broadcast.
+            // Priority: active > upcoming > ready > completed (ignore completed)
+            // Or just update the first non-completed one?
+            LiveBroadcast target = null;
+
+            for (LiveBroadcast b : broadcasts) {
+                String status = b.getStatus().getLifeCycleStatus();
+                if ("live".equalsIgnoreCase(status) || "active".equalsIgnoreCase(status)) {
+                    target = b;
+                    break;
+                }
+            }
+
+            if (target == null) {
+                for (LiveBroadcast b : broadcasts) {
+                    String status = b.getStatus().getLifeCycleStatus();
+                    if ("upcoming".equalsIgnoreCase(status) || "ready".equalsIgnoreCase(status)) {
+                        target = b;
+                        break;
+                    }
+                }
+            }
+
+            if (target == null) {
+                 log.info("No active/upcoming broadcast found to update.");
+                 return;
+            }
+
+            LiveBroadcastSnippet snippet = target.getSnippet();
+            boolean changed = false;
+
+            if (title != null && !title.isEmpty()) {
+                snippet.setTitle(title);
+                changed = true;
+            }
+            if (description != null && !description.isEmpty()) {
+                snippet.setDescription(description);
+                changed = true;
+            }
+
+            if (changed) {
+                LiveBroadcast update = new LiveBroadcast();
+                update.setId(target.getId());
+                update.setSnippet(snippet);
+                update.setStatus(target.getStatus());
+
+                youtube.liveBroadcasts().update(Collections.singletonList("snippet"), update).execute();
+                log.info("Updated broadcast {} ({}) title/desc", target.getId(), target.getStatus().getLifeCycleStatus());
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to update broadcast metadata", e);
+        }
     }
 }
