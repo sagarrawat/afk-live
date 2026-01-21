@@ -11,6 +11,8 @@ import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +26,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -38,6 +41,56 @@ public class LibraryController {
     private final ScheduledVideoRepository repository;
     private final UserService userService;
     private final AiService aiService;
+    private final com.afklive.streamer.service.ImportService importService;
+    private final com.afklive.streamer.service.VideoConversionService conversionService;
+
+    @PostMapping("/import-youtube")
+    public ResponseEntity<?> importFromYouTube(@RequestBody Map<String, String> payload, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+        String url = payload.get("url");
+        if (url == null || url.isEmpty()) return ResponseEntity.badRequest().body(ApiResponse.error("Missing URL"));
+
+        importService.downloadFromYouTube(url, username);
+        return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
+    }
+
+    @PostMapping("/merge")
+    public ResponseEntity<?> mergeVideos(@RequestBody Map<String, List<String>> payload, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+        List<String> files = payload.get("files");
+
+        if (files == null || files.size() < 2) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Select at least 2 videos to merge"));
+        }
+
+        // Verify ownership
+        List<ScheduledVideo> userVideos = repository.findByUsername(username);
+        List<String> safeFiles = files.stream()
+                .filter(f -> userVideos.stream().anyMatch(v -> v.getTitle().equals(f) && v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY))
+                .collect(Collectors.toList());
+
+        if (safeFiles.size() != files.size()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Invalid file selection"));
+        }
+
+        String outputName = "merged_" + System.currentTimeMillis() + ".mp4";
+
+        try {
+            List<ScheduledVideo> selectedVideos = safeFiles.stream()
+                    .map(f -> userVideos.stream().filter(uv -> uv.getTitle().equals(f)).findFirst().orElseThrow())
+                    .collect(Collectors.toList());
+
+            // Trigger async merge
+            conversionService.mergeVideosAsync(selectedVideos, username, outputName);
+
+            return ResponseEntity.ok(ApiResponse.success("Merge started. Check library shortly.", null));
+        } catch (Exception e) {
+            log.error("Merge init failed", e);
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Merge failed: " + e.getMessage()));
+        }
+    }
 
     @PostMapping("/upload")
     public ResponseEntity<?> bulkUpload(
@@ -119,7 +172,7 @@ public class LibraryController {
     }
 
     @GetMapping("/stream/{id}")
-    public ResponseEntity<Resource> streamVideo(@PathVariable Long id, java.security.Principal principal) {
+    public ResponseEntity<?> streamVideo(@PathVariable Long id, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         String username = SecurityUtils.getEmail(principal);
 
@@ -128,6 +181,15 @@ public class LibraryController {
             return ResponseEntity.notFound().build();
         }
 
+        // Try Presigned URL first (Optimization for S3)
+        Optional<String> presignedUrl = storageService.generatePresignedUrl(video.getS3Key());
+        if (presignedUrl.isPresent()) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, presignedUrl.get())
+                    .build();
+        }
+
+        // Fallback to streaming through backend (e.g. Local Storage)
         try {
             Resource resource = storageService.loadFileAsResource(video.getS3Key());
             return ResponseEntity.ok()
@@ -136,6 +198,43 @@ public class LibraryController {
         } catch (Exception e) {
             log.error("Failed to stream video", e);
             return ResponseEntity.internalServerError().build();
+        }
+    }
+
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteLibraryVideo(@PathVariable Long id, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+
+        ScheduledVideo video = repository.findById(id).orElse(null);
+        if (video == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!video.getUsername().equals(username)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Forbidden"));
+        }
+
+        try {
+            // Delete from S3/Storage
+            storageService.deleteFile(video.getS3Key());
+
+            // Delete Thumbnail if exists
+            if (video.getThumbnailS3Key() != null) {
+                storageService.deleteFile(video.getThumbnailS3Key());
+            }
+
+            // Delete from DB
+            repository.delete(video);
+
+            if (video.getFileSize() != null) {
+                userService.updateStorageUsage(username, -video.getFileSize());
+            }
+
+            return ResponseEntity.ok(ApiResponse.success("Video deleted", null));
+        } catch (Exception e) {
+            log.error("Failed to delete video", e);
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to delete video"));
         }
     }
 

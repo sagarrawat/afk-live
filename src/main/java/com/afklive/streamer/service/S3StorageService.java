@@ -8,12 +8,17 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.core.io.InputStreamResource;
@@ -24,6 +29,7 @@ import org.springframework.core.io.Resource;
 public class S3StorageService implements FileStorageService {
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
     private final String bucketName;
 
     public S3StorageService(
@@ -35,6 +41,13 @@ public class S3StorageService implements FileStorageService {
 
         this.bucketName = bucket;
         this.s3Client = S3Client.builder()
+                .endpointOverride(URI.create(endpoint))
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)))
+                .build();
+
+        this.s3Presigner = S3Presigner.builder()
                 .endpointOverride(URI.create(endpoint))
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
@@ -75,5 +88,35 @@ public class S3StorageService implements FileStorageService {
     @Override
     public Resource loadFileAsResource(String key) {
         return new InputStreamResource(downloadFile(key));
+    }
+
+    @Override
+    public void deleteFile(String key) {
+        DeleteObjectRequest deleteOb = DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+        s3Client.deleteObject(deleteOb);
+    }
+
+    @Override
+    public Optional<String> generatePresignedUrl(String key) {
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+
+            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofMinutes(60)) // 1 hour validity
+                    .getObjectRequest(getObjectRequest)
+                    .build();
+
+            String url = s3Presigner.presignGetObject(presignRequest).url().toString();
+            return Optional.of(url);
+        } catch (Exception e) {
+            // Log error or return empty
+            return Optional.empty();
+        }
     }
 }

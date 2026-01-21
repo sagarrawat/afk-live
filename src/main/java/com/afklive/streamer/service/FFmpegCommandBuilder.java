@@ -7,11 +7,12 @@ import java.util.List;
 public class FFmpegCommandBuilder {
 
     public static List<String> buildConversionCommand(Path source, Path target) {
+        String ffmpeg = "ffmpeg";
+        java.io.File local = new java.io.File("bin/ffmpeg");
+        if (local.exists()) ffmpeg = local.getAbsolutePath();
+
         return List.of(
-                "nice",
-                "-n",
-                "19",
-                "ffmpeg",
+                ffmpeg,
                 "-threads",
                 "1",
                 "-i",
@@ -19,7 +20,13 @@ public class FFmpegCommandBuilder {
                 "-c:v",
                 "libx264",
                 "-preset",
-                "ultrafast",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
                 "-vf",
                 "scale=1280:-2",
                 "-c:a",
@@ -34,10 +41,14 @@ public class FFmpegCommandBuilder {
     }
 
     public static List<String> buildConvertToShortCommand(Path input, Path output) {
+        String ffmpeg = "ffmpeg";
+        java.io.File local = new java.io.File("bin/ffmpeg");
+        if (local.exists()) ffmpeg = local.getAbsolutePath();
+
         // Convert Landscape to Portrait (9:16) with blurred background
         // ffmpeg -i input.mp4 -vf "split[original][copy];[copy]scale=-1:1920,crop=w=1080:h=1920,gblur=sigma=20[blurred];[original]scale=1080:-1[scaled];[blurred][scaled]overlay=0:(H-h)/2" -c:v libx264 -c:a copy output.mp4
         List<String> command = new ArrayList<>();
-        command.add("ffmpeg");
+        command.add(ffmpeg);
         command.add("-i");
         command.add(input.toString());
         command.add("-vf");
@@ -122,9 +133,13 @@ public class FFmpegCommandBuilder {
     }
 
     public static List<String> buildMixCommand(Path videoPath, Path audioPath, String volume, Path outputPath) {
+        String ffmpeg = "ffmpeg";
+        java.io.File local = new java.io.File("bin/ffmpeg");
+        if (local.exists()) ffmpeg = local.getAbsolutePath();
+
         // ffmpeg -i video.mp4 -stream_loop -1 -i audio.mp3 -filter_complex "[1:a]volume=0.5[a1];[0:a][a1]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -y out.mp4
         List<String> command = new ArrayList<>();
-        command.add("ffmpeg");
+        command.add(ffmpeg);
         command.add("-i");
         command.add(videoPath.toString());
         command.add("-stream_loop");
@@ -157,26 +172,12 @@ public class FFmpegCommandBuilder {
             String streamMode,
             int maxHeight
     ) {
-        return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, false);
-    }
+        String ffmpeg = "ffmpeg";
+        java.io.File local = new java.io.File("bin/ffmpeg");
+        if (local.exists()) ffmpeg = local.getAbsolutePath();
 
-    public static List<String> buildStreamCommand(
-            Path videoPath,
-            List<String> streamKeys,
-            Path musicPath,
-            String musicVolume,
-            int loopCount,
-            Path watermarkPath,
-            boolean muteVideoAudio,
-            String streamMode,
-            int maxHeight,
-            boolean isOptimized
-    ) {
         List<String> command = new ArrayList<>();
-        command.add("nice");
-        command.add("-n");
-        command.add("19");
-        command.add("ffmpeg");
+        command.add(ffmpeg);
 
         // Video input (Index 0)
         command.add("-re");
@@ -388,6 +389,49 @@ public class FFmpegCommandBuilder {
                  command.add("rtmps://a.rtmp.youtube.com:443/live2/" + key);
             }
         }
+
+        return command;
+    }
+
+    public static List<String> buildMergeCommand(List<Path> inputs, Path output) {
+        String ffmpeg = "ffmpeg";
+        java.io.File local = new java.io.File("bin/ffmpeg");
+        if (local.exists()) ffmpeg = local.getAbsolutePath();
+
+        // [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]
+        List<String> command = new ArrayList<>();
+        command.add(ffmpeg);
+
+        for (Path input : inputs) {
+            command.add("-i");
+            command.add(input.toString());
+        }
+
+        StringBuilder filterComplex = new StringBuilder();
+        for (int i = 0; i < inputs.size(); i++) {
+            filterComplex.append("[").append(i).append(":v]")
+                    .append("[").append(i).append(":a]");
+        }
+        filterComplex.append("concat=n=").append(inputs.size()).append(":v=1:a=1[v][a]");
+
+        command.add("-filter_complex");
+        command.add(filterComplex.toString());
+        command.add("-map");
+        command.add("[v]");
+        command.add("-map");
+        command.add("[a]");
+
+        command.add("-c:v");
+        command.add("libx264");
+        command.add("-preset");
+        command.add("ultrafast"); // fast merge
+        command.add("-c:a");
+        command.add("aac");
+        command.add("-b:a");
+        command.add("192k");
+
+        command.add("-y");
+        command.add(output.toString());
 
         return command;
     }

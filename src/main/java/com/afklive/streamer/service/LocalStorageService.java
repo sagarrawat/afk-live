@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.core.io.FileSystemResource;
@@ -71,5 +72,21 @@ public class LocalStorageService implements FileStorageService {
             throw new RuntimeException("File not found: " + key);
         }
         return new FileSystemResource(file);
+    }
+
+    @Override
+    public void deleteFile(String key) {
+        try {
+            Path file = rootLocation.resolve(key);
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete file", e);
+        }
+    }
+
+    @Override
+    public Optional<String> generatePresignedUrl(String key) {
+        // Local storage does not support presigned URLs for external access directly
+        return Optional.empty();
     }
 }

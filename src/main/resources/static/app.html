@@ -429,8 +429,10 @@
             <header class="page-header">
                 <h1>Media Library</h1>
                 <div class="header-actions">
-                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">Upload (Video/Zip)</button>
+                    <button class="btn btn-outline" onclick="openYouTubeImportModal()"><i class="fa-brands fa-youtube" style="color:red"></i> Import YouTube</button>
+                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">Upload</button>
                     <input type="file" id="bulkUploadInput" multiple hidden accept="video/*,.zip">
+                    <button class="btn btn-outline" id="btnMerge" disabled onclick="mergeSelectedVideos()">Merge Selected</button>
                     <button class="btn btn-primary" onclick="showAutoScheduleModal()">Auto-Schedule</button>
                 </div>
             </header>
