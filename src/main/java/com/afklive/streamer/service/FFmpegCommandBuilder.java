@@ -179,16 +179,18 @@ public class FFmpegCommandBuilder {
         List<String> command = new ArrayList<>();
         command.add(ffmpeg);
 
-        // Video input (Index 0)
+        // Global settings
         command.add("-re");
         command.add("-stream_loop");
         command.add(String.valueOf(loopCount));
         command.add("-fflags");
         command.add("+genpts");
+
+        // Input 0: Video
         command.add("-i");
         command.add(videoPath.toString());
 
-        // Music input (Index 1) if provided
+        // Input 1: Audio (Music or Silence)
         boolean hasMusic = musicPath != null;
         if (hasMusic) {
             command.add("-stream_loop");
@@ -196,205 +198,80 @@ public class FFmpegCommandBuilder {
             command.add("-i");
             command.add(musicPath.toString());
         } else if (muteVideoAudio) {
-            // Generate Silence if muted and no music
             command.add("-f");
             command.add("lavfi");
             command.add("-i");
             command.add("anullsrc=channel_layout=stereo:sample_rate=44100");
         }
 
-        // Watermark input (Index 1, 2, or 3) if provided
+        // Input 2: Watermark
         boolean hasWatermark = watermarkPath != null;
+        int wmIdx = (hasMusic || muteVideoAudio) ? 2 : 1;
         if (hasWatermark) {
             command.add("-i");
             command.add(watermarkPath.toString());
         }
 
-        // --- FILTER COMPLEX ---
+        // --- Filters ---
         List<String> filterChains = new ArrayList<>();
-        String videoLabel = "0:v";
-        String audioLabel = "0:a";
+        String vLabel = "0:v";
+        String aLabel = "0:a";
 
-        // Determine if we need video scaling/transcoding
-        boolean forceTranscode = false;
+        // Scaling logic (Force even dimensions to avoid libx264 crash)
+        int h = (Math.min(1080, maxHeight) / 2) * 2;
+        int w = ((h * 16 / 9) / 2) * 2; // Default to 16:9 even math
 
-        // Handle "streamMode" and Quality Limiting
-        // If maxHeight is enforced, adjust target resolutions
-        int targetH = (streamMode != null && streamMode.equals("force_landscape")) ? 1080 : 720;
-        // Logic refinement:
-        // if force_landscape (1080p target), but limit is 720, use 720.
-        // if force_portrait (1080w target?), no, force_portrait is 1080x1920. If limit 720, usually means 720x1280.
-
-        if (streamMode != null && !streamMode.equals("original")) {
-            forceTranscode = true;
-            String scaleFilter = "";
-            if (streamMode.equals("force_landscape")) {
-                // Target: 1920x1080 (16:9) OR smaller if restricted
-                int h = Math.min(1080, maxHeight);
-                int w = (h * 16) / 9;
-                // Ensure even dimensions
-                if (w % 2 != 0) w--;
-
-                scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h);
-            } else if (streamMode.equals("force_portrait")) {
-                // Target: 1080x1920 (9:16) OR smaller
-                // Portrait limit is usually width? If Plan says "720p", it means 720p (landscape).
-                // For vertical, 720p equivalent is 720x1280.
-                // So we assume maxHeight applies to the shorter dimension (width in portrait).
-                // Actually maxHeight usually refers to vertical lines.
-                // But for 9:16, "1080p" means 1080x1920 (1080 wide).
-                // So if maxHeight=720, we want 720x1280.
-
-                int w = Math.min(1080, maxHeight);
-                int h = (w * 16) / 9;
-                if (h % 2 != 0) h--;
-
-                scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h);
-            }
-
-            // We apply this scale to [0:v] immediately
-            filterChains.add("[0:v]" + scaleFilter + "[scaled]");
-            videoLabel = "[scaled]";
-        } else {
-            // Original Mode: Enforce Max Height if input exceeds it
-            // Logic: scale='if(gt(iw,ih),-2,min(iw,MAX))':'if(gt(iw,ih),min(ih,MAX),-2)'
-            // Explanation:
-            // If Landscape (iw > ih): Scale Height to min(ih, MAX), Width -2 (auto).
-            // If Portrait (iw <= ih): Scale Width to min(iw, MAX), Height -2 (auto).
-            // This ensures the short dimension never exceeds MAX.
-
-            // We ALWAYS add this filter to ensure compliance, forcing transcode.
-            // (Optimization: we could skip if we knew dimensions, but we don't here).
-            forceTranscode = true;
-            String limitFilter = String.format("scale='if(gt(iw,ih),-2,min(iw,%d))':'if(gt(iw,ih),min(ih,%d),-2)'", maxHeight, maxHeight);
-            filterChains.add("[0:v]" + limitFilter + "[scaled]");
-            videoLabel = "[scaled]";
+        if ("force_portrait".equals(streamMode)) {
+            w = (Math.min(1080, maxHeight) / 2) * 2;
+            h = ((w * 16 / 9) / 2) * 2;
         }
 
-        // Handle Watermark
+        String scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, w, h);
+        filterChains.add("[0:v]" + scaleFilter + "[scaled]");
+        vLabel = "[scaled]";
+
         if (hasWatermark) {
-            forceTranscode = true;
-            int watermarkIndex = (hasMusic || muteVideoAudio) ? 2 : 1; // Index shifts if silence is inserted
-            // Overlay on whatever current videoLabel is (original or scaled)
-            String overlayFilter = String.format("[%s][%d:v]overlay=main_w-overlay_w-20:20", videoLabel.equals("0:v") ? "0:v" : videoLabel, watermarkIndex);
-
-            // Note: If we haven't scaled, we might want to scale the watermark RELATIVE to video.
-            // But if we did scale, we know the size (1920 or 1080 wide).
-            // Let's keep it simple: just overlay. If user uploads giant watermark, it covers screen.
-            // Better: Scale watermark to 15% width of MAIN video.
-            // We need a complex filter chain for watermark scaling too.
-            // [wm_in]scale=iw*0.15:-1[wm_out];[main][wm_out]overlay...
-
-            String wmScale = String.format("[%d:v]scale=iw*0.15:-1[wm]", watermarkIndex);
-            filterChains.add(wmScale);
-
-            String overlay = String.format("[%s][wm]overlay=main_w-overlay_w-20:20[vout]", videoLabel.equals("0:v") ? "0:v" : videoLabel);
-            filterChains.add(overlay);
-            videoLabel = "[vout]";
+            filterChains.add(String.format("[%d:v]scale=iw*0.15:-1[wm]", wmIdx));
+            filterChains.add(String.format("[%s][wm]overlay=main_w-overlay_w-20:20[vout]", vLabel));
+            vLabel = "[vout]";
         }
 
         if (hasMusic) {
             if (muteVideoAudio) {
-                String volFilter = String.format("[1:a]volume=%s[aout]", musicVolume);
-                filterChains.add(volFilter);
-                audioLabel = "[aout]";
+                filterChains.add(String.format("[1:a]volume=%s[aout]", musicVolume));
             } else {
-                String mixFilter = String.format("[1:a]volume=%s[a1];[0:a][a1]amix=inputs=2:duration=first[aout]", musicVolume);
-                filterChains.add(mixFilter);
-                audioLabel = "[aout]";
+                filterChains.add(String.format("[0:a]volume=1.0[a0];[1:a]volume=%s[a1];[a0][a1]amix=inputs=2:duration=first[aout]", musicVolume));
             }
+            aLabel = "[aout]";
+        } else if (muteVideoAudio) {
+            aLabel = "1:a";
         }
 
-        if (!filterChains.isEmpty()) {
-            command.add("-filter_complex");
-            command.add(String.join(";", filterChains));
-        }
+        command.add("-filter_complex");
+        command.add(String.join(";", filterChains));
 
-        // --- ENCODING OPTIONS ---
+        // --- Encoding ---
+        command.add("-map"); command.add(vLabel);
+        command.add("-c:v"); command.add("libx264");
+        command.add("-preset"); command.add("veryfast");
+        command.add("-b:v"); command.add("3500k");
+        command.add("-pix_fmt"); command.add("yuv420p");
+        command.add("-g"); command.add("60");
 
-        // Video Encoding
-        // If optimized and no filters, use copy.
-        // Note: forceTranscode is true if streamMode != original OR watermark exists.
-        // So checking forceTranscode covers those cases.
-        // We only check isOptimized to confirm we CAN copy safely if forceTranscode is false.
-        // (Actually, the previous logic tried to copy if !forceTranscode, but didn't guarantee input quality).
-        // With isOptimized, we are more confident in copying.
+        command.add("-map"); command.add(aLabel.equals("0:a") ? "0:a?" : aLabel);
+        command.add("-c:a"); command.add("aac");
+        command.add("-b:a"); command.add("128k");
+        command.add("-ar"); command.add("44100");
+        command.add("-shortest");
 
-        if (forceTranscode || hasWatermark) {
-            command.add("-map");
-            command.add(videoLabel);
-            command.add("-c:v");
-            command.add("libx264");
-            command.add("-preset");
-            command.add("veryfast");
-            command.add("-b:v");
-            command.add("4000k");
-            command.add("-maxrate");
-            command.add("4500k");
-            command.add("-bufsize");
-            command.add("9000k");
-            command.add("-pix_fmt");
-            command.add("yuv420p");
-            command.add("-g");
-            command.add("60");
-        } else {
-            command.add("-map");
-            command.add("0:v");
-            command.add("-c:v");
-            command.add("copy");
-            // If isOptimized is true, this is ideal.
-        }
+        // --- Output ---
+        // For testing, we stream to the first key directly without 'tee'
+        String key = streamKeys.get(0);
+        String url = key.startsWith("rtmp") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
 
-        // Audio Encoding
-        if (hasMusic) {
-            command.add("-map");
-            command.add(audioLabel);
-            command.add("-c:a");
-            command.add("aac");
-            command.add("-b:a");
-            command.add("128k");
-        } else {
-            if (muteVideoAudio) {
-                // Map the silence generated at index 1
-                command.add("-map");
-                command.add("1:a");
-                command.add("-c:a");
-                command.add("aac");
-                command.add("-b:a");
-                command.add("128k");
-                // IMPORTANT: -shortest to stop when video ends (silence is infinite)
-                command.add("-shortest");
-            } else {
-                 command.add("-map");
-                 command.add("0:a?");
-                 command.add("-c:a");
-                 command.add("aac");
-            }
-        }
-
-        if (hasMusic) {
-            command.add("-shortest");
-        }
-
-        // --- OUTPUTS (Multi-streaming) ---
-        if (!streamKeys.isEmpty()) {
-            command.add("-f");
-            command.add("tee");
-            command.add("-map");
-            command.add(videoLabel);
-            command.add("-map");
-            // If audioLabel is default "0:a", make it optional "0:a?" to prevent fail on silent video
-            command.add(audioLabel.equals("0:a") ? "0:a?" : audioLabel);
-
-            StringBuilder teePayload = new StringBuilder();
-            for (int i = 0; i < streamKeys.size(); i++) {
-                String key = streamKeys.get(i);
-                if (i > 0) teePayload.append("|");
-                String url = key.startsWith("rtmp") ? key : "rtmps://a.rtmp.youtube.com:443/live2/" + key;
-                teePayload.append("[f=flv:flvflags=no_duration_filesize]").append(url);
-            }
-            command.add(teePayload.toString());
-        }
+        command.add("-f");
+        command.add("flv");
+        command.add(url);
 
         return command;
     }
