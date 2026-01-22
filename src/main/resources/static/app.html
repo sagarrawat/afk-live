@@ -126,7 +126,7 @@
         </div>
 
         <!-- VIEW: STREAM (Upstream.so Style) -->
-        <div id="view-stream" class="view-section hidden" style="padding: 0; overflow: hidden; background: #121212;">
+        <div id="view-stream" class="view-section hidden" style="padding: 0; overflow: hidden;">
             <div class="stream-studio-grid">
 
                 <!-- LEFT SIDEBAR: Scenes/Assets -->
@@ -139,12 +139,12 @@
 
                     <div id="studio-tab-scenes" class="studio-panel">
                         <div style="padding: 15px;">
-                            <h4 style="color:#aaa; font-size:0.8rem; margin-top:0;">VIDEO SOURCE</h4>
+                            <h4 style="color:var(--text-muted); font-size:0.8rem; margin-top:0;">VIDEO SOURCE</h4>
                             <div id="selectedVideoCard" class="studio-card" onclick="openLibraryModalForStream()">
                                 <div class="studio-card-icon"><i class="fa-solid fa-film"></i></div>
                                 <div class="studio-card-content">
                                     <div id="studioSelectedTitle" style="font-weight:600;">Select Video</div>
-                                    <div style="font-size:0.8rem; color:#666;">Click to choose</div>
+                                    <div style="font-size:0.8rem; color:var(--text-muted);">Click to choose</div>
                                 </div>
                             </div>
                             <button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('streamUploadInput').click()" style="margin-top:10px;">
@@ -153,28 +153,28 @@
                             <input type="file" id="streamUploadInput" hidden accept="video/*">
 
                             <div style="margin-top: 20px;">
-                                <label style="display:flex; align-items:center; gap:8px; color:#ddd; cursor:pointer;">
+                                <label style="display:flex; align-items:center; gap:8px; color:var(--text-main); cursor:pointer;">
                                     <input type="checkbox" id="streamLoopInfinite" checked onchange="toggleLoop(this)">
                                     Loop Stream (24/7)
                                 </label>
-                                <input type="number" id="streamLoopCount" value="1" min="1" class="form-input-dark hidden" style="margin-top:5px;" placeholder="Loop Count">
+                                <input type="number" id="streamLoopCount" value="1" min="1" class="form-input hidden" style="margin-top:5px;" placeholder="Loop Count">
                             </div>
                         </div>
                     </div>
 
                     <div id="studio-tab-audio" class="studio-panel hidden">
                          <div style="padding: 15px;">
-                            <h4 style="color:#aaa; font-size:0.8rem; margin-top:0;">BACKGROUND MUSIC</h4>
+                            <h4 style="color:var(--text-muted); font-size:0.8rem; margin-top:0;">BACKGROUND MUSIC</h4>
 
                             <div class="studio-audio-control">
-                                <button class="btn btn-sm btn-dark" onclick="switchStreamAudioTab('upload')">Upload</button>
-                                <button class="btn btn-sm btn-dark" onclick="switchStreamAudioTab('lib')">Stock</button>
-                                <button class="btn btn-sm btn-dark" onclick="switchStreamAudioTab('mylib')">Library</button>
+                                <button class="btn btn-sm btn-outline" onclick="switchStreamAudioTab('upload')">Upload</button>
+                                <button class="btn btn-sm btn-outline" onclick="switchStreamAudioTab('lib')">Stock</button>
+                                <button class="btn btn-sm btn-outline" onclick="switchStreamAudioTab('mylib')">Library</button>
                             </div>
 
                             <!-- Upload -->
                             <div id="streamAudioUploadSection" class="studio-subpanel">
-                                <input type="file" id="streamAudioFile" accept=".mp3,.wav" style="color:#ddd; font-size:0.8rem;" onchange="handleStreamMusicUpload(event)">
+                                <input type="file" id="streamAudioFile" accept=".mp3,.wav" style="color:var(--text-main); font-size:0.8rem;" onchange="handleStreamMusicUpload(event)">
                                 <input type="hidden" id="uploadedStreamMusicName">
                             </div>
 
@@ -191,11 +191,11 @@
                             </div>
 
                             <div style="margin-top:20px;">
-                                <label style="color:#ddd; font-size:0.85rem;">Music Volume: <span id="streamVolVal">50%</span></label>
+                                <label style="color:var(--text-main); font-size:0.85rem;">Music Volume: <span id="streamVolVal">50%</span></label>
                                 <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
                             </div>
 
-                             <label style="display:flex; align-items:center; gap:8px; color:#ddd; cursor:pointer; margin-top:15px;">
+                             <label style="display:flex; align-items:center; gap:8px; color:var(--text-main); cursor:pointer; margin-top:15px;">
                                 <input type="checkbox" id="streamMuteOriginal" checked>
                                 Mute Video Sound
                             </label>
@@ -204,15 +204,15 @@
 
                     <div id="studio-tab-brand" class="studio-panel hidden">
                          <div style="padding: 15px;">
-                             <h4 style="color:#aaa; font-size:0.8rem; margin-top:0;">WATERMARK</h4>
+                             <h4 style="color:var(--text-muted); font-size:0.8rem; margin-top:0;">WATERMARK</h4>
                              <button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('streamWatermarkFile').click()">
                                 <i class="fa-solid fa-image"></i> Upload Logo
                              </button>
                              <input type="file" id="streamWatermarkFile" accept=".png,.jpg" hidden onchange="handleWatermarkUpload(this)">
 
-                             <div id="watermarkPreview" class="hidden" style="margin-top:10px; background:#222; padding:5px; border-radius:4px; display:flex; align-items:center; gap:10px;">
+                             <div id="watermarkPreview" class="hidden" style="margin-top:10px; background:#f0f2f5; padding:5px; border-radius:4px; display:flex; align-items:center; gap:10px; border:1px solid var(--border);">
                                  <img id="watermarkImg" src="" style="height:30px;">
-                                 <button class="btn btn-text btn-xs" onclick="clearWatermark()" style="color:#aaa;"><i class="fa-solid fa-xmark"></i></button>
+                                 <button class="btn btn-text btn-xs" onclick="clearWatermark()" style="color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
                              </div>
                          </div>
                     </div>
@@ -249,17 +249,17 @@
                         <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">Stop Stream</button>
 
                         <div style="margin-top: 10px; text-align: center;">
-                             <a href="#" onclick="switchStreamTab('schedule')" style="color:#aaa; font-size:0.85rem;">Schedule for later</a>
-                             <div id="streamActionSchedule" class="hidden" style="background:#222; padding:10px; border-radius:4px; margin-top:10px; text-align:left;">
-                                 <label style="color:#ddd; font-size:0.8rem;">Start Time</label>
-                                 <input type="datetime-local" id="streamScheduleTime" class="form-input-dark" style="margin-bottom:10px;">
+                             <a href="#" onclick="switchStreamTab('schedule')" style="color:var(--text-muted); font-size:0.85rem;">Schedule for later</a>
+                             <div id="streamActionSchedule" class="hidden" style="background:#f4f5f7; padding:10px; border-radius:4px; margin-top:10px; text-align:left; border:1px solid var(--border);">
+                                 <label style="color:var(--text-main); font-size:0.8rem;">Start Time</label>
+                                 <input type="datetime-local" id="streamScheduleTime" class="form-input" style="margin-bottom:10px;">
                                  <button class="btn btn-primary btn-sm btn-block" onclick="submitScheduledStream()">Confirm Schedule</button>
                              </div>
                         </div>
                     </div>
 
-                    <div style="border-top: 1px solid #333; padding: 15px;">
-                        <h4 style="color:#aaa; font-size:0.8rem; margin:0 0 10px 0; display:flex; justify-content:space-between;">
+                    <div style="border-top: 1px solid var(--border); padding: 15px;">
+                        <h4 style="color:var(--text-muted); font-size:0.8rem; margin:0 0 10px 0; display:flex; justify-content:space-between;">
                             DESTINATIONS
                             <button class="btn btn-xs btn-text" onclick="openAddDestinationChoiceModal()"><i class="fa-solid fa-plus"></i></button>
                         </h4>
@@ -268,16 +268,16 @@
                         </div>
                     </div>
 
-                    <div style="border-top: 1px solid #333; padding: 15px;">
-                         <h4 style="color:#aaa; font-size:0.8rem; margin:0 0 10px 0;">METADATA</h4>
-                         <input type="text" id="streamMetaTitle" class="form-input-dark" placeholder="Stream Title" style="margin-bottom:10px;">
-                         <textarea id="streamMetaDesc" class="form-input-dark" rows="3" placeholder="Description" style="margin-bottom:10px;"></textarea>
-                         <select id="streamMetaPrivacy" class="form-input-dark">
+                    <div style="border-top: 1px solid var(--border); padding: 15px;">
+                         <h4 style="color:var(--text-muted); font-size:0.8rem; margin:0 0 10px 0;">METADATA</h4>
+                         <input type="text" id="streamMetaTitle" class="form-input" placeholder="Stream Title" style="margin-bottom:10px;">
+                         <textarea id="streamMetaDesc" class="form-input" rows="3" placeholder="Description" style="margin-bottom:10px;"></textarea>
+                         <select id="streamMetaPrivacy" class="form-input">
                             <option value="public">Public</option>
                             <option value="unlisted">Unlisted</option>
                             <option value="private">Private</option>
                          </select>
-                         <button class="btn btn-xs btn-outline btn-block" onclick="generateStreamMetadata()" style="margin-top:10px; border-color:#444; color:#aaa;">
+                         <button class="btn btn-xs btn-outline btn-block" onclick="generateStreamMetadata()" style="margin-top:10px; border-color:var(--border); color:var(--text-muted);">
                              <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Info
                          </button>
                          <input type="hidden" id="aiStreamTopic"> <!-- Hidden context -->
