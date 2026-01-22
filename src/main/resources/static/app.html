@@ -568,6 +568,18 @@
     </div>
 </div>
 
+<!-- Preview Modal (Library) -->
+<div id="previewModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 800px; max-width: 95vw; background: black; padding: 0;">
+        <div style="position:relative; width:100%; aspect-ratio:16/9;">
+            <video id="mainPreviewVideo" controls autoplay style="width:100%; height:100%; display:block;"></video>
+            <button onclick="document.getElementById('previewModal').classList.add('hidden'); document.getElementById('mainPreviewVideo').pause();" style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.5); border:none; color:white; border-radius:50%; width:32px; height:32px; cursor:pointer;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Destination Choice Modal -->
 <div id="destChoiceModal" class="modal-overlay hidden">
     <div class="modal-box" style="width: 550px;">
