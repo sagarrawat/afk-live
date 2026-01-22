@@ -152,6 +152,7 @@ public class YouTubeService {
 
     // --- ANALYTICS ---
 
+    @Cacheable(value = "analytics", key = "{#username, #startDate, #endDate}")
     public QueryResponse getChannelAnalytics(String username, String startDate, String endDate) throws Exception {
         YouTubeAnalytics analytics = getAnalyticsClient(username);
 

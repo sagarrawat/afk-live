@@ -91,7 +91,7 @@
         <dependency>
             <groupId>com.google.apis</groupId>
             <artifactId>google-api-services-youtubeAnalytics</artifactId>
-            <version>v2-rev272-1.25.0</version>
+            <version>v2-rev20230704-2.0.0</version>
         </dependency>
 
         <!-- AWS S3 (for DigitalOcean Spaces) -->
