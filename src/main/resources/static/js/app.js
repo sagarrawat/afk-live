@@ -132,8 +132,8 @@ function switchStudioTab(tab) {
     document.querySelectorAll('.studio-tab').forEach(b => b.classList.remove('active'));
     document.querySelector(`.studio-tab[onclick*="'${tab}'"]`)?.classList.add('active');
 
-    document.querySelectorAll('.studio-panel').forEach(p => p.classList.add('hidden'));
-    document.getElementById(`studio-tab-${tab}`).classList.remove('hidden');
+    document.querySelectorAll('.studio-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`studio-tab-${tab}`)?.classList.add('active');
 }
 
 function switchStreamTab(tab) {
@@ -144,13 +144,12 @@ function switchStreamTab(tab) {
 
 function switchStreamAudioTab(tab) {
     // Buttons
-    document.querySelectorAll('.studio-audio-control button').forEach(b => b.classList.remove('btn-primary', 'btn-dark'));
+    document.querySelectorAll('.studio-audio-control button').forEach(b => b.classList.remove('btn-primary', 'btn-outline'));
     document.querySelectorAll('.studio-audio-control button').forEach(b => {
         if(b.getAttribute('onclick').includes(`'${tab}'`)) {
-            b.classList.remove('btn-dark');
             b.classList.add('btn-primary');
         } else {
-            b.classList.add('btn-dark');
+            b.classList.add('btn-outline');
         }
     });
 
@@ -356,7 +355,22 @@ async function openLibraryModalForStream() {
 
 function selectStreamVideo(video) {
     selectedStreamVideo = video;
+
+    // Update Source Card (Bottom Strip)
+    const card = document.getElementById('selectedVideoCard');
+    const thumb = document.getElementById('selectedVideoThumb');
+
+    // Attempt to set thumbnail if available or use icon logic
+    if (video.thumbnailS3Key) {
+        thumb.src = `${API_URL}/videos/${video.id}/thumbnail`;
+    } else {
+        // Placeholder image generator or default
+        thumb.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" style="background:black"><text x="50%" y="50%" fill="white" text-anchor="middle" font-size="12">VIDEO</text></svg>';
+    }
+
     document.getElementById('studioSelectedTitle').innerText = video.title;
+    card.classList.remove('hidden');
+    card.classList.add('active'); // Highlight as active source
 
     // Auto-fill Metadata if empty
     if (!document.getElementById('streamMetaTitle').value) {
@@ -1452,17 +1466,22 @@ function initCalendar() {
 let currentComments = [];
 
 async function loadComments() {
-    const list = document.getElementById('threadList');
-    if(!list) return;
-    list.innerHTML = 'Loading...';
+    // Support both Main Engagement View and Studio Chat Tab
+    const listMain = document.getElementById('threadList');
+    const listStudio = document.getElementById('studioChatList');
+
+    if(!listMain && !listStudio) return;
 
     try {
         const res = await apiFetch(`${API_URL}/comments`);
         const data = await res.json();
         currentComments = data.items || [];
-        filterCommTab('all'); // Default view
+
+        // Initial Render
+        renderComments(currentComments);
     } catch(e) {
-        list.innerHTML = '<div class="empty-state">Failed to load comments</div>';
+        if(listMain) listMain.innerHTML = '<div class="empty-state">Failed to load comments</div>';
+        if(listStudio) listStudio.innerHTML = '<div class="empty-state">Failed to load comments</div>';
     }
 }
 
@@ -1480,7 +1499,6 @@ function filterCommTab(tab) {
     } else if (tab === 'unreplied') {
         filtered = currentComments.filter(c => c.snippet.totalReplyCount === 0);
     } else if (tab === 'activity') {
-        // Activity view (placeholder for now, showing all)
         filtered = currentComments;
     }
 
@@ -1488,40 +1506,57 @@ function filterCommTab(tab) {
 }
 
 function renderComments(comments) {
-    const list = document.getElementById('threadList');
-    if(!list) return;
-    list.innerHTML = '';
-
-    if(!comments || comments.length === 0) {
-        list.innerHTML = '<div class="empty-state">No conversations found.</div>';
-        return;
+    // Render to Main Engagement View
+    const listMain = document.getElementById('threadList');
+    if(listMain) {
+        listMain.innerHTML = '';
+        if(!comments || comments.length === 0) {
+            listMain.innerHTML = '<div class="empty-state">No conversations found.</div>';
+        } else {
+            comments.forEach(thread => {
+                const top = thread.snippet.topLevelComment.snippet;
+                const div = document.createElement('div');
+                div.className = 'thread-item';
+                div.onclick = () => openThread(thread);
+                div.innerHTML = `
+                    <img src="${top.authorProfileImageUrl}" class="thread-avatar">
+                    <div style="flex:1; overflow:hidden;">
+                        <div class="thread-meta"><b>${top.authorDisplayName}</b> • ${new Date(top.publishedAt).toLocaleDateString()}</div>
+                        <div class="thread-preview">${top.textDisplay}</div>
+                    </div>
+                `;
+                listMain.appendChild(div);
+            });
+        }
     }
 
-    comments.forEach(thread => {
-        const top = thread.snippet.topLevelComment.snippet;
-        const div = document.createElement('div');
-        div.className = 'thread-item'; // Assumes CSS class exists or queue-item style
-        div.style.cssText = "padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; hover: background: #f9f9f9;";
-        div.onmouseover = () => div.style.background = '#f9f9f9';
-        div.onmouseout = () => div.style.background = 'white';
-
-        div.onclick = () => openThread(thread);
-
-        div.innerHTML = `
-            <div style="display:flex; gap:10px;">
-                <img src="${top.authorProfileImageUrl}" style="width:40px; height:40px; border-radius:50%;">
-                <div style="flex:1;">
-                    <div style="font-weight:600; font-size:0.9rem;">${top.authorDisplayName} <span style="font-weight:400; color:#888; font-size:0.8rem;">• ${new Date(top.publishedAt).toLocaleDateString()}</span></div>
-                    <div style="font-size:0.9rem; color:#333; margin-top:4px; line-height:1.4;">${top.textDisplay.substring(0, 100)}${top.textDisplay.length>100?'...':''}</div>
-                    <div style="font-size:0.8rem; color:#666; margin-top:5px;">
-                        <i class="fa-regular fa-comment"></i> ${thread.snippet.totalReplyCount} replies
+    // Render to Studio Chat Tab
+    const listStudio = document.getElementById('studioChatList');
+    const emptyState = document.getElementById('chatEmptyState');
+    if(listStudio) {
+        listStudio.innerHTML = '';
+        if(!comments || comments.length === 0) {
+            if(emptyState) emptyState.classList.remove('hidden');
+        } else {
+            if(emptyState) emptyState.classList.add('hidden');
+            comments.forEach(thread => {
+                const top = thread.snippet.topLevelComment.snippet;
+                const div = document.createElement('div');
+                div.className = 'sidebar-thread-item';
+                // Simplified view for sidebar
+                div.innerHTML = `
+                    <img src="${top.authorProfileImageUrl}">
+                    <div class="sidebar-thread-content">
+                        <div class="sidebar-thread-name">${top.authorDisplayName}</div>
+                        <div class="sidebar-thread-msg">${top.textDisplay}</div>
                     </div>
-                </div>
-            </div>
-        `;
-        list.appendChild(div);
-    });
+                `;
+                listStudio.appendChild(div);
+            });
+        }
+    }
 }
+
 
 function openThread(thread) {
     const top = thread.snippet.topLevelComment.snippet;
