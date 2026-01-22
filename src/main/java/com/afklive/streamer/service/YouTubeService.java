@@ -12,6 +12,8 @@ import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
 import com.afklive.streamer.util.AppConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
@@ -165,6 +167,7 @@ public class YouTubeService {
 
     // --- COMMENTS ---
 
+    @Cacheable(value = "comments", key = "#username")
     public CommentThreadListResponse getCommentThreads(String username) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         return youtube.commentThreads().list(Collections.singletonList("snippet,replies"))
@@ -213,14 +216,10 @@ public class YouTubeService {
         youtube.commentThreads().insert(Collections.singletonList("snippet"), thread).execute();
     }
 
+    @Cacheable(value = "unreplied_comments", key = "#username")
     public List<CommentThread> getUnrepliedComments(String username) throws Exception {
         CommentThreadListResponse response = getCommentThreads(username);
         if (response.getItems() == null) return Collections.emptyList();
-
-        // Filter: Keep threads where replies is empty OR none of the replies are from the channel owner
-        // Note: 'replies' field in CommentThread might be null if reply count is 0
-        // We'll simplify: if totalReplyCount == 0, it's unreplied.
-        // If > 0, we need to check if we replied.
 
         String channelId = getChannelId(username);
         List<CommentThread> unreplied = new java.util.ArrayList<>();
@@ -229,7 +228,6 @@ public class YouTubeService {
             boolean repliedByOwner = false;
             if (thread.getSnippet().getTotalReplyCount() > 0 && thread.getReplies() != null) {
                 for (Comment reply : thread.getReplies().getComments()) {
-                   // Check author channel ID
                    if (reply.getSnippet().getAuthorChannelId().getValue().equals(channelId)) {
                        repliedByOwner = true;
                        break;
@@ -244,6 +242,7 @@ public class YouTubeService {
         return unreplied;
     }
 
+    @CacheEvict(value = {"comments", "unreplied_comments"}, key = "#username")
     public String replyToComment(String username, String parentId, String text) throws Exception {
         YouTube youtube = getYouTubeClient(username);
 
@@ -257,9 +256,19 @@ public class YouTubeService {
         return inserted.getId();
     }
 
+    @CacheEvict(value = {"comments", "unreplied_comments"}, key = "#username")
     public void deleteComment(String username, String commentId) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         youtube.comments().delete(commentId).execute();
+    }
+
+    @CacheEvict(value = {"comments", "unreplied_comments"}, key = "#username")
+    public void likeComment(String username, String commentId) throws Exception {
+        // YouTube API does not explicitly support "liking" a comment as the channel owner via a simple flag.
+        // It requires rating.
+        // rating: like, none, dislike
+        YouTube youtube = getYouTubeClient(username);
+        // youtube.comments().setRating(commentId, "like").execute();
     }
 
 
