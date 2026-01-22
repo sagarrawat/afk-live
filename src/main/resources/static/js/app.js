@@ -687,6 +687,19 @@ function switchStreamTab(mode) {
     }
 }
 
+function switchStreamSetupTab(tabName) {
+    // Buttons
+    document.querySelectorAll('.stream-setup-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+    // Find button by onclick content or add data attribute. For simplicity, we loop:
+    document.querySelectorAll('.stream-setup-tabs .tab-btn').forEach(btn => {
+        if(btn.onclick.toString().includes(tabName)) btn.classList.add('active');
+    });
+
+    // Content
+    document.querySelectorAll('.setup-panel').forEach(p => p.classList.add('hidden'));
+    document.getElementById(`setup-${tabName}`).classList.remove('hidden');
+}
+
 async function openLibraryModalForStream() {
     document.getElementById('streamLibraryModal').classList.remove('hidden');
     const list = document.getElementById('streamLibraryList');
@@ -1371,98 +1384,238 @@ function loadGlobalSettings() {
 
 /* --- LIBRARY --- */
 let selectedLibraryVideos = new Set();
+let libraryPagination = {
+    page: 1,
+    limit: 20,
+    total: 0,
+    data: []
+};
 
 async function loadLibraryVideos() {
     const list = document.getElementById('libraryList');
     selectedLibraryVideos.clear();
+    // Uncheck "Select All"
+    const selectAllBox = document.getElementById('selectAllLibrary');
+    if(selectAllBox) selectAllBox.checked = false;
+
     updateMergeButton();
 
     try {
         const res = await apiFetch(`${API_URL}/library`);
-        const data = await res.json();
-        list.innerHTML = '';
-        if(!data.data || !data.data.length) {
-            list.innerHTML = '<div class="empty-state">Library is empty. Upload videos to get started.</div>';
-            return;
+        const result = await res.json();
+
+        // Handle both wrapped ApiResponse or direct list
+        const allVideos = result.data || [];
+        libraryPagination.data = allVideos;
+        libraryPagination.total = allVideos.length;
+        libraryPagination.page = 1; // Reset to page 1 on reload
+
+        renderLibraryPage();
+
+    } catch(e){
+        list.innerHTML = '<div class="empty-state">Failed to load library.</div>';
+    }
+}
+
+function renderLibraryPage() {
+    const list = document.getElementById('libraryList');
+    list.innerHTML = '';
+
+    if (libraryPagination.total === 0) {
+        list.innerHTML = '<div class="empty-state">Library is empty. Upload videos to get started.</div>';
+        renderPaginationControls();
+        return;
+    }
+
+    const start = (libraryPagination.page - 1) * libraryPagination.limit;
+    const end = start + libraryPagination.limit;
+    const pageItems = libraryPagination.data.slice(start, end);
+
+    // Header stats calculation (Total, not just page)
+    let totalSize = 0;
+    let hasInProgress = false;
+    libraryPagination.data.forEach(v => {
+        totalSize += (v.fileSize || 0);
+        if(v.optimizationStatus === 'IN_PROGRESS') hasInProgress = true;
+    });
+    const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+
+    // Insert Stats at Top (or update existing element if I separated it, but simpler to prepend)
+    // Actually, stats should be outside list to persist during pagination, but for now inside is ok or I check app.html
+    // The previous implementation put it inside list. I will keep it but only on page 1? No, stats are useful always.
+    const statsDiv = document.createElement('div');
+    statsDiv.style.cssText = "padding:10px; font-weight:600; color:#666; border-bottom:1px solid #eee; margin-bottom:10px; display:flex; justify-content:space-between;";
+    statsDiv.innerHTML = `<span>Total Size: ${totalSizeMB} MB</span> <span>${libraryPagination.total} Videos</span>`;
+    list.appendChild(statsDiv);
+
+    pageItems.forEach(v => {
+        const sizeMB = v.fileSize ? (v.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown';
+
+        const div = document.createElement('div');
+        div.className = 'queue-item';
+
+        // Checkbox
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.style.marginRight = '10px';
+        checkbox.className = 'lib-chk';
+        checkbox.value = v.id; // Store ID
+        checkbox.dataset.title = v.title; // Store title for merge logic compatibility
+
+        // Restore selection state
+        if(selectedLibraryVideos.has(v.title)) checkbox.checked = true;
+
+        checkbox.onchange = (e) => {
+            if(e.target.checked) selectedLibraryVideos.add(v.title);
+            else selectedLibraryVideos.delete(v.title);
+            updateMergeButton();
+        };
+
+        const thumb = document.createElement('div');
+        thumb.className = 'queue-thumb';
+        thumb.innerHTML = `<i class="fa-solid fa-file-video"></i>`;
+        thumb.style.cursor = 'pointer';
+        thumb.onclick = () => openPreviewModal(v.id);
+
+        const content = document.createElement('div');
+        content.style.flex = '1';
+        content.innerHTML = `
+            <div style="font-weight:600; cursor:pointer" onclick="openPreviewModal(${v.id})">${v.title}</div>
+            <div style="font-size:0.8rem; color:#888;">${sizeMB}</div>
+        `;
+
+        const actions = document.createElement('div');
+
+        let optimizeBtn = '';
+        if (v.optimizationStatus === 'COMPLETED') {
+            optimizeBtn = `<span class="badge" style="background:#00875a; color:white; margin-right:5px; font-size:0.7rem;">OPTIMIZED</span>`;
+        } else if (v.optimizationStatus === 'IN_PROGRESS') {
+            optimizeBtn = `<button class="btn btn-sm btn-text" disabled><i class="fa-solid fa-spinner fa-spin"></i></button>`;
+        } else {
+            optimizeBtn = `<button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title}')" title="Optimize for Stream"><i class="fa-solid fa-wand-magic-sparkles"></i></button>`;
         }
 
-        // Header stats
-        let totalSize = 0;
-        let hasInProgress = false;
-        data.data.forEach(v => totalSize += (v.fileSize || 0));
-        const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+        actions.innerHTML = `
+            ${optimizeBtn}
+            <button class="btn btn-sm btn-text" onclick="scheduleFromLibrary(${v.id}, '${v.title.replace(/'/g, "\\'")}')" title="Schedule Post"><i class="fa-regular fa-calendar-plus"></i></button>
+            <button class="btn btn-sm btn-text" onclick="openPreviewModal(${v.id})" title="Preview"><i class="fa-solid fa-play"></i></button>
+            <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo(${v.id}, '${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        `;
 
-        list.innerHTML = `<div style="padding:10px; font-weight:600; color:#666; border-bottom:1px solid #eee; margin-bottom:10px;">Total Library Size: ${totalSizeMB} MB</div>`;
+        div.prepend(checkbox);
+        div.appendChild(thumb);
+        div.appendChild(content);
+        div.appendChild(actions);
 
-        data.data.forEach(v => {
-            const sizeMB = v.fileSize ? (v.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown';
-            const isOptimized = v.title.includes("_optimized"); // Basic check, better if backend flag
+        list.appendChild(div);
+    });
 
-            // Don't show optimized files as main items if we want to hide clutter, but user might want to see them.
-            // For now, let's show them but maybe different icon.
+    renderPaginationControls();
 
-            const div = document.createElement('div');
-            div.className = 'queue-item';
+    if (hasInProgress) {
+        // Poll every 5s if something is processing
+        setTimeout(async () => {
+             // We don't want to reset page or selection, so we fetch quietly
+             try {
+                const res = await apiFetch(`${API_URL}/library`);
+                const result = await res.json();
+                libraryPagination.data = result.data || [];
+                libraryPagination.total = libraryPagination.data.length;
+                // re-render current page
+                renderLibraryPage();
+             } catch(e){}
+        }, 5000);
+    }
+}
 
-            // Generate checkboxes
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.style.marginRight = '10px';
-            checkbox.onchange = (e) => {
-                if(e.target.checked) selectedLibraryVideos.add(v.title);
-                else selectedLibraryVideos.delete(v.title);
-                updateMergeButton();
-            };
+function renderPaginationControls() {
+    const container = document.getElementById('libraryPaginationControls');
+    if(!container) return;
 
-            const thumb = document.createElement('div');
-            thumb.className = 'queue-thumb';
-            thumb.innerHTML = `<i class="fa-solid fa-file-video"></i>`;
-            thumb.style.cursor = 'pointer';
-            thumb.onclick = () => openPreviewModal(v.id);
+    const totalPages = Math.ceil(libraryPagination.total / libraryPagination.limit);
+    if(totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
 
-            const content = document.createElement('div');
-            content.style.flex = '1';
-            content.innerHTML = `
-                <div style="font-weight:600; cursor:pointer" onclick="openPreviewModal(${v.id})">${v.title}</div>
-                <div style="font-size:0.8rem; color:#888;">${sizeMB}</div>
-            `;
+    container.innerHTML = `
+        <button class="btn btn-sm btn-outline" ${libraryPagination.page === 1 ? 'disabled' : ''} onclick="changeLibraryPage(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+        <span style="font-size:0.9rem; font-weight:600;">Page ${libraryPagination.page} of ${totalPages}</span>
+        <button class="btn btn-sm btn-outline" ${libraryPagination.page === totalPages ? 'disabled' : ''} onclick="changeLibraryPage(1)"><i class="fa-solid fa-chevron-right"></i></button>
+    `;
+}
 
-            const actions = document.createElement('div');
+function changeLibraryPage(delta) {
+    libraryPagination.page += delta;
+    renderLibraryPage();
+}
 
-            let optimizeBtn = '';
-            if (v.optimizationStatus === 'COMPLETED') {
-                optimizeBtn = `<span class="badge" style="background:#00875a; color:white; margin-right:5px; font-size:0.7rem;">OPTIMIZED</span>`;
-            } else if (v.optimizationStatus === 'IN_PROGRESS') {
-                optimizeBtn = `<button class="btn btn-sm btn-text" disabled><i class="fa-solid fa-spinner fa-spin"></i></button>`;
-                hasInProgress = true;
-            } else {
-                optimizeBtn = `<button class="btn btn-sm btn-text" onclick="optimizeVideo('${v.title}')" title="Optimize for Stream"><i class="fa-solid fa-wand-magic-sparkles"></i></button>`;
-            }
+function toggleSelectAllLibrary(source) {
+    const isChecked = source.checked;
+    const checkboxes = document.querySelectorAll('.lib-chk');
 
-            actions.innerHTML = `
-                ${optimizeBtn}
-                <button class="btn btn-sm btn-text" onclick="scheduleFromLibrary(${v.id}, '${v.title.replace(/'/g, "\\'")}')" title="Schedule Post"><i class="fa-regular fa-calendar-plus"></i></button>
-                <button class="btn btn-sm btn-text" onclick="openPreviewModal(${v.id})" title="Preview"><i class="fa-solid fa-play"></i></button>
-                <button class="btn btn-sm btn-text" onclick="deleteLibraryVideo(${v.id}, '${v.title}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
-            `;
+    // Select all visible on current page? Or all in library?
+    // "Select All" usually implies visible items or global.
+    // Given the Set logic, let's stick to visible items for safety and UI consistency.
+    // If user wants to delete EVERYTHING, that's a dangerous operation usually requiring explicit confirmation "All 100 items".
+    // For now, let's do visible items (current page).
 
-            div.prepend(checkbox);
-            div.appendChild(thumb);
-            div.appendChild(content);
-            div.appendChild(actions);
+    checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+        const title = cb.dataset.title;
+        if(isChecked) selectedLibraryVideos.add(title);
+        else selectedLibraryVideos.delete(title);
+    });
 
-            list.appendChild(div);
-        });
-
-        if (hasInProgress) {
-            setTimeout(loadLibraryVideos, 5000);
-        }
-    } catch(e){}
+    updateMergeButton();
 }
 
 function updateMergeButton() {
-    const btn = document.getElementById('btnMerge');
-    if(btn) btn.disabled = selectedLibraryVideos.size < 2;
+    const btnMerge = document.getElementById('btnMerge');
+    const btnDel = document.getElementById('btnDeleteSelected');
+
+    const count = selectedLibraryVideos.size;
+    if(btnMerge) btnMerge.disabled = count < 2;
+    if(btnDel) {
+        btnDel.disabled = count === 0;
+        btnDel.innerHTML = count > 0 ? `Delete (${count})` : `Delete Selected`;
+    }
+}
+
+async function deleteSelectedVideos() {
+    if(selectedLibraryVideos.size === 0) return;
+
+    showConfirmModal("Delete Multiple?", `Are you sure you want to delete ${selectedLibraryVideos.size} videos?`, async () => {
+        // We need IDs for deletion, but Set stores titles (legacy logic).
+        // Let's map titles back to IDs from libraryPagination.data
+        const titles = Array.from(selectedLibraryVideos);
+        const videosToDelete = libraryPagination.data.filter(v => titles.includes(v.title));
+
+        showToast("Deleting...", "info");
+
+        let successCount = 0;
+        for (let v of videosToDelete) {
+            try {
+                await apiFetch(`${API_URL}/library/${v.id}`, { method: 'DELETE' });
+                successCount++;
+            } catch(e) {}
+        }
+
+        showToast(`Deleted ${successCount} videos.`, "success");
+        selectedLibraryVideos.clear();
+        updateMergeButton();
+
+        // Refresh
+        const res = await apiFetch(`${API_URL}/library`);
+        const result = await res.json();
+        libraryPagination.data = result.data || [];
+        libraryPagination.total = libraryPagination.data.length;
+        if(libraryPagination.page > Math.ceil(libraryPagination.total/libraryPagination.limit)) {
+            libraryPagination.page = Math.max(1, Math.ceil(libraryPagination.total/libraryPagination.limit));
+        }
+        renderLibraryPage();
+        fetchUserInfo();
+    });
 }
 
 function openPreviewModal(id) {
