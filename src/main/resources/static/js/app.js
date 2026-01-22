@@ -136,6 +136,151 @@ function switchStudioTab(tab) {
     document.getElementById(`studio-tab-${tab}`).classList.remove('hidden');
 }
 
+function switchStreamTab(tab) {
+    if (tab === 'schedule') {
+        document.getElementById('streamActionSchedule').classList.toggle('hidden');
+    }
+}
+
+function switchStreamAudioTab(tab) {
+    // Buttons
+    document.querySelectorAll('.studio-audio-control button').forEach(b => b.classList.remove('btn-primary', 'btn-dark'));
+    document.querySelectorAll('.studio-audio-control button').forEach(b => {
+        if(b.getAttribute('onclick').includes(`'${tab}'`)) {
+            b.classList.remove('btn-dark');
+            b.classList.add('btn-primary');
+        } else {
+            b.classList.add('btn-dark');
+        }
+    });
+
+    // Sections
+    document.getElementById('streamAudioUploadSection').classList.add('hidden');
+    document.getElementById('streamAudioLibSection').classList.add('hidden');
+    document.getElementById('streamAudioMyLibSection').classList.add('hidden');
+
+    if (tab === 'upload') document.getElementById('streamAudioUploadSection').classList.remove('hidden');
+    if (tab === 'lib') {
+        document.getElementById('streamAudioLibSection').classList.remove('hidden');
+        if(document.getElementById('streamAudioTrackList').innerHTML === 'Loading...') loadStreamAudioLibrary();
+    }
+    if (tab === 'mylib') {
+        document.getElementById('streamAudioMyLibSection').classList.remove('hidden');
+        if(document.getElementById('streamAudioMyTrackList').innerHTML === 'Loading...') loadStreamAudioLibrary();
+    }
+}
+
+let streamAudioLibraryLoaded = false;
+async function loadStreamAudioLibrary() {
+    if(streamAudioLibraryLoaded) return;
+
+    // Load Stock
+    try {
+        const res = await apiFetch(`${API_URL}/audio/trending`);
+        const data = await res.json();
+        const list = document.getElementById('streamAudioTrackList');
+        list.innerHTML = '';
+        data.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.innerHTML = `<i class="fa-solid fa-music"></i> <div style="flex:1; margin-left:10px;">${t.title}</div>`;
+            div.onclick = () => {
+                document.querySelectorAll('#streamAudioTrackList .queue-item').forEach(e=>e.classList.remove('active-track'));
+                div.classList.add('active-track');
+                document.getElementById('selectedStreamStockId').value = t.id; // Assuming ID is title or needed param
+            };
+            list.appendChild(div);
+        });
+    } catch(e) { document.getElementById('streamAudioTrackList').innerHTML = 'Failed to load'; }
+
+    // Load My Library
+    try {
+        const res = await apiFetch(`${API_URL}/audio/my-library`);
+        const data = await res.json();
+        const list = document.getElementById('streamAudioMyTrackList');
+        list.innerHTML = '';
+        if(data.length === 0) list.innerHTML = '<div style="padding:10px; color:#666; font-size:0.8rem;">No audio files found in library.</div>';
+
+        data.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+            div.innerHTML = `<i class="fa-solid fa-file-audio"></i> <div style="flex:1; margin-left:10px;">${t.title}</div>`;
+            div.onclick = () => {
+                document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(e=>e.classList.remove('active-track'));
+                div.classList.add('active-track');
+                document.getElementById('selectedMyLibMusicName').value = t.title; // submitJob uses musicName
+            };
+            list.appendChild(div);
+        });
+    } catch(e) { document.getElementById('streamAudioMyTrackList').innerHTML = 'Failed to load'; }
+
+    streamAudioLibraryLoaded = true;
+}
+
+async function handleStreamMusicUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const btn = e.target.previousElementSibling || e.target; // Fallback
+    // Visual feedback not easy on file input, using Toast
+    showToast("Uploading music...", "info");
+
+    const formData = new FormData();
+    formData.append("files", file);
+
+    try {
+        const res = await apiFetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
+        if (res.ok) {
+            showToast("Music uploaded!", "success");
+            document.getElementById('uploadedStreamMusicName').value = file.name;
+        } else {
+            showToast("Upload failed.", "error");
+        }
+    } catch (err) {
+        showToast("Upload error.", "error");
+    }
+}
+
+async function generateStreamMetadata() {
+    const topic = document.getElementById('aiStreamTopic').value || document.getElementById('streamMetaTitle').value || "General Stream";
+    const btn = document.querySelector('button[onclick="generateStreamMetadata()"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating...';
+
+    try {
+        const res = await apiFetch(`${API_URL}/ai/generate`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ type: 'stream_metadata', context: topic })
+        });
+        const data = await res.json();
+        if(data.result) {
+            // Assume result is JSON string or formatted text.
+            // If it's simple text, put in description. If JSON, parse it.
+            // For now, let's assume the AI returns a JSON-like string or just description.
+            // But usually 'stream_metadata' implies structured data.
+            // Let's try to parse if it looks like JSON
+            try {
+                const parsed = JSON.parse(data.result);
+                if(parsed.title) document.getElementById('streamMetaTitle').value = parsed.title;
+                if(parsed.description) document.getElementById('streamMetaDesc').value = parsed.description;
+                if(parsed.tags) document.getElementById('aiStreamTopic').value = parsed.tags; // Reuse hidden field for tags
+            } catch(jsonErr) {
+                // Fallback: result is description
+                document.getElementById('streamMetaDesc').value = data.result;
+            }
+            showToast("Metadata generated!", "success");
+        }
+    } catch(e) { showToast("AI Generation Failed", "error"); }
+    finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
 // Reuse toggleLoop
 function toggleLoop(chk) {
     const input = document.getElementById('streamLoopCount');
@@ -1304,4 +1449,166 @@ function initCalendar() {
 }
 
 /* --- COMMUNITY --- */
-function loadComments() { /* ... */ }
+let currentComments = [];
+
+async function loadComments() {
+    const list = document.getElementById('threadList');
+    if(!list) return;
+    list.innerHTML = 'Loading...';
+
+    try {
+        const res = await apiFetch(`${API_URL}/comments`);
+        const data = await res.json();
+        currentComments = data.items || [];
+        filterCommTab('all'); // Default view
+    } catch(e) {
+        list.innerHTML = '<div class="empty-state">Failed to load comments</div>';
+    }
+}
+
+function filterCommTab(tab) {
+    // Nav
+    document.querySelectorAll('.comm-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.comm-nav-item').forEach(el => {
+        if(el.getAttribute('onclick').includes(`'${tab}'`)) el.classList.add('active');
+    });
+
+    // Filter
+    let filtered = [];
+    if (tab === 'all') {
+        filtered = currentComments;
+    } else if (tab === 'unreplied') {
+        filtered = currentComments.filter(c => c.snippet.totalReplyCount === 0);
+    } else if (tab === 'activity') {
+        // Activity view (placeholder for now, showing all)
+        filtered = currentComments;
+    }
+
+    renderComments(filtered);
+}
+
+function renderComments(comments) {
+    const list = document.getElementById('threadList');
+    if(!list) return;
+    list.innerHTML = '';
+
+    if(!comments || comments.length === 0) {
+        list.innerHTML = '<div class="empty-state">No conversations found.</div>';
+        return;
+    }
+
+    comments.forEach(thread => {
+        const top = thread.snippet.topLevelComment.snippet;
+        const div = document.createElement('div');
+        div.className = 'thread-item'; // Assumes CSS class exists or queue-item style
+        div.style.cssText = "padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; hover: background: #f9f9f9;";
+        div.onmouseover = () => div.style.background = '#f9f9f9';
+        div.onmouseout = () => div.style.background = 'white';
+
+        div.onclick = () => openThread(thread);
+
+        div.innerHTML = `
+            <div style="display:flex; gap:10px;">
+                <img src="${top.authorProfileImageUrl}" style="width:40px; height:40px; border-radius:50%;">
+                <div style="flex:1;">
+                    <div style="font-weight:600; font-size:0.9rem;">${top.authorDisplayName} <span style="font-weight:400; color:#888; font-size:0.8rem;">• ${new Date(top.publishedAt).toLocaleDateString()}</span></div>
+                    <div style="font-size:0.9rem; color:#333; margin-top:4px; line-height:1.4;">${top.textDisplay.substring(0, 100)}${top.textDisplay.length>100?'...':''}</div>
+                    <div style="font-size:0.8rem; color:#666; margin-top:5px;">
+                        <i class="fa-regular fa-comment"></i> ${thread.snippet.totalReplyCount} replies
+                    </div>
+                </div>
+            </div>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function openThread(thread) {
+    const top = thread.snippet.topLevelComment.snippet;
+    document.getElementById('emptyThreadState').classList.add('hidden');
+    document.getElementById('activeThread').classList.remove('hidden');
+
+    // Thread Header
+    document.getElementById('threadVideoTitle').innerText = "Comment on Video (ID: " + thread.snippet.videoId + ")"; // Title not available in comment object easily
+    document.getElementById('threadVideoLink').href = `https://youtube.com/watch?v=${thread.snippet.videoId}&lc=${thread.id}`;
+
+    const messages = document.getElementById('threadMessages');
+    messages.innerHTML = '';
+
+    // Render Top Level
+    messages.innerHTML += `
+        <div class="msg-bubble" style="display:flex; gap:10px; margin-bottom:20px;">
+             <img src="${top.authorProfileImageUrl}" style="width:32px; height:32px; border-radius:50%;">
+             <div>
+                 <div style="font-weight:600; font-size:0.85rem;">${top.authorDisplayName}</div>
+                 <div style="background:#f1f2f4; padding:10px; border-radius: 0 10px 10px 10px; margin-top:2px; font-size:0.9rem;">${top.textDisplay}</div>
+             </div>
+        </div>
+    `;
+
+    // In a real app, we would fetch replies here if not included or if truncated
+    if(thread.replies) {
+        thread.replies.comments.forEach(r => {
+             messages.innerHTML += `
+                <div class="msg-bubble reply" style="display:flex; gap:10px; margin-bottom:15px; margin-left:40px;">
+                     <img src="${r.snippet.authorProfileImageUrl}" style="width:24px; height:24px; border-radius:50%;">
+                     <div>
+                         <div style="font-weight:600; font-size:0.8rem;">${r.snippet.authorDisplayName}</div>
+                         <div style="background:#e3f2fd; padding:8px; border-radius: 0 10px 10px 10px; margin-top:2px; font-size:0.9rem;">${r.snippet.textDisplay}</div>
+                     </div>
+                </div>
+            `;
+        });
+    }
+
+    // Set context for reply
+    document.getElementById('replyInput').dataset.parentId = thread.id;
+}
+
+async function sendReply() {
+    const parentId = document.getElementById('replyInput').dataset.parentId;
+    const text = document.getElementById('replyInput').value;
+    if(!text) return;
+
+    try {
+        const res = await apiFetch(`${API_URL}/comments/${parentId}/reply`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text})
+        });
+        if(res.ok) {
+            showToast("Reply sent", "success");
+            document.getElementById('replyInput').value = '';
+            // Ideally reload thread or append reply locally
+        } else {
+            showToast("Failed to reply", "error");
+        }
+    } catch(e) { showToast("Error sending reply", "error"); }
+}
+
+function toggleAiSuggestions() {
+    const area = document.getElementById('aiSuggestionsArea');
+    if(area.classList.contains('hidden')) {
+        area.classList.remove('hidden');
+        generateSuggestions();
+    } else {
+        area.classList.add('hidden');
+    }
+}
+
+async function generateSuggestions() {
+    const chips = document.getElementById('aiChips');
+    chips.innerHTML = 'Generating...';
+    // Mock call for now or use existing generic AI endpoint
+    // In real scenario: call /api/ai/suggest-reply
+    setTimeout(() => {
+        chips.innerHTML = '';
+        ['Thanks for watching! 😊', 'Glad you liked it!', 'New video coming soon!'].forEach(s => {
+            const chip = document.createElement('div');
+            chip.style.cssText = "background:white; border:1px solid #cce0ff; padding:5px 10px; borderRadius:15px; cursor:pointer; font-size:0.85rem; color:#0052cc;";
+            chip.innerText = s;
+            chip.onclick = () => document.getElementById('replyInput').value = s;
+            chips.appendChild(chip);
+        });
+    }, 1000);
+}
