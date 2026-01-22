@@ -93,13 +93,8 @@ public class FFmpegCommandBuilder {
         // Resolution Logic
         int w, h;
         if ("portrait".equalsIgnoreCase(mode)) {
-            // 9:16
-            // If input is 1920x1080, we need to crop/blur to e.g. 1080x1920
-            // Logic: standard shorts is 1080x1920.
-            // If user selected different height (e.g. 720p), calculate w.
             h = height;
             w = (int) Math.round(h * (9.0 / 16.0));
-            // Ensure even
             if (w % 2 != 0) w++;
 
             // Blur background effect for portrait
@@ -256,19 +251,31 @@ public class FFmpegCommandBuilder {
         String vLabel = "0:v";
         String aLabel = "0:a";
 
-        // Scaling logic (Force even dimensions to avoid libx264 crash)
-        int h = (Math.min(1080, maxHeight) / 2) * 2;
-        int w = ((h * 16 / 9) / 2) * 2; // Default to 16:9 even math
+        // Dynamic Resolution Logic
+        String scaleFilter;
+        // Ensure max limit from Plan is respected (default 1080)
+        int safeMaxHeight = (maxHeight > 0) ? maxHeight : 1080;
 
         if ("force_portrait".equals(streamMode)) {
-            w = (Math.min(1080, maxHeight) / 2) * 2;
-            h = ((w * 16 / 9) / 2) * 2;
-             // Blur logic for portrait stream from landscape source could go here,
-             // but simpler to just scale/pad or use optimized video.
-             // For on-the-fly, we keep it simple to avoid CPU overload.
+            // Deprecated logic path, but if forced:
+            int h = safeMaxHeight;
+            int w = (int) Math.round(h * (9.0 / 16.0));
+            if (w % 2 != 0) w++;
+            if (h % 2 != 0) h++;
+            scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, w, h);
+        } else {
+            // "original" or "force_landscape"
+            // Use 'min(ih, maxHeight)' to avoid upscaling beyond plan, but respect original AR
+            // Ensure width/height are even (-2 logic handles width, but height needs even limit)
+
+            // Example: scale=-2:'min(ih,1080)' -> but we must ensure height is even.
+            // ffmpeg expression: min(ih, H) -> then round.
+            // Better to use: scale=-2:min(ih\,maxHeight),pad=ceil(iw/2)*2:ceil(ih/2)*2
+            // Note: complex filter escaping.
+
+            scaleFilter = String.format("scale=-2:min(ih\\,%d),pad=ceil(iw/2)*2:ceil(ih/2)*2", safeMaxHeight);
         }
 
-        String scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, w, h);
         filterChains.add("[0:v]" + scaleFilter + "[scaled]");
         vLabel = "[scaled]";
 
@@ -302,16 +309,27 @@ public class FFmpegCommandBuilder {
         command.add("-map"); command.add(vLabel);
         command.add("-c:v"); command.add("libx264");
         command.add("-preset"); command.add("veryfast");
-        command.add("-b:v"); command.add("4000k"); // Increased slightly
-        command.add("-maxrate"); command.add("4500k");
-        command.add("-bufsize"); command.add("9000k");
+
+        // Dynamic Bitrate Logic based on Max Height
+        // If max height is large (e.g. 2160/4k), we allow higher bitrate.
+        String bitrate = "4500k";
+        String maxrate = "6000k";
+        String bufsize = "12000k";
+
+        if (safeMaxHeight >= 2160) {
+            bitrate = "15000k"; maxrate = "20000k"; bufsize = "40000k";
+        } else if (safeMaxHeight >= 1440) {
+            bitrate = "9000k"; maxrate = "12000k"; bufsize = "24000k";
+        }
+
+        command.add("-b:v"); command.add(bitrate);
+        command.add("-maxrate"); command.add(maxrate);
+        command.add("-bufsize"); command.add(bufsize);
         command.add("-pix_fmt"); command.add("yuv420p");
         command.add("-g"); command.add("60");
 
         // Map audio
         if (aLabel.equals("0:a")) {
-             // If we rely on 0:a, use ? to avoid failure if missing, but Youtube needs audio.
-             // For robustness, if user didn't mute and didn't provide music, we take 0:a.
              command.add("-map"); command.add("0:a?");
         } else {
              command.add("-map"); command.add(aLabel);
@@ -321,11 +339,9 @@ public class FFmpegCommandBuilder {
         command.add("-b:a"); command.add("128k");
         command.add("-ar"); command.add("44100");
 
-        // Shortest output (video length)
         command.add("-shortest");
 
         // --- Output ---
-        // Support for multiple keys if needed, but for now take first
         String key = streamKeys.get(0);
         String url = key.startsWith("rtmp") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
 

@@ -123,23 +123,9 @@ public class StreamController {
         return ResponseEntity.ok(videoConversionService.getProgress(SecurityUtils.getEmail(principal), fileName).orElse(0));
     }
 
-    @PostMapping("/convert/shorts")
-    public ResponseEntity<?> convertToShort(@RequestParam String fileName, Principal principal) throws IOException {
-        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        String email = SecurityUtils.getEmail(principal);
-        videoConversionService.convertToShort(userFileService.getUserUploadDir(email), email, fileName);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Conversion started"));
-    }
-
-    // Deprecated in favor of ConvertController, but kept/updated for legacy route compatibility
-    @PostMapping("/convert/optimize")
-    public ResponseEntity<?> optimizeVideo(@RequestParam String fileName, Principal principal) throws IOException {
-        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        String email = SecurityUtils.getEmail(principal);
-        // Default to landscape 1080p if called via old endpoint
-        videoConversionService.optimizeVideo(userFileService.getUserUploadDir(email), email, fileName, "landscape", 1080);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Optimization started"));
-    }
+    // Removed conflicting mappings handled by ConvertController:
+    // /convert/shorts
+    // /convert/optimize
 
     @GetMapping("/stream-library")
     public ResponseEntity<?> getLibrary(Principal principal) throws IOException {

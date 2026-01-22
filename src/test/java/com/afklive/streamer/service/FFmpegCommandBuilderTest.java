@@ -30,11 +30,10 @@ class FFmpegCommandBuilderTest {
         List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, false, "original", 1080);
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
-        // Updated URL logic uses rtmp://a.rtmp.youtube.com:1935/live2/
         assertThat(command.toString()).contains("rtmp://a.rtmp.youtube.com:1935/live2/" + streamKey);
         assertThat(command).contains("-map", "0:a?");
-        // Scaling
-        assertThat(command.toString()).contains("scale=1920:1080:force_original_aspect_ratio=decrease");
+        // Scaling dynamic
+        assertThat(command.toString()).contains("scale=-2:min(ih\\,1080)");
     }
 
     @Test
@@ -54,6 +53,19 @@ class FFmpegCommandBuilderTest {
         // Check for specific filters/mappings when music is present
         assertThat(command.toString()).contains("volume=" + musicVolume);
         assertThat(command.toString()).contains("amix=inputs=2");
+    }
+
+    @Test
+    void testBuildStreamCommand4K() {
+        Path videoPath = Paths.get("in.mp4");
+        List<String> keys = List.of("key");
+
+        // 4K limit
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, keys, null, null, -1, null, false, "original", 2160);
+
+        assertThat(command.toString()).contains("scale=-2:min(ih\\,2160)");
+        // Check for high bitrate
+        assertThat(command).contains("15000k"); // 4k bitrate
     }
 
     @Test
