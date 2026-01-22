@@ -183,17 +183,30 @@ body {
 .form-group label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.85rem; }
 
 /* STREAM DASHBOARD */
-.stream-dashboard-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; height: calc(100vh - 140px); max-width: 1600px; margin: 0 auto; }
+.stream-dashboard-layout { display: grid; grid-template-columns: 3fr 1fr; gap: 24px; height: calc(100vh - 140px); max-width: 1800px; margin: 0 auto; }
 .stream-main-panel { display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
 .stream-control-panel { display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
 
-.preview-container {
-    background: black; border-radius: 8px; overflow: hidden; aspect-ratio: 16/9; display: block; position: relative; min-height: 360px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+.preview-container-lg {
+    background: black; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; display: block; position: relative;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15); width: 100%;
 }
 .preview-player { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 10; }
 .preview-placeholder { color: rgba(255,255,255,0.5); display: flex; flex-direction: column; align-items: center; gap: 10px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 0; }
-.preview-overlay { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; pointer-events: none; }
+.preview-overlay { position: absolute; top: 15px; left: 15px; background: rgba(224, 36, 36, 0.9); color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 700; pointer-events: none; z-index: 20; }
+
+/* Stream Setup Tabs */
+.stream-setup-tabs {
+    display: flex; gap: 10px; border-bottom: 2px solid #eee; padding-bottom: 0; margin-bottom: 15px;
+}
+.tab-btn {
+    background: none; border: none; padding: 10px 20px; font-size: 1rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: 0.2s;
+}
+.tab-btn:hover { color: var(--text-main); }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.setup-content { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; min-height: 200px; }
+.setup-panel.hidden { display: none; }
 
 .control-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
 .control-card h3 { margin: 0 0 16px 0; font-size: 1rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; }

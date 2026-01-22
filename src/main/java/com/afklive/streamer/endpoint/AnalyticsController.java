@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
 
 import java.security.Principal;
 import java.time.LocalDate;
@@ -29,12 +30,12 @@ public class AnalyticsController {
     private final ChannelService channelService;
 
     @GetMapping
-    public Map<String, Object> getAnalytics(
+    public ResponseEntity<?> getAnalytics(
             Principal principal,
             @RequestParam(required = false) String range) {
 
         if (principal == null) {
-            throw new IllegalStateException("Not authenticated");
+            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         }
         String username = SecurityUtils.getEmail(principal);
 
@@ -42,13 +43,18 @@ public class AnalyticsController {
         LocalDate end = LocalDate.now();
         LocalDate start = end.minusDays(28); // Default
 
-        if (range != null) {
-            switch (range) {
+        if (range != null && !range.trim().isEmpty()) {
+            // Clean range input to prevent injection or weird parsing
+            String cleanRange = range.split(":")[0].trim();
+            switch (cleanRange) {
                 case "7": start = end.minusDays(7); break;
                 case "28": start = end.minusDays(28); break;
                 case "90": start = end.minusDays(90); break;
                 case "365": start = end.minusDays(365); break;
-                // 'lifetime' or others can default to a long range or handled specifically
+                default:
+                    // Fallback to 28 days if unknown, instead of failing
+                    start = end.minusDays(28);
+                    log.debug("Unknown range '{}', defaulting to 28 days", range);
             }
         }
 
@@ -111,11 +117,12 @@ public class AnalyticsController {
                 "totalWatchTime", totalMins
             ));
 
-            return result;
+            return ResponseEntity.ok(result);
 
         } catch (Exception e) {
             log.error("Error fetching analytics", e);
-            throw new RuntimeException("Failed to fetch analytics: " + e.getMessage());
+            // Return 200 with empty data or error message to prevent client crash
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to fetch analytics: " + e.getMessage()));
         }
     }
 }

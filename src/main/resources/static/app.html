@@ -128,121 +128,120 @@
         <!-- VIEW: STREAM -->
         <div id="view-stream" class="view-section hidden">
             <div class="stream-dashboard-layout">
-                <!-- LEFT: Preview & Source -->
+                <!-- LEFT: Preview & Stage -->
                 <div class="stream-main-panel">
-                    <div class="preview-container">
+                    <div class="preview-container-lg">
                         <video id="previewPlayer" class="preview-player hidden" controls loop playsinline></video>
                         <div id="previewPlaceholder" class="preview-placeholder">
-                            <i class="fa-solid fa-film fa-3x"></i>
-                            <span>Select a video to preview</span>
+                            <i class="fa-solid fa-film fa-4x"></i>
+                            <span style="font-size: 1.2rem; font-weight: 500;">Stage Empty</span>
+                            <button class="btn btn-primary" onclick="openLibraryModalForStream()" style="margin-top:10px;">Select Video Source</button>
                         </div>
-                        <div class="preview-overlay">PREVIEW</div>
+                        <div class="preview-overlay">STAGE</div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
-                            <h3 style="margin:0">Video Source</h3>
-                            <div>
-                                <button class="btn btn-outline btn-sm" onclick="openLibraryModalForStream()">Select from Library</button>
-                                <button class="btn btn-outline btn-sm" onclick="document.getElementById('streamUploadInput').click()">Upload New</button>
-                                <input type="file" id="streamUploadInput" hidden accept="video/*">
+                    <!-- Stream Setup Tabs -->
+                    <div class="stream-setup-tabs">
+                        <button class="tab-btn active" onclick="switchStreamSetupTab('source')"><i class="fa-solid fa-video"></i> Source</button>
+                        <button class="tab-btn" onclick="switchStreamSetupTab('branding')"><i class="fa-solid fa-paintbrush"></i> Brand</button>
+                        <button class="tab-btn" onclick="switchStreamSetupTab('audio')"><i class="fa-solid fa-music"></i> Audio</button>
+                    </div>
+
+                    <div class="setup-content">
+                        <!-- SOURCE TAB -->
+                        <div id="setup-source" class="setup-panel">
+                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                                <h3 style="margin:0">Video Source</h3>
+                                <div style="display:flex; gap: 10px;">
+                                    <button class="btn btn-outline btn-sm" onclick="openLibraryModalForStream()">Select Video</button>
+                                    <button class="btn btn-outline btn-sm" onclick="document.getElementById('streamUploadInput').click()">Upload New</button>
+                                    <input type="file" id="streamUploadInput" hidden accept="video/*">
+                                </div>
+                            </div>
+                            <div style="background: #f4f5f7; padding: 15px; border-radius: 6px;">
+                                <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 10px;">
+                                    <i class="fa-solid fa-file-video" style="color:var(--primary); font-size: 1.2rem;"></i>
+                                    <strong id="selectedVideoTitle" style="font-size: 1.1rem;">No video selected</strong>
+                                </div>
+                                <div style="display: flex; gap: 30px; align-items: center; flex-wrap: wrap;">
+                                    <div style="display:flex; align-items:center; gap: 10px;">
+                                        <span>Loop:</span>
+                                        <input type="number" id="streamLoopCount" value="1" min="1" class="form-input" style="width: 70px;">
+                                        <label style="display:flex; align-items:center; gap:5px; margin:0; font-weight:400; cursor:pointer;">
+                                            <input type="checkbox" id="streamLoopInfinite" onchange="document.getElementById('streamLoopCount').disabled = this.checked">
+                                            Infinite
+                                        </label>
+                                    </div>
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <select id="streamOutputMode" class="form-input">
+                                            <option value="original">Original Resolution</option>
+                                            <option value="force_landscape">Force Landscape (1080p)</option>
+                                            <option value="force_portrait">Force Vertical (9:16)</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div>
-                            <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 10px;">
-                                <i class="fa-solid fa-file-video" style="color:var(--primary);"></i>
-                                <strong id="selectedVideoTitle" style="font-size: 1.1rem;">No video selected</strong>
+
+                        <!-- BRANDING TAB -->
+                        <div id="setup-branding" class="setup-panel hidden">
+                            <div class="form-group" style="display:flex; align-items:center; justify-content:space-between;">
+                                <div>
+                                    <label style="margin:0; font-size: 1rem;">Watermark Overlay</label>
+                                    <div style="font-size:0.8rem; color:#666;">Adds logo to top-right corner.</div>
+                                </div>
+                                <button class="btn btn-sm btn-outline" onclick="document.getElementById('streamWatermarkFile').click()">
+                                    <i class="fa-solid fa-upload"></i> Upload Logo
+                                </button>
+                                <input type="file" id="streamWatermarkFile" accept=".png,.jpg" hidden onchange="handleWatermarkUpload(this)">
                             </div>
-                            <div style="font-size: 0.9rem; color: #666; display: flex; gap: 20px; align-items: center;">
-                                <span><i class="fa-solid fa-rotate"></i> Loop Count:</span>
-                                <input type="number" id="streamLoopCount" value="1" min="1" class="form-input" style="width: 80px;">
-                                <label style="display:flex; align-items:center; gap:5px; margin:0; font-weight:400; cursor:pointer;">
-                                    <input type="checkbox" id="streamLoopInfinite" onchange="document.getElementById('streamLoopCount').disabled = this.checked">
-                                    24/7 (Infinite)
+                            <div id="watermarkPreview" class="hidden" style="display:flex; align-items:center; gap:10px; background:#f0f8ff; padding:10px; border-radius:6px; border: 1px dashed var(--primary);">
+                                <img id="watermarkImg" src="" style="height:40px; border-radius:4px;">
+                                <div style="flex:1; font-size:0.9rem; font-weight: 500;" id="watermarkName">logo.png</div>
+                                <button class="btn btn-sm btn-text" onclick="clearWatermark()" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- AUDIO TAB -->
+                        <div id="setup-audio" class="setup-panel hidden">
+                            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                                <button class="btn btn-sm btn-primary" id="tabStreamAudioUpload" onclick="switchStreamAudioTab('upload')">Upload MP3</button>
+                                <button class="btn btn-sm btn-outline" id="tabStreamAudioMyLib" onclick="switchStreamAudioTab('mylib')">My Library</button>
+                                <button class="btn btn-sm btn-outline" id="tabStreamAudioLib" onclick="switchStreamAudioTab('lib')">Stock Music</button>
+                            </div>
+
+                            <!-- Upload Tab -->
+                            <div id="streamAudioUploadSection">
+                                <div class="form-group">
+                                    <input type="file" id="streamAudioFile" accept=".mp3,.wav" class="form-control" style="font-size:0.9rem;">
+                                    <input type="hidden" id="uploadedStreamMusicName">
+                                    <small id="streamAudioUploadStatus" style="color: #666;"></small>
+                                </div>
+                            </div>
+
+                            <!-- My Library Tab -->
+                            <div id="streamAudioMyLibSection" class="hidden">
+                                <div id="streamAudioMyTrackList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">Loading...</div>
+                                <input type="hidden" id="selectedMyLibMusicName">
+                            </div>
+
+                            <!-- Library Tab -->
+                            <div id="streamAudioLibSection" class="hidden">
+                                <div id="streamAudioTrackList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">Loading...</div>
+                                <input type="hidden" id="selectedStreamStockId">
+                                <div id="selectedStreamTrackName" style="font-size:0.85rem; font-weight:600; color:var(--primary);"></div>
+                            </div>
+
+                            <div style="display: flex; gap: 20px; align-items: center; margin-top: 20px;">
+                                <div style="flex: 1;">
+                                    <label>Music Volume (<span id="streamVolVal">50%</span>)</label>
+                                    <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
+                                </div>
+                                <label style="display:flex; align-items:center; gap:8px; font-weight:400; cursor:pointer; margin-top: 20px;">
+                                    <input type="checkbox" id="streamMuteOriginal" checked>
+                                    <span>Mute Video Sound</span>
                                 </label>
                             </div>
-
-                            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee;">
-                                <div style="font-size: 0.9rem; margin-bottom: 5px; font-weight: 500;">Output Resolution (Fixes "Not Supported" errors)</div>
-                                <select id="streamOutputMode" class="form-input" style="width: 100%;">
-                                    <option value="original">Original (No Change)</option>
-                                    <option value="force_landscape">Force 1080p Landscape (16:9)</option>
-                                    <option value="force_portrait">Force 1080p Shorts (9:16)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Branding / Watermark -->
-                    <div class="card" style="margin-top: 15px;">
-                        <div class="card-header">
-                            <h3 style="margin:0">Branding</h3>
-                        </div>
-                        <div class="form-group" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-                            <div>
-                                <label style="margin:0">Watermark Overlay</label>
-                                <div style="font-size:0.8rem; color:#666;">Adds logo to top-right. <span style="color:red">(Forces Re-encoding)</span></div>
-                            </div>
-                            <button class="btn btn-sm btn-outline" onclick="document.getElementById('streamWatermarkFile').click()">
-                                <i class="fa-solid fa-upload"></i> Upload Logo
-                            </button>
-                            <input type="file" id="streamWatermarkFile" accept=".png,.jpg" hidden onchange="handleWatermarkUpload(this)">
-                        </div>
-                        <div id="watermarkPreview" class="hidden" style="display:flex; align-items:center; gap:10px; background:#f0f8ff; padding:8px; border-radius:4px;">
-                            <img id="watermarkImg" src="" style="height:30px; border-radius:4px;">
-                            <div style="flex:1; font-size:0.85rem;" id="watermarkName">logo.png</div>
-                            <button class="btn btn-sm btn-text" onclick="clearWatermark()"><i class="fa-solid fa-xmark"></i></button>
-                        </div>
-                    </div>
-
-                    <!-- Music Selection for Live Stream -->
-                    <div class="card" style="margin-top: 15px;">
-                        <div class="card-header">
-                            <h3 style="margin:0">Background Music</h3>
-                        </div>
-                        <div style="display:flex; gap:10px; margin-bottom:10px;">
-                            <button class="btn btn-sm btn-primary" id="tabStreamAudioUpload" onclick="switchStreamAudioTab('upload')">Upload</button>
-                            <button class="btn btn-sm btn-outline" id="tabStreamAudioMyLib" onclick="switchStreamAudioTab('mylib')">My Library</button>
-                            <button class="btn btn-sm btn-outline" id="tabStreamAudioLib" onclick="switchStreamAudioTab('lib')">Stock Library</button>
-                        </div>
-
-                        <!-- Upload Tab -->
-                        <div id="streamAudioUploadSection">
-                            <div class="form-group">
-                                <label>Upload MP3</label>
-                                <input type="file" id="streamAudioFile" accept=".mp3,.wav" class="form-control" style="font-size:0.9rem;">
-                                <input type="hidden" id="uploadedStreamMusicName">
-                                <small id="streamAudioUploadStatus" style="color: #666;"></small>
-                            </div>
-                        </div>
-
-                        <!-- My Library Tab -->
-                        <div id="streamAudioMyLibSection" class="hidden">
-                            <div id="streamAudioMyTrackList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">
-                                Loading...
-                            </div>
-                            <input type="hidden" id="selectedMyLibMusicName">
-                        </div>
-
-                        <!-- Library Tab -->
-                        <div id="streamAudioLibSection" class="hidden">
-                            <div id="streamAudioTrackList" class="scroll-list" style="height:150px; border:1px solid #eee; border-radius:4px; margin-bottom:10px;">
-                                Loading...
-                            </div>
-                            <input type="hidden" id="selectedStreamStockId">
-                            <div id="selectedStreamTrackName" style="font-size:0.85rem; font-weight:600; color:var(--primary);"></div>
-                        </div>
-
-                        <div class="form-group" style="margin-top: 10px;">
-                            <label>Music Volume (<span id="streamVolVal">50%</span>)</label>
-                            <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
-                        </div>
-
-                        <div class="form-group" style="margin-top: 5px;">
-                            <label style="display:flex; align-items:center; gap:8px; font-weight:400; cursor:pointer;">
-                                <input type="checkbox" id="streamMuteOriginal" checked>
-                                <span>Mute original video sound</span>
-                            </label>
                         </div>
                     </div>
                 </div>
@@ -441,10 +440,20 @@
                     <button class="btn btn-outline" onclick="openYouTubeImportModal()"><i class="fa-brands fa-youtube" style="color:red"></i> Import YouTube</button>
                     <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">Upload</button>
                     <input type="file" id="bulkUploadInput" multiple hidden accept="video/*,.zip">
+                    <button class="btn btn-outline" id="btnDeleteSelected" disabled onclick="deleteSelectedVideos()" style="color: var(--danger); border-color: var(--danger);">Delete Selected</button>
                     <button class="btn btn-outline" id="btnMerge" disabled onclick="mergeSelectedVideos()">Merge Selected</button>
                     <button class="btn btn-primary" onclick="showAutoScheduleModal()">Auto-Schedule</button>
                 </div>
             </header>
+            <div style="margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                <label style="display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer;">
+                    <input type="checkbox" id="selectAllLibrary" onchange="toggleSelectAllLibrary(this)">
+                    Select All
+                </label>
+                <div id="libraryPaginationControls" style="display:flex; gap:10px; align-items:center;">
+                    <!-- JS populated -->
+                </div>
+            </div>
             <div id="libraryList" class="queue-list"></div>
         </div>
 
@@ -933,6 +942,25 @@
             <button onclick="document.getElementById('streamLibraryModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div id="streamLibraryList" class="scroll-list" style="height: 300px; padding: 0;"></div>
+    </div>
+</div>
+
+<!-- YouTube Import Modal -->
+<div id="youtubeImportModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 450px;">
+        <div class="modal-header" style="border:none; padding-bottom: 10px;">
+            <h2>Import from YouTube</h2>
+            <button onclick="document.getElementById('youtubeImportModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-group">
+            <label>Video URL</label>
+            <input type="text" id="ytImportUrl" class="form-input" placeholder="https://youtube.com/watch?v=...">
+            <small style="color:#666;">Video will be downloaded to your library.</small>
+        </div>
+        <div class="modal-actions" style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-text" onclick="document.getElementById('youtubeImportModal').classList.add('hidden')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitYouTubeImport()">Import</button>
+        </div>
     </div>
 </div>
 
