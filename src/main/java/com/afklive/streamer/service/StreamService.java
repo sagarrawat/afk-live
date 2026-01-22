@@ -61,6 +61,7 @@ public class StreamService {
             MultipartFile watermarkFile,
             boolean muteVideoAudio,
             String streamMode,
+            int streamQuality,
             String title,
             String description,
             String privacy
@@ -162,7 +163,8 @@ public class StreamService {
         log.info("musicPath [{}]", musicPath);
 
         // Get User Plan Limits
-        int maxHeight = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
+        int planMax = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
+        int maxHeight = (streamQuality > 0 && streamQuality < planMax) ? streamQuality : planMax;
 
         // CHECK FOR OPTIMIZED VERSION
         // Logic: If user wants "original" stream mode, no watermark, no music, AND an optimized version exists,

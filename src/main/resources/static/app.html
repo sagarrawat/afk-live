@@ -185,6 +185,7 @@
                     <div class="studio-tabs">
                         <div class="studio-tab active" onclick="switchStudioTab('chat')">Chat</div>
                         <div class="studio-tab" onclick="switchStudioTab('brand')">Brand</div>
+                        <div class="studio-tab" onclick="switchStudioTab('audio')">Audio</div>
                         <div class="studio-tab" onclick="switchStudioTab('settings')">Settings</div>
                     </div>
 
@@ -204,7 +205,6 @@
                         <!-- TAB: BRAND -->
                         <div id="studio-tab-brand" class="studio-panel">
                             <span class="studio-section-title">Brand Customization</span>
-
                             <div class="studio-subpanel">
                                 <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:10px;">Logo / Watermark</label>
                                 <button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('streamWatermarkFile').click()">
@@ -217,7 +217,10 @@
                                     <button class="btn btn-text btn-xs" onclick="clearWatermark()" style="color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
                                 </div>
                             </div>
+                        </div>
 
+                        <!-- TAB: AUDIO -->
+                        <div id="studio-tab-audio" class="studio-panel">
                             <span class="studio-section-title">Audio</span>
                             <div class="studio-subpanel">
                                 <div class="studio-audio-control">
@@ -257,6 +260,22 @@
                             <div class="studio-subpanel">
                                 <div id="destinationList" class="studio-dest-list"></div>
                                 <button class="btn btn-text btn-sm btn-block" onclick="openAddDestinationChoiceModal()" style="margin-top:5px;">+ Add Destination</button>
+                            </div>
+
+                            <span class="studio-section-title">Stream Settings</span>
+                            <div class="studio-subpanel">
+                                <label style="font-size:0.8rem; font-weight:600;">Resolution</label>
+                                <select id="streamQuality" class="form-input" style="margin-bottom:10px;">
+                                    <option value="1080" selected>1080p (Full HD)</option>
+                                    <option value="720">720p (HD)</option>
+                                    <option value="2160">4K (Ultra HD)</option>
+                                </select>
+
+                                <label style="font-size:0.8rem; font-weight:600;">Orientation</label>
+                                <select id="streamOrientation" class="form-input">
+                                    <option value="original" selected>Landscape (16:9)</option>
+                                    <option value="force_portrait">Portrait (9:16)</option>
+                                </select>
                             </div>
 
                             <span class="studio-section-title">Broadcast Info</span>

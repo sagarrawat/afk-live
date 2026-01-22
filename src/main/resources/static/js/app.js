@@ -500,8 +500,12 @@ async function submitJob() {
     if (desc) fd.append("description", desc);
     if (privacy) fd.append("privacy", privacy);
 
-    // Default to "original" mode as user selects optimized video beforehand
-    fd.append("streamMode", "original");
+    // Stream Settings
+    const orientation = document.getElementById('streamOrientation').value || "original";
+    const quality = document.getElementById('streamQuality').value || "0";
+
+    fd.append("streamMode", orientation);
+    fd.append("streamQuality", quality);
 
     try {
         const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
@@ -1182,8 +1186,39 @@ async function checkStreamStatus() {
     try {
         const res = await apiFetch(`${API_URL}/status`);
         const data = await res.json();
-        if(data.success) renderActiveStreams(data.data.activeStreams || []);
+        if(data.success) {
+            renderActiveStreams(data.data.activeStreams || []);
+            updateStudioState(data.data.activeStreams || []);
+        }
     } catch(e) {}
+}
+
+function updateStudioState(streams) {
+    const btn = document.getElementById('btnGoLive');
+    const badge = document.getElementById('studioLiveBadge');
+
+    // Check if ANY stream is active (simplified for now)
+    const isLive = streams.some(s => s.live);
+
+    if (isLive) {
+        if (btn) {
+            btn.innerText = "End Broadcast";
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-secondary');
+            btn.onclick = stopStream;
+        }
+        if (badge) badge.classList.remove('hidden');
+
+        // Find active stream ID to stop specifically if needed, but stopStream() handles all via prompt
+    } else {
+        if (btn) {
+            btn.innerText = "Go Live";
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-danger');
+            btn.onclick = submitJob;
+        }
+        if (badge) badge.classList.add('hidden');
+    }
 }
 
 async function checkInitialStatus() { startStatusPoll(); }

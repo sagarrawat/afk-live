@@ -214,7 +214,7 @@ body {
 }
 
 .studio-preview-wrapper {
-    width: 100%; aspect-ratio: 16/9; max-height: 100%;
+    width: 100%; max-width: 800px; aspect-ratio: 16/9; max-height: 100%;
     background: #000; border-radius: 8px;
     position: relative; overflow: hidden;
     box-shadow: 0 4px 20px rgba(0,0,0,0.1);
