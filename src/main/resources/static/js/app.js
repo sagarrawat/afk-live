@@ -356,21 +356,20 @@ async function openLibraryModalForStream() {
 function selectStreamVideo(video) {
     selectedStreamVideo = video;
 
-    // Update Source Card (Bottom Strip)
-    const card = document.getElementById('selectedVideoCard');
+    // Update Source Bar
     const thumb = document.getElementById('selectedVideoThumb');
+    const icon = document.getElementById('selectedVideoIcon');
 
-    // Attempt to set thumbnail if available or use icon logic
     if (video.thumbnailS3Key) {
         thumb.src = `${API_URL}/videos/${video.id}/thumbnail`;
+        thumb.classList.remove('hidden');
+        icon.classList.add('hidden');
     } else {
-        // Placeholder image generator or default
-        thumb.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" style="background:black"><text x="50%" y="50%" fill="white" text-anchor="middle" font-size="12">VIDEO</text></svg>';
+        thumb.classList.add('hidden');
+        icon.classList.remove('hidden');
     }
 
     document.getElementById('studioSelectedTitle').innerText = video.title;
-    card.classList.remove('hidden');
-    card.classList.add('active'); // Highlight as active source
 
     // Auto-fill Metadata if empty
     if (!document.getElementById('streamMetaTitle').value) {

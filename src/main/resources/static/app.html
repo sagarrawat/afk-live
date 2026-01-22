@@ -136,39 +136,39 @@
                             <video id="previewPlayer" class="studio-preview-player hidden" controls playsinline></video>
                             <div id="previewPlaceholder" class="studio-preview-placeholder">
                                 <i class="fa-solid fa-film fa-3x"></i>
-                                <div style="margin-top:10px;">Preview Area</div>
+                                <div style="margin-top:10px;">Select a video to start</div>
+                                <button class="btn btn-primary btn-sm" onclick="openLibraryModalForStream()" style="margin-top:15px;">Select Source</button>
                             </div>
                             <div class="studio-live-badge hidden" id="studioLiveBadge">LIVE</div>
                         </div>
                     </div>
 
-                    <!-- Control Bar -->
-                    <div class="studio-control-bar">
-                        <button class="control-btn" title="Stop Cam (Mock)"><i class="fa-solid fa-video"></i></button>
-                        <button class="control-btn" title="Mute (Mock)"><i class="fa-solid fa-microphone"></i></button>
-                        <div style="width: 1px; background: #ddd; margin: 0 5px;"></div>
-                        <button class="control-btn" id="streamLoopBtn" onclick="document.getElementById('streamLoopInfinite').click()" title="Toggle Loop"><i class="fa-solid fa-repeat"></i></button>
-                        <button class="control-btn" onclick="openLibraryModalForStream()" title="Change Video"><i class="fa-solid fa-folder-open"></i></button>
-
-                        <div class="hidden">
-                            <input type="checkbox" id="streamLoopInfinite" checked onchange="toggleLoop(this)">
-                            <input type="number" id="streamLoopCount" value="1">
+                    <!-- Compact Stream Control Bar -->
+                    <div class="studio-source-bar">
+                        <div class="source-info" onclick="openLibraryModalForStream()">
+                            <div class="source-thumb">
+                                <img id="selectedVideoThumb" src="" class="hidden">
+                                <i id="selectedVideoIcon" class="fa-solid fa-film"></i>
+                            </div>
+                            <div class="source-details">
+                                <div class="source-label">Current Source</div>
+                                <div id="studioSelectedTitle" class="source-title">None Selected</div>
+                            </div>
+                            <button class="btn btn-sm btn-outline" style="margin-left:10px;">Change</button>
                         </div>
-                    </div>
 
-                    <!-- Asset Strip -->
-                    <div class="studio-asset-strip">
-                        <!-- Add Button -->
-                        <button class="asset-card asset-add-btn" onclick="openLibraryModalForStream()">
-                            <i class="fa-solid fa-plus fa-lg"></i>
-                            <div style="margin-top:5px;">Add Video</div>
-                        </button>
-                        <input type="file" id="streamUploadInput" hidden accept="video/*">
-
-                        <!-- Selected Video Card (Dynamic) -->
-                        <div id="selectedVideoCard" class="asset-card hidden" onclick="openLibraryModalForStream()">
-                            <img src="" id="selectedVideoThumb">
-                            <div class="asset-card-label" id="studioSelectedTitle">Video Title</div>
+                        <div class="source-actions">
+                            <div class="action-toggle" title="Loop Video">
+                                <input type="checkbox" id="streamLoopInfinite" checked>
+                                <span class="toggle-label"><i class="fa-solid fa-repeat"></i> Loop</span>
+                            </div>
+                            <div class="action-toggle" title="Mute Source Audio">
+                                <input type="checkbox" id="streamMuteOriginal" checked>
+                                <span class="toggle-label"><i class="fa-solid fa-volume-xmark"></i> Mute Src</span>
+                            </div>
+                            <!-- Hidden inputs for logic -->
+                            <input type="number" id="streamLoopCount" value="1" class="hidden">
+                            <input type="file" id="streamUploadInput" hidden accept="video/*">
                         </div>
                     </div>
                 </div>
