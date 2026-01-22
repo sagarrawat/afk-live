@@ -909,6 +909,15 @@ async function submitScheduledStream() {
         muteVideoAudio: document.getElementById('streamMuteOriginal').checked
     };
 
+    // Metadata
+    const title = document.getElementById('streamMetaTitle').value;
+    const desc = document.getElementById('streamMetaDesc').value;
+    const privacy = document.getElementById('streamMetaPrivacy').value;
+
+    if (title) payload.title = title;
+    if (desc) payload.description = desc;
+    if (privacy) payload.privacy = privacy;
+
     // Music logic (Simplified for JSON payload, logic duplicated from submitJob)
     const musicUpload = document.getElementById('uploadedStreamMusicName').value;
     const musicStock = document.getElementById('selectedStreamStockId').value;

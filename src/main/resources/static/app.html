@@ -142,7 +142,7 @@
 
                     <!-- Stream Setup Tabs -->
                     <div class="stream-setup-tabs">
-                        <button class="tab-btn active" onclick="switchStreamSetupTab('source')"><i class="fa-solid fa-video"></i> Source</button>
+                        <button class="tab-btn active" onclick="switchStreamSetupTab('source')"><i class="fa-solid fa-info-circle"></i> Stream Info</button>
                         <button class="tab-btn" onclick="switchStreamSetupTab('branding')"><i class="fa-solid fa-paintbrush"></i> Brand</button>
                         <button class="tab-btn" onclick="switchStreamSetupTab('audio')"><i class="fa-solid fa-music"></i> Audio</button>
                     </div>
@@ -150,6 +150,28 @@
                     <div class="setup-content">
                         <!-- SOURCE TAB -->
                         <div id="setup-source" class="setup-panel">
+
+                            <!-- METADATA (Moved to Top) -->
+                            <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #eee;">
+                                <h4 style="margin: 0 0 15px 0;">Metadata & Privacy</h4>
+                                <div class="form-group">
+                                    <label>Stream Title</label>
+                                    <input type="text" id="streamMetaTitle" class="form-input" placeholder="Enter stream title">
+                                </div>
+                                <div class="form-group">
+                                    <label>Description</label>
+                                    <textarea id="streamMetaDesc" class="form-input" rows="2" placeholder="Enter description"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Privacy</label>
+                                    <select id="streamMetaPrivacy" class="form-input">
+                                        <option value="public">Public</option>
+                                        <option value="unlisted">Unlisted</option>
+                                        <option value="private">Private</option>
+                                    </select>
+                                </div>
+                            </div>
+
                              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
                                 <h3 style="margin:0">Video Source</h3>
                                 <div style="display:flex; gap: 10px;">
@@ -179,26 +201,6 @@
                                             <option value="force_portrait">Force Vertical (9:16)</option>
                                         </select>
                                     </div>
-                                </div>
-                            </div>
-
-                            <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px;">
-                                <h4 style="margin: 0 0 15px 0;">Metadata & Privacy</h4>
-                                <div class="form-group">
-                                    <label>Stream Title</label>
-                                    <input type="text" id="streamMetaTitle" class="form-input" placeholder="Enter stream title">
-                                </div>
-                                <div class="form-group">
-                                    <label>Description</label>
-                                    <textarea id="streamMetaDesc" class="form-input" rows="2" placeholder="Enter description"></textarea>
-                                </div>
-                                <div class="form-group">
-                                    <label>Privacy</label>
-                                    <select id="streamMetaPrivacy" class="form-input">
-                                        <option value="public">Public</option>
-                                        <option value="unlisted">Unlisted</option>
-                                        <option value="private">Private</option>
-                                    </select>
                                 </div>
                             </div>
                         </div>
