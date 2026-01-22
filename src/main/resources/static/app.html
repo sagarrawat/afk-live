@@ -354,45 +354,74 @@
         </div>
 
         <!-- VIEW: COMMUNITY -->
-        <div id="view-community" class="view-section hidden">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                 <h2>Engagement</h2>
-                 <div style="display:flex; gap:10px;">
-                     <button class="btn btn-outline btn-sm" onclick="loadUnrepliedComments()"><i class="fa-regular fa-envelope-open"></i> Unreplied</button>
-                     <button class="btn btn-outline btn-sm" onclick="loadComments()"><i class="fa-solid fa-list"></i> All</button>
-                     <button class="btn btn-outline btn-sm" onclick="showEngagementSettings()"><i class="fa-solid fa-robot"></i> AI Automation</button>
-                 </div>
+        <div id="view-community" class="view-section hidden" style="padding: 20px;">
+            <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                 <h2 style="margin:0;">Engagement</h2>
+                 <button class="btn btn-outline btn-sm" onclick="showEngagementSettings()"><i class="fa-solid fa-robot"></i> AI Automation</button>
             </div>
-            <div class="community-layout">
-                <div class="thread-list-panel">
-                     <div class="search-bar">
-                         <input type="text" placeholder="Search comments..." class="form-input">
-                     </div>
-                     <div id="threadList" class="thread-list"></div>
-                </div>
-                <div class="thread-view-panel">
-                    <div id="emptyThreadState" class="empty-state">
-                        <i class="fa-regular fa-comments"></i>
-                        <p>Select a conversation</p>
+
+            <div class="community-grid-layout">
+                <!-- SIDEBAR -->
+                <div class="comm-sidebar">
+                    <div class="comm-nav-item active" onclick="filterCommTab('all')">
+                        <i class="fa-solid fa-inbox"></i> All Comments
                     </div>
-                    <div id="activeThread" class="hidden">
-                        <div class="thread-header">
-                             <h3 id="threadVideoTitle">Video Title</h3>
-                             <a href="#" id="threadVideoLink" target="_blank"><i class="fa-solid fa-external-link"></i></a>
+                    <div class="comm-nav-item" onclick="filterCommTab('unreplied')">
+                        <i class="fa-regular fa-envelope-open"></i> Unreplied
+                    </div>
+                    <div style="margin: 15px 20px 5px; font-size: 0.75rem; font-weight: 700; color: #999; text-transform: uppercase;">Activity</div>
+                    <div class="comm-nav-item" onclick="filterCommTab('activity')">
+                        <i class="fa-solid fa-bolt"></i> Auto-Actions
+                    </div>
+                </div>
+
+                <!-- LIST -->
+                <div id="commListPanel" class="comm-list-panel">
+                     <div style="padding: 15px; border-bottom: 1px solid var(--border);">
+                         <input type="text" placeholder="Search..." class="form-input" style="font-size: 0.9rem;">
+                     </div>
+                     <div id="threadList" class="thread-list">
+                         <!-- Populated via JS -->
+                     </div>
+                </div>
+
+                <!-- ACTIVITY VIEW (Alternative to List/Detail) -->
+                <div id="commActivityView" class="comm-detail-panel hidden" style="padding: 30px; overflow-y: auto; grid-column: span 2;">
+                    <h3 style="margin-top:0;">Automation Log</h3>
+                    <div id="activityList" class="activity-list"></div>
+                </div>
+
+                <!-- DETAIL -->
+                <div id="commDetailView" class="comm-detail-panel">
+                    <div id="emptyThreadState" class="empty-state" style="padding-top: 100px;">
+                        <i class="fa-regular fa-comments"></i>
+                        <p>Select a conversation to reply</p>
+                    </div>
+
+                    <div id="activeThread" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
+                        <div class="thread-header" style="padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #fafafa;">
+                             <div style="font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                                 <i class="fa-brands fa-youtube" style="color: red;"></i>
+                                 <span id="threadVideoTitle">Video Title</span>
+                             </div>
+                             <a href="#" id="threadVideoLink" target="_blank" style="color: var(--text-muted);"><i class="fa-solid fa-external-link"></i></a>
                         </div>
-                        <div id="threadMessages" class="thread-messages"></div>
+
+                        <div id="threadMessages" class="thread-messages" style="flex: 1; overflow-y: auto; padding: 20px;">
+                            <!-- Bubbles -->
+                        </div>
 
                         <!-- AI Suggestions Area -->
-                        <div id="aiSuggestionsArea" class="hidden" style="padding: 10px; background: #f0f8ff; margin-bottom: 10px; border-radius: 4px;">
-                            <small style="font-weight:600; color:#0052cc; display:block; margin-bottom:5px;">AI Suggestions:</small>
-                            <div id="aiChips" style="display:flex; gap:5px; flex-wrap:wrap;"></div>
-                            <button class="btn btn-sm btn-text" onclick="generateSuggestions()" style="font-size:0.8rem; margin-top:5px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate</button>
+                        <div id="aiSuggestionsArea" class="hidden" style="padding: 10px 20px; background: #f0f8ff; border-top: 1px solid #cce0ff;">
+                            <small style="font-weight:600; color:#0052cc; display:block; margin-bottom:8px;">AI Suggestions:</small>
+                            <div id="aiChips" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+                            <button class="btn btn-sm btn-text" onclick="generateSuggestions()" style="font-size:0.8rem; margin-top:5px; padding-left:0;"><i class="fa-solid fa-rotate"></i> Refresh</button>
                         </div>
 
-                        <div class="reply-box">
-                            <textarea id="replyInput" placeholder="Write a reply..." rows="3"></textarea>
-                            <div style="display: flex; justify-content: space-between; margin-top: 10px;">
-                                <button class="btn btn-sm btn-outline" onclick="toggleAiSuggestions()"><i class="fa-solid fa-robot"></i> AI Assist</button>
+                        <div class="reply-box" style="padding: 20px; border-top: 1px solid var(--border); background: white;">
+                            <textarea id="replyInput" placeholder="Write a reply..." rows="3" class="form-input" style="margin-bottom: 10px;"></textarea>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <button class="btn btn-sm btn-outline" onclick="toggleAiSuggestions()"><i class="fa-solid fa-wand-magic-sparkles" style="color: #8e44ad;"></i> AI Assist</button>
                                 <button class="btn btn-primary" onclick="sendReply()">Reply</button>
                             </div>
                         </div>
