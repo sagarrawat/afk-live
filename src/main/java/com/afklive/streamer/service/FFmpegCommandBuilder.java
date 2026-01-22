@@ -391,7 +391,7 @@ public class FFmpegCommandBuilder {
                 String key = streamKeys.get(i);
                 if (i > 0) teePayload.append("|");
                 String url = key.startsWith("rtmp") ? key : "rtmps://a.rtmp.youtube.com:443/live2/" + key;
-                teePayload.append("[f=flv:flvflags=no_duration_filesize]").append(url);
+                teePayload.append("[f=flv:onfail=ignore:flvflags=no_duration_filesize]").append(url);
             }
             command.add(teePayload.toString());
         }

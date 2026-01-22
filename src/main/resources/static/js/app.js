@@ -1004,6 +1004,10 @@ function setLiveState(isLive) {
         offlineBadge.classList.remove('hidden');
         btnGo.classList.remove('hidden');
         btnStop.classList.add('hidden');
+        // Reset button state
+        btnGo.disabled = false;
+        btnGo.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Go Live';
+
         log("Stream Offline");
         stopTimer();
     }
@@ -1299,6 +1303,7 @@ function startTimer() {
     const el = document.getElementById('streamTimer');
     if(!el) return;
 
+    let pollCounter = 0;
     streamTimerInterval = setInterval(() => {
         if(!streamStartTime) return;
         const diff = Math.floor((new Date() - streamStartTime) / 1000);
@@ -1306,7 +1311,26 @@ function startTimer() {
         const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
         const s = (diff % 60).toString().padStart(2, '0');
         el.innerText = `${h}:${m}:${s}`;
+
+        // Poll status every 5 seconds
+        pollCounter++;
+        if (pollCounter % 5 === 0) {
+            checkStreamStatus();
+        }
     }, 1000);
+}
+
+async function checkStreamStatus() {
+    try {
+        const res = await apiFetch(`${API_URL}/status`);
+        const data = await res.json();
+        // If backend says offline but UI thinks we are live
+        if(data.success && !data.data.live) {
+             setLiveState(false);
+             showToast("Stream ended unexpectedly.", "error");
+             localStorage.removeItem('afk_stream_state');
+        }
+    } catch(e) {}
 }
 
 function stopTimer() {
