@@ -40,12 +40,6 @@ public class VideoController {
     private final UserService userService;
     private final AudioService audioService;
 
-    @GetMapping("/audio/trending")
-    public ResponseEntity<?> getTrendingAudio(Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(audioService.getTrendingTracks());
-    }
-
     @GetMapping("/youtube/categories")
     public ResponseEntity<?> getVideoCategories(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
