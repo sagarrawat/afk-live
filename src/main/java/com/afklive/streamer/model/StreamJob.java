@@ -25,6 +25,11 @@ public class StreamJob {
     private String musicName;
     private String musicVolume;
 
+    // Metadata
+    private String title;
+    private String description;
+    private String privacy;
+
     public StreamJob(
             String username,
             String streamKey,
@@ -32,7 +37,10 @@ public class StreamJob {
             String musicName,
             String musicVolume,
             boolean live,
-            long pid
+            long pid,
+            String title,
+            String description,
+            String privacy
     ) {
         this.username = username;
         this.streamKey = streamKey;
@@ -41,6 +49,9 @@ public class StreamJob {
         this.musicVolume = musicVolume;
         this.isLive = live;
         this.pid = pid;
+        this.title = title;
+        this.description = description;
+        this.privacy = privacy;
     }
 
 }

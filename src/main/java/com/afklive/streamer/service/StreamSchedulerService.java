@@ -57,7 +57,10 @@ public class StreamSchedulerService {
                     stream.getLoopCount(),
                     null, // Watermark file (Multipart) not available here.
                     stream.isMuteVideoAudio(),
-                    stream.getStreamMode()
+                    stream.getStreamMode(),
+                    null, // Title
+                    null, // Description
+                    null  // Privacy
             );
 
             stream.setStatus(ScheduledStream.StreamStatus.COMPLETED); // Marked as "Started" basically
