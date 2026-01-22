@@ -131,11 +131,13 @@ public class StreamController {
         return ResponseEntity.ok(Map.of("success", true, "message", "Conversion started"));
     }
 
+    // Deprecated in favor of ConvertController, but kept/updated for legacy route compatibility
     @PostMapping("/convert/optimize")
     public ResponseEntity<?> optimizeVideo(@RequestParam String fileName, Principal principal) throws IOException {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String email = SecurityUtils.getEmail(principal);
-        videoConversionService.optimizeVideo(userFileService.getUserUploadDir(email), email, fileName);
+        // Default to landscape 1080p if called via old endpoint
+        videoConversionService.optimizeVideo(userFileService.getUserUploadDir(email), email, fileName, "landscape", 1080);
         return ResponseEntity.ok(Map.of("success", true, "message", "Optimization started"));
     }
 
