@@ -57,11 +57,12 @@ public class StreamController {
     public ResponseEntity<?> getStatus(Principal principal) {
         if (principal == null) return ResponseEntity.ok(ApiResponse.success("Guest", Map.of("live", false)));
 
-        StreamJob job = streamService.getCurrentStatus(SecurityUtils.getEmail(principal));
-        if (job == null) {
-            return ResponseEntity.ok(ApiResponse.success("OFFLINE", Map.of("live", false)));
+        List<StreamJob> jobs = streamService.getActiveStreams(SecurityUtils.getEmail(principal));
+        if (jobs == null || jobs.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success("OFFLINE", Map.of("live", false, "activeStreams", List.of())));
         }
-        return ResponseEntity.ok(ApiResponse.success("ONLINE", job));
+        // Return list in "activeStreams" for new UI, and "live"=true for legacy check
+        return ResponseEntity.ok(ApiResponse.success("ONLINE", Map.of("live", true, "activeStreams", jobs)));
     }
 
     @PostMapping("/start")
@@ -73,26 +74,38 @@ public class StreamController {
                                                 @RequestParam(required = false) MultipartFile watermarkFile,
                                                 @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
                                                 @RequestParam(required = false, defaultValue = "original") String streamMode,
+                                                @RequestParam(required = false) String title,
+                                                @RequestParam(required = false) String description,
+                                                @RequestParam(required = false) String privacy,
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
         String email = SecurityUtils.getEmail(principal);
-        if (streamManager.tryStartStream(email)) {
-            try {
-                return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode));
-            } catch (Exception e) {
-                return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
-            }
+        // Removed global lock (streamManager) to allow multiple streams per user.
+        // Quota is checked inside StreamService via UserService.
+        try {
+            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, title, description, privacy));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }
-        return ResponseEntity.status(413).body(ApiResponse.error("Too many concurrent streams"));
     }
 
     @PostMapping("/stop")
-    public ResponseEntity<?> stop(Principal principal) {
+    public ResponseEntity<?> stop(Principal principal, @RequestParam(required = false) Long streamId) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
-        streamManager.endStream(email);
-        return ResponseEntity.ok(streamService.stopStream(email));
+
+        if (streamId != null) {
+            // Stop specific stream
+            // We don't release the global lock (streamManager.endStream) unless it was the last one?
+            // Actually streamManager lock is per-user boolean. With multiple streams, we should probably refactor StreamManager
+            // or just rely on quota. For now, we'll let StreamService handle the logic.
+            return ResponseEntity.ok(streamService.stopStream(streamId, email));
+        } else {
+            // Stop all
+            streamManager.endStream(email);
+            return ResponseEntity.ok(streamService.stopAllStreams(email));
+        }
     }
 
     @PostMapping("/convert")

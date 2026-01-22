@@ -298,4 +298,59 @@ public class YouTubeService {
         // Usually the default stream is the first one or we pick the first available
         return response.getItems().get(0).getCdn().getIngestionInfo().getStreamName();
     }
+
+    public void updateActiveBroadcast(String username, String title, String description, String privacyStatus) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+
+        // 1. Find active or upcoming broadcast
+        // We prioritize 'active' (currently streaming) then 'upcoming' (scheduled/ready)
+        List<LiveBroadcast> broadcasts = new java.util.ArrayList<>();
+
+        // Listing with mine=true and broadcastStatus together can cause 400 errors.
+        // We fetch all types and filter in memory.
+        LiveBroadcastListResponse response = youtube.liveBroadcasts().list(Collections.singletonList("id,snippet,status"))
+                .setMine(true)
+                .setBroadcastType("all")
+                .execute();
+
+        if (response.getItems() != null) {
+            for (LiveBroadcast b : response.getItems()) {
+                String status = b.getStatus().getLifeCycleStatus();
+                // Prioritize active
+                if ("live".equals(status) || "liveStarting".equals(status) || "testing".equals(status) || "testStarting".equals(status)) {
+                    broadcasts.add(0, b);
+                } else if ("ready".equals(status) || "created".equals(status)) {
+                    broadcasts.add(b);
+                }
+            }
+        }
+
+        if (broadcasts.isEmpty()) {
+            // No broadcast found to update. We could create one, but that requires binding to a stream.
+            // For now, we just log a warning or assume user is using a non-API-managed stream (like persistent key without event).
+            // But usually "Default Broadcast" exists if "Stream Now" is used.
+            log.warn("No active or upcoming broadcast found for user {} to update metadata.", username);
+            return;
+        }
+
+        // Update the first found broadcast (most relevant)
+        LiveBroadcast broadcast = broadcasts.getFirst();
+
+        LiveBroadcastSnippet snippet = broadcast.getSnippet();
+        if (title != null && !title.isEmpty()) snippet.setTitle(title);
+        if (description != null && !description.isEmpty()) snippet.setDescription(description);
+
+        LiveBroadcastStatus status = broadcast.getStatus();
+        if (privacyStatus != null && !privacyStatus.isEmpty()) {
+            status.setPrivacyStatus(privacyStatus);
+        }
+
+        LiveBroadcast update = new LiveBroadcast();
+        update.setId(broadcast.getId());
+        update.setSnippet(snippet);
+        update.setStatus(status);
+
+        youtube.liveBroadcasts().update(Collections.singletonList("snippet,status"), update).execute();
+        log.info("Updated broadcast metadata for broadcast ID: {}", broadcast.getId());
+    }
 }

@@ -35,9 +35,8 @@ public class StreamService {
     private final List<String> logBuffer =
             Collections.synchronizedList(new ArrayList<>());
 
-    // Store active streams: StreamKey -> Process
-    // (In a real app, use a Database ID or User ID as the key, not the stream key itself)
-    private final ConcurrentHashMap<String, Process> activeStreams = new ConcurrentHashMap<>();
+    // Store active streams: Job ID -> Process
+    private final ConcurrentHashMap<Long, Process> activeStreams = new ConcurrentHashMap<>();
     @Autowired
     private UserFileService userFileService;
     @Autowired
@@ -48,6 +47,8 @@ public class StreamService {
     private AudioService audioService;
     @Autowired
     private ScheduledVideoRepository scheduledVideoRepository;
+    @Autowired
+    private YouTubeService youTubeService;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -59,7 +60,10 @@ public class StreamService {
             int loopCount,
             MultipartFile watermarkFile,
             boolean muteVideoAudio,
-            String streamMode
+            String streamMode,
+            String title,
+            String description,
+            String privacy
     ) throws IOException {
         
         log.info("username [{}]", username);
@@ -73,8 +77,20 @@ public class StreamService {
         int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
         userService.checkStreamQuota(username, activeCount);
 
-        if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
-            throw new IllegalStateException("You already have an active stream running!");
+        // REMOVED SINGLE STREAM CHECK TO ALLOW MULTIPLE STREAMS
+        // if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
+        //    throw new IllegalStateException("You already have an active stream running!");
+        // }
+
+        // 0. UPDATE METADATA (Optional)
+        // If title/desc provided, try to update YouTube broadcast
+        if (title != null || description != null || privacy != null) {
+            try {
+                youTubeService.updateActiveBroadcast(username, title, description, privacy);
+            } catch (Exception e) {
+                log.error("Failed to update broadcast metadata", e);
+                // Continue streaming anyway, non-fatal
+            }
         }
 
         // 2. Resolve Paths & Download from S3
@@ -198,26 +214,29 @@ public class StreamService {
         // We save the 'pid' so we can kill specifically THIS process later
         String primaryKey = streamKeys.getFirst();
         StreamJob job =
-                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid());
-        streamJobRepo.save(job);
+                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid(), title, description, privacy);
+        job = streamJobRepo.save(job);
+        final Long jobId = job.getId();
 
         // Store reference in memory map as backup (optional, but good for speed)
-        activeStreams.put(username, process);
+        activeStreams.put(jobId, process);
 
         // 6. EXIT HANDLER (Auto-Update DB)
         process.onExit().thenRun(() -> {
             log.warn("Stream Process Exited for user: {}", username);
 
-            // Mark as Offline in Database
-            Optional<StreamJob> jobOpt = streamJobRepo.findByUsernameAndIsLiveTrue(username);
+            // Mark as Offline in Database using ID to ensure we target correct job
+            Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
             if (jobOpt.isPresent()) {
                 StreamJob existingJob = jobOpt.get();
-                existingJob.setLive(false);
-                streamJobRepo.save(existingJob);
+                if (existingJob.isLive()) {
+                    existingJob.setLive(false);
+                    streamJobRepo.save(existingJob);
+                }
             }
 
             // Clear memory map
-            activeStreams.remove(username);
+            activeStreams.remove(jobId);
         });
 
         return ApiResponse.success("Stream started", new StreamResponse(
@@ -228,25 +247,50 @@ public class StreamService {
         ));
     }
 
-    public ApiResponse<?> stopStream(String username) {
-        // 1. Find active job in DB
-        Optional<StreamJob> jobOpt = streamJobRepo.findByUsernameAndIsLiveTrue(username);
+    public ApiResponse<?> stopAllStreams(String username) {
+        List<StreamJob> jobs = streamJobRepo.findAllByUsernameAndIsLiveTrue(username);
+
+        if (jobs.isEmpty()) {
+            return ApiResponse.success("No active streams found", null);
+        }
+
+        int stopped = 0;
+        for (StreamJob job : jobs) {
+            ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
+            job.setLive(false);
+            streamJobRepo.save(job);
+            stopped++;
+        }
+
+        // Clean up memory map
+        for (StreamJob job : jobs) {
+            activeStreams.remove(job.getId());
+        }
+
+        return ApiResponse.success(stopped + " streams stopped", null);
+    }
+
+    public ApiResponse<?> stopStream(Long jobId, String username) {
+        Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
 
         if (jobOpt.isPresent()) {
             StreamJob job = jobOpt.get();
-            // 2. Kill Process
-            ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
+            if (!job.getUsername().equals(username)) {
+                return ApiResponse.error("Unauthorized");
+            }
 
-            // 3. Update DB
-            job.setLive(false);
-            streamJobRepo.save(job);
-            return ApiResponse.success("Stream stopped successfully", null);
+            if (job.isLive()) {
+                ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
+                job.setLive(false);
+                streamJobRepo.save(job);
+                return ApiResponse.success("Stream stopped", null);
+            }
         }
-        return ApiResponse.success("No active stream found", null);
+        return ApiResponse.error("Stream not found or not active");
     }
 
-    public StreamJob getCurrentStatus(String username) {
-        return streamJobRepo.findByUsernameAndIsLiveTrue(username).orElse(null);
+    public List<StreamJob> getActiveStreams(String username) {
+        return streamJobRepo.findAllByUsernameAndIsLiveTrue(username);
     }
 
     // SAFETY NET: Kill all streams if the Java Server shuts down
