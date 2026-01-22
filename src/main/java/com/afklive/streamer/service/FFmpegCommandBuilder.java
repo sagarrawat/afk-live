@@ -45,8 +45,6 @@ public class FFmpegCommandBuilder {
         java.io.File local = new java.io.File("bin/ffmpeg");
         if (local.exists()) ffmpeg = local.getAbsolutePath();
 
-        // Convert Landscape to Portrait (9:16) with blurred background
-        // ffmpeg -i input.mp4 -vf "split[original][copy];[copy]scale=-1:1920,crop=w=1080:h=1920,gblur=sigma=20[blurred];[original]scale=1080:-1[scaled];[blurred][scaled]overlay=0:(H-h)/2" -c:v libx264 -c:a copy output.mp4
         List<String> command = new ArrayList<>();
         command.add(ffmpeg);
         command.add("-i");
@@ -54,13 +52,12 @@ public class FFmpegCommandBuilder {
         command.add("-vf");
         command.add("split[original][copy];[copy]scale=-1:1920,crop=w=1080:h=1920,gblur=sigma=20[blurred];[original]scale=1080:-1[scaled];[blurred][scaled]overlay=0:(H-h)/2");
 
-        // YouTube Shorts / Live optimizations
         command.add("-c:v");
         command.add("libx264");
         command.add("-preset");
-        command.add("superfast"); // Balanced for speed/quality
+        command.add("superfast");
         command.add("-b:v");
-        command.add("4500k"); // Target bitrate for 1080p Shorts
+        command.add("4500k");
         command.add("-maxrate");
         command.add("6000k");
         command.add("-bufsize");
@@ -70,7 +67,7 @@ public class FFmpegCommandBuilder {
         command.add("-r");
         command.add("30");
         command.add("-g");
-        command.add("60"); // 2-second GOP (keyframe interval) for 30fps
+        command.add("60");
 
         command.add("-c:a");
         command.add("aac");
@@ -84,7 +81,7 @@ public class FFmpegCommandBuilder {
         return command;
     }
 
-    public static List<String> buildOptimizeCommand(Path input, Path output) {
+    public static List<String> buildOptimizeCommand(Path input, Path output, String mode, int height) {
         List<String> command = new ArrayList<>();
         command.add("nice");
         command.add("-n");
@@ -93,30 +90,60 @@ public class FFmpegCommandBuilder {
         command.add("-i");
         command.add(input.toString());
 
-        // Video: Standardize to 1080p 30fps H.264
-        command.add("-vf");
-        command.add("scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2");
+        // Resolution Logic
+        int w, h;
+        if ("portrait".equalsIgnoreCase(mode)) {
+            h = height;
+            w = (int) Math.round(h * (9.0 / 16.0));
+            if (w % 2 != 0) w++;
+
+            // Blur background effect for portrait
+            String filter = String.format("split[original][copy];[copy]scale=-1:%d,crop=w=%d:h=%d,gblur=sigma=20[blurred];[original]scale=%d:-1[scaled];[blurred][scaled]overlay=(W-w)/2:(H-h)/2", h, w, h, w);
+            command.add("-vf");
+            command.add(filter);
+
+        } else {
+            // Landscape (Default)
+            h = height;
+            w = (int) Math.round(h * (16.0 / 9.0));
+            if (w % 2 != 0) w++;
+
+            String filter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h);
+            command.add("-vf");
+            command.add(filter);
+        }
 
         command.add("-c:v");
         command.add("libx264");
         command.add("-preset");
-        command.add("medium"); // Higher quality per bitrate for offline processing
+        command.add("medium");
         command.add("-profile:v");
         command.add("high");
-        command.add("-b:v");
-        command.add("4500k");
-        command.add("-maxrate");
-        command.add("4500k");
-        command.add("-bufsize");
-        command.add("9000k");
+
+        // Bitrate based on resolution
+        String bitrate = "4500k";
+        String maxrate = "4500k";
+        String bufsize = "9000k";
+
+        if (height >= 2160) { // 4K
+            bitrate = "12000k"; maxrate = "20000k"; bufsize = "40000k";
+        } else if (height >= 1440) { // 2K
+             bitrate = "8000k"; maxrate = "12000k"; bufsize = "24000k";
+        } else if (height <= 720) {
+             bitrate = "2500k"; maxrate = "3500k"; bufsize = "7000k";
+        }
+
+        command.add("-b:v"); command.add(bitrate);
+        command.add("-maxrate"); command.add(maxrate);
+        command.add("-bufsize"); command.add(bufsize);
+
         command.add("-pix_fmt");
         command.add("yuv420p");
         command.add("-r");
         command.add("30");
         command.add("-g");
-        command.add("60"); // 2-second GOP
+        command.add("60");
 
-        // Audio: AAC 128k
         command.add("-c:a");
         command.add("aac");
         command.add("-b:a");
@@ -132,12 +159,16 @@ public class FFmpegCommandBuilder {
         return command;
     }
 
+    // Keep old signature for backward compatibility if needed, though we should update callers
+    public static List<String> buildOptimizeCommand(Path input, Path output) {
+        return buildOptimizeCommand(input, output, "landscape", 1080);
+    }
+
     public static List<String> buildMixCommand(Path videoPath, Path audioPath, String volume, Path outputPath) {
         String ffmpeg = "ffmpeg";
         java.io.File local = new java.io.File("bin/ffmpeg");
         if (local.exists()) ffmpeg = local.getAbsolutePath();
 
-        // ffmpeg -i video.mp4 -stream_loop -1 -i audio.mp3 -filter_complex "[1:a]volume=0.5[a1];[0:a][a1]amix=inputs=2:duration=first[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -y out.mp4
         List<String> command = new ArrayList<>();
         command.add(ffmpeg);
         command.add("-i");
@@ -147,15 +178,18 @@ public class FFmpegCommandBuilder {
         command.add("-i");
         command.add(audioPath.toString());
         command.add("-filter_complex");
-        command.add("[1:a]volume=" + volume + "[a1];[0:a][a1]amix=inputs=2:duration=first[aout]");
+        // Robust mix with resample
+        command.add("[1:a]volume=" + volume + ",aresample=44100[a1];[0:a]aresample=44100[a0];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]");
         command.add("-map");
         command.add("0:v");
         command.add("-map");
         command.add("[aout]");
         command.add("-c:v");
-        command.add("copy"); // Copy video stream
+        command.add("copy");
         command.add("-c:a");
         command.add("aac");
+        command.add("-ar");
+        command.add("44100");
         command.add("-y");
         command.add(outputPath.toString());
         return command;
@@ -217,16 +251,31 @@ public class FFmpegCommandBuilder {
         String vLabel = "0:v";
         String aLabel = "0:a";
 
-        // Scaling logic (Force even dimensions to avoid libx264 crash)
-        int h = (Math.min(1080, maxHeight) / 2) * 2;
-        int w = ((h * 16 / 9) / 2) * 2; // Default to 16:9 even math
+        // Dynamic Resolution Logic
+        String scaleFilter;
+        // Ensure max limit from Plan is respected (default 1080)
+        int safeMaxHeight = (maxHeight > 0) ? maxHeight : 1080;
 
         if ("force_portrait".equals(streamMode)) {
-            w = (Math.min(1080, maxHeight) / 2) * 2;
-            h = ((w * 16 / 9) / 2) * 2;
+            // Deprecated logic path, but if forced:
+            int h = safeMaxHeight;
+            int w = (int) Math.round(h * (9.0 / 16.0));
+            if (w % 2 != 0) w++;
+            if (h % 2 != 0) h++;
+            scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, w, h);
+        } else {
+            // "original" or "force_landscape"
+            // Use 'min(ih, maxHeight)' to avoid upscaling beyond plan, but respect original AR
+            // Ensure width/height are even (-2 logic handles width, but height needs even limit)
+
+            // Example: scale=-2:'min(ih,1080)' -> but we must ensure height is even.
+            // ffmpeg expression: min(ih, H) -> then round.
+            // Better to use: scale=-2:min(ih\,maxHeight),pad=ceil(iw/2)*2:ceil(ih/2)*2
+            // Note: complex filter escaping.
+
+            scaleFilter = String.format("scale=-2:min(ih\\,%d),pad=ceil(iw/2)*2:ceil(ih/2)*2", safeMaxHeight);
         }
 
-        String scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, w, h);
         filterChains.add("[0:v]" + scaleFilter + "[scaled]");
         vLabel = "[scaled]";
 
@@ -236,14 +285,20 @@ public class FFmpegCommandBuilder {
             vLabel = "[vout]";
         }
 
+        // Audio Logic
         if (hasMusic) {
             if (muteVideoAudio) {
-                filterChains.add(String.format("[1:a]volume=%s[aout]", musicVolume));
+                 // Video audio muted, just use music
+                filterChains.add(String.format("[1:a]volume=%s,aresample=44100[aout]", musicVolume));
             } else {
-                filterChains.add(String.format("[0:a]volume=1.0[a0];[1:a]volume=%s[a1];[a0][a1]amix=inputs=2:duration=first[aout]", musicVolume));
+                // Mix: Ensure timestamps and sample rates align to avoid "Preparing" hangs
+                filterChains.add("[0:a]aresample=44100,asetpts=PTS-STARTPTS[a0]");
+                filterChains.add(String.format("[1:a]volume=%s,aresample=44100,asetpts=PTS-STARTPTS[a1]", musicVolume));
+                filterChains.add("[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]");
             }
             aLabel = "[aout]";
         } else if (muteVideoAudio) {
+            // Silence
             aLabel = "1:a";
         }
 
@@ -254,18 +309,39 @@ public class FFmpegCommandBuilder {
         command.add("-map"); command.add(vLabel);
         command.add("-c:v"); command.add("libx264");
         command.add("-preset"); command.add("veryfast");
-        command.add("-b:v"); command.add("3500k");
+
+        // Dynamic Bitrate Logic based on Max Height
+        // If max height is large (e.g. 2160/4k), we allow higher bitrate.
+        String bitrate = "4500k";
+        String maxrate = "6000k";
+        String bufsize = "12000k";
+
+        if (safeMaxHeight >= 2160) {
+            bitrate = "15000k"; maxrate = "20000k"; bufsize = "40000k";
+        } else if (safeMaxHeight >= 1440) {
+            bitrate = "9000k"; maxrate = "12000k"; bufsize = "24000k";
+        }
+
+        command.add("-b:v"); command.add(bitrate);
+        command.add("-maxrate"); command.add(maxrate);
+        command.add("-bufsize"); command.add(bufsize);
         command.add("-pix_fmt"); command.add("yuv420p");
         command.add("-g"); command.add("60");
 
-        command.add("-map"); command.add(aLabel.equals("0:a") ? "0:a?" : aLabel);
+        // Map audio
+        if (aLabel.equals("0:a")) {
+             command.add("-map"); command.add("0:a?");
+        } else {
+             command.add("-map"); command.add(aLabel);
+        }
+
         command.add("-c:a"); command.add("aac");
         command.add("-b:a"); command.add("128k");
         command.add("-ar"); command.add("44100");
+
         command.add("-shortest");
 
         // --- Output ---
-        // For testing, we stream to the first key directly without 'tee'
         String key = streamKeys.get(0);
         String url = key.startsWith("rtmp") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
 
@@ -281,7 +357,6 @@ public class FFmpegCommandBuilder {
         java.io.File local = new java.io.File("bin/ffmpeg");
         if (local.exists()) ffmpeg = local.getAbsolutePath();
 
-        // [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]
         List<String> command = new ArrayList<>();
         command.add(ffmpeg);
 
@@ -307,7 +382,7 @@ public class FFmpegCommandBuilder {
         command.add("-c:v");
         command.add("libx264");
         command.add("-preset");
-        command.add("ultrafast"); // fast merge
+        command.add("ultrafast");
         command.add("-c:a");
         command.add("aac");
         command.add("-b:a");
