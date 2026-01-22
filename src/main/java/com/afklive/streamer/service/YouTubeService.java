@@ -297,18 +297,23 @@ public class YouTubeService {
         // We prioritize 'active' (currently streaming) then 'upcoming' (scheduled/ready)
         List<LiveBroadcast> broadcasts = new java.util.ArrayList<>();
 
-        LiveBroadcastListResponse active = youtube.liveBroadcasts().list(Collections.singletonList("id,snippet,status"))
-                .setBroadcastStatus("active")
+        // Listing with mine=true and broadcastStatus together can cause 400 errors.
+        // We fetch all types and filter in memory.
+        LiveBroadcastListResponse response = youtube.liveBroadcasts().list(Collections.singletonList("id,snippet,status"))
                 .setMine(true)
+                .setBroadcastType("all")
                 .execute();
-        if (active.getItems() != null) broadcasts.addAll(active.getItems());
 
-        if (broadcasts.isEmpty()) {
-            LiveBroadcastListResponse upcoming = youtube.liveBroadcasts().list(Collections.singletonList("id,snippet,status"))
-                    .setBroadcastStatus("upcoming")
-                    .setMine(true)
-                    .execute();
-            if (upcoming.getItems() != null) broadcasts.addAll(upcoming.getItems());
+        if (response.getItems() != null) {
+            for (LiveBroadcast b : response.getItems()) {
+                String status = b.getStatus().getLifeCycleStatus();
+                // Prioritize active
+                if ("live".equals(status) || "liveStarting".equals(status) || "testing".equals(status) || "testStarting".equals(status)) {
+                    broadcasts.add(0, b);
+                } else if ("ready".equals(status) || "created".equals(status)) {
+                    broadcasts.add(b);
+                }
+            }
         }
 
         if (broadcasts.isEmpty()) {
