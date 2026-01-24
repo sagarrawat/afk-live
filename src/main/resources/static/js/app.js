@@ -108,11 +108,11 @@ function switchView(viewName) {
     if (viewName === 'library') loadLibraryVideos();
     if (viewName === 'community') loadComments();
     if (viewName === 'stream') {
-        // Init Stream Studio
-        checkStreamStatus();
-        switchStudioTab('streams');
-        loadDestinations();
-        loadStreamAudioLibrary();
+        // Init Stream Studio (Alpine)
+        if(window.alpineStudio) {
+            window.alpineStudio.checkStatus();
+            window.alpineStudio.loadDestinations();
+        }
     }
 
     // Close mobile menu if open
@@ -464,88 +464,9 @@ async function submitOptimization() {
 }
 
 /* --- STREAM CONTROL --- */
+// Legacy submitJob replaced by Alpine startStream()
 async function submitJob() {
-    // Gather destinations
-    const selectedKeys = destinations.filter(d => d.selected).map(d => d.key);
-
-    if(!selectedStreamVideo) return showToast("Select a video source first", "error");
-    if(selectedKeys.length === 0) return showToast("Select at least one destination", "error");
-
-    // Check optimization strictness? User requirement says "intercept... prompting".
-    if (selectedStreamVideo.optimizationStatus !== 'COMPLETED') {
-        openOptimizeModal(selectedStreamVideo);
-        return;
-    }
-
-    const btn = document.getElementById('btnGoLive');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing...';
-
-    const loopInfinite = document.getElementById('streamLoopInfinite').checked;
-    const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
-
-    const fd = new FormData();
-    selectedKeys.forEach(k => fd.append("streamKey", k));
-    fd.append("videoKey", selectedStreamVideo.s3Key);
-    fd.append("loopCount", loopCount);
-
-    // Music
-    const musicUpload = document.getElementById('uploadedStreamMusicName').value;
-    const musicStock = document.getElementById('selectedStreamStockId').value;
-    const musicMyLib = document.getElementById('selectedMyLibMusicName').value;
-    const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
-
-    // Detect active music tab logic in Studio UI
-    if (!document.getElementById('streamAudioUploadSection').classList.contains('hidden') && musicUpload) {
-        fd.append("musicName", musicUpload);
-        fd.append("musicVolume", musicVol);
-    } else if (!document.getElementById('streamAudioMyLibSection').classList.contains('hidden') && musicMyLib) {
-        fd.append("musicName", musicMyLib);
-        fd.append("musicVolume", musicVol);
-    } else if (!document.getElementById('streamAudioLibSection').classList.contains('hidden') && musicStock) {
-        fd.append("musicName", "stock:" + musicStock);
-        fd.append("musicVolume", musicVol);
-    }
-
-    // Watermark
-    if(window.uploadedWatermarkFile) {
-        fd.append("watermarkFile", window.uploadedWatermarkFile);
-    }
-
-    fd.append("muteVideoAudio", document.getElementById('streamMuteOriginal').checked);
-
-    // Metadata
-    const title = document.getElementById('streamMetaTitle').value;
-    const desc = document.getElementById('streamMetaDesc').value;
-    const privacy = document.getElementById('streamMetaPrivacy').value;
-
-    if (title) fd.append("title", title);
-    if (desc) fd.append("description", desc);
-    if (privacy) fd.append("privacy", privacy);
-
-    // Stream Settings
-    const orientation = document.getElementById('streamOrientation').value || "original";
-    const quality = document.getElementById('streamQuality').value || "0";
-
-    fd.append("streamMode", orientation);
-    fd.append("streamQuality", quality);
-
-    try {
-        const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
-        const data = await res.json();
-        if(data.success) {
-            showToast("Stream Started!", "success");
-            // Update UI
-            document.getElementById('studioLiveBadge').classList.remove('hidden');
-            checkStreamStatus();
-        } else {
-            showToast(data.message, "error");
-        }
-    } catch(e) { showToast("Failed to start", "error"); }
-    finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Go Live';
-    }
+    console.warn("Legacy submitJob called");
 }
 
 /* --- API HELPER --- */
@@ -1025,54 +946,7 @@ async function stopStreamById(id) {
 }
 
 function renderActiveStreams(streams) {
-    // 1. Render to 'Streams' Tab in Studio
-    const listStudio = document.getElementById('activeStreamsList');
-    const emptyState = document.getElementById('streamsEmptyState');
-
-    if (listStudio) {
-        listStudio.innerHTML = '';
-        if (!streams || streams.length === 0) {
-            if(emptyState) emptyState.classList.remove('hidden');
-        } else {
-            if(emptyState) emptyState.classList.add('hidden');
-            streams.forEach(s => {
-                // Calculate duration if startTime available
-                let timeText = "Live now";
-                if(s.startTime) {
-                    const start = new Date(s.startTime);
-                    const now = new Date();
-                    const diffMs = now - start;
-                    const diffMins = Math.floor(diffMs / 60000);
-                    const hrs = Math.floor(diffMins / 60);
-                    const mins = diffMins % 60;
-                    timeText = `${hrs}h ${mins}m`;
-                }
-
-                const div = document.createElement('div');
-                div.className = 'activity-item'; // Reuse activity style
-                div.innerHTML = `
-                    <div class="act-icon" style="background:#e3f2fd; color:red;"><i class="fa-solid fa-satellite-dish"></i></div>
-                    <div class="act-content">
-                        <div style="font-weight:600; color:#333;">${s.title || "Live Stream"}</div>
-                        <div style="font-size:0.8rem; color:#666;">
-                            <i class="fa-regular fa-clock"></i> ${timeText} • ${s.streamKey.substring(0, 15)}...
-                        </div>
-                    </div>
-                    <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:#ffdce0;" onclick="stopStreamById(${s.id})">
-                        <i class="fa-solid fa-stop"></i> End
-                    </button>
-                `;
-                listStudio.appendChild(div);
-            });
-        }
-    }
-
-    // Studio UI update (Badge)
-    const badge = document.getElementById('studioLiveBadge');
-    if (badge) {
-        if (streams && streams.length > 0) badge.classList.remove('hidden');
-        else badge.classList.add('hidden');
-    }
+    // Handled by Alpine
 }
 
 /* --- DESTINATIONS --- */
@@ -1134,6 +1008,7 @@ async function connectYouTubeDestination(channelId = null) {
             destinations.push({ id: newId, name: data.name || "YouTube (Auto)", key: data.key, type: 'youtube_auto', selected: true });
             saveDestinations();
             renderDestinations();
+            window.dispatchEvent(new Event('destination-added'));
             showToast("YouTube Connected!", "success");
         } else {
             showToast(data.message || "Failed", "error");
@@ -1156,6 +1031,7 @@ function submitDestination() {
     }
     saveDestinations();
     renderDestinations();
+    window.dispatchEvent(new Event('destination-added'));
     document.getElementById('addDestinationModal').classList.add('hidden');
 }
 
@@ -1165,6 +1041,7 @@ function removeDestination(id, e) {
         destinations = destinations.filter(d => d.id !== id);
         saveDestinations();
         renderDestinations();
+        window.dispatchEvent(new Event('destination-added'));
     });
 }
 
@@ -1233,42 +1110,11 @@ function startStatusPoll() {
 }
 
 async function checkStreamStatus() {
-    try {
-        const res = await apiFetch(`${API_URL}/status`);
-        const data = await res.json();
-        if(data.success) {
-            renderActiveStreams(data.data.activeStreams || []);
-            updateStudioState(data.data.activeStreams || []);
-        }
-    } catch(e) {}
+    // Handled by Alpine
 }
 
 function updateStudioState(streams) {
-    const btn = document.getElementById('btnGoLive');
-    const badge = document.getElementById('studioLiveBadge');
-
-    // Check if ANY stream is active (simplified for now)
-    const isLive = streams.some(s => s.live);
-
-    if (isLive) {
-        if (btn) {
-            btn.innerText = "End Broadcast";
-            btn.classList.remove('btn-danger');
-            btn.classList.add('btn-secondary');
-            btn.onclick = stopStream;
-        }
-        if (badge) badge.classList.remove('hidden');
-
-        // Find active stream ID to stop specifically if needed, but stopStream() handles all via prompt
-    } else {
-        if (btn) {
-            btn.innerText = "Go Live";
-            btn.classList.remove('btn-secondary');
-            btn.classList.add('btn-danger');
-            btn.onclick = submitJob;
-        }
-        if (badge) badge.classList.add('hidden');
-    }
+    // Handled by Alpine
 }
 
 async function checkInitialStatus() { startStatusPoll(); }
