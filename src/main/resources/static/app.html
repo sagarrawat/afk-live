@@ -154,7 +154,10 @@
                                 <div class="source-label">Current Source</div>
                                 <div id="studioSelectedTitle" class="source-title">None Selected</div>
                             </div>
-                            <button class="btn btn-sm btn-outline" style="margin-left:10px;">Change</button>
+                            <div style="display:flex; gap:5px; margin-left:15px;">
+                                <button class="btn btn-sm btn-outline" onclick="openLibraryModalForStream(event)" title="Select from Library"><i class="fa-solid fa-folder-open"></i></button>
+                                <button class="btn btn-sm btn-outline" onclick="document.getElementById('streamVideoUploadDirect').click(); event.stopPropagation();" title="Upload Video"><i class="fa-solid fa-upload"></i></button>
+                            </div>
                         </div>
 
                         <div class="source-actions">
@@ -169,6 +172,7 @@
                             <!-- Hidden inputs for logic -->
                             <input type="number" id="streamLoopCount" value="1" class="hidden">
                             <input type="file" id="streamUploadInput" hidden accept="video/*">
+                            <input type="file" id="streamVideoUploadDirect" hidden accept="video/*">
                         </div>
                     </div>
                 </div>

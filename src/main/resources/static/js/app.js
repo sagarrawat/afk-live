@@ -1,5 +1,6 @@
 const API_URL = "/api";
 let currentUser = null;
+let selectedStreamVideo = null; // Fix ReferenceError
 
 // On Load
 document.addEventListener("DOMContentLoaded", async () => {
@@ -43,9 +44,13 @@ function setupEventListeners() {
     const bulkInput = document.getElementById("bulkUploadInput");
     if(bulkInput) bulkInput.addEventListener("change", handleBulkUpload);
 
-    // Stream Upload
+    // Stream Upload (Library)
     const streamUpload = document.getElementById("streamUploadInput");
     if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
+
+    // Stream Direct Upload (Source Bar)
+    const streamDirectUpload = document.getElementById("streamVideoUploadDirect");
+    if(streamDirectUpload) streamDirectUpload.addEventListener("change", handleStreamVideoUpload);
 
     // Stream Music Upload
     const streamMusicUpload = document.getElementById("streamAudioFile");
@@ -183,11 +188,15 @@ async function loadStreamAudioLibrary() {
             const div = document.createElement('div');
             div.className = 'queue-item';
             div.style.cursor = 'pointer';
-            div.innerHTML = `<i class="fa-solid fa-music"></i> <div style="flex:1; margin-left:10px;">${t.title}</div>`;
+
+            // Play Button
+            const playBtn = t.url ? `<button class="btn btn-xs btn-text" onclick="previewAudio('${t.url}', event)"><i class="fa-solid fa-play"></i></button>` : '';
+
+            div.innerHTML = `<i class="fa-solid fa-music"></i> <div style="flex:1; margin-left:10px;">${t.title}</div> ${playBtn}`;
             div.onclick = () => {
                 document.querySelectorAll('#streamAudioTrackList .queue-item').forEach(e=>e.classList.remove('active-track'));
                 div.classList.add('active-track');
-                document.getElementById('selectedStreamStockId').value = t.id; // Assuming ID is title or needed param
+                document.getElementById('selectedStreamStockId').value = t.id;
             };
             list.appendChild(div);
         });
@@ -205,15 +214,30 @@ async function loadStreamAudioLibrary() {
             const div = document.createElement('div');
             div.className = 'queue-item';
             div.style.cursor = 'pointer';
-            div.innerHTML = `<i class="fa-solid fa-file-audio"></i> <div style="flex:1; margin-left:10px;">${t.title}</div>`;
+
+            // Play Button using Library Stream API
+            const playBtn = `<button class="btn btn-xs btn-text" onclick="previewAudio('${API_URL}/library/stream/${t.id}', event)"><i class="fa-solid fa-play"></i></button>`;
+
+            div.innerHTML = `<i class="fa-solid fa-file-audio"></i> <div style="flex:1; margin-left:10px;">${t.title}</div> ${playBtn}`;
             div.onclick = () => {
                 document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(e=>e.classList.remove('active-track'));
                 div.classList.add('active-track');
-                document.getElementById('selectedMyLibMusicName').value = t.title; // submitJob uses musicName
+                document.getElementById('selectedMyLibMusicName').value = t.title;
             };
             list.appendChild(div);
         });
     } catch(e) { document.getElementById('streamAudioMyTrackList').innerHTML = 'Failed to load'; }
+}
+
+let currentAudioPreview = null;
+function previewAudio(url, e) {
+    if(e) e.stopPropagation();
+    if(currentAudioPreview) {
+        currentAudioPreview.pause();
+        currentAudioPreview = null;
+    }
+    currentAudioPreview = new Audio(url);
+    currentAudioPreview.play();
 
     streamAudioLibraryLoaded = true;
 }
