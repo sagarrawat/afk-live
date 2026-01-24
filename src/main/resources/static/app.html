@@ -145,10 +145,10 @@
 
         <!-- VIEW: STREAM (Alpine & Tailwind - Apple Style) -->
         <div id="view-stream" class="view-section hidden h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
-            <div class="flex h-full w-full">
+            <div class="flex flex-col lg:flex-row h-full w-full">
 
                 <!-- LEFT: STAGE -->
-                <div class="flex-1 flex flex-col relative overflow-hidden">
+                <div class="flex-1 flex flex-col relative overflow-hidden bg-gray-100 lg:bg-transparent">
                     <!-- Header / Top Bar -->
                     <div class="h-16 flex items-center justify-between px-8 z-10">
                         <div class="flex items-center gap-3">
@@ -160,13 +160,13 @@
                     </div>
 
                     <!-- Main Preview Area -->
-                    <div class="flex-1 flex items-center justify-center p-8 pb-32">
+                    <div class="flex-1 flex items-center justify-center p-4 lg:p-8 lg:pb-32 min-h-[300px]">
                         <div class="relative w-full max-w-4xl aspect-video bg-black rounded-2xl shadow-2xl overflow-hidden ring-1 ring-black/5 group">
                             <!-- Placeholder -->
                             <div x-show="!selectedVideo" class="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
-                                <i class="fa-solid fa-film text-6xl mb-4 opacity-20"></i>
-                                <p class="font-medium text-lg">No Source Selected</p>
-                                <button @click="openSourceSelector()" class="mt-4 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-medium transition shadow-lg shadow-blue-600/20">
+                                <i class="fa-solid fa-film text-4xl lg:text-6xl mb-4 opacity-20"></i>
+                                <p class="font-medium text-sm lg:text-lg">No Source Selected</p>
+                                <button @click="openSourceSelector()" class="mt-4 px-4 py-2 text-sm lg:px-5 lg:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-medium transition shadow-lg shadow-blue-600/20">
                                     Select Video
                                 </button>
                             </div>
@@ -175,14 +175,14 @@
                             <video id="previewPlayer" class="w-full h-full object-contain" x-show="selectedVideo" controls playsinline></video>
 
                             <!-- Title Overlay (On Hover) -->
-                            <div x-show="selectedVideo" class="absolute top-0 left-0 w-full p-6 bg-gradient-to-b from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition duration-300 pointer-events-none">
+                            <div x-show="selectedVideo" class="absolute top-0 left-0 w-full p-6 bg-gradient-to-b from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition duration-300 pointer-events-none hidden lg:block">
                                 <h3 class="text-white font-medium text-lg" x-text="selectedVideo?.title"></h3>
                             </div>
                         </div>
                     </div>
 
                     <!-- Floating Control Dock -->
-                    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-20">
+                    <div class="absolute bottom-4 lg:bottom-8 left-1/2 -translate-x-1/2 z-20 w-full max-w-[90%] lg:w-auto">
                         <div class="bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl shadow-gray-200/50 rounded-2xl p-2 flex items-center gap-2 ring-1 ring-gray-900/5">
 
                             <!-- Source Select -->
@@ -262,7 +262,7 @@
                 </div>
 
                 <!-- RIGHT: SIDEBAR -->
-                <div class="w-96 bg-white border-l border-gray-200 flex flex-col shadow-xl shadow-gray-200/50 z-30">
+                <div class="w-full lg:w-96 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shadow-xl shadow-gray-200/50 z-30 h-1/2 lg:h-full">
 
                     <!-- Tabs -->
                     <div class="p-4 pb-0">
@@ -477,9 +477,9 @@
                  <button class="btn btn-outline btn-sm" onclick="showEngagementSettings()"><i class="fa-solid fa-robot"></i> AI Automation</button>
             </div>
 
-            <div class="community-grid-layout">
+            <div class="community-grid-layout flex flex-col lg:grid lg:grid-cols-[240px_350px_1fr]">
                 <!-- SIDEBAR -->
-                <div class="comm-sidebar">
+                <div class="comm-sidebar hidden lg:block">
                     <div class="comm-nav-item active" onclick="filterCommTab('all')">
                         <i class="fa-solid fa-inbox"></i> All Comments
                     </div>
@@ -493,7 +493,7 @@
                 </div>
 
                 <!-- LIST -->
-                <div id="commListPanel" class="comm-list-panel">
+                <div id="commListPanel" class="comm-list-panel h-full overflow-y-auto border-b lg:border-b-0 lg:border-r border-gray-200">
                      <div style="padding: 15px; border-bottom: 1px solid var(--border);">
                          <input type="text" placeholder="Search..." class="form-input" style="font-size: 0.9rem;">
                      </div>

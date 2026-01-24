@@ -201,12 +201,18 @@ document.addEventListener('alpine:init', () => {
             const btn = document.getElementById(`ai-btn-${type}`);
             if(btn) btn.classList.add('animate-pulse');
 
+            // Map frontend type to backend type
+            // Frontend: 'title', 'desc'
+            // Backend: 'title', 'description'
+            const apiType = type === 'desc' ? 'description' : 'title';
+
             try {
                 const res = await apiFetch('/api/ai/generate', {
                     method:'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ type: type === 'desc' ? 'stream_description' : 'stream_title', context: context })
+                    body: JSON.stringify({ type: apiType, context: context })
                 });
+                if (!res.ok) throw new Error("API Error");
                 const data = await res.json();
                 if(data.result) {
                     if(type === 'title') this.streamTitle = data.result.replace(/"/g, '');
@@ -255,7 +261,11 @@ document.addEventListener('alpine:init', () => {
 
             try {
                 // Ensure no Content-Type header is manually set for FormData
-                const res = await fetch('/api/start', { method:'POST', body:fd });
+                // The browser will automatically set the correct Content-Type with boundary
+                const res = await fetch('/api/start', {
+                    method: 'POST',
+                    body: fd
+                });
 
                 // Handle 401/403 manually since we bypassed apiFetch wrapper for safety
                 if (res.status === 401) { window.location.href = '/login'; return; }
