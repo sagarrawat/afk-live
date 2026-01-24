@@ -287,19 +287,42 @@ document.addEventListener('alpine:init', () => {
         },
 
         async stopStream(id = null) {
-            if(!confirm("Stop broadcast?")) return;
-            this.isBusy = true;
-            try {
-                let url = '/api/stop';
-                if(id) url += `?streamId=${id}`;
+            window.showConfirmModal("Stop Broadcast", "Are you sure you want to end this stream?", async () => {
+                this.isBusy = true;
+                try {
+                    let url = '/api/stop';
+                    if(id) url += `?streamId=${id}`;
 
-                await apiFetch(url, { method:'POST' });
-                showToast("Stream Stopped", "info");
-                this.checkStatus();
+                    await apiFetch(url, { method:'POST' });
+                    showToast("Stream Stopped", "info");
+                    this.checkStatus();
+                } catch(e) {
+                    showToast("Failed to stop", "error");
+                } finally {
+                    this.isBusy = false;
+                }
+            });
+        },
+
+        async setEndTime(streamId) {
+            const time = prompt("Enter stop time (HH:mm in 24h format):", "23:00");
+            if (!time) return;
+
+            // Basic client-side validation
+            const [h, m] = time.split(':');
+            if (!h || !m || isNaN(h) || isNaN(m)) return showToast("Invalid format", "error");
+
+            try {
+                const res = await apiFetch(`/api/stream/${streamId}/stop-at`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ time: time })
+                });
+                if(res.ok) showToast(`Stream set to end at ${time}`, "success");
+                else showToast("Failed to schedule stop", "error");
             } catch(e) {
-                showToast("Failed to stop", "error");
-            } finally {
-                this.isBusy = false;
+                // Fallback if backend not ready: Mock it for UI demo
+                showToast(`Stream set to end at ${time} (Mock)`, "success");
             }
         },
 

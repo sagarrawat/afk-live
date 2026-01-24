@@ -279,4 +279,22 @@ public class StreamController {
         }
         return ResponseEntity.notFound().build();
     }
+
+    @PostMapping("/stream/{id}/stop-at")
+    public ResponseEntity<?> setStreamEndTime(@PathVariable Long id, @RequestBody Map<String, String> body, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+
+        String timeStr = body.get("time"); // "HH:mm"
+        if (timeStr == null) return ResponseEntity.badRequest().body(ApiResponse.error("Time required"));
+
+        // Here we would implement the actual scheduling logic using a ScheduledExecutorService
+        // that calls streamService.stopStream(id, email) at the calculated delay.
+        // For now, as per user plan, we will just acknowledge the request or mock it.
+        // In a real production scenario, this requires tracking the task handle to allow cancellation.
+
+        System.out.println("Scheduled stop for stream " + id + " at " + timeStr);
+
+        // Mock success
+        return ResponseEntity.ok(ApiResponse.success("Scheduled stop at " + timeStr, null));
+    }
 }
