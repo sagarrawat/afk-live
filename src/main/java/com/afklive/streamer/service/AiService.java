@@ -130,8 +130,8 @@ public class AiService {
 
     private String callGemini(String prompt) {
         try {
-            // Using gemini-1.5-flash to avoid 404s
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + geminiKey;
+            // Using gemini-flash-lite-latest to avoid 404s
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=" + geminiKey;
 
             Map<String, Object> requestBody = Map.of(
                 "contents", List.of(
