@@ -495,3 +495,10 @@ input:checked + .slider:before { transform: translateX(22px); }
 .act-icon.DELETE { background: #ffebee; color: var(--danger); }
 .act-content { flex: 1; font-size: 0.9rem; }
 .act-time { font-size: 0.8rem; color: #999; }
+
+/* ANIMATIONS */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }

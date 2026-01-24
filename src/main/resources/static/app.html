@@ -608,71 +608,225 @@
             <div id="libraryList" class="queue-list"></div>
         </div>
 
-        <!-- VIEW: SETTINGS -->
-        <div id="view-settings" class="view-section hidden" style="padding: 20px;">
-            <div class="settings-container">
-                <div class="settings-sidebar">
-                    <div class="settings-nav-item active" onclick="switchSettingsTab('general')">General</div>
-                    <div class="settings-nav-item" onclick="switchSettingsTab('channels')">Channels</div>
-                    <div class="settings-nav-item" onclick="switchSettingsTab('benefits')">My Benefits</div>
-                    <div class="settings-nav-item" onclick="switchSettingsTab('plans')">Plans & Billing</div>
-                </div>
-                <div class="settings-content">
+        <!-- VIEW: SETTINGS (Alpine + Tailwind) -->
+        <div id="view-settings" class="view-section hidden bg-gray-50/50" x-data="settingsStudio">
+            <div class="max-w-6xl mx-auto h-full flex flex-col">
+                <header class="mb-8">
+                    <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Settings</h1>
+                    <p class="text-gray-500 mt-1">Manage your account, channels, and subscription.</p>
+                </header>
 
-                    <!-- TAB: GENERAL -->
-                    <div id="tab-general" class="settings-section">
-                        <h2>General Settings</h2>
-                        <div class="form-group">
-                            <label>Connected Accounts</label>
-                            <div class="queue-item">
-                                <i class="fa-brands fa-google" style="font-size: 1.5rem;"></i>
-                                <div style="flex:1">
-                                    <div style="font-weight:600">Google Account</div>
-                                    <div style="font-size:0.85rem; color:#666" id="settingsGoogleEmail">Connected</div>
+                <div class="flex flex-col lg:flex-row gap-8 flex-1 min-h-0">
+                    <!-- SIDEBAR NAV -->
+                    <nav class="w-full lg:w-64 flex-shrink-0 space-y-1">
+                        <template x-for="item in [
+                            {id: 'general', icon: 'fa-user', label: 'General'},
+                            {id: 'channels', icon: 'fa-share-nodes', label: 'Channels'},
+                            {id: 'plans', icon: 'fa-credit-card', label: 'Plan & Billing'}
+                        ]">
+                            <button @click="switchTab(item.id)"
+                                class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                                :class="activeTab === item.id ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'">
+                                <i class="fa-solid w-5 text-center" :class="item.icon"></i>
+                                <span x-text="item.label"></span>
+                            </button>
+                        </template>
+                    </nav>
+
+                    <!-- CONTENT AREA -->
+                    <div class="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+
+                        <!-- TAB: GENERAL -->
+                        <div x-show="activeTab === 'general'" class="p-8 space-y-8 animate-fade-in">
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Account Information</h3>
+                                <div class="bg-gray-50 rounded-xl p-6 border border-gray-100 flex items-center gap-6">
+                                    <div class="w-20 h-20 rounded-full bg-gray-200 overflow-hidden ring-4 ring-white shadow-sm">
+                                        <img :src="user?.picture" class="w-full h-full object-cover">
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="text-xl font-bold text-gray-900" x-text="user?.name || 'User'"></div>
+                                        <div class="text-sm text-gray-500" x-text="user?.email"></div>
+                                        <div class="mt-2 flex items-center gap-2">
+                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                <span x-text="user?.plan?.name || 'Free Plan'"></span>
+                                             </span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <a href="/oauth2/authorization/google" class="btn btn-sm btn-outline">Reconnect</a>
+                            </section>
+
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Linked Accounts</h3>
+                                <div class="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between hover:bg-gray-50 transition">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center">
+                                            <i class="fa-brands fa-google text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium text-gray-900">Google Account</div>
+                                            <div class="text-xs text-gray-500">Used for login and YouTube access</div>
+                                        </div>
+                                    </div>
+                                    <a href="/oauth2/authorization/google" class="text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition">
+                                        Reconnect
+                                    </a>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- TAB: CHANNELS -->
+                        <div x-show="activeTab === 'channels'" class="p-8 flex flex-col h-full animate-fade-in">
+                            <div class="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900">Social Channels</h3>
+                                    <p class="text-sm text-gray-500">Manage your connected streaming destinations.</p>
+                                </div>
+                                <button @click="openConnectModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm shadow-blue-500/30 flex items-center gap-2">
+                                    <i class="fa-solid fa-plus"></i> Connect Channel
+                                </button>
+                            </div>
+
+                            <div class="space-y-3">
+                                <template x-if="channels.length === 0">
+                                    <div class="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                        <i class="fa-solid fa-share-nodes text-4xl text-gray-300 mb-3"></i>
+                                        <p class="text-gray-500 font-medium">No channels connected</p>
+                                        <button @click="openConnectModal()" class="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium">Connect one now</button>
+                                    </div>
+                                </template>
+
+                                <template x-for="channel in channels" :key="channel.id">
+                                    <div class="group flex items-center gap-4 p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition bg-white">
+                                        <div class="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden border border-gray-200">
+                                            <img :src="channel.profileUrl" class="w-full h-full object-cover">
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="font-bold text-gray-900" x-text="channel.name"></h4>
+                                            <div class="flex items-center gap-2 mt-0.5">
+                                                <span class="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-600 uppercase" x-text="channel.platform"></span>
+                                            </div>
+                                        </div>
+                                        <button @click="removeChannel(channel.id)" class="opacity-0 group-hover:opacity-100 transition p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Disconnect">
+                                            <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                    </div>
+                                </template>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- TAB: CHANNELS -->
-                    <div id="tab-channels" class="settings-section hidden">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                            <h2>Channels</h2>
-                            <button class="btn btn-primary btn-sm" onclick="openConnectModal()">+ Add Channel</button>
+                        <!-- TAB: PLANS & BILLING -->
+                        <div x-show="activeTab === 'plans'" class="p-8 animate-fade-in space-y-8 overflow-y-auto">
+
+                            <!-- Current Usage -->
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Current Usage</h3>
+                                <div class="bg-gray-900 text-white rounded-2xl p-6 shadow-lg shadow-gray-200 overflow-hidden relative">
+                                    <div class="absolute top-0 right-0 p-32 bg-blue-500 rounded-full blur-3xl opacity-20 -mr-16 -mt-16"></div>
+
+                                    <div class="relative z-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
+                                        <div>
+                                            <div class="text-blue-200 font-medium text-sm uppercase tracking-wider mb-1">Current Plan</div>
+                                            <div class="text-3xl font-bold" x-text="user?.plan?.name || 'Free'"></div>
+                                            <div class="mt-4 flex items-center gap-2 text-sm text-gray-300">
+                                                <i class="fa-solid fa-hard-drive"></i>
+                                                <span>Storage Used: <span x-text="formattedStorage"></span></span>
+                                            </div>
+                                        </div>
+                                        <div class="w-full md:w-64">
+                                            <div class="flex justify-between text-xs mb-2 text-gray-400">
+                                                <span>Capacity</span>
+                                                <span x-text="storagePercentage.toFixed(0) + '%'"></span>
+                                            </div>
+                                            <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                                                <div class="h-full bg-blue-500 rounded-full transition-all duration-500" :style="`width: ${storagePercentage}%`"></div>
+                                            </div>
+                                            <button @click="cancelSubscription()" class="mt-4 text-xs text-red-400 hover:text-red-300 font-medium transition">
+                                                Cancel Subscription
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- Upgrade Options -->
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Available Plans</h3>
+                                <div x-show="isLoading" class="text-center py-8 text-gray-500">
+                                    <i class="fa-solid fa-spinner fa-spin"></i> Loading plans...
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <template x-for="plan in plans" :key="plan.id">
+                                        <div class="border rounded-2xl p-6 flex flex-col hover:shadow-lg transition duration-200 hover:-translate-y-1 bg-white relative overflow-hidden"
+                                            :class="user?.plan?.name === plan.title ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'">
+
+                                            <div x-show="user?.plan?.name === plan.title" class="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+                                                CURRENT
+                                            </div>
+
+                                            <h4 class="text-lg font-bold text-gray-900" x-text="plan.title"></h4>
+                                            <div class="mt-2 mb-4">
+                                                <span class="text-3xl font-bold text-gray-900" x-text="plan.price"></span>
+                                                <span class="text-sm text-gray-500">/month</span>
+                                            </div>
+
+                                            <ul class="space-y-3 mb-8 flex-1">
+                                                <!-- Mock features based on plan title -->
+                                                <li class="flex items-start gap-2 text-sm text-gray-600">
+                                                    <i class="fa-solid fa-check text-blue-500 mt-0.5"></i>
+                                                    <span x-text="(plan.title === 'Free' ? '500MB' : (plan.title === 'Pro' ? '10GB' : '50GB')) + ' Storage'"></span>
+                                                </li>
+                                                <li class="flex items-start gap-2 text-sm text-gray-600">
+                                                    <i class="fa-solid fa-check text-blue-500 mt-0.5"></i>
+                                                    <span>Unlimited Streaming</span>
+                                                </li>
+                                            </ul>
+
+                                            <button @click="openPayment(plan)"
+                                                class="w-full py-2 rounded-lg font-semibold transition"
+                                                :class="user?.plan?.name === plan.title ? 'bg-gray-100 text-gray-500 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/30'"
+                                                :disabled="user?.plan?.name === plan.title"
+                                                x-text="user?.plan?.name === plan.title ? 'Active' : 'Upgrade'">
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </section>
                         </div>
-                        <div id="channelListSettings" class="queue-list"></div>
+
                     </div>
-
-                    <!-- TAB: BENEFITS -->
-                    <div id="tab-benefits" class="settings-section hidden">
-                        <h2>My Benefits</h2>
-                        <div id="benefitsContent">Loading...</div>
-                    </div>
-
-                    <!-- TAB: PLANS -->
-                    <div id="tab-plans" class="settings-section hidden">
-                        <h2>Subscription</h2>
-                        <!-- Usage -->
-                        <div class="card" style="margin-bottom: 30px; background: #f9f9f9; border:none;">
-                            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                                <span>Current Plan: <strong id="planName">Loading...</strong></span>
-                                <span id="storageText">0/0</span>
-                            </div>
-                            <div class="progress-track"><div id="storageBar" class="progress-fill"></div></div>
-                            <div style="margin-top: 15px; text-align: right;">
-                                <button onclick="cancelSubscription()" class="btn btn-text btn-sm" style="color: var(--danger);">Cancel Subscription</button>
-                            </div>
-                        </div>
-
-                        <h3>Available Plans</h3>
-                        <div id="internalPlanGrid" class="plan-grid">
-                            <!-- Loaded via JS -->
-                        </div>
-                    </div>
-
                 </div>
             </div>
+
+            <!-- PAYMENT CONFIRMATION MODAL (Alpine) -->
+            <div x-show="paymentModalOpen" class="fixed inset-0 z-[100] bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4" x-transition.opacity style="display:none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+                    <button @click="paymentModalOpen = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-rocket text-2xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900">Upgrade to <span x-text="selectedPlan?.title"></span></h3>
+                        <p class="text-gray-500 text-sm mt-1">Unlock more storage and premium features.</p>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm font-medium text-gray-600">Total due today</span>
+                            <span class="text-lg font-bold text-gray-900" x-text="selectedPlan?.price"></span>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-gray-500">
+                            <i class="fa-solid fa-lock"></i> Secure payment with Stripe
+                        </div>
+                    </div>
+
+                    <button @click="processUpgrade()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/30 transition transform active:scale-95">
+                        Confirm & Pay
+                    </button>
+                </div>
+            </div>
+
         </div>
 
     </main>
@@ -1184,6 +1338,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="js/toast.js"></script>
 <script src="js/stream-studio.js"></script>
+<script src="js/settings.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
