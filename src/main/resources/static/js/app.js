@@ -1380,16 +1380,56 @@ async function saveEngagementSettings() {
 
 /* --- ANALYTICS/CALENDAR --- */
 async function initAnalytics() {
-    // Basic stub, real chart logic requires Chart.js which is loaded
     const ctx = document.getElementById('analyticsChart');
-    if(ctx && window.Chart) {
-        // ... chart init ...
+    if(ctx && window.Chart && !window.analyticsChartInstance) {
+        // Basic mock chart or real fetch if API existed
+        // For now, render a dummy chart so page isn't empty
+        window.analyticsChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Views',
+                    data: [12, 19, 3, 5, 2, 3, 10],
+                    borderColor: '#2c68f6',
+                    tension: 0.4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        // Mock data population
+        document.getElementById('totalViews').innerText = "1,245";
+        document.getElementById('totalSubs').innerText = "85";
+        document.getElementById('totalWatchTime').innerText = "120h";
     }
 }
+
 function initCalendar() {
     const el = document.getElementById('calendar');
     if(el && window.FullCalendar && !el.innerHTML) {
-        // ... calendar init ...
+        const calendar = new FullCalendar.Calendar(el, {
+            initialView: 'dayGridMonth',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek'
+            },
+            height: 'auto',
+            events: async (info, successCallback, failureCallback) => {
+                try {
+                    const res = await apiFetch(`${API_URL}/videos`); // Reuse video queue as events
+                    const videos = await res.json();
+                    const events = videos.map(v => ({
+                        title: v.title,
+                        start: v.scheduledTime,
+                        color: v.status === 'UPLOADED' ? '#00875a' : '#2c68f6'
+                    }));
+                    successCallback(events);
+                } catch(e) { failureCallback(e); }
+            }
+        });
+        calendar.render();
     }
 }
 
@@ -1449,10 +1489,17 @@ function renderComments(comments) {
                 const div = document.createElement('div');
                 div.className = 'thread-item';
                 div.onclick = () => openThread(thread);
+
+                let dateStr = "Recently";
+                if(top.publishedAt) {
+                    const d = new Date(top.publishedAt);
+                    if(!isNaN(d.getTime())) dateStr = d.toLocaleDateString();
+                }
+
                 div.innerHTML = `
                     <img src="${top.authorProfileImageUrl}" class="thread-avatar">
                     <div style="flex:1; overflow:hidden;">
-                        <div class="thread-meta"><b>${top.authorDisplayName}</b> • ${new Date(top.publishedAt).toLocaleDateString()}</div>
+                        <div class="thread-meta"><b>${top.authorDisplayName}</b> • ${dateStr}</div>
                         <div class="thread-preview">${top.textDisplay}</div>
                     </div>
                 `;

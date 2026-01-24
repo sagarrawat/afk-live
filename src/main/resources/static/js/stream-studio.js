@@ -1,13 +1,13 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('streamStudio', () => ({
         // UI State
-        activeTab: 'streams', // streams, chat, brand, audio, settings
+        activeTab: 'setup', // setup, streams, brand, audio
         isLive: false,
         isBusy: false,
         showLibraryModal: false,
 
         // Stream Configuration
-        selectedVideo: null, // { id, title, thumbnailS3Key, optimizationStatus, s3Key, ... }
+        selectedVideo: null,
         streamTitle: '',
         streamDescription: '',
         streamPrivacy: 'public',
@@ -19,37 +19,32 @@ document.addEventListener('alpine:init', () => {
         muteOriginal: true,
 
         // Audio State
-        audioTab: 'upload', // upload, lib, mylib
+        audioTab: 'upload',
         musicVolume: 50,
         uploadedMusicName: null,
         selectedStockId: null,
         selectedLibraryMusicName: null,
-        uploadedMusicFile: null, // For form data
+        uploadedMusicFile: null,
+        playingUrl: null, // Track playing audio
 
         // Destinations
         destinations: [],
 
         // Runtime Data
         activeStreams: [],
-        chatThreads: [],
 
         // Init
         init() {
             this.loadDestinations();
             this.startStatusPoll();
-            this.loadAudioLibrary(); // Pre-load or load on tab switch
-
-            // Listen for external events if needed
+            this.loadAudioLibrary();
             window.addEventListener('destination-added', () => this.loadDestinations());
-
-            // Expose for debugging
             window.alpineStudio = this;
         },
 
         // --- TABS & UI ---
         switchTab(tab) {
             this.activeTab = tab;
-            if(tab === 'chat') this.loadChat();
             if(tab === 'audio') this.loadAudioLibrary();
         },
 
@@ -114,8 +109,7 @@ document.addEventListener('alpine:init', () => {
         libraryTracks: [],
 
         async loadAudioLibrary() {
-            if(this.stockTracks.length > 0) return; // Already loaded
-
+            if(this.stockTracks.length > 0) return;
             try {
                 const [resStock, resLib] = await Promise.all([
                     apiFetch('/api/audio/trending'),
@@ -127,9 +121,23 @@ document.addEventListener('alpine:init', () => {
         },
 
         previewAudio(url) {
+            if (this.playingUrl === url && window.currentAudio) {
+                // Pause
+                window.currentAudio.pause();
+                this.playingUrl = null;
+                return;
+            }
+
             if(window.currentAudio) window.currentAudio.pause();
+
             window.currentAudio = new Audio(url);
+            window.currentAudio.volume = this.musicVolume / 100; // Bind volume
             window.currentAudio.play();
+            this.playingUrl = url;
+
+            window.currentAudio.onended = () => {
+                this.playingUrl = null;
+            };
         },
 
         handleVideoUpload(e) {
@@ -187,6 +195,27 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        // --- AI ---
+        async generateMetadata(type) {
+            const context = this.streamTitle || "Gaming Stream";
+            const btn = document.getElementById(`ai-btn-${type}`);
+            if(btn) btn.classList.add('animate-pulse');
+
+            try {
+                const res = await apiFetch('/api/ai/generate', {
+                    method:'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ type: type === 'desc' ? 'stream_description' : 'stream_title', context: context })
+                });
+                const data = await res.json();
+                if(data.result) {
+                    if(type === 'title') this.streamTitle = data.result.replace(/"/g, '');
+                    if(type === 'desc') this.streamDescription = data.result;
+                }
+            } catch(e) { showToast("AI Failed", "error"); }
+            if(btn) btn.classList.remove('animate-pulse');
+        },
+
         // --- STREAMING LOGIC ---
         async startStream() {
             const selectedKeys = this.destinations.filter(d => d.selected).map(d => d.key);
@@ -199,7 +228,7 @@ document.addEventListener('alpine:init', () => {
             const fd = new FormData();
             selectedKeys.forEach(k => fd.append("streamKey", k));
             fd.append("videoKey", this.selectedVideo.s3Key);
-            fd.append("loopCount", this.loopVideo ? -1 : 1);
+            fd.append("loopCount", this.loopVideo ? "-1" : "1"); // Send as string to be safe
 
             // Audio Logic
             const vol = (this.musicVolume / 100).toFixed(1);
@@ -222,11 +251,15 @@ document.addEventListener('alpine:init', () => {
             fd.append("streamMode", this.streamOrientation);
             fd.append("streamQuality", this.streamQuality);
 
-            // Watermark (global var from app.js for now, or we can reimplement)
             if(window.uploadedWatermarkFile) fd.append("watermarkFile", window.uploadedWatermarkFile);
 
             try {
-                const res = await apiFetch('/api/start', { method:'POST', body:fd });
+                // Ensure no Content-Type header is manually set for FormData
+                const res = await fetch('/api/start', { method:'POST', body:fd });
+
+                // Handle 401/403 manually since we bypassed apiFetch wrapper for safety
+                if (res.status === 401) { window.location.href = '/login'; return; }
+
                 const data = await res.json();
                 if(data.success) {
                     showToast("Stream Started! 🚀", "success");
@@ -236,6 +269,7 @@ document.addEventListener('alpine:init', () => {
                     showToast(data.message || "Failed to start", "error");
                 }
             } catch(e) {
+                console.error(e);
                 showToast("Error starting stream", "error");
             } finally {
                 this.isBusy = false;
@@ -257,15 +291,6 @@ document.addEventListener('alpine:init', () => {
             } finally {
                 this.isBusy = false;
             }
-        },
-
-        // --- CHAT ---
-        async loadChat() {
-             try {
-                const res = await apiFetch('/api/comments');
-                const data = await res.json();
-                this.chatThreads = data.items || [];
-            } catch(e) {}
         },
 
         // --- POLLING ---

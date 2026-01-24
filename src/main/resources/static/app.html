@@ -267,11 +267,11 @@
                     <!-- Tabs -->
                     <div class="p-4 pb-0">
                         <div class="flex p-1 bg-gray-100 rounded-lg overflow-x-auto">
-                            <template x-for="tab in ['streams', 'chat', 'audio', 'brand', 'settings']">
+                            <template x-for="tab in ['setup', 'audio', 'brand', 'streams']">
                                 <button @click="switchTab(tab)"
                                     class="flex-1 py-1.5 text-xs font-semibold rounded-md transition capitalize whitespace-nowrap px-2"
                                     :class="activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
-                                    x-text="tab">
+                                    x-text="tab === 'setup' ? 'Setup' : tab">
                                 </button>
                             </template>
                         </div>
@@ -280,36 +280,8 @@
                     <!-- Content -->
                     <div class="flex-1 overflow-y-auto p-5">
 
-                        <!-- STREAMS TAB -->
-                        <div x-show="activeTab === 'streams'" class="space-y-4">
-                            <div x-show="activeStreams.length === 0" class="text-center py-12">
-                                <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300">
-                                    <i class="fa-solid fa-tower-broadcast text-2xl"></i>
-                                </div>
-                                <p class="text-gray-500 text-sm">No active streams</p>
-                            </div>
-
-                            <template x-for="stream in activeStreams" :key="stream.id">
-                                <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
-                                    <div class="flex items-start gap-3">
-                                        <div class="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-                                            <i class="fa-solid fa-satellite-dish animate-pulse"></i>
-                                        </div>
-                                        <div class="flex-1 min-w-0">
-                                            <h4 class="font-semibold text-sm text-gray-900 truncate" x-text="stream.title || 'Live Stream'"></h4>
-                                            <p class="text-xs text-gray-500 mt-0.5" x-text="formatDuration(stream.startTime)"></p>
-                                            <div class="mt-3">
-                                                <button @click="stopStream(stream.id)" class="text-xs text-red-600 font-medium hover:text-red-700 hover:underline">Stop Stream</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-
-                        <!-- SETTINGS TAB -->
-                        <div x-show="activeTab === 'settings'" class="space-y-6">
-
+                        <!-- SETUP TAB -->
+                        <div x-show="activeTab === 'setup'" class="space-y-6">
                             <!-- Destinations -->
                             <section>
                                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Destinations</h4>
@@ -338,11 +310,17 @@
                                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Broadcast Info</h4>
                                 <div class="space-y-3">
                                     <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Title</label>
+                                        <div class="flex justify-between mb-1">
+                                            <label class="block text-xs font-medium text-gray-700">Title</label>
+                                            <button id="ai-btn-title" @click="generateMetadata('title')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
+                                        </div>
                                         <input type="text" x-model="streamTitle" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Stream Title">
                                     </div>
                                     <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                                        <div class="flex justify-between mb-1">
+                                            <label class="block text-xs font-medium text-gray-700">Description</label>
+                                            <button id="ai-btn-desc" @click="generateMetadata('desc')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
+                                        </div>
                                         <textarea x-model="streamDescription" rows="3" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Description"></textarea>
                                     </div>
                                     <div class="grid grid-cols-2 gap-3">
@@ -365,6 +343,33 @@
                                     </div>
                                 </div>
                             </section>
+                        </div>
+
+                        <!-- STREAMS TAB -->
+                        <div x-show="activeTab === 'streams'" class="space-y-4">
+                            <div x-show="activeStreams.length === 0" class="text-center py-12">
+                                <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300">
+                                    <i class="fa-solid fa-tower-broadcast text-2xl"></i>
+                                </div>
+                                <p class="text-gray-500 text-sm">No active streams</p>
+                            </div>
+
+                            <template x-for="stream in activeStreams" :key="stream.id">
+                                <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                                            <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <h4 class="font-semibold text-sm text-gray-900 truncate" x-text="stream.title || 'Live Stream'"></h4>
+                                            <p class="text-xs text-gray-500 mt-0.5" x-text="formatDuration(stream.startTime)"></p>
+                                            <div class="mt-3">
+                                                <button @click="stopStream(stream.id)" class="text-xs text-red-600 font-medium hover:text-red-700 hover:underline">Stop Stream</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- AUDIO TAB -->
@@ -397,7 +402,9 @@
                                                  <i class="fa-solid fa-music text-gray-400 text-xs"></i>
                                                  <span class="text-xs font-medium truncate" x-text="track.title"></span>
                                              </div>
-                                             <button @click.stop="previewAudio(track.url)" class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs"><i class="fa-solid fa-play"></i></button>
+                                             <button @click.stop="previewAudio(track.url)" class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs">
+                                                 <i class="fa-solid" :class="playingUrl === track.url ? 'fa-pause' : 'fa-play'"></i>
+                                             </button>
                                          </div>
                                      </template>
                                  </div>
@@ -411,7 +418,9 @@
                                                  <i class="fa-solid fa-file-audio text-gray-400 text-xs"></i>
                                                  <span class="text-xs font-medium truncate" x-text="track.title"></span>
                                              </div>
-                                             <button @click.stop="previewAudio('/api/library/stream/' + track.id)" class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs"><i class="fa-solid fa-play"></i></button>
+                                             <button @click.stop="previewAudio('/api/library/stream/' + track.id)" class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs">
+                                                 <i class="fa-solid" :class="playingUrl === '/api/library/stream/' + track.id ? 'fa-pause' : 'fa-play'"></i>
+                                             </button>
                                          </div>
                                      </template>
                                  </div>
@@ -447,24 +456,6 @@
                             </section>
                         </div>
 
-                        <!-- CHAT TAB -->
-                        <div x-show="activeTab === 'chat'" class="h-full flex flex-col">
-                            <div x-show="chatThreads.length === 0" class="flex-1 flex flex-col items-center justify-center text-gray-400 text-center">
-                                 <i class="fa-regular fa-comments text-3xl mb-2"></i>
-                                 <p class="text-xs">No messages yet</p>
-                            </div>
-                            <div class="space-y-4">
-                                <template x-for="thread in chatThreads" :key="thread.id">
-                                    <div class="flex gap-3 text-sm">
-                                        <img :src="thread.snippet.topLevelComment.snippet.authorProfileImageUrl" class="w-8 h-8 rounded-full">
-                                        <div>
-                                            <div class="font-bold text-xs text-gray-900" x-text="thread.snippet.topLevelComment.snippet.authorDisplayName"></div>
-                                            <div class="text-gray-600 mt-0.5" x-text="thread.snippet.topLevelComment.snippet.textDisplay"></div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
 
                     </div>
                 </div>
