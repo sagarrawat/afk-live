@@ -119,7 +119,7 @@ body {
 .mobile-title { font-weight: 700; font-size: 1.1rem; }
 
 .view-section { flex: 1; overflow-y: auto; padding: 30px 40px; }
-.hidden { display: none !important; }
+.hidden { display: none; }
 
 .page-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -466,9 +466,9 @@ body {
 input:checked + .slider { background-color: var(--primary); }
 input:checked + .slider:before { transform: translateX(22px); }
 
-/* COMMUNITY GRID */
-.community-grid-layout { display: grid; grid-template-columns: 240px 350px 1fr; height: calc(100vh - 140px); background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.comm-sidebar { background: #f9f9f9; border-right: 1px solid var(--border); padding: 20px 0; }
+/* COMMUNITY GRID (Handled by Tailwind primarily, this is fallback/mobile) */
+.community-grid-layout { height: calc(100vh - 140px); background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.comm-sidebar { background: #f9f9f9; padding: 20px 0; }
 .comm-nav-item { padding: 10px 20px; cursor: pointer; color: var(--text-main); font-weight: 500; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
 .comm-nav-item:hover { background: #eee; }
 .comm-nav-item.active { background: #e3f2fd; color: var(--primary); border-right: 3px solid var(--primary); }

@@ -355,7 +355,7 @@
                             </div>
 
                             <template x-for="stream in activeStreams" :key="stream.id">
-                                <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                                <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition group">
                                     <div class="flex items-start gap-3">
                                         <div class="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
                                             <i class="fa-solid fa-satellite-dish animate-pulse"></i>
@@ -363,8 +363,13 @@
                                         <div class="flex-1 min-w-0">
                                             <h4 class="font-semibold text-sm text-gray-900 truncate" x-text="stream.title || 'Live Stream'"></h4>
                                             <p class="text-xs text-gray-500 mt-0.5" x-text="formatDuration(stream.startTime)"></p>
-                                            <div class="mt-3">
-                                                <button @click="stopStream(stream.id)" class="text-xs text-red-600 font-medium hover:text-red-700 hover:underline">Stop Stream</button>
+                                            <div class="mt-3 flex items-center gap-2">
+                                                <button @click="stopStream(stream.id)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition flex items-center gap-1">
+                                                    <i class="fa-solid fa-stop"></i> End
+                                                </button>
+                                                <button @click="setEndTime(stream.id)" class="px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-100 transition flex items-center gap-1" title="Set End Time">
+                                                    <i class="fa-regular fa-clock"></i> Stop At
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
