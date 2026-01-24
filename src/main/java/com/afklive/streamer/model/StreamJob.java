@@ -29,6 +29,7 @@ public class StreamJob {
     private String title;
     private String description;
     private String privacy;
+    private java.time.LocalDateTime startTime;
 
     public StreamJob(
             String username,
@@ -40,7 +41,8 @@ public class StreamJob {
             long pid,
             String title,
             String description,
-            String privacy
+            String privacy,
+            java.time.LocalDateTime startTime
     ) {
         this.username = username;
         this.streamKey = streamKey;

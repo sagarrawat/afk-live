@@ -61,6 +61,7 @@ public class StreamService {
             MultipartFile watermarkFile,
             boolean muteVideoAudio,
             String streamMode,
+            int streamQuality,
             String title,
             String description,
             String privacy
@@ -162,7 +163,8 @@ public class StreamService {
         log.info("musicPath [{}]", musicPath);
 
         // Get User Plan Limits
-        int maxHeight = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
+        int planMax = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
+        int maxHeight = (streamQuality > 0 && streamQuality < planMax) ? streamQuality : planMax;
 
         // CHECK FOR OPTIMIZED VERSION
         // Logic: If user wants "original" stream mode, no watermark, no music, AND an optimized version exists,
@@ -214,7 +216,7 @@ public class StreamService {
         // We save the 'pid' so we can kill specifically THIS process later
         String primaryKey = streamKeys.getFirst();
         StreamJob job =
-                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid(), title, description, privacy);
+                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid(), title, description, privacy, java.time.LocalDateTime.now());
         job = streamJobRepo.save(job);
         final Long jobId = job.getId();
 

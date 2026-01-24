@@ -1,5 +1,6 @@
 const API_URL = "/api";
 let currentUser = null;
+let selectedStreamVideo = null; // Fix ReferenceError
 
 // On Load
 document.addEventListener("DOMContentLoaded", async () => {
@@ -43,9 +44,13 @@ function setupEventListeners() {
     const bulkInput = document.getElementById("bulkUploadInput");
     if(bulkInput) bulkInput.addEventListener("change", handleBulkUpload);
 
-    // Stream Upload
+    // Stream Upload (Library)
     const streamUpload = document.getElementById("streamUploadInput");
     if(streamUpload) streamUpload.addEventListener("change", handleStreamVideoUpload);
+
+    // Stream Direct Upload (Source Bar)
+    const streamDirectUpload = document.getElementById("streamVideoUploadDirect");
+    if(streamDirectUpload) streamDirectUpload.addEventListener("change", handleStreamVideoUpload);
 
     // Stream Music Upload
     const streamMusicUpload = document.getElementById("streamAudioFile");
@@ -105,7 +110,7 @@ function switchView(viewName) {
     if (viewName === 'stream') {
         // Init Stream Studio
         checkStreamStatus();
-        switchStudioTab('scenes');
+        switchStudioTab('streams');
         loadDestinations();
         loadStreamAudioLibrary();
     }
@@ -132,8 +137,171 @@ function switchStudioTab(tab) {
     document.querySelectorAll('.studio-tab').forEach(b => b.classList.remove('active'));
     document.querySelector(`.studio-tab[onclick*="'${tab}'"]`)?.classList.add('active');
 
-    document.querySelectorAll('.studio-panel').forEach(p => p.classList.add('hidden'));
-    document.getElementById(`studio-tab-${tab}`).classList.remove('hidden');
+    document.querySelectorAll('.studio-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`studio-tab-${tab}`)?.classList.add('active');
+}
+
+function switchStreamTab(tab) {
+    if (tab === 'schedule') {
+        document.getElementById('streamActionSchedule').classList.toggle('hidden');
+    }
+}
+
+function switchStreamAudioTab(tab) {
+    // Buttons
+    document.querySelectorAll('.studio-audio-control button').forEach(b => b.classList.remove('btn-primary', 'btn-outline'));
+    document.querySelectorAll('.studio-audio-control button').forEach(b => {
+        if(b.getAttribute('onclick').includes(`'${tab}'`)) {
+            b.classList.add('btn-primary');
+        } else {
+            b.classList.add('btn-outline');
+        }
+    });
+
+    // Sections
+    document.getElementById('streamAudioUploadSection').classList.add('hidden');
+    document.getElementById('streamAudioLibSection').classList.add('hidden');
+    document.getElementById('streamAudioMyLibSection').classList.add('hidden');
+
+    if (tab === 'upload') document.getElementById('streamAudioUploadSection').classList.remove('hidden');
+    if (tab === 'lib') {
+        document.getElementById('streamAudioLibSection').classList.remove('hidden');
+        if(document.getElementById('streamAudioTrackList').innerHTML === 'Loading...') loadStreamAudioLibrary();
+    }
+    if (tab === 'mylib') {
+        document.getElementById('streamAudioMyLibSection').classList.remove('hidden');
+        if(document.getElementById('streamAudioMyTrackList').innerHTML === 'Loading...') loadStreamAudioLibrary();
+    }
+}
+
+let streamAudioLibraryLoaded = false;
+async function loadStreamAudioLibrary() {
+    if(streamAudioLibraryLoaded) return;
+
+    // Load Stock
+    try {
+        const res = await apiFetch(`${API_URL}/audio/trending`);
+        const data = await res.json();
+        const list = document.getElementById('streamAudioTrackList');
+        list.innerHTML = '';
+        data.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+
+            // Play Button
+            const playBtn = t.url ? `<button class="btn btn-xs btn-text" onclick="previewAudio('${t.url}', event)"><i class="fa-solid fa-play"></i></button>` : '';
+
+            div.innerHTML = `<i class="fa-solid fa-music"></i> <div style="flex:1; margin-left:10px;">${t.title}</div> ${playBtn}`;
+            div.onclick = () => {
+                document.querySelectorAll('#streamAudioTrackList .queue-item').forEach(e=>e.classList.remove('active-track'));
+                div.classList.add('active-track');
+                document.getElementById('selectedStreamStockId').value = t.id;
+            };
+            list.appendChild(div);
+        });
+    } catch(e) { document.getElementById('streamAudioTrackList').innerHTML = 'Failed to load'; }
+
+    // Load My Library
+    try {
+        const res = await apiFetch(`${API_URL}/audio/my-library`);
+        const data = await res.json();
+        const list = document.getElementById('streamAudioMyTrackList');
+        list.innerHTML = '';
+        if(data.length === 0) list.innerHTML = '<div style="padding:10px; color:#666; font-size:0.8rem;">No audio files found in library.</div>';
+
+        data.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.style.cursor = 'pointer';
+
+            // Play Button using Library Stream API
+            const playBtn = `<button class="btn btn-xs btn-text" onclick="previewAudio('${API_URL}/library/stream/${t.id}', event)"><i class="fa-solid fa-play"></i></button>`;
+
+            div.innerHTML = `<i class="fa-solid fa-file-audio"></i> <div style="flex:1; margin-left:10px;">${t.title}</div> ${playBtn}`;
+            div.onclick = () => {
+                document.querySelectorAll('#streamAudioMyTrackList .queue-item').forEach(e=>e.classList.remove('active-track'));
+                div.classList.add('active-track');
+                document.getElementById('selectedMyLibMusicName').value = t.title;
+            };
+            list.appendChild(div);
+        });
+    } catch(e) { document.getElementById('streamAudioMyTrackList').innerHTML = 'Failed to load'; }
+}
+
+let currentAudioPreview = null;
+function previewAudio(url, e) {
+    if(e) e.stopPropagation();
+    if(currentAudioPreview) {
+        currentAudioPreview.pause();
+        currentAudioPreview = null;
+    }
+    currentAudioPreview = new Audio(url);
+    currentAudioPreview.play();
+
+    streamAudioLibraryLoaded = true;
+}
+
+async function handleStreamMusicUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const btn = e.target.previousElementSibling || e.target; // Fallback
+    // Visual feedback not easy on file input, using Toast
+    showToast("Uploading music...", "info");
+
+    const formData = new FormData();
+    formData.append("files", file);
+
+    try {
+        const res = await apiFetch(`${API_URL}/library/upload`, { method: "POST", body: formData });
+        if (res.ok) {
+            showToast("Music uploaded!", "success");
+            document.getElementById('uploadedStreamMusicName').value = file.name;
+        } else {
+            showToast("Upload failed.", "error");
+        }
+    } catch (err) {
+        showToast("Upload error.", "error");
+    }
+}
+
+async function generateStreamMetadata() {
+    const topic = document.getElementById('aiStreamTopic').value || document.getElementById('streamMetaTitle').value || "General Stream";
+    const btn = document.querySelector('button[onclick="generateStreamMetadata()"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating...';
+
+    try {
+        const res = await apiFetch(`${API_URL}/ai/generate`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ type: 'stream_metadata', context: topic })
+        });
+        const data = await res.json();
+        if(data.result) {
+            // Assume result is JSON string or formatted text.
+            // If it's simple text, put in description. If JSON, parse it.
+            // For now, let's assume the AI returns a JSON-like string or just description.
+            // But usually 'stream_metadata' implies structured data.
+            // Let's try to parse if it looks like JSON
+            try {
+                const parsed = JSON.parse(data.result);
+                if(parsed.title) document.getElementById('streamMetaTitle').value = parsed.title;
+                if(parsed.description) document.getElementById('streamMetaDesc').value = parsed.description;
+                if(parsed.tags) document.getElementById('aiStreamTopic').value = parsed.tags; // Reuse hidden field for tags
+            } catch(jsonErr) {
+                // Fallback: result is description
+                document.getElementById('streamMetaDesc').value = data.result;
+            }
+            showToast("Metadata generated!", "success");
+        }
+    } catch(e) { showToast("AI Generation Failed", "error"); }
+    finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
 }
 
 // Reuse toggleLoop
@@ -211,6 +379,20 @@ async function openLibraryModalForStream() {
 
 function selectStreamVideo(video) {
     selectedStreamVideo = video;
+
+    // Update Source Bar
+    const thumb = document.getElementById('selectedVideoThumb');
+    const icon = document.getElementById('selectedVideoIcon');
+
+    if (video.thumbnailS3Key) {
+        thumb.src = `${API_URL}/videos/${video.id}/thumbnail`;
+        thumb.classList.remove('hidden');
+        icon.classList.add('hidden');
+    } else {
+        thumb.classList.add('hidden');
+        icon.classList.remove('hidden');
+    }
+
     document.getElementById('studioSelectedTitle').innerText = video.title;
 
     // Auto-fill Metadata if empty
@@ -341,8 +523,12 @@ async function submitJob() {
     if (desc) fd.append("description", desc);
     if (privacy) fd.append("privacy", privacy);
 
-    // Default to "original" mode as user selects optimized video beforehand
-    fd.append("streamMode", "original");
+    // Stream Settings
+    const orientation = document.getElementById('streamOrientation').value || "original";
+    const quality = document.getElementById('streamQuality').value || "0";
+
+    fd.append("streamMode", orientation);
+    fd.append("streamQuality", quality);
 
     try {
         const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
@@ -839,22 +1025,49 @@ async function stopStreamById(id) {
 }
 
 function renderActiveStreams(streams) {
-    const list = document.getElementById('activeStreamList'); // Legacy list, but might use console logic in studio
-    // In studio, we might just show badge.
-    // But let's check legacy container existence just in case.
-    if(list) {
-        list.innerHTML = '';
-        if(!streams || streams.length === 0) { list.innerHTML = `<div class="empty-state">No active streams.</div>`; return; }
-        streams.forEach(s => {
-            list.innerHTML += `
-            <div class="queue-item">
-                <div style="flex:1"><div style="font-weight:600">LIVE: ${s.title || "Stream"}</div></div>
-                <button class="btn btn-sm btn-text" onclick="stopStreamById(${s.id})"><i class="fa-solid fa-stop" style="color:var(--danger)"></i></button>
-            </div>`;
-        });
+    // 1. Render to 'Streams' Tab in Studio
+    const listStudio = document.getElementById('activeStreamsList');
+    const emptyState = document.getElementById('streamsEmptyState');
+
+    if (listStudio) {
+        listStudio.innerHTML = '';
+        if (!streams || streams.length === 0) {
+            if(emptyState) emptyState.classList.remove('hidden');
+        } else {
+            if(emptyState) emptyState.classList.add('hidden');
+            streams.forEach(s => {
+                // Calculate duration if startTime available
+                let timeText = "Live now";
+                if(s.startTime) {
+                    const start = new Date(s.startTime);
+                    const now = new Date();
+                    const diffMs = now - start;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const hrs = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    timeText = `${hrs}h ${mins}m`;
+                }
+
+                const div = document.createElement('div');
+                div.className = 'activity-item'; // Reuse activity style
+                div.innerHTML = `
+                    <div class="act-icon" style="background:#e3f2fd; color:red;"><i class="fa-solid fa-satellite-dish"></i></div>
+                    <div class="act-content">
+                        <div style="font-weight:600; color:#333;">${s.title || "Live Stream"}</div>
+                        <div style="font-size:0.8rem; color:#666;">
+                            <i class="fa-regular fa-clock"></i> ${timeText} • ${s.streamKey.substring(0, 15)}...
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:#ffdce0;" onclick="stopStreamById(${s.id})">
+                        <i class="fa-solid fa-stop"></i> End
+                    </button>
+                `;
+                listStudio.appendChild(div);
+            });
+        }
     }
 
-    // Studio UI update
+    // Studio UI update (Badge)
     const badge = document.getElementById('studioLiveBadge');
     if (badge) {
         if (streams && streams.length > 0) badge.classList.remove('hidden');
@@ -1023,8 +1236,39 @@ async function checkStreamStatus() {
     try {
         const res = await apiFetch(`${API_URL}/status`);
         const data = await res.json();
-        if(data.success) renderActiveStreams(data.data.activeStreams || []);
+        if(data.success) {
+            renderActiveStreams(data.data.activeStreams || []);
+            updateStudioState(data.data.activeStreams || []);
+        }
     } catch(e) {}
+}
+
+function updateStudioState(streams) {
+    const btn = document.getElementById('btnGoLive');
+    const badge = document.getElementById('studioLiveBadge');
+
+    // Check if ANY stream is active (simplified for now)
+    const isLive = streams.some(s => s.live);
+
+    if (isLive) {
+        if (btn) {
+            btn.innerText = "End Broadcast";
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-secondary');
+            btn.onclick = stopStream;
+        }
+        if (badge) badge.classList.remove('hidden');
+
+        // Find active stream ID to stop specifically if needed, but stopStream() handles all via prompt
+    } else {
+        if (btn) {
+            btn.innerText = "Go Live";
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-danger');
+            btn.onclick = submitJob;
+        }
+        if (badge) badge.classList.add('hidden');
+    }
 }
 
 async function checkInitialStatus() { startStatusPoll(); }
@@ -1304,4 +1548,187 @@ function initCalendar() {
 }
 
 /* --- COMMUNITY --- */
-function loadComments() { /* ... */ }
+let currentComments = [];
+
+async function loadComments() {
+    // Support both Main Engagement View and Studio Chat Tab
+    const listMain = document.getElementById('threadList');
+    const listStudio = document.getElementById('studioChatList');
+
+    if(!listMain && !listStudio) return;
+
+    try {
+        const res = await apiFetch(`${API_URL}/comments`);
+        const data = await res.json();
+        currentComments = data.items || [];
+
+        // Initial Render
+        renderComments(currentComments);
+    } catch(e) {
+        if(listMain) listMain.innerHTML = '<div class="empty-state">Failed to load comments</div>';
+        if(listStudio) listStudio.innerHTML = '<div class="empty-state">Failed to load comments</div>';
+    }
+}
+
+function filterCommTab(tab) {
+    // Nav
+    document.querySelectorAll('.comm-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.comm-nav-item').forEach(el => {
+        if(el.getAttribute('onclick').includes(`'${tab}'`)) el.classList.add('active');
+    });
+
+    // Filter
+    let filtered = [];
+    if (tab === 'all') {
+        filtered = currentComments;
+    } else if (tab === 'unreplied') {
+        filtered = currentComments.filter(c => c.snippet.totalReplyCount === 0);
+    } else if (tab === 'activity') {
+        filtered = currentComments;
+    }
+
+    renderComments(filtered);
+}
+
+function renderComments(comments) {
+    // Render to Main Engagement View
+    const listMain = document.getElementById('threadList');
+    if(listMain) {
+        listMain.innerHTML = '';
+        if(!comments || comments.length === 0) {
+            listMain.innerHTML = '<div class="empty-state">No conversations found.</div>';
+        } else {
+            comments.forEach(thread => {
+                const top = thread.snippet.topLevelComment.snippet;
+                const div = document.createElement('div');
+                div.className = 'thread-item';
+                div.onclick = () => openThread(thread);
+                div.innerHTML = `
+                    <img src="${top.authorProfileImageUrl}" class="thread-avatar">
+                    <div style="flex:1; overflow:hidden;">
+                        <div class="thread-meta"><b>${top.authorDisplayName}</b> • ${new Date(top.publishedAt).toLocaleDateString()}</div>
+                        <div class="thread-preview">${top.textDisplay}</div>
+                    </div>
+                `;
+                listMain.appendChild(div);
+            });
+        }
+    }
+
+    // Render to Studio Chat Tab
+    const listStudio = document.getElementById('studioChatList');
+    const emptyState = document.getElementById('chatEmptyState');
+    if(listStudio) {
+        listStudio.innerHTML = '';
+        if(!comments || comments.length === 0) {
+            if(emptyState) emptyState.classList.remove('hidden');
+        } else {
+            if(emptyState) emptyState.classList.add('hidden');
+            comments.forEach(thread => {
+                const top = thread.snippet.topLevelComment.snippet;
+                const div = document.createElement('div');
+                div.className = 'sidebar-thread-item';
+                // Simplified view for sidebar
+                div.innerHTML = `
+                    <img src="${top.authorProfileImageUrl}">
+                    <div class="sidebar-thread-content">
+                        <div class="sidebar-thread-name">${top.authorDisplayName}</div>
+                        <div class="sidebar-thread-msg">${top.textDisplay}</div>
+                    </div>
+                `;
+                listStudio.appendChild(div);
+            });
+        }
+    }
+}
+
+
+function openThread(thread) {
+    const top = thread.snippet.topLevelComment.snippet;
+    document.getElementById('emptyThreadState').classList.add('hidden');
+    document.getElementById('activeThread').classList.remove('hidden');
+
+    // Thread Header
+    document.getElementById('threadVideoTitle').innerText = "Comment on Video (ID: " + thread.snippet.videoId + ")"; // Title not available in comment object easily
+    document.getElementById('threadVideoLink').href = `https://youtube.com/watch?v=${thread.snippet.videoId}&lc=${thread.id}`;
+
+    const messages = document.getElementById('threadMessages');
+    messages.innerHTML = '';
+
+    // Render Top Level
+    messages.innerHTML += `
+        <div class="msg-bubble" style="display:flex; gap:10px; margin-bottom:20px;">
+             <img src="${top.authorProfileImageUrl}" style="width:32px; height:32px; border-radius:50%;">
+             <div>
+                 <div style="font-weight:600; font-size:0.85rem;">${top.authorDisplayName}</div>
+                 <div style="background:#f1f2f4; padding:10px; border-radius: 0 10px 10px 10px; margin-top:2px; font-size:0.9rem;">${top.textDisplay}</div>
+             </div>
+        </div>
+    `;
+
+    // In a real app, we would fetch replies here if not included or if truncated
+    if(thread.replies) {
+        thread.replies.comments.forEach(r => {
+             messages.innerHTML += `
+                <div class="msg-bubble reply" style="display:flex; gap:10px; margin-bottom:15px; margin-left:40px;">
+                     <img src="${r.snippet.authorProfileImageUrl}" style="width:24px; height:24px; border-radius:50%;">
+                     <div>
+                         <div style="font-weight:600; font-size:0.8rem;">${r.snippet.authorDisplayName}</div>
+                         <div style="background:#e3f2fd; padding:8px; border-radius: 0 10px 10px 10px; margin-top:2px; font-size:0.9rem;">${r.snippet.textDisplay}</div>
+                     </div>
+                </div>
+            `;
+        });
+    }
+
+    // Set context for reply
+    document.getElementById('replyInput').dataset.parentId = thread.id;
+}
+
+async function sendReply() {
+    const parentId = document.getElementById('replyInput').dataset.parentId;
+    const text = document.getElementById('replyInput').value;
+    if(!text) return;
+
+    try {
+        const res = await apiFetch(`${API_URL}/comments/${parentId}/reply`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text})
+        });
+        if(res.ok) {
+            showToast("Reply sent", "success");
+            document.getElementById('replyInput').value = '';
+            // Ideally reload thread or append reply locally
+        } else {
+            showToast("Failed to reply", "error");
+        }
+    } catch(e) { showToast("Error sending reply", "error"); }
+}
+
+function toggleAiSuggestions() {
+    const area = document.getElementById('aiSuggestionsArea');
+    if(area.classList.contains('hidden')) {
+        area.classList.remove('hidden');
+        generateSuggestions();
+    } else {
+        area.classList.add('hidden');
+    }
+}
+
+async function generateSuggestions() {
+    const chips = document.getElementById('aiChips');
+    chips.innerHTML = 'Generating...';
+    // Mock call for now or use existing generic AI endpoint
+    // In real scenario: call /api/ai/suggest-reply
+    setTimeout(() => {
+        chips.innerHTML = '';
+        ['Thanks for watching! 😊', 'Glad you liked it!', 'New video coming soon!'].forEach(s => {
+            const chip = document.createElement('div');
+            chip.style.cssText = "background:white; border:1px solid #cce0ff; padding:5px 10px; borderRadius:15px; cursor:pointer; font-size:0.85rem; color:#0052cc;";
+            chip.innerText = s;
+            chip.onclick = () => document.getElementById('replyInput').value = s;
+            chips.appendChild(chip);
+        });
+    }, 1000);
+}

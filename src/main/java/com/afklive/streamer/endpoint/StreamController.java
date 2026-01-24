@@ -74,6 +74,7 @@ public class StreamController {
                                                 @RequestParam(required = false) MultipartFile watermarkFile,
                                                 @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
                                                 @RequestParam(required = false, defaultValue = "original") String streamMode,
+                                                @RequestParam(required = false, defaultValue = "0") int streamQuality,
                                                 @RequestParam(required = false) String title,
                                                 @RequestParam(required = false) String description,
                                                 @RequestParam(required = false) String privacy,
@@ -84,7 +85,7 @@ public class StreamController {
         // Removed global lock (streamManager) to allow multiple streams per user.
         // Quota is checked inside StreamService via UserService.
         try {
-            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, title, description, privacy));
+            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }

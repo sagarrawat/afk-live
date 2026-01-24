@@ -125,164 +125,199 @@
             </div>
         </div>
 
-        <!-- VIEW: STREAM (Upstream.so Style) -->
-        <div id="view-stream" class="view-section hidden" style="padding: 0; overflow: hidden; background: #121212;">
+        <!-- VIEW: STREAM (StreamYard Inspired) -->
+        <div id="view-stream" class="view-section hidden" style="padding: 0; overflow: hidden;">
             <div class="stream-studio-grid">
 
-                <!-- LEFT SIDEBAR: Scenes/Assets -->
-                <div class="studio-sidebar-left">
-                    <div class="studio-tab-header">
-                        <button class="studio-tab active" onclick="switchStudioTab('scenes')">Sources</button>
-                        <button class="studio-tab" onclick="switchStudioTab('audio')">Audio</button>
-                        <button class="studio-tab" onclick="switchStudioTab('brand')">Brand</button>
-                    </div>
-
-                    <div id="studio-tab-scenes" class="studio-panel">
-                        <div style="padding: 15px;">
-                            <h4 style="color:#aaa; font-size:0.8rem; margin-top:0;">VIDEO SOURCE</h4>
-                            <div id="selectedVideoCard" class="studio-card" onclick="openLibraryModalForStream()">
-                                <div class="studio-card-icon"><i class="fa-solid fa-film"></i></div>
-                                <div class="studio-card-content">
-                                    <div id="studioSelectedTitle" style="font-weight:600;">Select Video</div>
-                                    <div style="font-size:0.8rem; color:#666;">Click to choose</div>
-                                </div>
+                <!-- MAIN COL: Preview & Assets -->
+                <div class="studio-main-col">
+                    <div class="studio-preview-container">
+                        <div class="studio-preview-wrapper">
+                            <video id="previewPlayer" class="studio-preview-player hidden" controls playsinline></video>
+                            <div id="previewPlaceholder" class="studio-preview-placeholder">
+                                <i class="fa-solid fa-film fa-3x"></i>
+                                <div style="margin-top:10px;">Select a video to start</div>
+                                <button class="btn btn-primary btn-sm" onclick="openLibraryModalForStream()" style="margin-top:15px;">Select Source</button>
                             </div>
-                            <button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('streamUploadInput').click()" style="margin-top:10px;">
-                                <i class="fa-solid fa-upload"></i> Upload New
-                            </button>
-                            <input type="file" id="streamUploadInput" hidden accept="video/*">
-
-                            <div style="margin-top: 20px;">
-                                <label style="display:flex; align-items:center; gap:8px; color:#ddd; cursor:pointer;">
-                                    <input type="checkbox" id="streamLoopInfinite" checked onchange="toggleLoop(this)">
-                                    Loop Stream (24/7)
-                                </label>
-                                <input type="number" id="streamLoopCount" value="1" min="1" class="form-input-dark hidden" style="margin-top:5px;" placeholder="Loop Count">
-                            </div>
+                            <div class="studio-live-badge hidden" id="studioLiveBadge">LIVE</div>
                         </div>
                     </div>
 
-                    <div id="studio-tab-audio" class="studio-panel hidden">
-                         <div style="padding: 15px;">
-                            <h4 style="color:#aaa; font-size:0.8rem; margin-top:0;">BACKGROUND MUSIC</h4>
-
-                            <div class="studio-audio-control">
-                                <button class="btn btn-sm btn-dark" onclick="switchStreamAudioTab('upload')">Upload</button>
-                                <button class="btn btn-sm btn-dark" onclick="switchStreamAudioTab('lib')">Stock</button>
-                                <button class="btn btn-sm btn-dark" onclick="switchStreamAudioTab('mylib')">Library</button>
+                    <!-- Compact Stream Control Bar -->
+                    <div class="studio-source-bar">
+                        <div class="source-info" onclick="openLibraryModalForStream()">
+                            <div class="source-thumb">
+                                <img id="selectedVideoThumb" src="" class="hidden">
+                                <i id="selectedVideoIcon" class="fa-solid fa-film"></i>
                             </div>
-
-                            <!-- Upload -->
-                            <div id="streamAudioUploadSection" class="studio-subpanel">
-                                <input type="file" id="streamAudioFile" accept=".mp3,.wav" style="color:#ddd; font-size:0.8rem;" onchange="handleStreamMusicUpload(event)">
-                                <input type="hidden" id="uploadedStreamMusicName">
+                            <div class="source-details">
+                                <div class="source-label">Current Source</div>
+                                <div id="studioSelectedTitle" class="source-title">None Selected</div>
                             </div>
-
-                            <!-- Stock -->
-                            <div id="streamAudioLibSection" class="studio-subpanel hidden">
-                                <div id="streamAudioTrackList" class="studio-list">Loading...</div>
-                                <input type="hidden" id="selectedStreamStockId">
+                            <div style="display:flex; gap:5px; margin-left:15px;">
+                                <button class="btn btn-sm btn-outline" onclick="openLibraryModalForStream(event)" title="Select from Library"><i class="fa-solid fa-folder-open"></i></button>
+                                <button class="btn btn-sm btn-outline" onclick="document.getElementById('streamVideoUploadDirect').click(); event.stopPropagation();" title="Upload Video"><i class="fa-solid fa-upload"></i></button>
                             </div>
+                        </div>
 
-                            <!-- My Lib -->
-                            <div id="streamAudioMyLibSection" class="studio-subpanel hidden">
-                                <div id="streamAudioMyTrackList" class="studio-list">Loading...</div>
-                                <input type="hidden" id="selectedMyLibMusicName">
+                        <div class="source-actions">
+                            <div class="action-toggle" title="Loop Video">
+                                <input type="checkbox" id="streamLoopInfinite" checked>
+                                <span class="toggle-label"><i class="fa-solid fa-repeat"></i> Loop</span>
                             </div>
-
-                            <div style="margin-top:20px;">
-                                <label style="color:#ddd; font-size:0.85rem;">Music Volume: <span id="streamVolVal">50%</span></label>
-                                <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
-                            </div>
-
-                             <label style="display:flex; align-items:center; gap:8px; color:#ddd; cursor:pointer; margin-top:15px;">
+                            <div class="action-toggle" title="Mute Source Audio">
                                 <input type="checkbox" id="streamMuteOriginal" checked>
-                                Mute Video Sound
-                            </label>
-                         </div>
-                    </div>
-
-                    <div id="studio-tab-brand" class="studio-panel hidden">
-                         <div style="padding: 15px;">
-                             <h4 style="color:#aaa; font-size:0.8rem; margin-top:0;">WATERMARK</h4>
-                             <button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('streamWatermarkFile').click()">
-                                <i class="fa-solid fa-image"></i> Upload Logo
-                             </button>
-                             <input type="file" id="streamWatermarkFile" accept=".png,.jpg" hidden onchange="handleWatermarkUpload(this)">
-
-                             <div id="watermarkPreview" class="hidden" style="margin-top:10px; background:#222; padding:5px; border-radius:4px; display:flex; align-items:center; gap:10px;">
-                                 <img id="watermarkImg" src="" style="height:30px;">
-                                 <button class="btn btn-text btn-xs" onclick="clearWatermark()" style="color:#aaa;"><i class="fa-solid fa-xmark"></i></button>
-                             </div>
-                         </div>
-                    </div>
-                </div>
-
-                <!-- CENTER: Preview -->
-                <div class="studio-center">
-                    <div class="studio-preview-wrapper">
-                        <video id="previewPlayer" class="studio-preview-player hidden" controls playsinline></video>
-                        <div id="previewPlaceholder" class="studio-preview-placeholder">
-                            <i class="fa-solid fa-film fa-3x"></i>
-                            <div style="margin-top:10px;">Preview Area</div>
+                                <span class="toggle-label"><i class="fa-solid fa-volume-xmark"></i> Mute Src</span>
+                            </div>
+                            <!-- Hidden inputs for logic -->
+                            <input type="number" id="streamLoopCount" value="1" class="hidden">
+                            <input type="file" id="streamUploadInput" hidden accept="video/*">
+                            <input type="file" id="streamVideoUploadDirect" hidden accept="video/*">
                         </div>
-                        <div class="studio-live-badge hidden" id="studioLiveBadge">LIVE</div>
                     </div>
-
-                    <!-- Logs / Console -->
-                     <div class="studio-console-wrapper">
-                         <div class="studio-console-header">
-                             <span>Stream Logs</span>
-                             <button class="btn btn-xs btn-text" onclick="document.getElementById('console').innerHTML=''">Clear</button>
-                         </div>
-                         <div id="console" class="studio-console"></div>
-                     </div>
                 </div>
 
-                <!-- RIGHT SIDEBAR: Destinations & Go Live -->
+                <!-- RIGHT SIDEBAR: Tools -->
                 <div class="studio-sidebar-right">
 
-                    <div style="padding: 15px;">
-                        <button id="btnGoLive" class="btn btn-danger btn-lg btn-block" onclick="submitJob()">
-                            <i class="fa-solid fa-tower-broadcast"></i> Go Live
-                        </button>
-                        <button id="btnStop" class="btn btn-secondary btn-lg btn-block hidden" onclick="stopStream()">Stop Stream</button>
+                    <div class="studio-header">
+                        <h2>Stream Settings</h2>
+                        <button id="btnGoLive" class="btn btn-danger" onclick="submitJob()">Go Live</button>
+                        <button id="btnStop" class="btn btn-secondary hidden" onclick="stopStream()">Stop</button>
+                    </div>
 
-                        <div style="margin-top: 10px; text-align: center;">
-                             <a href="#" onclick="switchStreamTab('schedule')" style="color:#aaa; font-size:0.85rem;">Schedule for later</a>
-                             <div id="streamActionSchedule" class="hidden" style="background:#222; padding:10px; border-radius:4px; margin-top:10px; text-align:left;">
-                                 <label style="color:#ddd; font-size:0.8rem;">Start Time</label>
-                                 <input type="datetime-local" id="streamScheduleTime" class="form-input-dark" style="margin-bottom:10px;">
-                                 <button class="btn btn-primary btn-sm btn-block" onclick="submitScheduledStream()">Confirm Schedule</button>
-                             </div>
+                    <div class="studio-tabs">
+                        <div class="studio-tab active" onclick="switchStudioTab('streams')">Streams</div>
+                        <div class="studio-tab" onclick="switchStudioTab('chat')">Chat</div>
+                        <div class="studio-tab" onclick="switchStudioTab('brand')">Brand</div>
+                        <div class="studio-tab" onclick="switchStudioTab('audio')">Audio</div>
+                        <div class="studio-tab" onclick="switchStudioTab('settings')">Settings</div>
+                    </div>
+
+                    <div class="studio-content">
+
+                        <!-- TAB: STREAMS -->
+                        <div id="studio-tab-streams" class="studio-panel active">
+                            <div class="empty-state" id="streamsEmptyState">
+                                <i class="fa-solid fa-tower-broadcast"></i>
+                                <p>No active streams</p>
+                            </div>
+                            <div id="activeStreamsList" class="activity-list"></div>
                         </div>
-                    </div>
 
-                    <div style="border-top: 1px solid #333; padding: 15px;">
-                        <h4 style="color:#aaa; font-size:0.8rem; margin:0 0 10px 0; display:flex; justify-content:space-between;">
-                            DESTINATIONS
-                            <button class="btn btn-xs btn-text" onclick="openAddDestinationChoiceModal()"><i class="fa-solid fa-plus"></i></button>
-                        </h4>
-                        <div id="destinationList" class="studio-dest-list">
-                            <!-- Populated JS -->
+                        <!-- TAB: CHAT -->
+                        <div id="studio-tab-chat" class="studio-panel">
+                            <div class="empty-state" id="chatEmptyState">
+                                <i class="fa-regular fa-comments"></i>
+                                <p>Chats show up here</p>
+                            </div>
+                            <div id="studioChatList" class="sidebar-thread-list">
+                                <!-- Populated via JS -->
+                            </div>
                         </div>
-                    </div>
 
-                    <div style="border-top: 1px solid #333; padding: 15px;">
-                         <h4 style="color:#aaa; font-size:0.8rem; margin:0 0 10px 0;">METADATA</h4>
-                         <input type="text" id="streamMetaTitle" class="form-input-dark" placeholder="Stream Title" style="margin-bottom:10px;">
-                         <textarea id="streamMetaDesc" class="form-input-dark" rows="3" placeholder="Description" style="margin-bottom:10px;"></textarea>
-                         <select id="streamMetaPrivacy" class="form-input-dark">
-                            <option value="public">Public</option>
-                            <option value="unlisted">Unlisted</option>
-                            <option value="private">Private</option>
-                         </select>
-                         <button class="btn btn-xs btn-outline btn-block" onclick="generateStreamMetadata()" style="margin-top:10px; border-color:#444; color:#aaa;">
-                             <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Info
-                         </button>
-                         <input type="hidden" id="aiStreamTopic"> <!-- Hidden context -->
-                    </div>
+                        <!-- TAB: BRAND -->
+                        <div id="studio-tab-brand" class="studio-panel">
+                            <span class="studio-section-title">Brand Customization</span>
+                            <div class="studio-subpanel">
+                                <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:10px;">Logo / Watermark</label>
+                                <button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('streamWatermarkFile').click()">
+                                    <i class="fa-solid fa-upload"></i> Upload
+                                </button>
+                                <input type="file" id="streamWatermarkFile" accept=".png,.jpg" hidden onchange="handleWatermarkUpload(this)">
 
+                                <div id="watermarkPreview" class="hidden" style="margin-top:10px; background:#e3f2fd; padding:10px; border-radius:4px; display:flex; align-items:center; gap:10px;">
+                                    <img id="watermarkImg" src="" style="height:30px;">
+                                    <button class="btn btn-text btn-xs" onclick="clearWatermark()" style="color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TAB: AUDIO -->
+                        <div id="studio-tab-audio" class="studio-panel">
+                            <span class="studio-section-title">Audio</span>
+                            <div class="studio-subpanel">
+                                <div class="studio-audio-control">
+                                    <button class="btn btn-xs btn-outline" onclick="switchStreamAudioTab('upload')">Upload</button>
+                                    <button class="btn btn-xs btn-outline" onclick="switchStreamAudioTab('lib')">Stock</button>
+                                    <button class="btn btn-xs btn-outline" onclick="switchStreamAudioTab('mylib')">Library</button>
+                                </div>
+
+                                <div id="streamAudioUploadSection" class="hidden">
+                                    <input type="file" id="streamAudioFile" accept=".mp3,.wav" style="font-size:0.8rem;" onchange="handleStreamMusicUpload(event)">
+                                    <input type="hidden" id="uploadedStreamMusicName">
+                                </div>
+                                <div id="streamAudioLibSection" class="hidden">
+                                    <div id="streamAudioTrackList" class="studio-list" style="height:100px;">Loading...</div>
+                                    <input type="hidden" id="selectedStreamStockId">
+                                </div>
+                                <div id="streamAudioMyLibSection" class="hidden">
+                                    <div id="streamAudioMyTrackList" class="studio-list" style="height:100px;">Loading...</div>
+                                    <input type="hidden" id="selectedMyLibMusicName">
+                                </div>
+
+                                <div style="margin-top:15px;">
+                                    <label style="font-size:0.8rem;">Music Volume: <span id="streamVolVal">50%</span></label>
+                                    <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
+                                </div>
+
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; margin-top:10px; cursor:pointer;">
+                                    <input type="checkbox" id="streamMuteOriginal" checked>
+                                    Mute Video Sound
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- TAB: SETTINGS -->
+                        <div id="studio-tab-settings" class="studio-panel">
+                            <span class="studio-section-title">Destinations</span>
+                            <div class="studio-subpanel">
+                                <div id="destinationList" class="studio-dest-list"></div>
+                                <button class="btn btn-text btn-sm btn-block" onclick="openAddDestinationChoiceModal()" style="margin-top:5px;">+ Add Destination</button>
+                            </div>
+
+                            <span class="studio-section-title">Stream Settings</span>
+                            <div class="studio-subpanel">
+                                <label style="font-size:0.8rem; font-weight:600;">Resolution</label>
+                                <select id="streamQuality" class="form-input" style="margin-bottom:10px;">
+                                    <option value="1080" selected>1080p (Full HD)</option>
+                                    <option value="720">720p (HD)</option>
+                                    <option value="2160">4K (Ultra HD)</option>
+                                </select>
+
+                                <label style="font-size:0.8rem; font-weight:600;">Orientation</label>
+                                <select id="streamOrientation" class="form-input">
+                                    <option value="original" selected>Landscape (16:9)</option>
+                                    <option value="force_portrait">Portrait (9:16)</option>
+                                </select>
+                            </div>
+
+                            <span class="studio-section-title">Broadcast Info</span>
+                            <div class="studio-subpanel">
+                                 <input type="text" id="streamMetaTitle" class="form-input" placeholder="Title" style="margin-bottom:8px;">
+                                 <textarea id="streamMetaDesc" class="form-input" rows="3" placeholder="Description" style="margin-bottom:8px;"></textarea>
+                                 <select id="streamMetaPrivacy" class="form-input" style="margin-bottom:8px;">
+                                    <option value="public">Public</option>
+                                    <option value="unlisted">Unlisted</option>
+                                    <option value="private">Private</option>
+                                 </select>
+                                 <button class="btn btn-xs btn-outline btn-block" onclick="generateStreamMetadata()">
+                                     <i class="fa-solid fa-wand-magic-sparkles"></i> AI Generate
+                                 </button>
+                                 <input type="hidden" id="aiStreamTopic">
+                            </div>
+
+                            <div style="text-align:center;">
+                                <a href="#" onclick="switchStreamTab('schedule')" style="font-size:0.85rem;">Schedule for later</a>
+                                <div id="streamActionSchedule" class="hidden studio-subpanel" style="text-align:left;">
+                                     <label style="font-size:0.8rem;">Start Time</label>
+                                     <input type="datetime-local" id="streamScheduleTime" class="form-input">
+                                     <button class="btn btn-primary btn-sm btn-block" style="margin-top:5px;" onclick="submitScheduledStream()">Confirm Schedule</button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
             </div>
         </div>

@@ -58,6 +58,7 @@ public class StreamSchedulerService {
                     null, // Watermark file (Multipart) not available here.
                     stream.isMuteVideoAudio(),
                     stream.getStreamMode(),
+                    0,    // streamQuality (default)
                     null, // Title
                     null, // Description
                     null  // Privacy
