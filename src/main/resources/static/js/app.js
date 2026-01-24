@@ -105,7 +105,7 @@ function switchView(viewName) {
     if (viewName === 'stream') {
         // Init Stream Studio
         checkStreamStatus();
-        switchStudioTab('scenes');
+        switchStudioTab('streams');
         loadDestinations();
         loadStreamAudioLibrary();
     }
@@ -1001,22 +1001,49 @@ async function stopStreamById(id) {
 }
 
 function renderActiveStreams(streams) {
-    const list = document.getElementById('activeStreamList'); // Legacy list, but might use console logic in studio
-    // In studio, we might just show badge.
-    // But let's check legacy container existence just in case.
-    if(list) {
-        list.innerHTML = '';
-        if(!streams || streams.length === 0) { list.innerHTML = `<div class="empty-state">No active streams.</div>`; return; }
-        streams.forEach(s => {
-            list.innerHTML += `
-            <div class="queue-item">
-                <div style="flex:1"><div style="font-weight:600">LIVE: ${s.title || "Stream"}</div></div>
-                <button class="btn btn-sm btn-text" onclick="stopStreamById(${s.id})"><i class="fa-solid fa-stop" style="color:var(--danger)"></i></button>
-            </div>`;
-        });
+    // 1. Render to 'Streams' Tab in Studio
+    const listStudio = document.getElementById('activeStreamsList');
+    const emptyState = document.getElementById('streamsEmptyState');
+
+    if (listStudio) {
+        listStudio.innerHTML = '';
+        if (!streams || streams.length === 0) {
+            if(emptyState) emptyState.classList.remove('hidden');
+        } else {
+            if(emptyState) emptyState.classList.add('hidden');
+            streams.forEach(s => {
+                // Calculate duration if startTime available
+                let timeText = "Live now";
+                if(s.startTime) {
+                    const start = new Date(s.startTime);
+                    const now = new Date();
+                    const diffMs = now - start;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const hrs = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    timeText = `${hrs}h ${mins}m`;
+                }
+
+                const div = document.createElement('div');
+                div.className = 'activity-item'; // Reuse activity style
+                div.innerHTML = `
+                    <div class="act-icon" style="background:#e3f2fd; color:red;"><i class="fa-solid fa-satellite-dish"></i></div>
+                    <div class="act-content">
+                        <div style="font-weight:600; color:#333;">${s.title || "Live Stream"}</div>
+                        <div style="font-size:0.8rem; color:#666;">
+                            <i class="fa-regular fa-clock"></i> ${timeText} • ${s.streamKey.substring(0, 15)}...
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:#ffdce0;" onclick="stopStreamById(${s.id})">
+                        <i class="fa-solid fa-stop"></i> End
+                    </button>
+                `;
+                listStudio.appendChild(div);
+            });
+        }
     }
 
-    // Studio UI update
+    // Studio UI update (Badge)
     const badge = document.getElementById('studioLiveBadge');
     if (badge) {
         if (streams && streams.length > 0) badge.classList.remove('hidden');

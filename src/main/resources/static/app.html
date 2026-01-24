@@ -183,7 +183,8 @@
                     </div>
 
                     <div class="studio-tabs">
-                        <div class="studio-tab active" onclick="switchStudioTab('chat')">Chat</div>
+                        <div class="studio-tab active" onclick="switchStudioTab('streams')">Streams</div>
+                        <div class="studio-tab" onclick="switchStudioTab('chat')">Chat</div>
                         <div class="studio-tab" onclick="switchStudioTab('brand')">Brand</div>
                         <div class="studio-tab" onclick="switchStudioTab('audio')">Audio</div>
                         <div class="studio-tab" onclick="switchStudioTab('settings')">Settings</div>
@@ -191,8 +192,17 @@
 
                     <div class="studio-content">
 
+                        <!-- TAB: STREAMS -->
+                        <div id="studio-tab-streams" class="studio-panel active">
+                            <div class="empty-state" id="streamsEmptyState">
+                                <i class="fa-solid fa-tower-broadcast"></i>
+                                <p>No active streams</p>
+                            </div>
+                            <div id="activeStreamsList" class="activity-list"></div>
+                        </div>
+
                         <!-- TAB: CHAT -->
-                        <div id="studio-tab-chat" class="studio-panel active">
+                        <div id="studio-tab-chat" class="studio-panel">
                             <div class="empty-state" id="chatEmptyState">
                                 <i class="fa-regular fa-comments"></i>
                                 <p>Chats show up here</p>

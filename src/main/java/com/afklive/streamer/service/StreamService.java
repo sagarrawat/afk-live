@@ -216,7 +216,7 @@ public class StreamService {
         // We save the 'pid' so we can kill specifically THIS process later
         String primaryKey = streamKeys.getFirst();
         StreamJob job =
-                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid(), title, description, privacy);
+                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid(), title, description, privacy, java.time.LocalDateTime.now());
         job = streamJobRepo.save(job);
         final Long jobId = job.getId();
 
