@@ -919,7 +919,7 @@ async function submitScheduledStream() {
 }
 
 async function cancelScheduledStream(id) {
-    if(!confirm("Cancel this stream?")) return;
+    if(!await Alpine.store('modal').confirm("Are you sure you want to cancel this scheduled stream?", "Cancel Stream")) return;
     try {
         await apiFetch(`${API_URL}/stream/scheduled/${id}`, { method: 'DELETE' });
         showScheduledStreamsModal();
@@ -927,17 +927,16 @@ async function cancelScheduledStream(id) {
 }
 
 async function stopStream() {
-    showConfirmModal("End All Streams", "Are you sure you want to stop all active streams?", async () => {
-        try {
-            await apiFetch(`${API_URL}/stop`, {method:'POST'});
-            checkStreamStatus();
-            showToast("Streams Stopped", "info");
-        } catch(e) {}
-    });
+    if(!await Alpine.store('modal').confirm("Are you sure you want to stop all active streams?", "End All Streams")) return;
+    try {
+        await apiFetch(`${API_URL}/stop`, {method:'POST'});
+        checkStreamStatus();
+        showToast("Streams Stopped", "info");
+    } catch(e) {}
 }
 
 async function stopStreamById(id) {
-    if(!confirm("Stop this stream?")) return;
+    if(!await Alpine.store('modal').confirm("Are you sure you want to stop this stream?", "Stop Stream")) return;
     try {
         await apiFetch(`${API_URL}/stop?streamId=${id}`, { method: 'POST' });
         checkStreamStatus();
@@ -1035,14 +1034,14 @@ function submitDestination() {
     document.getElementById('addDestinationModal').classList.add('hidden');
 }
 
-function removeDestination(id, e) {
+async function removeDestination(id, e) {
     e.stopPropagation();
-    showConfirmModal("Remove Destination", "Delete this key?", () => {
-        destinations = destinations.filter(d => d.id !== id);
-        saveDestinations();
-        renderDestinations();
-        window.dispatchEvent(new Event('destination-added'));
-    });
+    if(!await Alpine.store('modal').confirm("Delete this destination key?", "Remove Destination")) return;
+
+    destinations = destinations.filter(d => d.id !== id);
+    saveDestinations();
+    renderDestinations();
+    window.dispatchEvent(new Event('destination-added'));
 }
 
 function saveDestinations() { localStorage.setItem('afk_destinations', JSON.stringify(destinations)); }
@@ -1092,13 +1091,12 @@ function toggleStreamKeyVisibility(inputId, btn) {
     else { input.type = 'password'; icon.classList.replace('fa-eye-slash', 'fa-eye'); }
 }
 
-function removeChannel(id) {
-    showConfirmModal("Disconnect Channel", "Remove channel?", async () => {
-        try {
-            await apiFetch(`${API_URL}/channels/${id}`, { method: 'DELETE' });
-            loadUserChannels();
-        } catch(e) { showToast("Error", "error"); }
-    });
+async function removeChannel(id) {
+    if(!await Alpine.store('modal').confirm("Are you sure you want to disconnect this channel?", "Disconnect Channel")) return;
+    try {
+        await apiFetch(`${API_URL}/channels/${id}`, { method: 'DELETE' });
+        loadUserChannels();
+    } catch(e) { showToast("Error", "error"); }
 }
 
 /* --- TIMER & STATUS POLL --- */
@@ -1213,14 +1211,14 @@ function updateMergeButton() {
 
 async function deleteSelectedVideos() {
     if(selectedLibraryVideos.size === 0) return;
-    showConfirmModal("Delete Multiple?", `Delete ${selectedLibraryVideos.size} videos?`, async () => {
-        const titles = Array.from(selectedLibraryVideos);
-        const videosToDelete = libraryPagination.data.filter(v => titles.includes(v.title));
-        for (let v of videosToDelete) { try { await apiFetch(`${API_URL}/library/${v.id}`, { method: 'DELETE' }); } catch(e) {} }
-        selectedLibraryVideos.clear();
-        loadLibraryVideos();
-        fetchUserInfo();
-    });
+    if(!await Alpine.store('modal').confirm(`Delete ${selectedLibraryVideos.size} videos?`, "Delete Multiple")) return;
+
+    const titles = Array.from(selectedLibraryVideos);
+    const videosToDelete = libraryPagination.data.filter(v => titles.includes(v.title));
+    for (let v of videosToDelete) { try { await apiFetch(`${API_URL}/library/${v.id}`, { method: 'DELETE' }); } catch(e) {} }
+    selectedLibraryVideos.clear();
+    loadLibraryVideos();
+    fetchUserInfo();
 }
 
 function openPreviewModal(id) {
@@ -1252,15 +1250,14 @@ async function submitYouTubeImport() {
 async function mergeSelectedVideos() {
     if(selectedLibraryVideos.size < 2) return;
     const files = Array.from(selectedLibraryVideos);
-    showConfirmModal("Merge Videos", "Merge selected?", async () => {
-        try { await apiFetch(`${API_URL}/library/merge`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({files}) }); showToast("Merge started", "success"); } catch(e){}
-    });
+    if(!await Alpine.store('modal').confirm("Merge selected videos into one?", "Merge Videos")) return;
+
+    try { await apiFetch(`${API_URL}/library/merge`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({files}) }); showToast("Merge started", "success"); } catch(e){}
 }
 
 async function deleteLibraryVideo(id, filename) {
-    showConfirmModal("Delete", `Delete ${filename}?`, async () => {
-        try { await apiFetch(`${API_URL}/library/${id}`, { method: 'DELETE' }); loadLibraryVideos(); fetchUserInfo(); } catch(e){}
-    });
+    if(!await Alpine.store('modal').confirm(`Delete ${filename}?`, "Delete Video")) return;
+    try { await apiFetch(`${API_URL}/library/${id}`, { method: 'DELETE' }); loadLibraryVideos(); fetchUserInfo(); } catch(e){}
 }
 
 async function handleBulkUpload(e) {
@@ -1308,9 +1305,8 @@ function renderPlanInfo(plan) {
 }
 
 async function cancelSubscription() {
-    showConfirmModal("Cancel", "Downgrade to free?", async () => {
-        try { await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' }); window.location.reload(); } catch(e){}
-    });
+    if(!await Alpine.store('modal').confirm("Downgrade to free plan? You will lose premium features.", "Cancel Subscription")) return;
+    try { await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' }); window.location.reload(); } catch(e){}
 }
 
 function switchSettingsTab(tabName) {
@@ -1341,15 +1337,6 @@ async function loadInternalPricing() {
 
 /* --- MODALS --- */
 function openSupportModal() { document.getElementById('supportModal').classList.remove('hidden'); }
-let confirmCallback = null;
-function showConfirmModal(title, message, onConfirm) {
-    document.getElementById('confirmTitle').innerText = title;
-    document.getElementById('confirmMessage').innerText = message;
-    confirmCallback = onConfirm;
-    document.getElementById('confirmationModal').classList.remove('hidden');
-    document.getElementById('btnConfirmAction').onclick = () => { if(confirmCallback) confirmCallback(); closeConfirmModal(); };
-}
-function closeConfirmModal() { document.getElementById('confirmationModal').classList.add('hidden'); confirmCallback = null; }
 
 let selectedPlanId = null;
 function openPaymentModal(id, title, price) {

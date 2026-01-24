@@ -287,25 +287,25 @@ document.addEventListener('alpine:init', () => {
         },
 
         async stopStream(id = null) {
-            window.showConfirmModal("Stop Broadcast", "Are you sure you want to end this stream?", async () => {
-                this.isBusy = true;
-                try {
-                    let url = '/api/stop';
-                    if(id) url += `?streamId=${id}`;
+            if (!await Alpine.store('modal').confirm("Are you sure you want to end this stream?", "Stop Broadcast")) return;
 
-                    await apiFetch(url, { method:'POST' });
-                    showToast("Stream Stopped", "info");
-                    this.checkStatus();
-                } catch(e) {
-                    showToast("Failed to stop", "error");
-                } finally {
-                    this.isBusy = false;
-                }
-            });
+            this.isBusy = true;
+            try {
+                let url = '/api/stop';
+                if(id) url += `?streamId=${id}`;
+
+                await apiFetch(url, { method:'POST' });
+                showToast("Stream Stopped", "info");
+                this.checkStatus();
+            } catch(e) {
+                showToast("Failed to stop", "error");
+            } finally {
+                this.isBusy = false;
+            }
         },
 
         async setEndTime(streamId) {
-            const time = prompt("Enter stop time (HH:mm in 24h format):", "23:00");
+            const time = await Alpine.store('modal').prompt("Stop Stream At", "HH:mm (24h)", "23:00");
             if (!time) return;
 
             // Basic client-side validation

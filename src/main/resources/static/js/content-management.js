@@ -93,7 +93,7 @@ document.addEventListener('alpine:init', () => {
 
         async deleteSelected() {
             if (this.selectedVideos.size === 0) return;
-            if (!confirm(`Delete ${this.selectedVideos.size} videos?`)) return;
+            if (!await Alpine.store('modal').confirm(`Delete ${this.selectedVideos.size} videos?`, "Delete Selected")) return;
 
             const ids = Array.from(this.selectedVideos);
             // Sequential delete or Promise.all - doing sequential to avoid rate limits/errors ideally
@@ -112,7 +112,7 @@ document.addEventListener('alpine:init', () => {
             const ids = Array.from(this.selectedVideos);
             const titles = this.libraryVideos.filter(v => ids.includes(v.id)).map(v => v.title);
 
-            if(!confirm("Merge these videos into one?")) return;
+            if(!await Alpine.store('modal').confirm("Merge these videos into one?", "Merge Videos")) return;
 
             try {
                 await apiFetch(`/api/library/merge`, {

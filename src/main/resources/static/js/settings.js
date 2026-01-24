@@ -60,7 +60,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         async removeChannel(id) {
-            if (!confirm("Are you sure you want to disconnect this channel?")) return;
+            if (!await Alpine.store('modal').confirm("Are you sure you want to disconnect this channel?", "Disconnect Channel")) return;
             try {
                 await apiFetch(`/api/channels/${id}`, { method: 'DELETE' });
                 showToast("Channel disconnected", "success");
@@ -105,7 +105,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         async cancelSubscription() {
-            if (!confirm("Are you sure you want to cancel your subscription? You will lose access to premium features.")) return;
+            if (!await Alpine.store('modal').confirm("Are you sure you want to cancel your subscription? You will lose access to premium features.", "Cancel Subscription")) return;
             try {
                 await apiFetch('/api/pricing/cancel', { method: 'POST' });
                 showToast("Subscription cancelled", "info");

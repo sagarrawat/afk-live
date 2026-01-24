@@ -1492,8 +1492,76 @@
 </div>
 
 
+<!-- GLOBAL ALPINE MODAL -->
+<div x-data="$store.modal"
+     x-show="open"
+     class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm"
+     x-transition.opacity
+     style="display: none;">
+
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all"
+         @click.outside="if(type === 'alert') cancel()"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95">
+
+        <!-- Icon / Header -->
+        <div class="p-6 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4"
+                 :class="{
+                    'bg-red-100 text-red-600': type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                    'bg-blue-100 text-blue-600': !(type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')))
+                 }">
+                <i class="fa-solid text-xl"
+                   :class="{
+                       'fa-triangle-exclamation': type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                       'fa-circle-info': type === 'alert',
+                       'fa-circle-question': type === 'confirm' && !(title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                       'fa-pen': type === 'prompt'
+                   }"></i>
+            </div>
+
+            <h3 class="text-lg leading-6 font-bold text-gray-900" x-text="title"></h3>
+            <div class="mt-2">
+                <p class="text-sm text-gray-500" x-text="message"></p>
+            </div>
+
+            <!-- Prompt Input -->
+            <div x-show="type === 'prompt'" class="mt-4">
+                <input type="text" id="modal-input" x-model="inputValue"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                       :placeholder="placeholder"
+                       @keydown.enter="accept()">
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
+            <button type="button"
+                    class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm transition"
+                    :class="{
+                        'bg-red-600 hover:bg-red-700 focus:ring-red-500': type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                        'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500': !(type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')))
+                    }"
+                    @click="accept()">
+                <span x-text="type === 'alert' ? 'OK' : (type === 'confirm' ? 'Confirm' : 'Submit')"></span>
+            </button>
+
+            <button type="button" x-show="type !== 'alert'"
+                    class="mt-3 w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm transition"
+                    @click="cancel()">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="js/modal-service.js"></script>
 <script src="js/toast.js"></script>
 <script src="js/stream-studio.js"></script>
 <script src="js/settings.js"></script>
