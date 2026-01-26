@@ -402,7 +402,10 @@ body {
 
 /* MOBILE */
 @media (max-width: 768px) {
-    .app-layout { flex-direction: column; height: auto; min-height: 100vh; }
+    body { height: auto; overflow-y: auto; }
+    .app-layout { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
+    .content-area { height: auto; overflow: visible; }
+    .view-section { overflow: visible; height: auto; padding-bottom: 80px; } /* Bottom padding for nav/safe area */
 
     .icon-sidebar { display: none; }
 
