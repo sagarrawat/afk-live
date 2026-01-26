@@ -734,11 +734,19 @@
                                 <div class="p-4">
                                     <h4 class="font-semibold text-gray-900 text-sm truncate mb-1" x-text="video.title" :title="video.title"></h4>
                                     <div class="flex justify-between items-center mt-3">
-                                        <button class="text-xs font-medium text-gray-500 hover:text-blue-600 transition flex items-center gap-1" @click.stop="scheduleFromLibrary(video.id, video.title)">
-                                            <i class="fa-regular fa-calendar-plus"></i> Schedule
+
+                                        <!-- Optimize Action -->
+                                        <button x-show="video.optimizationStatus !== 'COMPLETED' && video.optimizationStatus !== 'IN_PROGRESS'"
+                                                class="text-xs font-medium text-blue-600 hover:text-blue-700 transition flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded"
+                                                @click.stop="window.openOptimizeModal(video)">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i> Optimize
                                         </button>
 
-                                        <button class="text-gray-400 hover:text-red-500 transition p-1 rounded-md hover:bg-red-50" @click.stop="deleteLibraryVideo(video.id, video.title)">
+                                        <button class="text-xs font-medium text-gray-500 hover:text-blue-600 transition flex items-center gap-1 ml-auto" @click.stop="scheduleFromLibrary(video.id, video.title)">
+                                            <i class="fa-regular fa-calendar-plus"></i>
+                                        </button>
+
+                                        <button class="text-gray-400 hover:text-red-500 transition p-1 rounded-md hover:bg-red-50 ml-2" @click.stop="deleteLibraryVideo(video.id, video.title)">
                                             <i class="fa-solid fa-trash text-xs"></i>
                                         </button>
                                     </div>
