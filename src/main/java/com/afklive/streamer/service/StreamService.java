@@ -184,68 +184,74 @@ public class StreamService {
             }
         }
 
-        List<String> command =
-                FFmpegCommandBuilder.buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight);
-        
-        log.info("command : [{}]", String.join(" ", command));
-
-        // 4. Start the Process
-        ProcessBuilder builder = new ProcessBuilder(command);
-
-        // Redirect logs to console so you can debug "Connection Failed" errors
-        builder.redirectErrorStream(true);
-        // builder.redirectOutput(ProcessBuilder.Redirect.INHERIT); // Removing INHERIT to capture logs in getInputStream
-
-        Process process = builder.start();
-
+        List<Long> startedJobIds = new ArrayList<>();
         clearLogs();
 
-        Thread.ofVirtual().start(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while (process.isAlive() && (line = reader.readLine()) != null) {
-                    addLog(line);
+        // Loop through keys to start individual processes
+        for (String key : streamKeys) {
+            List<String> command =
+                    FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight);
+
+            log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
+
+            // 4. Start the Process
+            ProcessBuilder builder = new ProcessBuilder(command);
+            builder.redirectErrorStream(true);
+
+            Process process = builder.start();
+
+            Thread.ofVirtual().start(() -> {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while (process.isAlive() && (line = reader.readLine()) != null) {
+                        addLog("[" + process.pid() + "] " + line);
+                    }
+                } catch (IOException e) {
+                    addLog("Log Capture Error: " + e.getMessage());
+                    log.error("Error", e);
                 }
-            } catch (IOException e) {
-                addLog("Log Capture Error: " + e.getMessage());
-                log.error("Error", e);
-            }
-        });
+            });
 
-        // 5. SAVE STATE TO DATABASE
-        // We save the 'pid' so we can kill specifically THIS process later
-        String primaryKey = streamKeys.getFirst();
-        StreamJob job =
-                new StreamJob(username, primaryKey, videoKey, musicName, musicVolume, true, process.pid(), title, description, privacy, java.time.LocalDateTime.now());
-        job = streamJobRepo.save(job);
-        final Long jobId = job.getId();
+            // 5. SAVE STATE TO DATABASE
+            StreamJob job = new StreamJob(
+                    username,
+                    key,
+                    videoKey,
+                    musicName,
+                    musicVolume,
+                    true,
+                    process.pid(),
+                    title,
+                    description,
+                    privacy,
+                    java.time.LocalDateTime.now()
+            );
+            job = streamJobRepo.save(job);
+            final Long jobId = job.getId();
+            startedJobIds.add(jobId);
 
-        // Store reference in memory map as backup (optional, but good for speed)
-        activeStreams.put(jobId, process);
+            activeStreams.put(jobId, process);
 
-        // 6. EXIT HANDLER (Auto-Update DB)
-        process.onExit().thenRun(() -> {
-            log.warn("Stream Process Exited for user: {}", username);
-
-            // Mark as Offline in Database using ID to ensure we target correct job
-            Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
-            if (jobOpt.isPresent()) {
-                StreamJob existingJob = jobOpt.get();
-                if (existingJob.isLive()) {
-                    existingJob.setLive(false);
-                    streamJobRepo.save(existingJob);
+            // 6. EXIT HANDLER (Auto-Update DB)
+            process.onExit().thenRun(() -> {
+                log.warn("Stream Process Exited for job {}", jobId);
+                Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
+                if (jobOpt.isPresent()) {
+                    StreamJob existingJob = jobOpt.get();
+                    if (existingJob.isLive()) {
+                        existingJob.setLive(false);
+                        streamJobRepo.save(existingJob);
+                    }
                 }
-            }
-
-            // Clear memory map
-            activeStreams.remove(jobId);
-        });
+                activeStreams.remove(jobId);
+            });
+        }
 
         return ApiResponse.success("Stream started", new StreamResponse(
-                String.valueOf(process.pid()),
-                primaryKey,
+                startedJobIds.toString(),
+                streamKeys.toString(),
                 "RUNNING",
-                "Stream is now live to " + streamKeys.size() + " destinations"
+                "Started " + startedJobIds.size() + " separate stream processes."
         ));
     }
 

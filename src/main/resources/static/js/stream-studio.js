@@ -285,7 +285,7 @@ document.addEventListener('alpine:init', () => {
                 const data = await res.json();
                 if(data.success) {
                     showToast("Stream Started! 🚀", "success");
-                    this.isLive = true;
+                    this.switchTab('streams');
                     this.checkStatus();
                 } else {
                     showToast(data.message || "Failed to start", "error");
@@ -342,6 +342,26 @@ document.addEventListener('alpine:init', () => {
         startStatusPoll() {
             setInterval(() => this.checkStatus(), 5000);
             this.checkStatus();
+            // Local ticker for duration
+            setInterval(() => this.updateTimers(), 1000);
+        },
+
+        now: Date.now(),
+        updateTimers() {
+            this.now = Date.now();
+        },
+
+        getStreamDuration(startTime) {
+            if(!startTime) return 'Starting...';
+            const start = new Date(startTime).getTime();
+            const diff = Math.max(0, this.now - start);
+
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+
+            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+            return `${minutes}m ${seconds}s`;
         },
 
         async checkStatus() {
