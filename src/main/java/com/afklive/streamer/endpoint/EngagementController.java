@@ -76,23 +76,36 @@ public class EngagementController {
     public ResponseEntity<?> getSettings(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
-        return ResponseEntity.ok(Map.of(
-            "autoReplyEnabled", user.isAutoReplyEnabled(),
-            "deleteNegativeComments", user.isDeleteNegativeComments()
-        ));
+
+        // Use a generic Map to allow null values for strings if needed, though Map.of requires non-nulls.
+        // Using a mutable map or checking nulls is safer.
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("autoReplyEnabled", user.isAutoReplyEnabled());
+        response.put("deleteNegativeComments", user.isDeleteNegativeComments());
+        response.put("autoReplyUnrepliedEnabled", user.isAutoReplyUnrepliedEnabled());
+        response.put("autoReplyUnrepliedMessage", user.getAutoReplyUnrepliedMessage());
+
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/settings")
-    public ResponseEntity<?> updateSettings(@RequestBody Map<String, Boolean> payload, Principal principal) {
+    public ResponseEntity<?> updateSettings(@RequestBody Map<String, Object> payload, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
 
         if (payload.containsKey("autoReplyEnabled")) {
-            user.setAutoReplyEnabled(payload.get("autoReplyEnabled"));
+            user.setAutoReplyEnabled((Boolean) payload.get("autoReplyEnabled"));
         }
         if (payload.containsKey("deleteNegativeComments")) {
-            user.setDeleteNegativeComments(payload.get("deleteNegativeComments"));
+            user.setDeleteNegativeComments((Boolean) payload.get("deleteNegativeComments"));
         }
+        if (payload.containsKey("autoReplyUnrepliedEnabled")) {
+            user.setAutoReplyUnrepliedEnabled((Boolean) payload.get("autoReplyUnrepliedEnabled"));
+        }
+        if (payload.containsKey("autoReplyUnrepliedMessage")) {
+            user.setAutoReplyUnrepliedMessage((String) payload.get("autoReplyUnrepliedMessage"));
+        }
+
         userService.saveUser(user);
         return ResponseEntity.ok(Map.of("success", true));
     }

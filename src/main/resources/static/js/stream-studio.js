@@ -232,7 +232,10 @@ document.addEventListener('alpine:init', () => {
             this.isBusy = true;
 
             const fd = new FormData();
-            selectedKeys.forEach(k => fd.append("streamKey", k));
+            // selectedKeys.forEach(k => fd.append("streamKey", k));
+            // Send streamKey as a comma-separated string to avoid potential multipart parsing issues with array fields
+            fd.append("streamKey", selectedKeys.join(','));
+
             fd.append("videoKey", this.selectedVideo.s3Key);
             fd.append("loopCount", this.loopVideo ? "-1" : "1"); // Send as string to be safe
 

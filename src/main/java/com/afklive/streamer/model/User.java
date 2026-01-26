@@ -26,6 +26,8 @@ public class User {
 
     private boolean autoReplyEnabled = false;
     private boolean deleteNegativeComments = false;
+    private boolean autoReplyUnrepliedEnabled = false;
+    private String autoReplyUnrepliedMessage;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
@@ -141,6 +143,22 @@ public class User {
 
     public void setDeleteNegativeComments(boolean deleteNegativeComments) {
         this.deleteNegativeComments = deleteNegativeComments;
+    }
+
+    public boolean isAutoReplyUnrepliedEnabled() {
+        return autoReplyUnrepliedEnabled;
+    }
+
+    public void setAutoReplyUnrepliedEnabled(boolean autoReplyUnrepliedEnabled) {
+        this.autoReplyUnrepliedEnabled = autoReplyUnrepliedEnabled;
+    }
+
+    public String getAutoReplyUnrepliedMessage() {
+        return autoReplyUnrepliedMessage;
+    }
+
+    public void setAutoReplyUnrepliedMessage(String autoReplyUnrepliedMessage) {
+        this.autoReplyUnrepliedMessage = autoReplyUnrepliedMessage;
     }
 
     public java.util.List<SocialChannel> getChannels() {
