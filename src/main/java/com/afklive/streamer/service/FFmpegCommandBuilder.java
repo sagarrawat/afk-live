@@ -68,6 +68,10 @@ public class FFmpegCommandBuilder {
         command.add("30");
         command.add("-g");
         command.add("60");
+        command.add("-keyint_min");
+        command.add("60");
+        command.add("-sc_threshold");
+        command.add("0");
 
         command.add("-c:a");
         command.add("aac");
@@ -143,6 +147,10 @@ public class FFmpegCommandBuilder {
         command.add("30");
         command.add("-g");
         command.add("60");
+        command.add("-keyint_min");
+        command.add("60");
+        command.add("-sc_threshold");
+        command.add("0");
 
         command.add("-c:a");
         command.add("aac");
@@ -327,6 +335,8 @@ public class FFmpegCommandBuilder {
         command.add("-bufsize"); command.add(bufsize);
         command.add("-pix_fmt"); command.add("yuv420p");
         command.add("-g"); command.add("60");
+        command.add("-keyint_min"); command.add("60");
+        command.add("-sc_threshold"); command.add("0");
 
         // Map audio
         if (aLabel.equals("0:a")) {
