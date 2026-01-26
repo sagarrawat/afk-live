@@ -3,168 +3,146 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AFK Live - Grow your audience</title>
-    <meta name="description" content="AFK Live helps you schedule videos, stream continuously 24/7, and grow your audience on YouTube.">
-    <meta name="keywords" content="youtube scheduler, live streaming, 24/7 stream, lofi radio, video scheduling, social media tools">
-    <meta property="og:title" content="AFK Live - Grow your audience">
-    <meta property="og:description" content="Schedule videos and stream 24/7 to YouTube.">
-    <meta property="og:type" content="website">
+    <title>AFK Live - Stream While You Sleep</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/landing.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    animation: { 'fade-in': 'fadeIn 1s ease-out forwards' },
+                    keyframes: { fadeIn: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } } }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-nav { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,0.05); }
+    </style>
 </head>
-<body>
+<body class="bg-white text-gray-900 antialiased selection:bg-blue-100 selection:text-blue-900">
 
-<nav class="navbar">
-    <div class="container">
-        <div class="logo">🔴 AFK Live</div>
-        <div class="nav-links">
-            <a href="/features">Features</a>
-            <a href="/pricing">Pricing</a>
-            <a href="/login" class="btn-login">Log In</a>
-            <a href="/register" class="btn btn-primary">Get Started</a>
-        </div>
-    </div>
-</nav>
-
-<header class="hero">
-    <div class="container">
-        <div class="hero-content">
-            <h1>Grow your audience on social and beyond</h1>
-            <p>AFK Live helps you schedule videos, stream continuously, and track your performance. All in one place.</p>
-            <div class="hero-actions">
-                <a href="/register" class="btn btn-lg btn-primary">Get Started for Free</a>
-                <a href="/features" class="btn btn-lg btn-outline">See How It Works</a>
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-50 glass-nav transition-all duration-300" x-data="{ scrolled: false }" @scroll.window="scrolled = (window.pageYOffset > 20)">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🔴</span>
+                <span class="font-bold text-xl tracking-tight">AFK Live</span>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
+                <a href="#features" class="hover:text-gray-900 transition">Features</a>
+                <a href="#pricing" class="hover:text-gray-900 transition">Pricing</a>
+                <a href="#faq" class="hover:text-gray-900 transition">FAQ</a>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="/login" class="text-sm font-medium text-gray-900 hover:text-blue-600 transition">Log in</a>
+                <a href="/register" class="text-sm font-medium bg-gray-900 text-white px-4 py-2 rounded-full hover:bg-gray-800 transition shadow-lg shadow-gray-900/20">Get Started</a>
             </div>
         </div>
-        <div class="hero-image">
-            <!-- Placeholder for Buffer-like hero graphic -->
-            <div class="fake-ui-window">
-                <div class="fake-ui-header">
-                    <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+    </nav>
+
+    <!-- Hero -->
+    <section class="pt-32 pb-20 md:pt-48 md:pb-32 px-6 relative overflow-hidden">
+        <div class="max-w-7xl mx-auto text-center relative z-10">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold uppercase tracking-wide mb-8 animate-fade-in" style="animation-delay: 0.1s;">
+                <span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span> Now in Beta
+            </div>
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 animate-fade-in" style="animation-delay: 0.2s;">
+                Stream <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">While You Sleep</span>
+            </h1>
+            <p class="text-xl text-gray-500 max-w-2xl mx-auto mb-10 animate-fade-in leading-relaxed" style="animation-delay: 0.3s;">
+                Turn your pre-recorded videos into 24/7 live streams on YouTube. <br class="hidden md:block">Automate your growth without being at your desk.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in" style="animation-delay: 0.4s;">
+                <a href="/register" class="w-full sm:w-auto px-8 py-4 bg-blue-600 text-white font-bold rounded-full hover:bg-blue-700 transition shadow-xl shadow-blue-600/30 transform hover:-translate-y-1">Start Streaming Free</a>
+                <a href="#how-it-works" class="w-full sm:w-auto px-8 py-4 bg-white text-gray-900 border border-gray-200 font-bold rounded-full hover:bg-gray-50 transition">How it works</a>
+            </div>
+        </div>
+
+        <!-- Abstract Decoration -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-tr from-blue-100 to-purple-100 rounded-full blur-3xl opacity-50 -z-10"></div>
+    </section>
+
+    <!-- UI Mockup -->
+    <section class="px-6 pb-24">
+        <div class="max-w-6xl mx-auto">
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl shadow-gray-200 border border-gray-200 bg-gray-900 aspect-[16/9] group">
+                <!-- Mock UI Header -->
+                <div class="absolute top-0 w-full h-8 bg-gray-800 flex items-center px-4 gap-2 z-10">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
                 </div>
-                <div class="fake-ui-body" style="display:flex;">
-                    <div class="fake-sidebar" style="width: 200px; background: #f4f5f7; padding: 15px;">
-                        <div style="width: 30px; height: 30px; background: #2c68f6; border-radius: 50%; margin-bottom: 20px;"></div>
-                        <div style="height: 10px; width: 60%; background: #e0e0e0; margin-bottom: 10px; border-radius: 4px;"></div>
-                        <div style="height: 10px; width: 80%; background: #e0e0e0; margin-bottom: 10px; border-radius: 4px;"></div>
-                        <div style="height: 10px; width: 50%; background: #e0e0e0; margin-bottom: 10px; border-radius: 4px;"></div>
-                    </div>
-                    <div class="fake-content" style="flex:1; padding: 20px;">
-                        <div style="display:flex; justify-content: space-between; margin-bottom: 20px;">
-                            <div style="height: 20px; width: 100px; background: #eee; border-radius: 4px;"></div>
-                            <div style="height: 30px; width: 80px; background: #2c68f6; border-radius: 4px;"></div>
-                        </div>
-                        <div class="fake-post" style="display:flex; gap:15px; margin-bottom:15px;">
-                            <div style="width: 80px; height: 60px; background: #eee; border-radius: 4px;"></div>
-                            <div style="flex:1">
-                                <div style="height: 10px; width: 80%; background: #eee; margin-bottom: 8px;"></div>
-                                <div style="height: 10px; width: 40%; background: #eee;"></div>
-                            </div>
-                        </div>
-                        <div class="fake-post" style="display:flex; gap:15px;">
-                            <div style="width: 80px; height: 60px; background: #eee; border-radius: 4px;"></div>
-                            <div style="flex:1">
-                                <div style="height: 10px; width: 70%; background: #eee; margin-bottom: 8px;"></div>
-                                <div style="height: 10px; width: 30%; background: #eee;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</header>
-
-<section class="social-proof">
-    <div class="container">
-        <p>140,000+ people like you use AFK Live to build their brand</p>
-        <div class="logos">
-            <span>HackerNews</span>
-            <span>GitHub</span>
-            <span>Shopify</span>
-            <span>Spotify</span>
-        </div>
-    </div>
-</section>
-
-<section class="features-preview">
-    <div class="container">
-        <div class="feature-row">
-            <div class="feature-text">
-                <h2>1. Schedule Your Content</h2>
-                <p>Plan your video releases months in advance. Bypassing standard scheduling limits by automating the upload process just when you need it.</p>
-                <a href="/features">Learn more about Publishing →</a>
-            </div>
-            <div class="feature-visual">
-                <div class="calendar-mockup">
-                    <div class="cal-header">October</div>
-                    <div class="cal-grid">
-                        <div></div><div></div><div class="active">Upload</div><div></div>
+                <!-- Content -->
+                <div class="pt-8 h-full flex items-center justify-center relative">
+                    <div class="absolute inset-0 bg-gradient-to-br from-gray-900 to-gray-800"></div>
+                    <div class="text-center relative z-10">
+                        <div class="text-6xl mb-4 opacity-50">🔴</div>
+                        <h3 class="text-white text-2xl font-semibold">Live Studio Preview</h3>
+                        <p class="text-gray-400 mt-2">Your content is being broadcasted.</p>
                     </div>
                 </div>
             </div>
         </div>
+    </section>
 
-        <div class="feature-row reverse">
-            <div class="feature-text">
-                <h2>2. Stream 24/7</h2>
-                <p>Keep your channel active even when you are AFK. Upload a loop, set a backing track, and go live instantly.</p>
-                <a href="/features">Explore Streaming →</a>
+    <!-- Features -->
+    <section id="features" class="py-24 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl font-bold tracking-tight mb-4">Everything you need to go live</h2>
+                <p class="text-gray-500 max-w-2xl mx-auto">Powerful tools designed for creators who value their time.</p>
             </div>
-            <div class="feature-visual">
-                <div class="stream-mockup">
-                    <div class="play-btn">▶</div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:shadow-lg transition duration-300">
+                    <div class="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 mb-6 text-xl">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">24/7 Automation</h3>
+                    <p class="text-gray-500 leading-relaxed">Schedule streams to run indefinitely. Perfect for radio stations, looped content, or reruns.</p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:shadow-lg transition duration-300">
+                    <div class="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 mb-6 text-xl">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">AI Enhancement</h3>
+                    <p class="text-gray-500 leading-relaxed">Let AI write your titles, descriptions, and tags. Auto-reply to comments to keep engagement high.</p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:shadow-lg transition duration-300">
+                    <div class="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-6 text-xl">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Cloud Based</h3>
+                    <p class="text-gray-500 leading-relaxed">No need to keep your computer on. Our servers handle the encoding and streaming for you.</p>
                 </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<section class="faq-section" style="padding: 80px 0; background: #f9f9f9;">
-    <div class="container">
-        <h2 style="text-align: center; margin-bottom: 50px;">Frequently Asked Questions</h2>
-        <div style="max-width: 800px; margin: 0 auto;">
-            <div style="margin-bottom: 30px;">
-                <h4 style="margin-bottom: 10px;">Can I cancel anytime?</h4>
-                <p style="color: #666;">Yes, you can cancel your subscription at any time from your account settings.</p>
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-100 py-12">
+        <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-2">
+                <span class="text-xl">🔴</span>
+                <span class="font-bold text-gray-900">AFK Live</span>
             </div>
-            <div style="margin-bottom: 30px;">
-                <h4 style="margin-bottom: 10px;">Do you offer a free trial?</h4>
-                <p style="color: #666;">We offer a generous Free tier. You can upgrade to paid plans to unlock more features.</p>
+            <div class="text-sm text-gray-500">
+                &copy; 2024 AFK Live Inc. All rights reserved.
             </div>
-            <div style="margin-bottom: 30px;">
-                <h4 style="margin-bottom: 10px;">Which platforms are supported?</h4>
-                <p style="color: #666;">Currently we support YouTube. We are working on adding Twitch and Facebook soon.</p>
+            <div class="flex gap-6">
+                <a href="#" class="text-gray-400 hover:text-gray-900"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg></a>
             </div>
         </div>
-    </div>
-</section>
-
-<footer class="footer">
-    <div class="container">
-        <div class="footer-col">
-            <h3>AFK Live</h3>
-            <p>The all-you-need social media toolkit for small businesses.</p>
-        </div>
-        <div class="footer-col">
-            <h4>Tools</h4>
-            <a href="#">Publishing</a>
-            <a href="#">Analytics</a>
-            <a href="#">Engagement</a>
-        </div>
-        <div class="footer-col">
-            <h4>Resources</h4>
-            <a href="#">Blog</a>
-            <a href="#">Help Center</a>
-        </div>
-        <div class="footer-col">
-            <h4>Company</h4>
-            <a href="#">About</a>
-            <a href="mailto:support@afklive.com">Contact Support</a>
-        </div>
-    </div>
-</footer>
+    </footer>
 
 </body>
 </html>

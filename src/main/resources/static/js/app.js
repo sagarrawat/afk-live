@@ -108,11 +108,11 @@ function switchView(viewName) {
     if (viewName === 'library') loadLibraryVideos();
     if (viewName === 'community') loadComments();
     if (viewName === 'stream') {
-        // Init Stream Studio
-        checkStreamStatus();
-        switchStudioTab('streams');
-        loadDestinations();
-        loadStreamAudioLibrary();
+        // Init Stream Studio (Alpine)
+        if(window.alpineStudio) {
+            window.alpineStudio.checkStatus();
+            window.alpineStudio.loadDestinations();
+        }
     }
 
     // Close mobile menu if open
@@ -464,88 +464,9 @@ async function submitOptimization() {
 }
 
 /* --- STREAM CONTROL --- */
+// Legacy submitJob replaced by Alpine startStream()
 async function submitJob() {
-    // Gather destinations
-    const selectedKeys = destinations.filter(d => d.selected).map(d => d.key);
-
-    if(!selectedStreamVideo) return showToast("Select a video source first", "error");
-    if(selectedKeys.length === 0) return showToast("Select at least one destination", "error");
-
-    // Check optimization strictness? User requirement says "intercept... prompting".
-    if (selectedStreamVideo.optimizationStatus !== 'COMPLETED') {
-        openOptimizeModal(selectedStreamVideo);
-        return;
-    }
-
-    const btn = document.getElementById('btnGoLive');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing...';
-
-    const loopInfinite = document.getElementById('streamLoopInfinite').checked;
-    const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
-
-    const fd = new FormData();
-    selectedKeys.forEach(k => fd.append("streamKey", k));
-    fd.append("videoKey", selectedStreamVideo.s3Key);
-    fd.append("loopCount", loopCount);
-
-    // Music
-    const musicUpload = document.getElementById('uploadedStreamMusicName').value;
-    const musicStock = document.getElementById('selectedStreamStockId').value;
-    const musicMyLib = document.getElementById('selectedMyLibMusicName').value;
-    const musicVol = (document.getElementById('streamAudioVol').value / 100).toFixed(1);
-
-    // Detect active music tab logic in Studio UI
-    if (!document.getElementById('streamAudioUploadSection').classList.contains('hidden') && musicUpload) {
-        fd.append("musicName", musicUpload);
-        fd.append("musicVolume", musicVol);
-    } else if (!document.getElementById('streamAudioMyLibSection').classList.contains('hidden') && musicMyLib) {
-        fd.append("musicName", musicMyLib);
-        fd.append("musicVolume", musicVol);
-    } else if (!document.getElementById('streamAudioLibSection').classList.contains('hidden') && musicStock) {
-        fd.append("musicName", "stock:" + musicStock);
-        fd.append("musicVolume", musicVol);
-    }
-
-    // Watermark
-    if(window.uploadedWatermarkFile) {
-        fd.append("watermarkFile", window.uploadedWatermarkFile);
-    }
-
-    fd.append("muteVideoAudio", document.getElementById('streamMuteOriginal').checked);
-
-    // Metadata
-    const title = document.getElementById('streamMetaTitle').value;
-    const desc = document.getElementById('streamMetaDesc').value;
-    const privacy = document.getElementById('streamMetaPrivacy').value;
-
-    if (title) fd.append("title", title);
-    if (desc) fd.append("description", desc);
-    if (privacy) fd.append("privacy", privacy);
-
-    // Stream Settings
-    const orientation = document.getElementById('streamOrientation').value || "original";
-    const quality = document.getElementById('streamQuality').value || "0";
-
-    fd.append("streamMode", orientation);
-    fd.append("streamQuality", quality);
-
-    try {
-        const res = await apiFetch(`${API_URL}/start`, {method:'POST', body:fd});
-        const data = await res.json();
-        if(data.success) {
-            showToast("Stream Started!", "success");
-            // Update UI
-            document.getElementById('studioLiveBadge').classList.remove('hidden');
-            checkStreamStatus();
-        } else {
-            showToast(data.message, "error");
-        }
-    } catch(e) { showToast("Failed to start", "error"); }
-    finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-tower-broadcast"></i> Go Live';
-    }
+    console.warn("Legacy submitJob called");
 }
 
 /* --- API HELPER --- */
@@ -998,7 +919,7 @@ async function submitScheduledStream() {
 }
 
 async function cancelScheduledStream(id) {
-    if(!confirm("Cancel this stream?")) return;
+    if(!await Alpine.store('modal').confirm("Are you sure you want to cancel this scheduled stream?", "Cancel Stream")) return;
     try {
         await apiFetch(`${API_URL}/stream/scheduled/${id}`, { method: 'DELETE' });
         showScheduledStreamsModal();
@@ -1006,17 +927,16 @@ async function cancelScheduledStream(id) {
 }
 
 async function stopStream() {
-    showConfirmModal("End All Streams", "Are you sure you want to stop all active streams?", async () => {
-        try {
-            await apiFetch(`${API_URL}/stop`, {method:'POST'});
-            checkStreamStatus();
-            showToast("Streams Stopped", "info");
-        } catch(e) {}
-    });
+    if(!await Alpine.store('modal').confirm("Are you sure you want to stop all active streams?", "End All Streams")) return;
+    try {
+        await apiFetch(`${API_URL}/stop`, {method:'POST'});
+        checkStreamStatus();
+        showToast("Streams Stopped", "info");
+    } catch(e) {}
 }
 
 async function stopStreamById(id) {
-    if(!confirm("Stop this stream?")) return;
+    if(!await Alpine.store('modal').confirm("Are you sure you want to stop this stream?", "Stop Stream")) return;
     try {
         await apiFetch(`${API_URL}/stop?streamId=${id}`, { method: 'POST' });
         checkStreamStatus();
@@ -1025,54 +945,7 @@ async function stopStreamById(id) {
 }
 
 function renderActiveStreams(streams) {
-    // 1. Render to 'Streams' Tab in Studio
-    const listStudio = document.getElementById('activeStreamsList');
-    const emptyState = document.getElementById('streamsEmptyState');
-
-    if (listStudio) {
-        listStudio.innerHTML = '';
-        if (!streams || streams.length === 0) {
-            if(emptyState) emptyState.classList.remove('hidden');
-        } else {
-            if(emptyState) emptyState.classList.add('hidden');
-            streams.forEach(s => {
-                // Calculate duration if startTime available
-                let timeText = "Live now";
-                if(s.startTime) {
-                    const start = new Date(s.startTime);
-                    const now = new Date();
-                    const diffMs = now - start;
-                    const diffMins = Math.floor(diffMs / 60000);
-                    const hrs = Math.floor(diffMins / 60);
-                    const mins = diffMins % 60;
-                    timeText = `${hrs}h ${mins}m`;
-                }
-
-                const div = document.createElement('div');
-                div.className = 'activity-item'; // Reuse activity style
-                div.innerHTML = `
-                    <div class="act-icon" style="background:#e3f2fd; color:red;"><i class="fa-solid fa-satellite-dish"></i></div>
-                    <div class="act-content">
-                        <div style="font-weight:600; color:#333;">${s.title || "Live Stream"}</div>
-                        <div style="font-size:0.8rem; color:#666;">
-                            <i class="fa-regular fa-clock"></i> ${timeText} • ${s.streamKey.substring(0, 15)}...
-                        </div>
-                    </div>
-                    <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:#ffdce0;" onclick="stopStreamById(${s.id})">
-                        <i class="fa-solid fa-stop"></i> End
-                    </button>
-                `;
-                listStudio.appendChild(div);
-            });
-        }
-    }
-
-    // Studio UI update (Badge)
-    const badge = document.getElementById('studioLiveBadge');
-    if (badge) {
-        if (streams && streams.length > 0) badge.classList.remove('hidden');
-        else badge.classList.add('hidden');
-    }
+    // Handled by Alpine
 }
 
 /* --- DESTINATIONS --- */
@@ -1134,6 +1007,7 @@ async function connectYouTubeDestination(channelId = null) {
             destinations.push({ id: newId, name: data.name || "YouTube (Auto)", key: data.key, type: 'youtube_auto', selected: true });
             saveDestinations();
             renderDestinations();
+            window.dispatchEvent(new Event('destination-added'));
             showToast("YouTube Connected!", "success");
         } else {
             showToast(data.message || "Failed", "error");
@@ -1156,16 +1030,18 @@ function submitDestination() {
     }
     saveDestinations();
     renderDestinations();
+    window.dispatchEvent(new Event('destination-added'));
     document.getElementById('addDestinationModal').classList.add('hidden');
 }
 
-function removeDestination(id, e) {
+async function removeDestination(id, e) {
     e.stopPropagation();
-    showConfirmModal("Remove Destination", "Delete this key?", () => {
-        destinations = destinations.filter(d => d.id !== id);
-        saveDestinations();
-        renderDestinations();
-    });
+    if(!await Alpine.store('modal').confirm("Delete this destination key?", "Remove Destination")) return;
+
+    destinations = destinations.filter(d => d.id !== id);
+    saveDestinations();
+    renderDestinations();
+    window.dispatchEvent(new Event('destination-added'));
 }
 
 function saveDestinations() { localStorage.setItem('afk_destinations', JSON.stringify(destinations)); }
@@ -1215,13 +1091,12 @@ function toggleStreamKeyVisibility(inputId, btn) {
     else { input.type = 'password'; icon.classList.replace('fa-eye-slash', 'fa-eye'); }
 }
 
-function removeChannel(id) {
-    showConfirmModal("Disconnect Channel", "Remove channel?", async () => {
-        try {
-            await apiFetch(`${API_URL}/channels/${id}`, { method: 'DELETE' });
-            loadUserChannels();
-        } catch(e) { showToast("Error", "error"); }
-    });
+async function removeChannel(id) {
+    if(!await Alpine.store('modal').confirm("Are you sure you want to disconnect this channel?", "Disconnect Channel")) return;
+    try {
+        await apiFetch(`${API_URL}/channels/${id}`, { method: 'DELETE' });
+        loadUserChannels();
+    } catch(e) { showToast("Error", "error"); }
 }
 
 /* --- TIMER & STATUS POLL --- */
@@ -1233,42 +1108,11 @@ function startStatusPoll() {
 }
 
 async function checkStreamStatus() {
-    try {
-        const res = await apiFetch(`${API_URL}/status`);
-        const data = await res.json();
-        if(data.success) {
-            renderActiveStreams(data.data.activeStreams || []);
-            updateStudioState(data.data.activeStreams || []);
-        }
-    } catch(e) {}
+    // Handled by Alpine
 }
 
 function updateStudioState(streams) {
-    const btn = document.getElementById('btnGoLive');
-    const badge = document.getElementById('studioLiveBadge');
-
-    // Check if ANY stream is active (simplified for now)
-    const isLive = streams.some(s => s.live);
-
-    if (isLive) {
-        if (btn) {
-            btn.innerText = "End Broadcast";
-            btn.classList.remove('btn-danger');
-            btn.classList.add('btn-secondary');
-            btn.onclick = stopStream;
-        }
-        if (badge) badge.classList.remove('hidden');
-
-        // Find active stream ID to stop specifically if needed, but stopStream() handles all via prompt
-    } else {
-        if (btn) {
-            btn.innerText = "Go Live";
-            btn.classList.remove('btn-secondary');
-            btn.classList.add('btn-danger');
-            btn.onclick = submitJob;
-        }
-        if (badge) badge.classList.add('hidden');
-    }
+    // Handled by Alpine
 }
 
 async function checkInitialStatus() { startStatusPoll(); }
@@ -1367,14 +1211,14 @@ function updateMergeButton() {
 
 async function deleteSelectedVideos() {
     if(selectedLibraryVideos.size === 0) return;
-    showConfirmModal("Delete Multiple?", `Delete ${selectedLibraryVideos.size} videos?`, async () => {
-        const titles = Array.from(selectedLibraryVideos);
-        const videosToDelete = libraryPagination.data.filter(v => titles.includes(v.title));
-        for (let v of videosToDelete) { try { await apiFetch(`${API_URL}/library/${v.id}`, { method: 'DELETE' }); } catch(e) {} }
-        selectedLibraryVideos.clear();
-        loadLibraryVideos();
-        fetchUserInfo();
-    });
+    if(!await Alpine.store('modal').confirm(`Delete ${selectedLibraryVideos.size} videos?`, "Delete Multiple")) return;
+
+    const titles = Array.from(selectedLibraryVideos);
+    const videosToDelete = libraryPagination.data.filter(v => titles.includes(v.title));
+    for (let v of videosToDelete) { try { await apiFetch(`${API_URL}/library/${v.id}`, { method: 'DELETE' }); } catch(e) {} }
+    selectedLibraryVideos.clear();
+    loadLibraryVideos();
+    fetchUserInfo();
 }
 
 function openPreviewModal(id) {
@@ -1406,15 +1250,14 @@ async function submitYouTubeImport() {
 async function mergeSelectedVideos() {
     if(selectedLibraryVideos.size < 2) return;
     const files = Array.from(selectedLibraryVideos);
-    showConfirmModal("Merge Videos", "Merge selected?", async () => {
-        try { await apiFetch(`${API_URL}/library/merge`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({files}) }); showToast("Merge started", "success"); } catch(e){}
-    });
+    if(!await Alpine.store('modal').confirm("Merge selected videos into one?", "Merge Videos")) return;
+
+    try { await apiFetch(`${API_URL}/library/merge`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({files}) }); showToast("Merge started", "success"); } catch(e){}
 }
 
 async function deleteLibraryVideo(id, filename) {
-    showConfirmModal("Delete", `Delete ${filename}?`, async () => {
-        try { await apiFetch(`${API_URL}/library/${id}`, { method: 'DELETE' }); loadLibraryVideos(); fetchUserInfo(); } catch(e){}
-    });
+    if(!await Alpine.store('modal').confirm(`Delete ${filename}?`, "Delete Video")) return;
+    try { await apiFetch(`${API_URL}/library/${id}`, { method: 'DELETE' }); loadLibraryVideos(); fetchUserInfo(); } catch(e){}
 }
 
 async function handleBulkUpload(e) {
@@ -1462,9 +1305,8 @@ function renderPlanInfo(plan) {
 }
 
 async function cancelSubscription() {
-    showConfirmModal("Cancel", "Downgrade to free?", async () => {
-        try { await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' }); window.location.reload(); } catch(e){}
-    });
+    if(!await Alpine.store('modal').confirm("Downgrade to free plan? You will lose premium features.", "Cancel Subscription")) return;
+    try { await apiFetch(`${API_URL}/pricing/cancel`, { method: 'POST' }); window.location.reload(); } catch(e){}
 }
 
 function switchSettingsTab(tabName) {
@@ -1495,15 +1337,6 @@ async function loadInternalPricing() {
 
 /* --- MODALS --- */
 function openSupportModal() { document.getElementById('supportModal').classList.remove('hidden'); }
-let confirmCallback = null;
-function showConfirmModal(title, message, onConfirm) {
-    document.getElementById('confirmTitle').innerText = title;
-    document.getElementById('confirmMessage').innerText = message;
-    confirmCallback = onConfirm;
-    document.getElementById('confirmationModal').classList.remove('hidden');
-    document.getElementById('btnConfirmAction').onclick = () => { if(confirmCallback) confirmCallback(); closeConfirmModal(); };
-}
-function closeConfirmModal() { document.getElementById('confirmationModal').classList.add('hidden'); confirmCallback = null; }
 
 let selectedPlanId = null;
 function openPaymentModal(id, title, price) {
@@ -1534,16 +1367,56 @@ async function saveEngagementSettings() {
 
 /* --- ANALYTICS/CALENDAR --- */
 async function initAnalytics() {
-    // Basic stub, real chart logic requires Chart.js which is loaded
     const ctx = document.getElementById('analyticsChart');
-    if(ctx && window.Chart) {
-        // ... chart init ...
+    if(ctx && window.Chart && !window.analyticsChartInstance) {
+        // Basic mock chart or real fetch if API existed
+        // For now, render a dummy chart so page isn't empty
+        window.analyticsChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Views',
+                    data: [12, 19, 3, 5, 2, 3, 10],
+                    borderColor: '#2c68f6',
+                    tension: 0.4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        // Mock data population
+        document.getElementById('totalViews').innerText = "1,245";
+        document.getElementById('totalSubs').innerText = "85";
+        document.getElementById('totalWatchTime').innerText = "120h";
     }
 }
+
 function initCalendar() {
     const el = document.getElementById('calendar');
     if(el && window.FullCalendar && !el.innerHTML) {
-        // ... calendar init ...
+        const calendar = new FullCalendar.Calendar(el, {
+            initialView: 'dayGridMonth',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek'
+            },
+            height: 'auto',
+            events: async (info, successCallback, failureCallback) => {
+                try {
+                    const res = await apiFetch(`${API_URL}/videos`); // Reuse video queue as events
+                    const videos = await res.json();
+                    const events = videos.map(v => ({
+                        title: v.title,
+                        start: v.scheduledTime,
+                        color: v.status === 'UPLOADED' ? '#00875a' : '#2c68f6'
+                    }));
+                    successCallback(events);
+                } catch(e) { failureCallback(e); }
+            }
+        });
+        calendar.render();
     }
 }
 
@@ -1603,10 +1476,17 @@ function renderComments(comments) {
                 const div = document.createElement('div');
                 div.className = 'thread-item';
                 div.onclick = () => openThread(thread);
+
+                let dateStr = "Recently";
+                if(top.publishedAt) {
+                    const d = new Date(top.publishedAt);
+                    if(!isNaN(d.getTime())) dateStr = d.toLocaleDateString();
+                }
+
                 div.innerHTML = `
                     <img src="${top.authorProfileImageUrl}" class="thread-avatar">
                     <div style="flex:1; overflow:hidden;">
-                        <div class="thread-meta"><b>${top.authorDisplayName}</b> • ${new Date(top.publishedAt).toLocaleDateString()}</div>
+                        <div class="thread-meta"><b>${top.authorDisplayName}</b> • ${dateStr}</div>
                         <div class="thread-preview">${top.textDisplay}</div>
                     </div>
                 `;

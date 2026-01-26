@@ -6,8 +6,26 @@
     <title>AFK Live</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="css/theme.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔴</text></svg>">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2c68f6',
+                        'primary-dark': '#1b53d6',
+                        danger: '#e02424',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
 </head>
 <body>
 
@@ -107,227 +125,418 @@
             ⚠️ Please verify your email address to access all features.
         </div>
 
-        <!-- VIEW: PUBLISH -->
-        <div id="view-publish" class="view-section">
-            <header class="page-header">
-                <h1>Queue</h1>
-                <div class="header-actions">
-                    <button class="btn btn-primary" onclick="showScheduleModal()">
-                        <i class="fa-solid fa-pen-to-square"></i> Create Post
+        <!-- VIEW: PUBLISH (Alpine + Tailwind) -->
+        <div id="view-publish" class="view-section hidden bg-gray-50 font-sans" x-data="contentStudio">
+            <div class="max-w-6xl mx-auto h-full flex flex-col">
+                <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Content Queue</h1>
+                        <p class="text-gray-500 mt-1">Scheduled uploads and recent activity.</p>
+                    </div>
+                    <button onclick="showScheduleModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-xl shadow-lg shadow-blue-500/30 transition flex items-center gap-2 transform active:scale-95">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                        <span>Create Post</span>
                     </button>
-                </div>
-            </header>
+                </header>
 
-            <div class="container-fluid">
-                <div class="queue-list" id="queueList">
-                     <!-- Populated JS -->
+                <!-- Queue List -->
+                <div class="flex-1 overflow-y-auto">
+                    <div x-show="isLoadingQueue" class="text-center py-12 text-gray-500">
+                        <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i>
+                        <p>Loading queue...</p>
+                    </div>
+
+                    <div x-show="!isLoadingQueue && queue.length === 0" class="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
+                        <div class="w-16 h-16 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-regular fa-paper-plane text-2xl"></i>
+                        </div>
+                        <h3 class="text-lg font-medium text-gray-900">Your queue is empty</h3>
+                        <p class="text-gray-500 text-sm mt-1">Schedule your first video to get started.</p>
+                    </div>
+
+                    <div class="space-y-3" x-show="!isLoadingQueue && queue.length > 0">
+                        <template x-for="item in queue" :key="item.id">
+                            <div class="group bg-white rounded-xl p-4 border border-gray-200 hover:border-blue-300 hover:shadow-md transition flex flex-col md:flex-row md:items-center gap-4">
+                                <!-- Thumb -->
+                                <div class="w-full md:w-32 aspect-video bg-gray-100 rounded-lg overflow-hidden relative flex-shrink-0">
+                                    <template x-if="item.thumbnailS3Key">
+                                        <img :src="`/api/videos/${item.id}/thumbnail`" class="w-full h-full object-cover">
+                                    </template>
+                                    <template x-if="!item.thumbnailS3Key">
+                                        <div class="w-full h-full flex items-center justify-center text-gray-300">
+                                            <i class="fa-solid fa-film text-2xl"></i>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <!-- Info -->
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="text-base font-bold text-gray-900 truncate" x-text="item.title"></h3>
+                                    <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                                        <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> <span x-text="formatDate(item.scheduledTime)"></span></span>
+                                        <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                                        <span class="flex items-center gap-1"><i class="fa-solid fa-layer-group"></i> <span>YouTube</span></span>
+                                    </div>
+                                </div>
+
+                                <!-- Status -->
+                                <div class="flex items-center justify-between md:justify-end gap-4 mt-2 md:mt-0 w-full md:w-auto">
+                                    <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide"
+                                          :class="getStatusColor(item.status)"
+                                          x-text="item.status"></span>
+
+                                    <div class="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition">
+                                        <button class="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition" title="Edit">
+                                            <i class="fa-solid fa-pencil"></i>
+                                        </button>
+                                        <button class="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition" title="Delete">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- VIEW: STREAM (StreamYard Inspired) -->
-        <div id="view-stream" class="view-section hidden" style="padding: 0; overflow: hidden;">
-            <div class="stream-studio-grid">
+        <!-- VIEW: STREAM (Alpine & Tailwind - Apple Style) -->
+        <div id="view-stream" class="view-section hidden h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
+            <div class="flex flex-col lg:flex-row h-full w-full">
 
-                <!-- MAIN COL: Preview & Assets -->
-                <div class="studio-main-col">
-                    <div class="studio-preview-container">
-                        <div class="studio-preview-wrapper">
-                            <video id="previewPlayer" class="studio-preview-player hidden" controls playsinline></video>
-                            <div id="previewPlaceholder" class="studio-preview-placeholder">
-                                <i class="fa-solid fa-film fa-3x"></i>
-                                <div style="margin-top:10px;">Select a video to start</div>
-                                <button class="btn btn-primary btn-sm" onclick="openLibraryModalForStream()" style="margin-top:15px;">Select Source</button>
-                            </div>
-                            <div class="studio-live-badge hidden" id="studioLiveBadge">LIVE</div>
+                <!-- LEFT: STAGE -->
+                <div class="flex-1 flex flex-col relative overflow-hidden bg-gray-100 lg:bg-transparent">
+                    <!-- Header / Top Bar -->
+                    <div class="h-16 flex items-center justify-between px-8 z-10">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Studio</span>
+                            <span x-show="isLive" class="bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded text-xs font-bold animate-pulse flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-600"></span> LIVE
+                            </span>
                         </div>
                     </div>
 
-                    <!-- Compact Stream Control Bar -->
-                    <div class="studio-source-bar">
-                        <div class="source-info" onclick="openLibraryModalForStream()">
-                            <div class="source-thumb">
-                                <img id="selectedVideoThumb" src="" class="hidden">
-                                <i id="selectedVideoIcon" class="fa-solid fa-film"></i>
-                            </div>
-                            <div class="source-details">
-                                <div class="source-label">Current Source</div>
-                                <div id="studioSelectedTitle" class="source-title">None Selected</div>
-                            </div>
-                            <div style="display:flex; gap:5px; margin-left:15px;">
-                                <button class="btn btn-sm btn-outline" onclick="openLibraryModalForStream(event)" title="Select from Library"><i class="fa-solid fa-folder-open"></i></button>
-                                <button class="btn btn-sm btn-outline" onclick="document.getElementById('streamVideoUploadDirect').click(); event.stopPropagation();" title="Upload Video"><i class="fa-solid fa-upload"></i></button>
-                            </div>
-                        </div>
-
-                        <div class="source-actions">
-                            <div class="action-toggle" title="Loop Video">
-                                <input type="checkbox" id="streamLoopInfinite" checked>
-                                <span class="toggle-label"><i class="fa-solid fa-repeat"></i> Loop</span>
-                            </div>
-                            <div class="action-toggle" title="Mute Source Audio">
-                                <input type="checkbox" id="streamMuteOriginal" checked>
-                                <span class="toggle-label"><i class="fa-solid fa-volume-xmark"></i> Mute Src</span>
-                            </div>
-                            <!-- Hidden inputs for logic -->
-                            <input type="number" id="streamLoopCount" value="1" class="hidden">
-                            <input type="file" id="streamUploadInput" hidden accept="video/*">
-                            <input type="file" id="streamVideoUploadDirect" hidden accept="video/*">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- RIGHT SIDEBAR: Tools -->
-                <div class="studio-sidebar-right">
-
-                    <div class="studio-header">
-                        <h2>Stream Settings</h2>
-                        <button id="btnGoLive" class="btn btn-danger" onclick="submitJob()">Go Live</button>
-                        <button id="btnStop" class="btn btn-secondary hidden" onclick="stopStream()">Stop</button>
-                    </div>
-
-                    <div class="studio-tabs">
-                        <div class="studio-tab active" onclick="switchStudioTab('streams')">Streams</div>
-                        <div class="studio-tab" onclick="switchStudioTab('chat')">Chat</div>
-                        <div class="studio-tab" onclick="switchStudioTab('brand')">Brand</div>
-                        <div class="studio-tab" onclick="switchStudioTab('audio')">Audio</div>
-                        <div class="studio-tab" onclick="switchStudioTab('settings')">Settings</div>
-                    </div>
-
-                    <div class="studio-content">
-
-                        <!-- TAB: STREAMS -->
-                        <div id="studio-tab-streams" class="studio-panel active">
-                            <div class="empty-state" id="streamsEmptyState">
-                                <i class="fa-solid fa-tower-broadcast"></i>
-                                <p>No active streams</p>
-                            </div>
-                            <div id="activeStreamsList" class="activity-list"></div>
-                        </div>
-
-                        <!-- TAB: CHAT -->
-                        <div id="studio-tab-chat" class="studio-panel">
-                            <div class="empty-state" id="chatEmptyState">
-                                <i class="fa-regular fa-comments"></i>
-                                <p>Chats show up here</p>
-                            </div>
-                            <div id="studioChatList" class="sidebar-thread-list">
-                                <!-- Populated via JS -->
-                            </div>
-                        </div>
-
-                        <!-- TAB: BRAND -->
-                        <div id="studio-tab-brand" class="studio-panel">
-                            <span class="studio-section-title">Brand Customization</span>
-                            <div class="studio-subpanel">
-                                <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:10px;">Logo / Watermark</label>
-                                <button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById('streamWatermarkFile').click()">
-                                    <i class="fa-solid fa-upload"></i> Upload
+                    <!-- Main Preview Area -->
+                    <div class="flex-1 flex items-center justify-center p-4 lg:p-8 lg:pb-32 min-h-[300px]">
+                        <div class="relative w-full max-w-4xl aspect-video bg-black rounded-2xl shadow-2xl overflow-hidden ring-1 ring-black/5 group">
+                            <!-- Placeholder -->
+                            <div x-show="!selectedVideo" class="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                                <i class="fa-solid fa-film text-4xl lg:text-6xl mb-4 opacity-20"></i>
+                                <p class="font-medium text-sm lg:text-lg">No Source Selected</p>
+                                <button @click="openSourceSelector()" class="mt-4 px-4 py-2 text-sm lg:px-5 lg:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-medium transition shadow-lg shadow-blue-600/20">
+                                    Select Video
                                 </button>
-                                <input type="file" id="streamWatermarkFile" accept=".png,.jpg" hidden onchange="handleWatermarkUpload(this)">
+                            </div>
 
-                                <div id="watermarkPreview" class="hidden" style="margin-top:10px; background:#e3f2fd; padding:10px; border-radius:4px; display:flex; align-items:center; gap:10px;">
-                                    <img id="watermarkImg" src="" style="height:30px;">
-                                    <button class="btn btn-text btn-xs" onclick="clearWatermark()" style="color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
-                                </div>
+                            <!-- Video Player -->
+                            <video id="previewPlayer" class="w-full h-full object-contain" x-show="selectedVideo" controls playsinline></video>
+
+                            <!-- Title Overlay (On Hover) -->
+                            <div x-show="selectedVideo" class="absolute top-0 left-0 w-full p-6 bg-gradient-to-b from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition duration-300 pointer-events-none hidden lg:block">
+                                <h3 class="text-white font-medium text-lg" x-text="selectedVideo?.title"></h3>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- TAB: AUDIO -->
-                        <div id="studio-tab-audio" class="studio-panel">
-                            <span class="studio-section-title">Audio</span>
-                            <div class="studio-subpanel">
-                                <div class="studio-audio-control">
-                                    <button class="btn btn-xs btn-outline" onclick="switchStreamAudioTab('upload')">Upload</button>
-                                    <button class="btn btn-xs btn-outline" onclick="switchStreamAudioTab('lib')">Stock</button>
-                                    <button class="btn btn-xs btn-outline" onclick="switchStreamAudioTab('mylib')">Library</button>
-                                </div>
+                    <!-- Floating Control Dock -->
+                    <div class="absolute bottom-4 lg:bottom-8 left-1/2 -translate-x-1/2 z-20 w-full max-w-[90%] lg:w-auto">
+                        <div class="bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl shadow-gray-200/50 rounded-2xl p-2 flex items-center gap-2 ring-1 ring-gray-900/5">
 
-                                <div id="streamAudioUploadSection" class="hidden">
-                                    <input type="file" id="streamAudioFile" accept=".mp3,.wav" style="font-size:0.8rem;" onchange="handleStreamMusicUpload(event)">
-                                    <input type="hidden" id="uploadedStreamMusicName">
-                                </div>
-                                <div id="streamAudioLibSection" class="hidden">
-                                    <div id="streamAudioTrackList" class="studio-list" style="height:100px;">Loading...</div>
-                                    <input type="hidden" id="selectedStreamStockId">
-                                </div>
-                                <div id="streamAudioMyLibSection" class="hidden">
-                                    <div id="streamAudioMyTrackList" class="studio-list" style="height:100px;">Loading...</div>
-                                    <input type="hidden" id="selectedMyLibMusicName">
-                                </div>
+                            <!-- Source Select -->
+                            <button @click="openSourceSelector()" class="p-3 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition tooltip-trigger relative group">
+                                <i class="fa-solid fa-folder-open text-xl"></i>
+                                <span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap pointer-events-none">Source</span>
+                            </button>
 
-                                <div style="margin-top:15px;">
-                                    <label style="font-size:0.8rem;">Music Volume: <span id="streamVolVal">50%</span></label>
-                                    <input type="range" id="streamAudioVol" min="0" max="200" value="50" style="width:100%" oninput="document.getElementById('streamVolVal').innerText = this.value + '%'">
-                                </div>
+                            <div class="w-px h-8 bg-gray-200 mx-1"></div>
 
-                                <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; margin-top:10px; cursor:pointer;">
-                                    <input type="checkbox" id="streamMuteOriginal" checked>
-                                    Mute Video Sound
-                                </label>
+                            <!-- Mute -->
+                            <button @click="muteOriginal = !muteOriginal" :class="muteOriginal ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:bg-gray-100'" class="p-3 rounded-xl transition relative group">
+                                <i class="fa-solid" :class="muteOriginal ? 'fa-volume-xmark' : 'fa-volume-high'"></i>
+                            </button>
+
+                            <!-- Loop -->
+                            <button @click="loopVideo = !loopVideo" :class="loopVideo ? 'bg-blue-50 text-blue-600' : 'text-gray-500 hover:bg-gray-100'" class="p-3 rounded-xl transition relative group">
+                                <i class="fa-solid fa-repeat"></i>
+                            </button>
+
+                            <div class="w-px h-8 bg-gray-200 mx-1"></div>
+
+                            <!-- Main Action -->
+                            <button @click="startStream()" x-show="!isLive" :disabled="isBusy"
+                                class="px-6 py-3 rounded-xl font-bold text-white shadow-lg transition transform active:scale-95 flex items-center gap-2 min-w-[140px] justify-center bg-red-600 hover:bg-red-700 shadow-red-500/30">
+                                <i x-show="isBusy" class="fa-solid fa-spinner fa-spin"></i>
+                                <span x-show="!isBusy">Go Live</span>
+                            </button>
+
+                             <button @click="stopStream()" x-show="isLive" :disabled="isBusy"
+                                class="px-6 py-3 rounded-xl font-bold text-white shadow-lg transition transform active:scale-95 flex items-center gap-2 min-w-[140px] justify-center bg-gray-800 hover:bg-gray-900">
+                                <i x-show="isBusy" class="fa-solid fa-spinner fa-spin"></i>
+                                <span x-show="!isBusy">End Stream</span>
+                            </button>
+
+                        </div>
+                    </div>
+
+                     <!-- Modal: Source Selector (Tailwind) -->
+                    <div x-show="showLibraryModal" class="absolute inset-0 z-50 bg-gray-900/20 backdrop-blur-sm flex items-center justify-center p-8" x-transition.opacity style="display:none;">
+                        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-full flex flex-col overflow-hidden ring-1 ring-gray-900/5">
+                            <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                                <h3 class="font-semibold text-gray-900">Select Source</h3>
+                                <div class="flex items-center gap-3">
+                                    <button class="text-sm text-blue-600 font-medium hover:bg-blue-50 px-3 py-1.5 rounded-lg transition" onclick="document.getElementById('studioVideoUpload').click()">
+                                        <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Upload
+                                    </button>
+                                    <input type="file" id="studioVideoUpload" hidden accept="video/*" @change="handleVideoUpload($event)">
+                                    <button @click="showLibraryModal = false" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+                                </div>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-4 space-y-2">
+                                <template x-if="isLoadingLibrary">
+                                    <div class="text-center py-8 text-gray-500"><i class="fa-solid fa-spinner fa-spin"></i> Loading library...</div>
+                                </template>
+                                <template x-for="video in libraryVideos" :key="video.id">
+                                    <div @click="selectVideo(video)" class="flex items-center gap-4 p-3 rounded-xl hover:bg-blue-50 cursor-pointer group transition border border-transparent hover:border-blue-100">
+                                        <div class="w-16 h-10 bg-gray-200 rounded-lg overflow-hidden relative">
+                                             <!-- If thumbnail exists -->
+                                             <img x-show="video.thumbnailS3Key" :src="`/api/videos/${video.id}/thumbnail`" class="w-full h-full object-cover">
+                                             <div x-show="!video.thumbnailS3Key" class="absolute inset-0 flex items-center justify-center text-gray-400"><i class="fa-solid fa-film"></i></div>
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="font-medium text-gray-900 text-sm group-hover:text-blue-700" x-text="video.title"></h4>
+                                            <div class="flex items-center gap-2 mt-1">
+                                                 <span class="text-xs text-gray-500" x-text="(video.fileSize / 1024 / 1024).toFixed(1) + ' MB'"></span>
+                                                 <span x-show="video.optimizationStatus === 'COMPLETED'" class="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">OPTIMIZED</span>
+                                            </div>
+                                        </div>
+                                        <i class="fa-solid fa-chevron-right text-gray-300 group-hover:text-blue-500"></i>
+                                    </div>
+                                </template>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- TAB: SETTINGS -->
-                        <div id="studio-tab-settings" class="studio-panel">
-                            <span class="studio-section-title">Destinations</span>
-                            <div class="studio-subpanel">
-                                <div id="destinationList" class="studio-dest-list"></div>
-                                <button class="btn btn-text btn-sm btn-block" onclick="openAddDestinationChoiceModal()" style="margin-top:5px;">+ Add Destination</button>
-                            </div>
+                </div>
 
-                            <span class="studio-section-title">Stream Settings</span>
-                            <div class="studio-subpanel">
-                                <label style="font-size:0.8rem; font-weight:600;">Resolution</label>
-                                <select id="streamQuality" class="form-input" style="margin-bottom:10px;">
-                                    <option value="1080" selected>1080p (Full HD)</option>
-                                    <option value="720">720p (HD)</option>
-                                    <option value="2160">4K (Ultra HD)</option>
-                                </select>
+                <!-- RIGHT: SIDEBAR -->
+                <div class="w-full lg:w-96 bg-white border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shadow-xl shadow-gray-200/50 z-30 h-1/2 lg:h-full">
 
-                                <label style="font-size:0.8rem; font-weight:600;">Orientation</label>
-                                <select id="streamOrientation" class="form-input">
-                                    <option value="original" selected>Landscape (16:9)</option>
-                                    <option value="force_portrait">Portrait (9:16)</option>
-                                </select>
-                            </div>
-
-                            <span class="studio-section-title">Broadcast Info</span>
-                            <div class="studio-subpanel">
-                                 <input type="text" id="streamMetaTitle" class="form-input" placeholder="Title" style="margin-bottom:8px;">
-                                 <textarea id="streamMetaDesc" class="form-input" rows="3" placeholder="Description" style="margin-bottom:8px;"></textarea>
-                                 <select id="streamMetaPrivacy" class="form-input" style="margin-bottom:8px;">
-                                    <option value="public">Public</option>
-                                    <option value="unlisted">Unlisted</option>
-                                    <option value="private">Private</option>
-                                 </select>
-                                 <button class="btn btn-xs btn-outline btn-block" onclick="generateStreamMetadata()">
-                                     <i class="fa-solid fa-wand-magic-sparkles"></i> AI Generate
-                                 </button>
-                                 <input type="hidden" id="aiStreamTopic">
-                            </div>
-
-                            <div style="text-align:center;">
-                                <a href="#" onclick="switchStreamTab('schedule')" style="font-size:0.85rem;">Schedule for later</a>
-                                <div id="streamActionSchedule" class="hidden studio-subpanel" style="text-align:left;">
-                                     <label style="font-size:0.8rem;">Start Time</label>
-                                     <input type="datetime-local" id="streamScheduleTime" class="form-input">
-                                     <button class="btn btn-primary btn-sm btn-block" style="margin-top:5px;" onclick="submitScheduledStream()">Confirm Schedule</button>
-                                </div>
-                            </div>
+                    <!-- Tabs -->
+                    <div class="p-4 pb-0">
+                        <div class="flex p-1 bg-gray-100 rounded-lg overflow-x-auto">
+                            <template x-for="tab in ['setup', 'audio', 'brand', 'streams']">
+                                <button @click="switchTab(tab)"
+                                    class="flex-1 py-1.5 text-xs font-semibold rounded-md transition capitalize whitespace-nowrap px-2"
+                                    :class="activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+                                    x-text="tab === 'setup' ? 'Setup' : tab">
+                                </button>
+                            </template>
                         </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="flex-1 overflow-y-auto p-5">
+
+                        <!-- SETUP TAB -->
+                        <div x-show="activeTab === 'setup'" class="space-y-6">
+                            <!-- Destinations -->
+                            <section>
+                                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Destinations</h4>
+                                <div class="space-y-2">
+                                     <template x-for="dest in destinations" :key="dest.id">
+                                         <div @click="toggleDest(dest.id)" class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition"
+                                             :class="dest.selected ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:border-gray-300'">
+                                             <div class="w-5 h-5 rounded-full border flex items-center justify-center"
+                                                 :class="dest.selected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'">
+                                                 <i x-show="dest.selected" class="fa-solid fa-check text-white text-xs"></i>
+                                             </div>
+                                             <div class="flex-1">
+                                                 <div class="text-sm font-medium text-gray-900" x-text="dest.name"></div>
+                                             </div>
+                                             <i x-show="dest.type === 'youtube_auto'" class="fa-brands fa-youtube text-red-600"></i>
+                                         </div>
+                                     </template>
+                                </div>
+                                <button @click="window.openAddDestinationChoiceModal()" class="mt-3 w-full py-2 text-sm text-blue-600 font-medium bg-blue-50 rounded-lg hover:bg-blue-100 transition">
+                                    + Add Destination
+                                </button>
+                            </section>
+
+                            <!-- Broadcast Info -->
+                            <section>
+                                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Broadcast Info</h4>
+                                <div class="space-y-3">
+                                    <div>
+                                        <div class="flex justify-between mb-1">
+                                            <label class="block text-xs font-medium text-gray-700">Title</label>
+                                            <button id="ai-btn-title" @click="generateMetadata('title')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
+                                        </div>
+                                        <input type="text" x-model="streamTitle" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Stream Title">
+                                    </div>
+                                    <div>
+                                        <div class="flex justify-between mb-1">
+                                            <label class="block text-xs font-medium text-gray-700">Description</label>
+                                            <button id="ai-btn-desc" @click="generateMetadata('desc')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
+                                        </div>
+                                        <textarea x-model="streamDescription" rows="3" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Description"></textarea>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-700 mb-1">Privacy</label>
+                                            <select x-model="streamPrivacy" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                                                <option value="public">Public</option>
+                                                <option value="unlisted">Unlisted</option>
+                                                <option value="private">Private</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-700 mb-1">Quality</label>
+                                            <select x-model="streamQuality" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                                                <option value="1080">1080p</option>
+                                                <option value="720">720p</option>
+                                                <option value="2160">4K</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- STREAMS TAB -->
+                        <div x-show="activeTab === 'streams'" class="space-y-4">
+                            <div x-show="activeStreams.length === 0" class="text-center py-12">
+                                <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300">
+                                    <i class="fa-solid fa-tower-broadcast text-2xl"></i>
+                                </div>
+                                <p class="text-gray-500 text-sm">No active streams</p>
+                            </div>
+
+                            <template x-for="stream in activeStreams" :key="stream.id">
+                                <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition group">
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                                            <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <h4 class="font-semibold text-sm text-gray-900 truncate" x-text="stream.title || 'Live Stream'"></h4>
+                                            <p class="text-xs text-gray-500 mt-0.5" x-text="formatDuration(stream.startTime)"></p>
+                                            <div class="mt-3 flex items-center gap-2">
+                                                <button @click="stopStream(stream.id)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition flex items-center gap-1">
+                                                    <i class="fa-solid fa-stop"></i> End
+                                                </button>
+                                                <button @click="setEndTime(stream.id)" class="px-3 py-1.5 bg-gray-50 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-100 transition flex items-center gap-1" title="Set End Time">
+                                                    <i class="fa-regular fa-clock"></i> Stop At
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- AUDIO TAB -->
+                        <div x-show="activeTab === 'audio'" class="space-y-6">
+                            <section>
+                                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Audio & Music</h4>
+
+                                 <!-- Audio Sub-Tabs -->
+                                 <div class="flex gap-2 mb-4">
+                                     <button @click="audioTab = 'upload'" class="px-3 py-1 text-xs rounded-full border transition" :class="audioTab === 'upload' ? 'bg-gray-900 text-white border-gray-900' : 'text-gray-600 border-gray-200'">Upload</button>
+                                     <button @click="audioTab = 'lib'" class="px-3 py-1 text-xs rounded-full border transition" :class="audioTab === 'lib' ? 'bg-gray-900 text-white border-gray-900' : 'text-gray-600 border-gray-200'">Stock</button>
+                                     <button @click="audioTab = 'mylib'" class="px-3 py-1 text-xs rounded-full border transition" :class="audioTab === 'mylib' ? 'bg-gray-900 text-white border-gray-900' : 'text-gray-600 border-gray-200'">My Library</button>
+                                 </div>
+
+                                 <!-- Upload -->
+                                 <div x-show="audioTab === 'upload'">
+                                     <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition cursor-pointer relative">
+                                         <input type="file" class="absolute inset-0 opacity-0 cursor-pointer" accept=".mp3,.wav" @change="handleMusicUpload($event)">
+                                         <i class="fa-solid fa-cloud-arrow-up text-gray-400 text-2xl mb-2"></i>
+                                         <p class="text-xs text-gray-500" x-text="uploadedMusicName || 'Click to upload mp3'"></p>
+                                     </div>
+                                 </div>
+
+                                 <!-- Stock -->
+                                 <div x-show="audioTab === 'lib'" class="space-y-2 max-h-60 overflow-y-auto">
+                                     <template x-for="track in stockTracks" :key="track.id">
+                                         <div @click="selectedStockId = track.id" class="flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-gray-50"
+                                             :class="selectedStockId === track.id ? 'bg-blue-50' : ''">
+                                             <div class="flex items-center gap-2 overflow-hidden">
+                                                 <i class="fa-solid fa-music text-gray-400 text-xs"></i>
+                                                 <span class="text-xs font-medium truncate" x-text="track.title"></span>
+                                             </div>
+                                             <button @click.stop="previewAudio(track.url)" class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs">
+                                                 <i class="fa-solid" :class="playingUrl === track.url ? 'fa-pause' : 'fa-play'"></i>
+                                             </button>
+                                         </div>
+                                     </template>
+                                 </div>
+
+                                 <!-- My Library -->
+                                 <div x-show="audioTab === 'mylib'" class="space-y-2 max-h-60 overflow-y-auto">
+                                     <template x-for="track in libraryTracks" :key="track.id">
+                                         <div @click="selectedLibraryMusicName = track.title" class="flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-gray-50"
+                                             :class="selectedLibraryMusicName === track.title ? 'bg-blue-50' : ''">
+                                             <div class="flex items-center gap-2 overflow-hidden">
+                                                 <i class="fa-solid fa-file-audio text-gray-400 text-xs"></i>
+                                                 <span class="text-xs font-medium truncate" x-text="track.title"></span>
+                                             </div>
+                                             <button @click.stop="previewAudio('/api/library/stream/' + track.id)" class="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs">
+                                                 <i class="fa-solid" :class="playingUrl === '/api/library/stream/' + track.id ? 'fa-pause' : 'fa-play'"></i>
+                                             </button>
+                                         </div>
+                                     </template>
+                                 </div>
+
+                                 <!-- Volume -->
+                                 <div class="mt-4">
+                                     <div class="flex justify-between text-xs mb-2 text-gray-600">
+                                         <span>Music Volume</span>
+                                         <span x-text="musicVolume + '%'"></span>
+                                     </div>
+                                     <input type="range" x-model="musicVolume" min="0" max="100" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                                 </div>
+
+                            </section>
+                        </div>
+
+                        <!-- BRAND TAB -->
+                        <div x-show="activeTab === 'brand'" class="space-y-6">
+                            <section>
+                                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Branding</h4>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-2">Watermark / Logo</label>
+                                    <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition cursor-pointer relative">
+                                         <input type="file" id="streamWatermarkFile" class="absolute inset-0 opacity-0 cursor-pointer" accept=".png,.jpg" onchange="window.handleWatermarkUpload(this)">
+                                         <i class="fa-solid fa-image text-gray-400 text-2xl mb-2"></i>
+                                         <p class="text-xs text-gray-500">Upload PNG/JPG</p>
+                                    </div>
+                                    <div id="watermarkPreview" class="hidden mt-3 p-2 bg-blue-50 rounded-lg flex items-center justify-between">
+                                        <img id="watermarkImg" src="" class="h-8 object-contain">
+                                        <button onclick="window.clearWatermark()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+
 
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- VIEW: CALENDAR -->
-        <div id="view-calendar" class="view-section hidden">
-            <header class="page-header">
-                <h1>Calendar</h1>
-            </header>
-            <div id="calendar" class="calendar-container"></div>
+        <!-- VIEW: CALENDAR (Alpine + Tailwind) -->
+        <div id="view-calendar" class="view-section hidden bg-gray-50 font-sans" x-data="contentStudio" x-init="initCalendar()">
+            <div class="max-w-6xl mx-auto h-full flex flex-col">
+                <header class="mb-8">
+                    <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Content Calendar</h1>
+                    <p class="text-gray-500 mt-1">Visualize and plan your upcoming content strategy.</p>
+                </header>
+
+                <div class="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 overflow-hidden flex flex-col">
+                    <div id="calendar" class="flex-1"></div>
+                </div>
+            </div>
         </div>
 
         <!-- VIEW: COMMUNITY -->
@@ -337,9 +546,9 @@
                  <button class="btn btn-outline btn-sm" onclick="showEngagementSettings()"><i class="fa-solid fa-robot"></i> AI Automation</button>
             </div>
 
-            <div class="community-grid-layout">
+            <div class="community-grid-layout flex flex-col lg:grid lg:grid-cols-[240px_350px_1fr]">
                 <!-- SIDEBAR -->
-                <div class="comm-sidebar">
+                <div class="comm-sidebar hidden lg:block">
                     <div class="comm-nav-item active" onclick="filterCommTab('all')">
                         <i class="fa-solid fa-inbox"></i> All Comments
                     </div>
@@ -353,7 +562,7 @@
                 </div>
 
                 <!-- LIST -->
-                <div id="commListPanel" class="comm-list-panel">
+                <div id="commListPanel" class="comm-list-panel h-full overflow-y-auto border-b lg:border-b-0 lg:border-r border-gray-200">
                      <div style="padding: 15px; border-bottom: 1px solid var(--border);">
                          <input type="text" placeholder="Search..." class="form-input" style="font-size: 0.9rem;">
                      </div>
@@ -438,96 +647,344 @@
              </div>
         </div>
 
-        <!-- VIEW: LIBRARY -->
-        <div id="view-library" class="view-section hidden">
-            <header class="page-header">
-                <h1>Media Library</h1>
-                <div class="header-actions">
-                    <button class="btn btn-outline" onclick="openYouTubeImportModal()"><i class="fa-brands fa-youtube" style="color:red"></i> Import YouTube</button>
-                    <button class="btn btn-outline" onclick="document.getElementById('bulkUploadInput').click()">Upload</button>
-                    <input type="file" id="bulkUploadInput" multiple hidden accept="video/*,.zip">
-                    <button class="btn btn-outline" id="btnDeleteSelected" disabled onclick="deleteSelectedVideos()" style="color: var(--danger); border-color: var(--danger);">Delete Selected</button>
-                    <button class="btn btn-outline" id="btnMerge" disabled onclick="mergeSelectedVideos()">Merge Selected</button>
-                    <button class="btn btn-primary" onclick="showAutoScheduleModal()">Auto-Schedule</button>
+        <!-- VIEW: LIBRARY (Alpine + Tailwind) -->
+        <div id="view-library" class="view-section hidden bg-gray-50/50 font-sans" x-data="contentStudio" x-init="loadLibrary()">
+            <div class="max-w-[1600px] mx-auto h-full flex flex-col">
+                <header class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Media Library</h1>
+                        <p class="text-gray-500 mt-1">Manage, optimize, and schedule your video assets.</p>
+                    </div>
+
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <button onclick="openYouTubeImportModal()" class="bg-white border border-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition flex items-center gap-2 shadow-sm">
+                            <i class="fa-brands fa-youtube text-red-600"></i> Import
+                        </button>
+                        <button onclick="document.getElementById('bulkUploadInput').click()" class="bg-white border border-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition flex items-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> Upload
+                        </button>
+                        <input type="file" id="bulkUploadInput" multiple hidden accept="video/*,.zip">
+                        <div class="w-px h-8 bg-gray-200 mx-1"></div>
+                        <button class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-sm shadow-blue-500/30 transition flex items-center gap-2" onclick="showAutoScheduleModal()">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Schedule
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Selection Toolbar (Visible when items selected) -->
+                <div x-show="selectedVideos.size > 0"
+                     class="bg-blue-600 text-white px-6 py-3 rounded-xl mb-6 flex items-center justify-between shadow-lg shadow-blue-600/20 animate-fade-in"
+                     style="display:none;">
+                    <div class="flex items-center gap-4 font-medium">
+                        <span x-text="selectedVideos.size + ' selected'"></span>
+                        <div class="w-px h-4 bg-white/20"></div>
+                        <button @click="toggleSelectAll()" class="text-white/80 hover:text-white text-sm">Select All</button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button @click="mergeSelected()" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-sm transition border border-white/10 flex items-center gap-2">
+                            <i class="fa-solid fa-object-group"></i> Merge
+                        </button>
+                        <button @click="deleteSelected()" class="bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg text-sm transition shadow-sm flex items-center gap-2">
+                            <i class="fa-solid fa-trash"></i> Delete
+                        </button>
+                    </div>
                 </div>
-            </header>
-            <div style="margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-                <label style="display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer;">
-                    <input type="checkbox" id="selectAllLibrary" onchange="toggleSelectAllLibrary(this)">
-                    Select All
-                </label>
-                <div id="libraryPaginationControls" style="display:flex; gap:10px; align-items:center;">
-                    <!-- JS populated -->
+
+                <!-- Main Content -->
+                <div class="flex-1 overflow-y-auto">
+                    <!-- Loading State -->
+                    <div x-show="isLoadingLibrary" class="text-center py-20 text-gray-500">
+                        <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-4 text-blue-500"></i>
+                        <p>Loading your library...</p>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div x-show="!isLoadingLibrary && libraryVideos.length === 0" class="text-center py-24 bg-white rounded-3xl border border-dashed border-gray-300">
+                        <div class="w-20 h-20 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <i class="fa-solid fa-film text-3xl"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-gray-900">Library is empty</h3>
+                        <p class="text-gray-500 mt-2 mb-6">Upload videos to start streaming or scheduling.</p>
+                        <button onclick="document.getElementById('bulkUploadInput').click()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-full transition shadow-lg shadow-blue-500/30">
+                            Upload Video
+                        </button>
+                    </div>
+
+                    <!-- Video Grid -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 pb-20" x-show="!isLoadingLibrary && libraryVideos.length > 0">
+                        <template x-for="video in libraryVideos" :key="video.id">
+                            <div class="group relative bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+                                :class="isSelected(video) ? 'ring-2 ring-blue-500 border-transparent' : ''">
+
+                                <!-- Selection Checkbox (Absolute) -->
+                                <div class="absolute top-3 left-3 z-10">
+                                    <input type="checkbox"
+                                           class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shadow-sm"
+                                           :checked="isSelected(video)"
+                                           @change="toggleSelection(video)">
+                                </div>
+
+                                <!-- Thumbnail / Preview -->
+                                <div class="aspect-video bg-gray-100 relative overflow-hidden cursor-pointer" @click="previewVideo(video)">
+                                    <template x-if="video.thumbnailS3Key">
+                                        <img :src="`/api/videos/${video.id}/thumbnail`" class="w-full h-full object-cover transition duration-500 group-hover:scale-105">
+                                    </template>
+                                    <template x-if="!video.thumbnailS3Key">
+                                        <div class="w-full h-full flex items-center justify-center text-gray-300 bg-gray-50">
+                                            <i class="fa-solid fa-clapperboard text-3xl opacity-50"></i>
+                                        </div>
+                                    </template>
+
+                                    <!-- Duration/Size Badge -->
+                                    <div class="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                        <span x-text="(video.fileSize / 1024 / 1024).toFixed(1) + ' MB'"></span>
+                                    </div>
+
+                                    <!-- Optimized Badge -->
+                                    <div x-show="video.optimizationStatus === 'COMPLETED'" class="absolute top-3 right-3 bg-green-500/90 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm backdrop-blur-sm">
+                                        OPTIMIZED
+                                    </div>
+                                </div>
+
+                                <!-- Info Body -->
+                                <div class="p-4">
+                                    <h4 class="font-semibold text-gray-900 text-sm truncate mb-1" x-text="video.title" :title="video.title"></h4>
+                                    <div class="flex justify-between items-center mt-3">
+                                        <button class="text-xs font-medium text-gray-500 hover:text-blue-600 transition flex items-center gap-1" @click.stop="scheduleFromLibrary(video.id, video.title)">
+                                            <i class="fa-regular fa-calendar-plus"></i> Schedule
+                                        </button>
+
+                                        <button class="text-gray-400 hover:text-red-500 transition p-1 rounded-md hover:bg-red-50" @click.stop="deleteLibraryVideo(video.id, video.title)">
+                                            <i class="fa-solid fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </div>
-            <div id="libraryList" class="queue-list"></div>
         </div>
 
-        <!-- VIEW: SETTINGS -->
-        <div id="view-settings" class="view-section hidden" style="padding: 20px;">
-            <div class="settings-container">
-                <div class="settings-sidebar">
-                    <div class="settings-nav-item active" onclick="switchSettingsTab('general')">General</div>
-                    <div class="settings-nav-item" onclick="switchSettingsTab('channels')">Channels</div>
-                    <div class="settings-nav-item" onclick="switchSettingsTab('benefits')">My Benefits</div>
-                    <div class="settings-nav-item" onclick="switchSettingsTab('plans')">Plans & Billing</div>
-                </div>
-                <div class="settings-content">
+        <!-- VIEW: SETTINGS (Alpine + Tailwind) -->
+        <div id="view-settings" class="view-section hidden bg-gray-50/50" x-data="settingsStudio">
+            <div class="max-w-5xl mx-auto h-full flex flex-col pl-4 lg:pl-0">
+                <header class="mb-8">
+                    <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Settings</h1>
+                    <p class="text-gray-500 mt-1">Manage your account, channels, and subscription.</p>
+                </header>
 
-                    <!-- TAB: GENERAL -->
-                    <div id="tab-general" class="settings-section">
-                        <h2>General Settings</h2>
-                        <div class="form-group">
-                            <label>Connected Accounts</label>
-                            <div class="queue-item">
-                                <i class="fa-brands fa-google" style="font-size: 1.5rem;"></i>
-                                <div style="flex:1">
-                                    <div style="font-weight:600">Google Account</div>
-                                    <div style="font-size:0.85rem; color:#666" id="settingsGoogleEmail">Connected</div>
+                <div class="flex flex-col lg:flex-row gap-8 flex-1 min-h-0">
+                    <!-- SIDEBAR NAV -->
+                    <nav class="w-full lg:w-64 flex-shrink-0 space-y-1">
+                        <template x-for="item in [
+                            {id: 'general', icon: 'fa-user', label: 'General'},
+                            {id: 'channels', icon: 'fa-share-nodes', label: 'Channels'},
+                            {id: 'plans', icon: 'fa-credit-card', label: 'Plan & Billing'}
+                        ]">
+                            <button @click="switchTab(item.id)"
+                                class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                                :class="activeTab === item.id ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'">
+                                <i class="fa-solid w-5 text-center" :class="item.icon"></i>
+                                <span x-text="item.label"></span>
+                            </button>
+                        </template>
+                    </nav>
+
+                    <!-- CONTENT AREA -->
+                    <div class="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+
+                        <!-- TAB: GENERAL -->
+                        <div x-show="activeTab === 'general'" class="p-8 space-y-8 animate-fade-in">
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Account Information</h3>
+                                <div class="bg-gray-50 rounded-xl p-6 border border-gray-100 flex items-center gap-6">
+                                    <div class="w-20 h-20 rounded-full bg-gray-200 overflow-hidden ring-4 ring-white shadow-sm">
+                                        <img :src="user?.picture" class="w-full h-full object-cover">
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="text-xl font-bold text-gray-900" x-text="user?.name || 'User'"></div>
+                                        <div class="text-sm text-gray-500" x-text="user?.email"></div>
+                                        <div class="mt-2 flex items-center gap-2">
+                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                <span x-text="user?.plan?.name || 'Free Plan'"></span>
+                                             </span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <a href="/oauth2/authorization/google" class="btn btn-sm btn-outline">Reconnect</a>
+                            </section>
+
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Linked Accounts</h3>
+                                <div class="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between hover:bg-gray-50 transition">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center">
+                                            <i class="fa-brands fa-google text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium text-gray-900">Google Account</div>
+                                            <div class="text-xs text-gray-500">Used for login and YouTube access</div>
+                                        </div>
+                                    </div>
+                                    <a href="/oauth2/authorization/google" class="text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition">
+                                        Reconnect
+                                    </a>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- TAB: CHANNELS -->
+                        <div x-show="activeTab === 'channels'" class="p-8 flex flex-col h-full animate-fade-in">
+                            <div class="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900">Social Channels</h3>
+                                    <p class="text-sm text-gray-500">Manage your connected streaming destinations.</p>
+                                </div>
+                                <button @click="openConnectModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm shadow-blue-500/30 flex items-center gap-2">
+                                    <i class="fa-solid fa-plus"></i> Connect Channel
+                                </button>
+                            </div>
+
+                            <div class="space-y-3">
+                                <template x-if="channels.length === 0">
+                                    <div class="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                        <i class="fa-solid fa-share-nodes text-4xl text-gray-300 mb-3"></i>
+                                        <p class="text-gray-500 font-medium">No channels connected</p>
+                                        <button @click="openConnectModal()" class="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium">Connect one now</button>
+                                    </div>
+                                </template>
+
+                                <template x-for="channel in channels" :key="channel.id">
+                                    <div class="group flex items-center gap-4 p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition bg-white">
+                                        <div class="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden border border-gray-200">
+                                            <img :src="channel.profileUrl" class="w-full h-full object-cover">
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="font-bold text-gray-900" x-text="channel.name"></h4>
+                                            <div class="flex items-center gap-2 mt-0.5">
+                                                <span class="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-600 uppercase" x-text="channel.platform"></span>
+                                            </div>
+                                        </div>
+                                        <button @click="removeChannel(channel.id)" class="opacity-0 group-hover:opacity-100 transition p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Disconnect">
+                                            <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                    </div>
+                                </template>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- TAB: CHANNELS -->
-                    <div id="tab-channels" class="settings-section hidden">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                            <h2>Channels</h2>
-                            <button class="btn btn-primary btn-sm" onclick="openConnectModal()">+ Add Channel</button>
+                        <!-- TAB: PLANS & BILLING -->
+                        <div x-show="activeTab === 'plans'" class="p-8 animate-fade-in space-y-8 overflow-y-auto">
+
+                            <!-- Current Usage -->
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Current Usage</h3>
+                                <div class="bg-gray-900 text-white rounded-2xl p-6 shadow-lg shadow-gray-200 overflow-hidden relative">
+                                    <div class="absolute top-0 right-0 p-32 bg-blue-500 rounded-full blur-3xl opacity-20 -mr-16 -mt-16"></div>
+
+                                    <div class="relative z-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
+                                        <div>
+                                            <div class="text-blue-200 font-medium text-sm uppercase tracking-wider mb-1">Current Plan</div>
+                                            <div class="text-3xl font-bold" x-text="user?.plan?.name || 'Free'"></div>
+                                            <div class="mt-4 flex items-center gap-2 text-sm text-gray-300">
+                                                <i class="fa-solid fa-hard-drive"></i>
+                                                <span>Storage Used: <span x-text="formattedStorage"></span></span>
+                                            </div>
+                                        </div>
+                                        <div class="w-full md:w-64">
+                                            <div class="flex justify-between text-xs mb-2 text-gray-400">
+                                                <span>Capacity</span>
+                                                <span x-text="storagePercentage.toFixed(0) + '%'"></span>
+                                            </div>
+                                            <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                                                <div class="h-full bg-blue-500 rounded-full transition-all duration-500" :style="`width: ${storagePercentage}%`"></div>
+                                            </div>
+                                            <button @click="cancelSubscription()" class="mt-4 text-xs text-red-400 hover:text-red-300 font-medium transition">
+                                                Cancel Subscription
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- Upgrade Options -->
+                            <section>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Available Plans</h3>
+                                <div x-show="isLoading" class="text-center py-8 text-gray-500">
+                                    <i class="fa-solid fa-spinner fa-spin"></i> Loading plans...
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <template x-for="plan in plans" :key="plan.id">
+                                        <div class="border rounded-2xl p-6 flex flex-col hover:shadow-lg transition duration-200 hover:-translate-y-1 bg-white relative overflow-hidden"
+                                            :class="user?.plan?.name === plan.title ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'">
+
+                                            <div x-show="user?.plan?.name === plan.title" class="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+                                                CURRENT
+                                            </div>
+
+                                            <h4 class="text-lg font-bold text-gray-900" x-text="plan.title"></h4>
+                                            <div class="mt-2 mb-4">
+                                                <span class="text-3xl font-bold text-gray-900" x-text="plan.price"></span>
+                                                <span class="text-sm text-gray-500">/month</span>
+                                            </div>
+
+                                            <ul class="space-y-3 mb-8 flex-1">
+                                                <!-- Mock features based on plan title -->
+                                                <li class="flex items-start gap-2 text-sm text-gray-600">
+                                                    <i class="fa-solid fa-check text-blue-500 mt-0.5"></i>
+                                                    <span x-text="(plan.title === 'Free' ? '500MB' : (plan.title === 'Pro' ? '10GB' : '50GB')) + ' Storage'"></span>
+                                                </li>
+                                                <li class="flex items-start gap-2 text-sm text-gray-600">
+                                                    <i class="fa-solid fa-check text-blue-500 mt-0.5"></i>
+                                                    <span>Unlimited Streaming</span>
+                                                </li>
+                                            </ul>
+
+                                            <button @click="openPayment(plan)"
+                                                class="w-full py-2 rounded-lg font-semibold transition"
+                                                :class="user?.plan?.name === plan.title ? 'bg-gray-100 text-gray-500 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/30'"
+                                                :disabled="user?.plan?.name === plan.title"
+                                                x-text="user?.plan?.name === plan.title ? 'Active' : 'Upgrade'">
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </section>
                         </div>
-                        <div id="channelListSettings" class="queue-list"></div>
+
                     </div>
-
-                    <!-- TAB: BENEFITS -->
-                    <div id="tab-benefits" class="settings-section hidden">
-                        <h2>My Benefits</h2>
-                        <div id="benefitsContent">Loading...</div>
-                    </div>
-
-                    <!-- TAB: PLANS -->
-                    <div id="tab-plans" class="settings-section hidden">
-                        <h2>Subscription</h2>
-                        <!-- Usage -->
-                        <div class="card" style="margin-bottom: 30px; background: #f9f9f9; border:none;">
-                            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                                <span>Current Plan: <strong id="planName">Loading...</strong></span>
-                                <span id="storageText">0/0</span>
-                            </div>
-                            <div class="progress-track"><div id="storageBar" class="progress-fill"></div></div>
-                            <div style="margin-top: 15px; text-align: right;">
-                                <button onclick="cancelSubscription()" class="btn btn-text btn-sm" style="color: var(--danger);">Cancel Subscription</button>
-                            </div>
-                        </div>
-
-                        <h3>Available Plans</h3>
-                        <div id="internalPlanGrid" class="plan-grid">
-                            <!-- Loaded via JS -->
-                        </div>
-                    </div>
-
                 </div>
             </div>
+
+            <!-- PAYMENT CONFIRMATION MODAL (Alpine) -->
+            <div x-show="paymentModalOpen" class="fixed inset-0 z-[100] bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4" x-transition.opacity style="display:none;">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+                    <button @click="paymentModalOpen = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-rocket text-2xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900">Upgrade to <span x-text="selectedPlan?.title"></span></h3>
+                        <p class="text-gray-500 text-sm mt-1">Unlock more storage and premium features.</p>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm font-medium text-gray-600">Total due today</span>
+                            <span class="text-lg font-bold text-gray-900" x-text="selectedPlan?.price"></span>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-gray-500">
+                            <i class="fa-solid fa-lock"></i> Secure payment with Stripe
+                        </div>
+                    </div>
+
+                    <button @click="processUpgrade()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/30 transition transform active:scale-95">
+                        Confirm & Pay
+                    </button>
+                </div>
+            </div>
+
         </div>
 
     </main>
@@ -1035,9 +1492,80 @@
 </div>
 
 
+<!-- GLOBAL ALPINE MODAL -->
+<div x-data="$store.modal"
+     x-show="open"
+     class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm"
+     x-transition.opacity
+     style="display: none;">
+
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all"
+         @click.outside="if(type === 'alert') cancel()"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95">
+
+        <!-- Icon / Header -->
+        <div class="p-6 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4"
+                 :class="{
+                    'bg-red-100 text-red-600': type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                    'bg-blue-100 text-blue-600': !(type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')))
+                 }">
+                <i class="fa-solid text-xl"
+                   :class="{
+                       'fa-triangle-exclamation': type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                       'fa-circle-info': type === 'alert',
+                       'fa-circle-question': type === 'confirm' && !(title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                       'fa-pen': type === 'prompt'
+                   }"></i>
+            </div>
+
+            <h3 class="text-lg leading-6 font-bold text-gray-900" x-text="title"></h3>
+            <div class="mt-2">
+                <p class="text-sm text-gray-500" x-text="message"></p>
+            </div>
+
+            <!-- Prompt Input -->
+            <div x-show="type === 'prompt'" class="mt-4">
+                <input type="text" id="modal-input" x-model="inputValue"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                       :placeholder="placeholder"
+                       @keydown.enter="accept()">
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
+            <button type="button"
+                    class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm transition"
+                    :class="{
+                        'bg-red-600 hover:bg-red-700 focus:ring-red-500': type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')),
+                        'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500': !(type === 'confirm' && (title.toLowerCase().includes('delete') || title.toLowerCase().includes('stop') || title.toLowerCase().includes('disconnect') || title.toLowerCase().includes('cancel')))
+                    }"
+                    @click="accept()">
+                <span x-text="type === 'alert' ? 'OK' : (type === 'confirm' ? 'Confirm' : 'Submit')"></span>
+            </button>
+
+            <button type="button" x-show="type !== 'alert'"
+                    class="mt-3 w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm transition"
+                    @click="cancel()">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="js/modal-service.js"></script>
 <script src="js/toast.js"></script>
+<script src="js/stream-studio.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/content-management.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
