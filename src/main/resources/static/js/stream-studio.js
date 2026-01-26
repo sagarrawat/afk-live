@@ -182,16 +182,24 @@ document.addEventListener('alpine:init', () => {
         },
 
         // --- DESTINATIONS ---
-        loadDestinations() {
-            const saved = localStorage.getItem('afk_destinations');
-            if(saved) this.destinations = JSON.parse(saved);
+        async loadDestinations() {
+            try {
+                const res = await apiFetch('/api/destinations');
+                this.destinations = await res.json();
+            } catch(e) { this.destinations = []; }
         },
 
-        toggleDest(id) {
+        async toggleDest(id) {
             const d = this.destinations.find(x => x.id === id);
             if(d) {
                 d.selected = !d.selected;
-                localStorage.setItem('afk_destinations', JSON.stringify(this.destinations));
+                try {
+                    await apiFetch(`/api/destinations/${id}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({selected: d.selected})
+                    });
+                } catch(e) {}
             }
         },
 

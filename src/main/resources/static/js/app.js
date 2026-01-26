@@ -935,9 +935,11 @@ function renderActiveStreams(streams) {
 
 /* --- DESTINATIONS --- */
 let destinations = [];
-function loadDestinations() {
-    const saved = localStorage.getItem('afk_destinations');
-    if(saved) destinations = JSON.parse(saved);
+async function loadDestinations() {
+    try {
+        const res = await apiFetch('/api/destinations');
+        destinations = await res.json();
+    } catch(e) { destinations = []; }
     renderDestinations();
 }
 
@@ -986,12 +988,18 @@ async function connectYouTubeDestination(channelId = null) {
         if (res.status === 401) { window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube'; return; }
         const data = await res.json();
         if (res.ok && data.key) {
-            const existing = destinations.find(d => d.key === data.key);
-            if(existing) return showToast("Destination exists", "info");
-            const newId = Date.now();
-            destinations.push({ id: newId, name: data.name || "YouTube (Auto)", key: data.key, type: 'youtube_auto', selected: true });
-            saveDestinations();
-            renderDestinations();
+            // Post to backend
+            await apiFetch('/api/destinations', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: data.name || "YouTube (Auto)",
+                    key: data.key,
+                    type: 'youtube_auto',
+                    selected: true
+                })
+            });
+            await loadDestinations();
             window.dispatchEvent(new Event('destination-added'));
             showToast("YouTube Connected!", "success");
         } else {
@@ -1000,36 +1008,43 @@ async function connectYouTubeDestination(channelId = null) {
     } catch (e) { showToast("Error", "error"); }
 }
 
-function submitDestination() {
+async function submitDestination() {
     const name = document.getElementById('newDestName').value;
     const key = document.getElementById('newDestKey').value;
     const editId = document.getElementById('addDestinationModal').dataset.editId;
     if(!name || !key) return showToast("Fill all fields", "error");
 
-    if (editId) {
-        const idx = destinations.findIndex(d => d.id == editId);
-        if (idx !== -1) { destinations[idx].name = name; destinations[idx].key = key; }
-        delete document.getElementById('addDestinationModal').dataset.editId;
-    } else {
-        destinations.push({ id: Date.now(), name, key, selected: true });
-    }
-    saveDestinations();
-    renderDestinations();
-    window.dispatchEvent(new Event('destination-added'));
-    document.getElementById('addDestinationModal').classList.add('hidden');
+    try {
+        if (editId) {
+            await apiFetch(`/api/destinations/${editId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, key})
+            });
+            delete document.getElementById('addDestinationModal').dataset.editId;
+        } else {
+            await apiFetch('/api/destinations', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, key, selected: true})
+            });
+        }
+        await loadDestinations();
+        window.dispatchEvent(new Event('destination-added'));
+        document.getElementById('addDestinationModal').classList.add('hidden');
+    } catch(e) { showToast("Failed to save", "error"); }
 }
 
 async function removeDestination(id, e) {
     e.stopPropagation();
     if(!await Alpine.store('modal').confirm("Delete this destination key?", "Remove Destination")) return;
 
-    destinations = destinations.filter(d => d.id !== id);
-    saveDestinations();
-    renderDestinations();
-    window.dispatchEvent(new Event('destination-added'));
+    try {
+        await apiFetch(`/api/destinations/${id}`, { method: 'DELETE' });
+        await loadDestinations();
+        window.dispatchEvent(new Event('destination-added'));
+    } catch(e) { showToast("Failed to delete", "error"); }
 }
-
-function saveDestinations() { localStorage.setItem('afk_destinations', JSON.stringify(destinations)); }
 
 function renderDestinations() {
     const list = document.getElementById('destinationList');
@@ -1055,9 +1070,19 @@ function renderDestinations() {
     });
 }
 
-function toggleDestination(id) {
+async function toggleDestination(id) {
     const dest = destinations.find(d => d.id === id);
-    if(dest) { dest.selected = !dest.selected; saveDestinations(); renderDestinations(); }
+    if(dest) {
+        dest.selected = !dest.selected;
+        try {
+            await apiFetch(`/api/destinations/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({selected: dest.selected})
+            });
+            renderDestinations();
+        } catch(e) {}
+    }
 }
 
 function editDestination(id, e) {
