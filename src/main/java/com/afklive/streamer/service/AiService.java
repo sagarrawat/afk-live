@@ -22,7 +22,8 @@ public class AiService {
 
     public String generateTitle(String context) {
         if (isAiEnabled()) {
-            return callGemini("Generate a catchy, viral YouTube video title about: " + context);
+            return callGemini("Generate a catchy, viral YouTube video title about: " + context + 
+                    ". Only Give single answer without any explanation");
         }
         String[] templates = {
             "Amazing Video about " + context,
@@ -36,7 +37,8 @@ public class AiService {
 
     public String generateDescription(String title) {
         if (isAiEnabled()) {
-            return callGemini("Write a YouTube video description for a video titled: " + title);
+            return callGemini("Write a YouTube video description for a video titled: " + title +
+                    ". Only Give single answer without any explanation");
         }
         return "In this video, we dive deep into " + title + ". \n\n" +
                "Make sure to like and subscribe for more content about this topic! \n" +
@@ -45,7 +47,8 @@ public class AiService {
 
     public String generateTags(String context) {
         if (isAiEnabled()) {
-            return callGemini("Generate 10 comma-separated YouTube tags for a video about: " + context);
+            return callGemini("Generate 10 comma-separated YouTube tags for a video about: " + context +
+                    ". Only Give single answer without any explanation");
         }
         String base = context.toLowerCase().replaceAll("\\s+", ",");
         return base + ",viral,trending,2024,guide,tutorial,review";
