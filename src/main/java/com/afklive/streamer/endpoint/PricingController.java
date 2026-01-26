@@ -44,18 +44,9 @@ public class PricingController {
             "features", List.of("3 Channels", "Unlimited Scheduling", "Analytics", "HD Streaming")
         );
 
-        // Tier 3: Team
-        Map<String, Object> team = Map.of(
-            "id", "TEAM",
-            "title", "Team",
-            "price", isIndia ? "₹999" : "$12",
-            "period", "/mo",
-            "features", List.of("Unlimited Channels", "Team Members", "Approval Workflow", "4K Streaming")
-        );
-
         return ResponseEntity.ok(Map.of(
             "currency", isIndia ? "INR" : "USD",
-            "plans", List.of(free, essentials, team)
+            "plans", List.of(free, essentials)
         ));
     }
 

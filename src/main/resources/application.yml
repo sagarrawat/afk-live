@@ -3,8 +3,10 @@ spring:
     name: streamer
   servlet:
     multipart:
+      enabled: true
       max-file-size: 2GB
       max-request-size: 2GB
+      resolve-lazily: true
   security:
     oauth2:
       client:

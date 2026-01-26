@@ -9,7 +9,7 @@
     --danger: #e02424;
     --success: #00875a;
     --sidebar-width: 240px;
-    --icon-sidebar-width: 64px;
+    --icon-sidebar-width: 0px;
     --header-height: 60px;
 }
 
@@ -27,38 +27,6 @@ body {
     display: flex;
     height: 100vh;
 }
-
-/* ICON SIDEBAR (Far Left) */
-.icon-sidebar {
-    width: var(--icon-sidebar-width);
-    background: #091e42; /* Dark Navy like Buffer/Atlassian */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 16px 0;
-    flex-shrink: 0;
-    z-index: 20;
-}
-
-.icon-btn {
-    width: 40px; height: 40px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: rgba(255,255,255,0.7);
-    text-decoration: none;
-    margin-bottom: 12px;
-    transition: 0.2s;
-    font-size: 1.1rem;
-    border: none;
-    background: none;
-    cursor: pointer;
-}
-.icon-btn:hover { background: rgba(255,255,255,0.1); color: white; }
-.icon-btn.active { border: 2px solid white; }
-.icon-btn img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
-.add-btn { border: 1px dashed rgba(255,255,255,0.3); }
-
-.spacer { flex: 1; }
 
 /* SUB SIDEBAR (Navigation) */
 .sub-sidebar {
@@ -325,7 +293,7 @@ body {
 .settings-nav-item { padding: 10px 24px; cursor: pointer; color: var(--text-main); font-size: 0.95rem; border-left: 3px solid transparent; }
 .settings-nav-item:hover { background: #ebecf0; }
 .settings-nav-item.active { background: white; border-left-color: var(--primary); font-weight: 600; color: var(--primary); }
-.settings-content { flex: 1; padding: 40px; overflow-y: auto; }
+.settings-content { flex: 1; padding: 20px; overflow-y: auto; }
 .settings-section h2 { margin-top: 0; margin-bottom: 24px; font-size: 1.5rem; border-bottom: 1px solid #eee; padding-bottom: 10px; }
 
 /* PRICING CARDS (Internal) */
@@ -402,9 +370,10 @@ body {
 
 /* MOBILE */
 @media (max-width: 768px) {
-    .app-layout { flex-direction: column; height: auto; min-height: 100vh; }
-
-    .icon-sidebar { display: none; }
+    body { height: auto; overflow-y: auto; }
+    .app-layout { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
+    .content-area { height: auto; overflow: visible; }
+    .view-section { overflow: visible; height: auto; padding-bottom: 80px; } /* Bottom padding for nav/safe area */
 
     .sub-sidebar {
         position: fixed;

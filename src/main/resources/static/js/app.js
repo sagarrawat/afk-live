@@ -523,22 +523,7 @@ async function loadUserChannels() {
 }
 
 function renderChannelList(channels) {
-    const sidebarList = document.getElementById('channelIconsList');
-    if(sidebarList) {
-        sidebarList.innerHTML = '';
-        channels.forEach((c, idx) => {
-            const btn = document.createElement('button');
-            btn.className = 'icon-btn';
-            if(idx === 0) btn.classList.add('active');
-            btn.innerHTML = `<img src="${c.profileUrl}" title="${c.name}">`;
-            btn.onclick = () => {
-                document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                filterViewByChannel(c);
-            };
-            sidebarList.appendChild(btn);
-        });
-    }
+    // Icon sidebar removed
     const settingsList = document.getElementById('channelListSettings');
     if(settingsList) {
         settingsList.innerHTML = '';
