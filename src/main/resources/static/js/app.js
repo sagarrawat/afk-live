@@ -2,6 +2,20 @@ const API_URL = "/api";
 let currentUser = null;
 let selectedStreamVideo = null; // Fix ReferenceError
 
+// Global Loader
+window.showLoader = function(msg = "Loading...") {
+    document.getElementById('globalLoaderText').innerText = msg;
+    const loader = document.getElementById('globalLoader');
+    loader.classList.remove('hidden');
+    loader.style.display = 'flex';
+};
+
+window.hideLoader = function() {
+    const loader = document.getElementById('globalLoader');
+    loader.classList.add('hidden');
+    loader.style.display = 'none';
+};
+
 // On Load
 document.addEventListener("DOMContentLoaded", async () => {
     await fetchUserInfo();
@@ -1275,7 +1289,24 @@ async function handleBulkUpload(e) {
     if(!files.length) return;
     const fd = new FormData();
     for(let f of files) fd.append("files", f);
-    try { await apiFetch(`${API_URL}/library/upload`, {method:'POST', body:fd}); loadLibraryVideos(); fetchUserInfo(); } catch(e){}
+
+    showLoader("Uploading " + files.length + " file(s)...");
+    try {
+        await apiFetch(`${API_URL}/library/upload`, {method:'POST', body:fd});
+        // Trigger global refresh if needed, but since we are in app.js, we might not have access to contentStudio scope directly unless we dispatch event
+        // The original code called loadLibraryVideos() which is the legacy function in app.js? No, I see loadLibraryVideos in app.js.
+        // But app.html uses contentStudio.
+        // Let's emit a refresh event
+        window.dispatchEvent(new Event('refresh-content'));
+        loadLibraryVideos(); // Legacy fallback
+        fetchUserInfo();
+        showToast("Upload complete", "success");
+    } catch(e){
+        showToast("Upload failed", "error");
+    } finally {
+        hideLoader();
+        e.target.value = ''; // Reset input
+    }
 }
 
 function showAutoScheduleModal() { document.getElementById('autoScheduleModal').classList.remove('hidden'); }

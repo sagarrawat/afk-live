@@ -147,19 +147,20 @@ document.addEventListener('alpine:init', () => {
             const formData = new FormData();
             formData.append("files", file);
 
-            showToast("Uploading video...", "info");
-            this.isLoadingLibrary = true;
+            window.showLoader("Uploading video...");
 
             apiFetch('/api/library/upload', { method: "POST", body: formData })
                 .then(async res => {
                     if(res.ok) {
                         showToast("Video uploaded!", "success");
                         await this.loadLibraryVideos(); // Reload list
-                        // Optionally select it automatically if we can find it
                     } else showToast("Upload failed", "error");
                 })
                 .catch(() => showToast("Upload error", "error"))
-                .finally(() => this.isLoadingLibrary = false);
+                .finally(() => {
+                    window.hideLoader();
+                    e.target.value = '';
+                });
         },
 
         handleMusicUpload(e) {
