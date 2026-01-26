@@ -1340,14 +1340,28 @@ async function showEngagementSettings() {
         const res = await apiFetch(`${API_URL}/engagement/settings`);
         const data = await res.json();
         document.getElementById('engAutoReply').checked = data.autoReplyEnabled;
+        document.getElementById('engDeleteNegative').checked = data.deleteNegativeComments;
+
+        // New features
+        document.getElementById('engAutoReplyUnreplied').checked = data.autoReplyUnrepliedEnabled || false;
+        document.getElementById('engAutoReplyMessage').value = data.autoReplyUnrepliedMessage || '';
+        document.getElementById('engCustomMsgBox').classList.toggle('hidden', !data.autoReplyUnrepliedEnabled);
+
         document.getElementById('engagementSettingsModal').classList.remove('hidden');
     } catch(e){}
 }
 async function saveEngagementSettings() {
+    const payload = {
+        autoReplyEnabled: document.getElementById('engAutoReply').checked,
+        deleteNegativeComments: document.getElementById('engDeleteNegative').checked,
+        autoReplyUnrepliedEnabled: document.getElementById('engAutoReplyUnreplied').checked,
+        autoReplyUnrepliedMessage: document.getElementById('engAutoReplyMessage').value
+    };
     try {
-        await apiFetch(`${API_URL}/engagement/settings`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ autoReplyEnabled: document.getElementById('engAutoReply').checked }) });
+        await apiFetch(`${API_URL}/engagement/settings`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
         document.getElementById('engagementSettingsModal').classList.add('hidden');
-    } catch(e){}
+        showToast("Settings saved", "success");
+    } catch(e){ showToast("Failed to save", "error"); }
 }
 
 /* --- ANALYTICS/CALENDAR --- */

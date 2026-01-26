@@ -1167,6 +1167,24 @@
             </label>
         </div>
 
+        <div class="form-group" style="border-top:1px solid #eee; padding-top:15px; margin-top:15px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 10px;">
+                <div>
+                    <label style="margin:0; font-weight:600;">Reply to Unreplied</label>
+                    <div style="font-size:0.85rem; color:#888;">Auto-reply to all unreplied comments with a preset message.</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="engAutoReplyUnreplied" onchange="document.getElementById('engCustomMsgBox').classList.toggle('hidden', !this.checked)">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+
+            <div id="engCustomMsgBox" class="hidden">
+                <label style="font-size:0.85rem; font-weight:600; margin-bottom:5px; display:block;">Custom Message</label>
+                <input type="text" id="engAutoReplyMessage" class="form-input" placeholder="e.g. Thanks for watching! 😊">
+            </div>
+        </div>
+
         <div class="modal-actions" style="text-align:right; margin-top:30px;">
             <button class="btn btn-primary" onclick="saveEngagementSettings()">Save Changes</button>
         </div>
