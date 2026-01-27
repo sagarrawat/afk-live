@@ -125,6 +125,7 @@ public class StreamController {
 //    }
 
     // Removed conflicting mappings handled by ConvertController:
+    // /convert/status
     // /convert/shorts
     // /convert/optimize
 

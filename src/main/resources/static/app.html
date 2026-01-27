@@ -320,16 +320,38 @@
                                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Destinations</h4>
                                 <div class="space-y-2">
                                      <template x-for="dest in destinations" :key="dest.id">
-                                         <div @click="toggleDest(dest.id)" class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition"
-                                             :class="dest.selected ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:border-gray-300'">
-                                             <div class="w-5 h-5 rounded-full border flex items-center justify-center"
-                                                 :class="dest.selected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'">
-                                                 <i x-show="dest.selected" class="fa-solid fa-check text-white text-xs"></i>
+                                         <div class="flex items-center gap-3 p-3 rounded-xl border transition group"
+                                             :class="dest.selected ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:border-gray-300'"
+                                             x-data="{ showKey: false }">
+
+                                             <!-- Selection Toggle -->
+                                             <div @click="toggleDest(dest.id)" class="cursor-pointer flex items-center gap-3 flex-1 min-w-0">
+                                                 <div class="w-5 h-5 rounded-full border flex items-center justify-center shrink-0"
+                                                     :class="dest.selected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'">
+                                                     <i x-show="dest.selected" class="fa-solid fa-check text-white text-xs"></i>
+                                                 </div>
+                                                 <div class="flex-1 min-w-0">
+                                                     <div class="text-sm font-medium text-gray-900 truncate" x-text="dest.name"></div>
+                                                     <div class="text-[10px] text-gray-400 font-mono truncate"
+                                                          x-text="showKey ? (dest.streamKey || dest.key || 'N/A') : 'Key: •••••' + ((dest.streamKey || dest.key) && (dest.streamKey || dest.key).length > 4 ? (dest.streamKey || dest.key).slice(-4) : '****')">
+                                                     </div>
+                                                 </div>
                                              </div>
-                                             <div class="flex-1">
-                                                 <div class="text-sm font-medium text-gray-900" x-text="dest.name"></div>
+
+                                             <!-- Icon / Delete Action -->
+                                             <div class="flex items-center gap-1">
+                                                 <i x-show="dest.type === 'youtube_auto'" class="fa-brands fa-youtube text-red-600 mr-1"></i>
+
+                                                 <!-- Show Key Toggle -->
+                                                 <button @click.stop="showKey = !showKey" class="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg transition" title="Show/Hide Key">
+                                                     <i class="fa-solid" :class="showKey ? 'fa-eye-slash' : 'fa-eye'"></i>
+                                                 </button>
+
+                                                 <!-- Delete Button -->
+                                                 <button @click.stop="removeDestination(dest.id)" class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="Remove Destination">
+                                                     <i class="fa-solid fa-trash-can"></i>
+                                                 </button>
                                              </div>
-                                             <i x-show="dest.type === 'youtube_auto'" class="fa-brands fa-youtube text-red-600"></i>
                                          </div>
                                      </template>
                                 </div>

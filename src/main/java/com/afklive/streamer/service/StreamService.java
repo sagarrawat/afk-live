@@ -69,8 +69,20 @@ public class StreamService {
         
         log.info("username [{}]", username);
 
-        if (streamKeys == null || streamKeys.isEmpty()) {
+        if (streamKeys == null) {
              throw new IllegalArgumentException("At least one destination is required.");
+        }
+
+        // Flatten and Filter out empty keys
+        List<String> validKeys = streamKeys.stream()
+                .filter(k -> k != null && !k.trim().isEmpty())
+                .flatMap(k -> java.util.Arrays.stream(k.split(","))) // Split comma-separated keys
+                .map(String::trim)
+                .filter(k -> !k.isEmpty())
+                .collect(Collectors.toList());
+
+        if (validKeys.isEmpty()) {
+             throw new IllegalArgumentException("At least one valid destination stream key is required.");
         }
 
         // 1. SAFETY CHECK: Check DB to see if this user is already live
@@ -171,16 +183,46 @@ public class StreamService {
         // we can use it and potentially copy the stream.
         boolean isOptimized = false;
         if (streamMode.equals("original") && watermarkPath == null && musicPath == null) {
-            String originalFileName = videoPath.getFileName().toString();
-            // Assuming optimized file follows "name_optimized.mp4" convention
-            // We need to resolve it in the same directory.
-            String baseName = originalFileName.toLowerCase().endsWith(".mp4") ? originalFileName.substring(0, originalFileName.length() - 4) : originalFileName;
-            Path optimizedPath = videoPath.resolveSibling(baseName + "_optimized.mp4");
+            // Check if current file is already optimized (DB check)
+            boolean isCurrentOptimized = false;
+            try {
+                // Inefficient but safe: find by S3 key
+                Optional<ScheduledVideo> currentVideoOpt = scheduledVideoRepository.findByUsername(username).stream()
+                        .filter(v -> v.getS3Key() != null && v.getS3Key().equals(videoKey))
+                        .findFirst();
 
-            if (Files.exists(optimizedPath)) {
-                log.info("Found optimized video version: {}", optimizedPath);
-                videoPath = optimizedPath;
-                isOptimized = true;
+                if (currentVideoOpt.isPresent()) {
+                    ScheduledVideo v = currentVideoOpt.get();
+                    if (v.getOptimizationStatus() == ScheduledVideo.OptimizationStatus.COMPLETED) {
+                         isCurrentOptimized = true;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to check optimization status from DB", e);
+            }
+
+            // Fallback: Check filename pattern if DB check failed or not found
+            if (!isCurrentOptimized) {
+                String fName = videoPath.getFileName().toString();
+                if (fName.contains("_portrait_") || fName.contains("_landscape_") || fName.contains("_optimized")) {
+                    isCurrentOptimized = true;
+                }
+            }
+
+            if (isCurrentOptimized) {
+                 log.info("Video detected as pre-optimized. Enabling Stream Copy mode.");
+                 isOptimized = true;
+            } else {
+                // Try to find a sibling optimized file (Legacy behavior)
+                String originalFileName = videoPath.getFileName().toString();
+                String baseName = originalFileName.toLowerCase().endsWith(".mp4") ? originalFileName.substring(0, originalFileName.length() - 4) : originalFileName;
+                Path optimizedPath = videoPath.resolveSibling(baseName + "_optimized.mp4");
+
+                if (Files.exists(optimizedPath)) {
+                    log.info("Found sibling optimized video version: {}", optimizedPath);
+                    videoPath = optimizedPath;
+                    isOptimized = true;
+                }
             }
         }
 
@@ -188,7 +230,7 @@ public class StreamService {
         clearLogs();
 
         // Loop through keys to start individual processes
-        for (String key : streamKeys) {
+        for (String key : validKeys) {
             List<String> command =
                     FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized);
 

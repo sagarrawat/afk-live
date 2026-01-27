@@ -204,6 +204,22 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        async removeDestination(id) {
+            if (!await Alpine.store('modal').confirm("Are you sure you want to remove this destination?", "Delete Destination")) return;
+
+            try {
+                const res = await apiFetch(`/api/destinations/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast("Destination removed", "success");
+                    this.loadDestinations();
+                } else {
+                    showToast("Failed to remove destination", "error");
+                }
+            } catch(e) {
+                showToast("Error removing destination", "error");
+            }
+        },
+
         // --- AI ---
         async generateMetadata(type) {
             const context = this.streamTitle || "Gaming Stream";
@@ -233,16 +249,19 @@ document.addEventListener('alpine:init', () => {
 
         // --- STREAMING LOGIC ---
         async startStream() {
-            const selectedKeys = this.destinations.filter(d => d.selected).map(d => d.key);
+            // Filter keys to ensure they are not empty
+            // The property is 'streamKey' from backend, but JS code was using 'key'.
+            const selectedKeys = this.destinations
+                .filter(d => d.selected && (d.streamKey || d.key) && (d.streamKey || d.key).trim().length > 0)
+                .map(d => (d.streamKey || d.key).trim());
 
             if(!this.selectedVideo) return showToast("Select a video source", "error");
-            if(selectedKeys.length === 0) return showToast("Select a destination", "error");
+            if(selectedKeys.length === 0) return showToast("Select a valid destination (key required)", "error");
 
             this.isBusy = true;
 
             const fd = new FormData();
-            // selectedKeys.forEach(k => fd.append("streamKey", k));
-            // Send streamKey as a comma-separated string to avoid potential multipart parsing issues with array fields
+            // Send streamKey as a comma-separated string
             fd.append("streamKey", selectedKeys.join(','));
 
             fd.append("videoKey", this.selectedVideo.s3Key);
