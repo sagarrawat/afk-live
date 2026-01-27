@@ -190,7 +190,7 @@ public class StreamService {
         // Loop through keys to start individual processes
         for (String key : streamKeys) {
             List<String> command =
-                    FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight);
+                    FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized);
 
             log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
 
