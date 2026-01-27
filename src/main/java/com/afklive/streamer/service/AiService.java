@@ -130,6 +130,7 @@ public class AiService {
 
     private String callGemini(String prompt) {
         try {
+            prompt += ". Give single answer don't explain.";
             // Using gemini-flash-lite-latest to avoid 404s
             String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=" + geminiKey;
 

@@ -14,6 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Comparator;
 import java.util.stream.Stream;
+import java.util.Set;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
@@ -27,6 +30,7 @@ public class VideoConversionService {
 
     private final FileStorageService storageService;
     private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
+    private final Set<String> activeOptimizations = ConcurrentHashMap.newKeySet();
     private final UserService userService;
     private final ScheduledVideoRepository repository;
 
@@ -44,11 +48,18 @@ public class VideoConversionService {
 
     @Async
     public void optimizeVideo(Path userDir, String username, String fileName, String mode, int height) {
+        String lockKey = username + ":" + fileName;
+        if (!activeOptimizations.add(lockKey)) {
+            log.warn("Optimization already in progress for {}: {}", username, fileName);
+            return;
+        }
+
         ScheduledVideo scheduledVideo = repository.findByUsernameAndTitle(username, fileName)
                 .orElse(null);
 
         if (scheduledVideo == null) {
             log.error("Video not found for optimization: {}", fileName);
+            activeOptimizations.remove(lockKey);
             return;
         }
 
@@ -57,7 +68,7 @@ public class VideoConversionService {
         String baseTitle = fileName.lastIndexOf('.') > 0 ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
         String targetTitle = baseTitle + targetSuffix + ".mp4";
 
-        String progressKey = username + ":optimize:" + fileName;
+        String progressKey = username + ":" + fileName;
         conversionProgress.put(progressKey, 0);
 
         Path tempDir = null;
@@ -75,7 +86,13 @@ public class VideoConversionService {
             List<String> command = FFmpegCommandBuilder.buildOptimizeCommand(sourcePath, targetPath, mode, height);
 
             Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
-            // process.getInputStream().transferTo(System.out);
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.info("[FFmpeg Optimize] {}", line);
+                }
+            }
 
             int exitCode = process.waitFor();
             if (exitCode == 0) {
@@ -114,6 +131,7 @@ public class VideoConversionService {
             conversionProgress.put(progressKey, -1);
         } finally {
             cleanupTempDir(tempDir);
+            activeOptimizations.remove(lockKey);
         }
     }
 
@@ -148,7 +166,13 @@ public class VideoConversionService {
             log.info("Starting merge for {}: {} -> {}", username, inputs.size(), outputName);
 
             Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
-            process.getInputStream().transferTo(System.out); // Log
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.info("[FFmpeg Merge] {}", line);
+                }
+            }
 
             int exitCode = process.waitFor();
             if (exitCode != 0) {
