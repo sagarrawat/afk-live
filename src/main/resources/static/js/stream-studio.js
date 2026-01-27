@@ -250,9 +250,10 @@ document.addEventListener('alpine:init', () => {
         // --- STREAMING LOGIC ---
         async startStream() {
             // Filter keys to ensure they are not empty
+            // The property is 'streamKey' from backend, but JS code was using 'key'.
             const selectedKeys = this.destinations
-                .filter(d => d.selected && d.key && d.key.trim().length > 0)
-                .map(d => d.key.trim());
+                .filter(d => d.selected && (d.streamKey || d.key) && (d.streamKey || d.key).trim().length > 0)
+                .map(d => (d.streamKey || d.key).trim());
 
             if(!this.selectedVideo) return showToast("Select a video source", "error");
             if(selectedKeys.length === 0) return showToast("Select a valid destination (key required)", "error");

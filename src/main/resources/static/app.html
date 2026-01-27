@@ -332,7 +332,9 @@
                                                  </div>
                                                  <div class="flex-1 min-w-0">
                                                      <div class="text-sm font-medium text-gray-900 truncate" x-text="dest.name"></div>
-                                                     <div class="text-[10px] text-gray-400 font-mono truncate" x-text="showKey ? (dest.key || 'N/A') : 'Key: •••••' + (dest.key && dest.key.length > 4 ? dest.key.slice(-4) : '****')"></div>
+                                                     <div class="text-[10px] text-gray-400 font-mono truncate"
+                                                          x-text="showKey ? (dest.streamKey || dest.key || 'N/A') : 'Key: •••••' + ((dest.streamKey || dest.key) && (dest.streamKey || dest.key).length > 4 ? (dest.streamKey || dest.key).slice(-4) : '****')">
+                                                     </div>
                                                  </div>
                                              </div>
 
