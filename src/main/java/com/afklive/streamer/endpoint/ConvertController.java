@@ -66,4 +66,17 @@ public class ConvertController {
         conversionService.optimizeVideo(null, username, fileName, mode, height);
         return ResponseEntity.ok(ApiResponse.success("Optimization started", null));
     }
+
+    @GetMapping("/convert/status")
+    public ResponseEntity<?> getConversionStatus(@RequestParam String fileName, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+
+        Optional<Integer> progress = conversionService.getProgress(username, fileName);
+        if (progress.isPresent()) {
+            return ResponseEntity.ok(Map.of("progress", progress.get()));
+        } else {
+            return ResponseEntity.ok(Map.of("progress", -1));
+        }
+    }
 }

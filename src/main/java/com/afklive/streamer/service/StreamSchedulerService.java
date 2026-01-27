@@ -19,7 +19,7 @@ public class StreamSchedulerService {
     private final StreamService streamService;
     private final StreamManagerService streamManager;
 
-    @Scheduled(fixedRate = 3_00_000) // Every minute
+    @Scheduled(fixedRate = 60000) // Every minute
     public void processScheduledStreams() {
         log.info("Checking for scheduled live streams...");
         List<ScheduledStream> dueStreams = repository.findByStatusAndScheduledTimeLessThanEqual(
