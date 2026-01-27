@@ -42,6 +42,7 @@ public class SecurityConfig {
                         // 1. PUBLIC: Landing page, assets
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
+                        .requestMatchers("/api/payment/callback", "/api/payment/initiate").permitAll()
 
                         // 2. ADMIN
                         .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
