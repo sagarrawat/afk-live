@@ -73,9 +73,12 @@ public class StreamService {
              throw new IllegalArgumentException("At least one destination is required.");
         }
 
-        // Filter out empty keys
+        // Flatten and Filter out empty keys
         List<String> validKeys = streamKeys.stream()
                 .filter(k -> k != null && !k.trim().isEmpty())
+                .flatMap(k -> java.util.Arrays.stream(k.split(","))) // Split comma-separated keys
+                .map(String::trim)
+                .filter(k -> !k.isEmpty())
                 .collect(Collectors.toList());
 
         if (validKeys.isEmpty()) {
