@@ -118,11 +118,11 @@ public class StreamController {
         return ResponseEntity.ok("Conversion Started");
     }
 
-    @GetMapping("/convert/status")
-    public ResponseEntity<?> getConversionStatus(@RequestParam String fileName, Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).body(0);
-        return ResponseEntity.ok(videoConversionService.getProgress(SecurityUtils.getEmail(principal), fileName).orElse(0));
-    }
+//    @GetMapping("/convert/status")
+//    public ResponseEntity<?> getConversionStatus(@RequestParam String fileName, Principal principal) {
+//        if (principal == null) return ResponseEntity.status(401).body(0);
+//        return ResponseEntity.ok(videoConversionService.getProgress(SecurityUtils.getEmail(principal), fileName).orElse(0));
+//    }
 
     // Removed conflicting mappings handled by ConvertController:
     // /convert/shorts
