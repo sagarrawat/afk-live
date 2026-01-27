@@ -233,16 +233,18 @@ document.addEventListener('alpine:init', () => {
 
         // --- STREAMING LOGIC ---
         async startStream() {
-            const selectedKeys = this.destinations.filter(d => d.selected).map(d => d.key);
+            // Filter keys to ensure they are not empty
+            const selectedKeys = this.destinations
+                .filter(d => d.selected && d.key && d.key.trim().length > 0)
+                .map(d => d.key.trim());
 
             if(!this.selectedVideo) return showToast("Select a video source", "error");
-            if(selectedKeys.length === 0) return showToast("Select a destination", "error");
+            if(selectedKeys.length === 0) return showToast("Select a valid destination (key required)", "error");
 
             this.isBusy = true;
 
             const fd = new FormData();
-            // selectedKeys.forEach(k => fd.append("streamKey", k));
-            // Send streamKey as a comma-separated string to avoid potential multipart parsing issues with array fields
+            // Send streamKey as a comma-separated string
             fd.append("streamKey", selectedKeys.join(','));
 
             fd.append("videoKey", this.selectedVideo.s3Key);
