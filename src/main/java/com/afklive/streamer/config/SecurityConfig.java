@@ -21,6 +21,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import com.afklive.streamer.service.CustomUserDetailsService;
 
 import java.util.function.Consumer;
 
@@ -35,7 +36,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ClientRegistrationRepository clientRegistrationRepository,
-                                           OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler) throws Exception {
+                                           OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler,
+                                           CustomUserDetailsService userDetailsService) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
@@ -57,6 +59,11 @@ public class SecurityConfig {
                         .loginProcessingUrl("/login")
                         .defaultSuccessUrl("/studio", true)
                         .permitAll()
+                )
+                .rememberMe(remember -> remember
+                        .key("afkLiveSecretKey123")
+                        .tokenValiditySeconds(86400 * 30) // 30 days
+                        .userDetailsService(userDetailsService)
                 )
                 .oauth2Login(oauth -> oauth
                         .loginPage("/login")
