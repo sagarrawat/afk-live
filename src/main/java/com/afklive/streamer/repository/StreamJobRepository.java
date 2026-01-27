@@ -11,4 +11,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     Optional<StreamJob> findByUsernameAndIsLiveTrue(String username);
     List<StreamJob> findAllByUsernameAndIsLiveTrue(String username);
     long countByUsernameAndIsLiveTrue(String username);
+
+    // Admin: Find ALL live jobs
+    List<StreamJob> findAllByIsLiveTrue();
 }
