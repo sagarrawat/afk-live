@@ -204,6 +204,22 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        async removeDestination(id) {
+            if (!await Alpine.store('modal').confirm("Are you sure you want to remove this destination?", "Delete Destination")) return;
+
+            try {
+                const res = await apiFetch(`/api/destinations/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast("Destination removed", "success");
+                    this.loadDestinations();
+                } else {
+                    showToast("Failed to remove destination", "error");
+                }
+            } catch(e) {
+                showToast("Error removing destination", "error");
+            }
+        },
+
         // --- AI ---
         async generateMetadata(type) {
             const context = this.streamTitle || "Gaming Stream";
