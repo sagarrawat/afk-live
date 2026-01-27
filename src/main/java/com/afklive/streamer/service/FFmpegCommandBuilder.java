@@ -68,6 +68,10 @@ public class FFmpegCommandBuilder {
         command.add("30");
         command.add("-g");
         command.add("60");
+        command.add("-keyint_min");
+        command.add("60");
+        command.add("-sc_threshold");
+        command.add("0");
 
         command.add("-c:a");
         command.add("aac");
@@ -143,6 +147,10 @@ public class FFmpegCommandBuilder {
         command.add("30");
         command.add("-g");
         command.add("60");
+        command.add("-keyint_min");
+        command.add("60");
+        command.add("-sc_threshold");
+        command.add("0");
 
         command.add("-c:a");
         command.add("aac");
@@ -206,6 +214,21 @@ public class FFmpegCommandBuilder {
             String streamMode,
             int maxHeight
     ) {
+        return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, false);
+    }
+
+    public static List<String> buildStreamCommand(
+            Path videoPath,
+            List<String> streamKeys,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized
+    ) {
         String ffmpeg = "ffmpeg";
         java.io.File local = new java.io.File("bin/ffmpeg");
         if (local.exists()) ffmpeg = local.getAbsolutePath();
@@ -224,120 +247,125 @@ public class FFmpegCommandBuilder {
         command.add("-i");
         command.add(videoPath.toString());
 
-        // Input 1: Audio (Music or Silence)
-        boolean hasMusic = musicPath != null;
-        if (hasMusic) {
-            command.add("-stream_loop");
-            command.add("-1");
-            command.add("-i");
-            command.add(musicPath.toString());
-        } else if (muteVideoAudio) {
-            command.add("-f");
-            command.add("lavfi");
-            command.add("-i");
-            command.add("anullsrc=channel_layout=stereo:sample_rate=44100");
-        }
+        if (isOptimized) {
+            // STREAM COPY MODE (Low CPU)
+            // Assumes video is already h264/aac and scaled/padded correctly
+            command.add("-c:v");
+            command.add("copy");
 
-        // Input 2: Watermark
-        boolean hasWatermark = watermarkPath != null;
-        int wmIdx = (hasMusic || muteVideoAudio) ? 2 : 1;
-        if (hasWatermark) {
-            command.add("-i");
-            command.add(watermarkPath.toString());
-        }
+            // Audio: Re-encode to AAC to be safe against sample rate issues, but it's cheap
+            command.add("-c:a");
+            command.add("aac");
+            command.add("-b:a");
+            command.add("128k");
+            command.add("-ar");
+            command.add("44100");
 
-        // --- Filters ---
-        List<String> filterChains = new ArrayList<>();
-        String vLabel = "0:v";
-        String aLabel = "0:a";
-
-        // Dynamic Resolution Logic
-        String scaleFilter;
-        // Ensure max limit from Plan is respected (default 1080)
-        int safeMaxHeight = (maxHeight > 0) ? maxHeight : 1080;
-
-        if ("force_portrait".equals(streamMode)) {
-            // Deprecated logic path, but if forced:
-            int h = safeMaxHeight;
-            int w = (int) Math.round(h * (9.0 / 16.0));
-            if (w % 2 != 0) w++;
-            if (h % 2 != 0) h++;
-            scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, w, h);
         } else {
-            // "original" or "force_landscape"
-            // Use 'min(ih, maxHeight)' to avoid upscaling beyond plan, but respect original AR
-            // Ensure width/height are even (-2 logic handles width, but height needs even limit)
+            // RE-ENCODE MODE (High CPU)
 
-            // Example: scale=-2:'min(ih,1080)' -> but we must ensure height is even.
-            // ffmpeg expression: min(ih, H) -> then round.
-            // Better to use: scale=-2:min(ih\,maxHeight),pad=ceil(iw/2)*2:ceil(ih/2)*2
-            // Note: complex filter escaping.
-
-            scaleFilter = String.format("scale=-2:min(ih\\,%d),pad=ceil(iw/2)*2:ceil(ih/2)*2", safeMaxHeight);
-        }
-
-        filterChains.add("[0:v]" + scaleFilter + "[scaled]");
-        vLabel = "[scaled]";
-
-        if (hasWatermark) {
-            filterChains.add(String.format("[%d:v]scale=iw*0.15:-1[wm]", wmIdx));
-            filterChains.add(String.format("[%s][wm]overlay=main_w-overlay_w-20:20[vout]", vLabel));
-            vLabel = "[vout]";
-        }
-
-        // Audio Logic
-        if (hasMusic) {
-            if (muteVideoAudio) {
-                 // Video audio muted, just use music
-                filterChains.add(String.format("[1:a]volume=%s,aresample=44100[aout]", musicVolume));
-            } else {
-                // Mix: Ensure timestamps and sample rates align to avoid "Preparing" hangs
-                filterChains.add("[0:a]aresample=44100,asetpts=PTS-STARTPTS[a0]");
-                filterChains.add(String.format("[1:a]volume=%s,aresample=44100,asetpts=PTS-STARTPTS[a1]", musicVolume));
-                filterChains.add("[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]");
+            // Input 1: Audio (Music or Silence)
+            boolean hasMusic = musicPath != null;
+            if (hasMusic) {
+                command.add("-stream_loop");
+                command.add("-1");
+                command.add("-i");
+                command.add(musicPath.toString());
+            } else if (muteVideoAudio) {
+                command.add("-f");
+                command.add("lavfi");
+                command.add("-i");
+                command.add("anullsrc=channel_layout=stereo:sample_rate=44100");
             }
-            aLabel = "[aout]";
-        } else if (muteVideoAudio) {
-            // Silence
-            aLabel = "1:a";
+
+            // Input 2: Watermark
+            boolean hasWatermark = watermarkPath != null;
+            int wmIdx = (hasMusic || muteVideoAudio) ? 2 : 1;
+            if (hasWatermark) {
+                command.add("-i");
+                command.add(watermarkPath.toString());
+            }
+
+            // --- Filters ---
+            List<String> filterChains = new ArrayList<>();
+            String vLabel = "0:v";
+            String aLabel = "0:a";
+
+            // Dynamic Resolution Logic
+            String scaleFilter;
+            int safeMaxHeight = (maxHeight > 0) ? maxHeight : 1080;
+
+            if ("force_portrait".equals(streamMode)) {
+                int h = safeMaxHeight;
+                int w = (int) Math.round(h * (9.0 / 16.0));
+                if (w % 2 != 0) w++;
+                if (h % 2 != 0) h++;
+                scaleFilter = String.format("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, w, h);
+            } else {
+                scaleFilter = String.format("scale=-2:min(ih\\,%d),pad=ceil(iw/2)*2:ceil(ih/2)*2", safeMaxHeight);
+            }
+
+            filterChains.add("[0:v]" + scaleFilter + "[scaled]");
+            vLabel = "[scaled]";
+
+            if (hasWatermark) {
+                filterChains.add(String.format("[%d:v]scale=iw*0.15:-1[wm]", wmIdx));
+                filterChains.add(String.format("[%s][wm]overlay=main_w-overlay_w-20:20[vout]", vLabel));
+                vLabel = "[vout]";
+            }
+
+            // Audio Logic
+            if (hasMusic) {
+                if (muteVideoAudio) {
+                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100[aout]", musicVolume));
+                } else {
+                    filterChains.add("[0:a]aresample=44100,asetpts=PTS-STARTPTS[a0]");
+                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100,asetpts=PTS-STARTPTS[a1]", musicVolume));
+                    filterChains.add("[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]");
+                }
+                aLabel = "[aout]";
+            } else if (muteVideoAudio) {
+                aLabel = "1:a";
+            }
+
+            command.add("-filter_complex");
+            command.add(String.join(";", filterChains));
+
+            // --- Encoding ---
+            command.add("-map"); command.add(vLabel);
+            command.add("-c:v"); command.add("libx264");
+            command.add("-preset"); command.add("veryfast");
+
+            // Dynamic Bitrate Logic based on Max Height
+            String bitrate = "4500k";
+            String maxrate = "6000k";
+            String bufsize = "12000k";
+
+            if (safeMaxHeight >= 2160) {
+                bitrate = "15000k"; maxrate = "20000k"; bufsize = "40000k";
+            } else if (safeMaxHeight >= 1440) {
+                bitrate = "9000k"; maxrate = "12000k"; bufsize = "24000k";
+            }
+
+            command.add("-b:v"); command.add(bitrate);
+            command.add("-maxrate"); command.add(maxrate);
+            command.add("-bufsize"); command.add(bufsize);
+            command.add("-pix_fmt"); command.add("yuv420p");
+            command.add("-g"); command.add("60");
+            command.add("-keyint_min"); command.add("60");
+            command.add("-sc_threshold"); command.add("0");
+
+            // Map audio
+            if (aLabel.equals("0:a")) {
+                 command.add("-map"); command.add("0:a?");
+            } else {
+                 command.add("-map"); command.add(aLabel);
+            }
+
+            command.add("-c:a"); command.add("aac");
+            command.add("-b:a"); command.add("128k");
+            command.add("-ar"); command.add("44100");
         }
-
-        command.add("-filter_complex");
-        command.add(String.join(";", filterChains));
-
-        // --- Encoding ---
-        command.add("-map"); command.add(vLabel);
-        command.add("-c:v"); command.add("libx264");
-        command.add("-preset"); command.add("veryfast");
-
-        // Dynamic Bitrate Logic based on Max Height
-        // If max height is large (e.g. 2160/4k), we allow higher bitrate.
-        String bitrate = "4500k";
-        String maxrate = "6000k";
-        String bufsize = "12000k";
-
-        if (safeMaxHeight >= 2160) {
-            bitrate = "15000k"; maxrate = "20000k"; bufsize = "40000k";
-        } else if (safeMaxHeight >= 1440) {
-            bitrate = "9000k"; maxrate = "12000k"; bufsize = "24000k";
-        }
-
-        command.add("-b:v"); command.add(bitrate);
-        command.add("-maxrate"); command.add(maxrate);
-        command.add("-bufsize"); command.add(bufsize);
-        command.add("-pix_fmt"); command.add("yuv420p");
-        command.add("-g"); command.add("60");
-
-        // Map audio
-        if (aLabel.equals("0:a")) {
-             command.add("-map"); command.add("0:a?");
-        } else {
-             command.add("-map"); command.add(aLabel);
-        }
-
-        command.add("-c:a"); command.add("aac");
-        command.add("-b:a"); command.add("128k");
-        command.add("-ar"); command.add("44100");
 
         command.add("-shortest");
 

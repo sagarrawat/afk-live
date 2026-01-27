@@ -59,13 +59,50 @@ document.addEventListener('alpine:init', () => {
             try {
                 const res = await apiFetch('/api/library');
                 const data = await res.json();
-                this.libraryVideos = data.data || [];
+                this.libraryVideos = (data.data || []).map(v => ({...v, progress: 0}));
                 this.libTotal = this.libraryVideos.length;
+
+                // Check if any need polling
+                if (this.libraryVideos.some(v => v.optimizationStatus === 'IN_PROGRESS')) {
+                    this.pollOptimizationProgress();
+                }
             } catch(e) {
                 console.error(e);
             } finally {
                 this.isLoadingLibrary = false;
             }
+        },
+
+        optPollInterval: null,
+
+        pollOptimizationProgress() {
+            if (this.optPollInterval) clearInterval(this.optPollInterval);
+
+            this.optPollInterval = setInterval(async () => {
+                let activeCount = 0;
+
+                for (let i = 0; i < this.libraryVideos.length; i++) {
+                    const v = this.libraryVideos[i];
+                    if (v.optimizationStatus === 'IN_PROGRESS') {
+                        activeCount++;
+                        try {
+                            const res = await apiFetch(`/api/convert/status?fileName=${encodeURIComponent(v.title)}`);
+                            const progress = await res.json(); // returns integer 0-100
+
+                            // Update reactive array item
+                            this.libraryVideos[i].progress = progress;
+
+                            // If complete, maybe reload to get final status or just wait
+                            if (progress >= 100) {
+                                // Reload library after short delay to sync status
+                                setTimeout(() => this.loadLibrary(), 2000);
+                            }
+                        } catch(e) {}
+                    }
+                }
+
+                if (activeCount === 0) clearInterval(this.optPollInterval);
+            }, 2000);
         },
 
         toggleSelection(video) {

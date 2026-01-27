@@ -147,19 +147,20 @@ document.addEventListener('alpine:init', () => {
             const formData = new FormData();
             formData.append("files", file);
 
-            showToast("Uploading video...", "info");
-            this.isLoadingLibrary = true;
+            window.showLoader("Uploading video...");
 
             apiFetch('/api/library/upload', { method: "POST", body: formData })
                 .then(async res => {
                     if(res.ok) {
                         showToast("Video uploaded!", "success");
                         await this.loadLibraryVideos(); // Reload list
-                        // Optionally select it automatically if we can find it
                     } else showToast("Upload failed", "error");
                 })
                 .catch(() => showToast("Upload error", "error"))
-                .finally(() => this.isLoadingLibrary = false);
+                .finally(() => {
+                    window.hideLoader();
+                    e.target.value = '';
+                });
         },
 
         handleMusicUpload(e) {
@@ -182,16 +183,24 @@ document.addEventListener('alpine:init', () => {
         },
 
         // --- DESTINATIONS ---
-        loadDestinations() {
-            const saved = localStorage.getItem('afk_destinations');
-            if(saved) this.destinations = JSON.parse(saved);
+        async loadDestinations() {
+            try {
+                const res = await apiFetch('/api/destinations');
+                this.destinations = await res.json();
+            } catch(e) { this.destinations = []; }
         },
 
-        toggleDest(id) {
+        async toggleDest(id) {
             const d = this.destinations.find(x => x.id === id);
             if(d) {
                 d.selected = !d.selected;
-                localStorage.setItem('afk_destinations', JSON.stringify(this.destinations));
+                try {
+                    await apiFetch(`/api/destinations/${id}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({selected: d.selected})
+                    });
+                } catch(e) {}
             }
         },
 
@@ -276,7 +285,7 @@ document.addEventListener('alpine:init', () => {
                 const data = await res.json();
                 if(data.success) {
                     showToast("Stream Started! 🚀", "success");
-                    this.isLive = true;
+                    this.switchTab('streams');
                     this.checkStatus();
                 } else {
                     showToast(data.message || "Failed to start", "error");
@@ -333,6 +342,26 @@ document.addEventListener('alpine:init', () => {
         startStatusPoll() {
             setInterval(() => this.checkStatus(), 5000);
             this.checkStatus();
+            // Local ticker for duration
+            setInterval(() => this.updateTimers(), 1000);
+        },
+
+        now: Date.now(),
+        updateTimers() {
+            this.now = Date.now();
+        },
+
+        getStreamDuration(startTime) {
+            if(!startTime) return 'Starting...';
+            const start = new Date(startTime).getTime();
+            const diff = Math.max(0, this.now - start);
+
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+
+            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+            return `${minutes}m ${seconds}s`;
         },
 
         async checkStatus() {

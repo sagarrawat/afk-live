@@ -338,20 +338,40 @@ public class YouTubeService {
         LiveBroadcast broadcast = broadcasts.getFirst();
 
         LiveBroadcastSnippet snippet = broadcast.getSnippet();
-        if (title != null && !title.isEmpty()) snippet.setTitle(title);
-        if (description != null && !description.isEmpty()) snippet.setDescription(description);
+        boolean updateSnippet = false;
+        if (title != null && !title.isEmpty()) {
+            snippet.setTitle(title);
+            updateSnippet = true;
+        }
+        if (description != null && !description.isEmpty()) {
+            snippet.setDescription(description);
+            updateSnippet = true;
+        }
 
         LiveBroadcastStatus status = broadcast.getStatus();
+        boolean updateStatus = false;
         if (privacyStatus != null && !privacyStatus.isEmpty()) {
+            // YouTube API requires 'privacyStatus' to be set in 'status' part
             status.setPrivacyStatus(privacyStatus);
+            updateStatus = true;
         }
 
         LiveBroadcast update = new LiveBroadcast();
         update.setId(broadcast.getId());
-        update.setSnippet(snippet);
-        update.setStatus(status);
 
-        youtube.liveBroadcasts().update(Collections.singletonList("snippet,status"), update).execute();
-        log.info("Updated broadcast metadata for broadcast ID: {}", broadcast.getId());
+        String parts = "";
+        if (updateSnippet) {
+            update.setSnippet(snippet);
+            parts += "snippet";
+        }
+        if (updateStatus) {
+            update.setStatus(status);
+            parts += (parts.isEmpty() ? "" : ",") + "status";
+        }
+
+        if (!parts.isEmpty()) {
+            youtube.liveBroadcasts().update(Collections.singletonList(parts), update).execute();
+            log.info("Updated broadcast metadata for broadcast ID: {}", broadcast.getId());
+        }
     }
 }

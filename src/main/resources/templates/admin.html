@@ -1,49 +1,208 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <title>Admin - AFK Live</title>
+    <title>Admin Dashboard - AFK Live</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/theme.css">
-    <style>
-        body { padding: 40px; background: #f4f5f7; }
-        .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        .user-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .user-table th, .user-table td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
-        .user-table th { background: #f9f9f9; font-weight: 600; color: #555; }
-    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2c68f6',
+                        'primary-dark': '#1b53d6',
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
+<body class="bg-gray-50 text-gray-900 font-sans" x-data="{ activeTab: 'overview' }">
 
-<div class="admin-header">
-    <h1>Admin Dashboard</h1>
-    <a href="/studio" class="btn btn-outline">Back to Studio</a>
-</div>
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-8 z-10 sticky top-0">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">🔴</span>
+                <h1 class="font-bold text-xl tracking-tight">Admin Console</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="/studio" class="text-sm font-medium text-gray-600 hover:text-primary transition">Back to App</a>
+                <form action="/logout" method="post">
+                    <button type="submit" class="text-sm font-medium text-red-600 hover:text-red-700">Logout</button>
+                </form>
+            </div>
+        </header>
 
-<div class="card">
-    <h2>Users</h2>
-    <table class="user-table">
-        <thead>
-            <tr>
-                <th>Username</th>
-                <th>Name</th>
-                <th>Plan</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Storage Used</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr th:each="user : ${users}">
-                <td th:text="${user.username}">user@example.com</td>
-                <td th:text="${user.fullName}">John Doe</td>
-                <td><span class="badge" th:text="${user.planType}">FREE</span></td>
-                <td th:text="${user.role}">ROLE_USER</td>
-                <td th:text="${user.enabled ? 'Active' : 'Disabled'}">Active</td>
-                <td th:text="${user.usedStorageBytes / 1024 / 1024 + ' MB'}">0 MB</td>
-            </tr>
-        </tbody>
-    </table>
-</div>
+        <div class="flex flex-1">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-white border-r border-gray-200 p-6 flex flex-col gap-1">
+                <button @click="activeTab = 'overview'"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
+                    :class="activeTab === 'overview' ? 'bg-blue-50 text-primary' : 'text-gray-600 hover:bg-gray-50'">
+                    <i class="fa-solid fa-chart-pie w-5 text-center"></i> Overview
+                </button>
+                <button @click="activeTab = 'streams'"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
+                    :class="activeTab === 'streams' ? 'bg-blue-50 text-primary' : 'text-gray-600 hover:bg-gray-50'">
+                    <i class="fa-solid fa-satellite-dish w-5 text-center"></i> Active Streams
+                </button>
+                <button @click="activeTab = 'users'"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
+                    :class="activeTab === 'users' ? 'bg-blue-50 text-primary' : 'text-gray-600 hover:bg-gray-50'">
+                    <i class="fa-solid fa-users w-5 text-center"></i> Users
+                </button>
+            </aside>
 
+            <!-- Content -->
+            <main class="flex-1 p-8 overflow-y-auto">
+
+                <!-- OVERVIEW -->
+                <div x-show="activeTab === 'overview'" class="space-y-8 animate-fade-in">
+                    <h2 class="text-2xl font-bold">System Overview</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Card 1 -->
+                        <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-500 uppercase">Total Users</p>
+                                    <h3 class="text-3xl font-bold mt-1" th:text="${stats.totalUsers}">0</h3>
+                                </div>
+                                <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                                    <i class="fa-solid fa-users text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2 -->
+                        <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-500 uppercase">Active Streams</p>
+                                    <h3 class="text-3xl font-bold mt-1" th:text="${stats.activeStreams}">0</h3>
+                                </div>
+                                <div class="p-3 bg-red-50 text-red-600 rounded-xl">
+                                    <i class="fa-solid fa-video text-xl animate-pulse"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3 -->
+                        <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-500 uppercase">Storage Used</p>
+                                    <h3 class="text-3xl font-bold mt-1" th:text="${stats.formattedStorage}">0 GB</h3>
+                                </div>
+                                <div class="p-3 bg-purple-50 text-purple-600 rounded-xl">
+                                    <i class="fa-solid fa-hard-drive text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACTIVE STREAMS -->
+                <div x-show="activeTab === 'streams'" class="space-y-6 animate-fade-in" style="display:none;">
+                    <h2 class="text-2xl font-bold">Active Streams</h2>
+
+                    <div th:if="${activeStreamList.empty}" class="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
+                        <p class="text-gray-500">No active streams at the moment.</p>
+                    </div>
+
+                    <div th:unless="${activeStreamList.empty}" class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">User</th>
+                                    <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Title</th>
+                                    <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Started</th>
+                                    <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">PID</th>
+                                    <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <tr th:each="stream : ${activeStreamList}" class="hover:bg-gray-50 transition">
+                                    <td class="px-6 py-4 text-sm font-medium text-gray-900" th:text="${stream.username}">user</td>
+                                    <td class="px-6 py-4 text-sm text-gray-600" th:text="${stream.title}">Title</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500" th:text="${#temporals.format(stream.startTime, 'HH:mm:ss')}">10:00</td>
+                                    <td class="px-6 py-4 text-sm font-mono text-gray-400" th:text="${stream.pid}">1234</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <form th:action="@{/admin/streams/{id}/stop(id=${stream.id})}" method="post" onsubmit="return confirm('Force stop this stream?');">
+                                            <button type="submit" class="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition">
+                                                Force Stop
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- USERS -->
+                <div x-show="activeTab === 'users'" class="space-y-6 animate-fade-in" style="display:none;">
+                    <h2 class="text-2xl font-bold">User Management</h2>
+
+                    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="bg-gray-50 border-b border-gray-200">
+                                    <tr>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Username</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Plan</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Role</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Storage</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <tr th:each="user : ${users}" class="hover:bg-gray-50 transition">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-3">
+                                                <img th:src="${user.pictureUrl}" class="w-8 h-8 rounded-full bg-gray-200 object-cover">
+                                                <div>
+                                                    <div class="text-sm font-medium text-gray-900" th:text="${user.fullName}">Name</div>
+                                                    <div class="text-xs text-gray-500" th:text="${user.username}">email</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800" th:text="${user.planType}">
+                                                FREE
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-gray-500" th:text="${user.role}">USER</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500 font-mono" th:text="${user.usedStorageBytes / 1024 / 1024 + ' MB'}">0 MB</td>
+                                        <td class="px-6 py-4">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                  th:classappend="${user.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}"
+                                                  th:text="${user.enabled ? 'Active' : 'Disabled'}">
+                                                Active
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // Simple fade animation
+        document.addEventListener('alpine:init', () => {
+            // Nothing extra needed yet
+        });
+    </script>
 </body>
 </html>

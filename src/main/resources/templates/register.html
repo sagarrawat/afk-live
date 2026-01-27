@@ -6,60 +6,105 @@
     <title>Sign Up - AFK Live</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; background: #f9fafb; }
-    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'buffer-navy': '#091e42',
+                        'buffer-blue': '#2c68f6',
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50">
+<body class="h-screen flex overflow-hidden bg-white font-sans text-gray-900">
 
-    <div class="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden border border-white/50 relative">
-        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-600"></div>
-
-        <div class="p-8 text-center pt-12">
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">Create Account</h1>
-            <p class="text-gray-500 text-sm">Start streaming in minutes.</p>
+    <!-- LEFT COLUMN (Branding) -->
+    <div class="hidden lg:flex w-5/12 flex-col justify-between bg-buffer-navy p-12 text-white relative overflow-hidden">
+        <!-- Logo -->
+        <div class="z-10 flex items-center gap-3">
+            <span class="text-3xl">🔴</span>
+            <span class="text-2xl font-bold tracking-tight">AFK Live</span>
         </div>
 
-        <div class="px-8 pb-8 space-y-6">
-            <a href="/oauth2/authorization/google" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 rounded-xl transition shadow-sm">
+        <!-- Content -->
+        <div class="z-10 max-w-md">
+            <h2 class="text-4xl font-bold mb-6 leading-tight">Start streaming in minutes.</h2>
+            <p class="text-lg text-gray-300 leading-relaxed">
+                Join thousands of creators automating their content.
+                No credit card required.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="z-10 text-sm text-gray-400">
+            &copy; 2024 AFK Live Inc.
+        </div>
+
+        <!-- Background Decor -->
+        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-blue-600 rounded-full blur-3xl opacity-20"></div>
+        <div class="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-purple-600 rounded-full blur-3xl opacity-20"></div>
+    </div>
+
+    <!-- RIGHT COLUMN (Form) -->
+    <div class="flex-1 flex flex-col justify-center items-center p-8 lg:p-12 overflow-y-auto">
+        <div class="w-full max-w-md space-y-8">
+
+            <div class="text-center">
+                <div class="lg:hidden inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-50 text-blue-600 mb-6">
+                    <span class="text-2xl">🔴</span>
+                </div>
+                <h2 class="text-3xl font-bold text-gray-900">Create your account</h2>
+                <p class="mt-2 text-gray-500">Get started with your free 14-day trial.</p>
+            </div>
+
+            <!-- OAuth -->
+            <a href="/oauth2/authorization/google" class="flex items-center justify-center gap-3 w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 px-4 rounded-lg transition shadow-sm">
                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-5 h-5" alt="Google">
-                Sign up with Google
+                <span>Sign up with Google</span>
             </a>
 
-            <div class="relative flex py-1 items-center">
+            <div class="relative flex py-2 items-center">
                 <div class="flex-grow border-t border-gray-200"></div>
-                <span class="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase font-medium tracking-wider">Or</span>
+                <span class="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase font-semibold tracking-wider">Or with email</span>
                 <div class="flex-grow border-t border-gray-200"></div>
             </div>
 
-            <form action="/register" method="post" class="space-y-4">
-                 <div th:if="${error}" class="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg text-center">
+            <!-- Form -->
+            <form action="/register" method="post" class="space-y-6">
+                <!-- Alerts -->
+                <div th:if="${error}" class="bg-red-50 border border-red-100 text-red-600 text-sm p-4 rounded-lg flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <span th:text="${error}"></span>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1.5 ml-1">Full Name</label>
-                    <input type="text" name="name" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="John Doe">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input type="text" name="name" required class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder-gray-400" placeholder="e.g. John Doe">
                 </div>
 
                 <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1.5 ml-1">Email Address</label>
-                    <input type="email" name="email" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="you@example.com">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" name="email" required class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder-gray-400" placeholder="Enter your email">
                 </div>
 
                 <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1.5 ml-1">Password</label>
-                    <input type="password" name="password" required class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="••••••••">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" name="password" required class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder-gray-400" placeholder="Create a password">
                 </div>
 
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/20 transition transform active:scale-[0.98] mt-2">
-                    Create Account
+                <button type="submit" class="w-full bg-buffer-blue hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition transform active:scale-[0.99]">
+                    Get Started
                 </button>
             </form>
-        </div>
 
-        <div class="bg-gray-50 p-6 text-center text-sm text-gray-500 border-t border-gray-100">
-            Already have an account? <a href="/login" class="text-blue-600 font-semibold hover:underline">Log in</a>
+            <p class="text-center text-sm text-gray-600">
+                Already have an account?
+                <a href="/login" class="font-semibold text-blue-600 hover:text-blue-700">Log in</a>
+            </p>
         </div>
     </div>
 
