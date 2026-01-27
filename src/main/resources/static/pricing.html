@@ -73,6 +73,11 @@
             <!-- Loaded via JS -->
             <div style="grid-column: 1/-1; text-align: center;">Loading...</div>
         </div>
+
+        <div style="margin-top: 50px; text-align: center;">
+            <p style="color:#666; margin-bottom:10px;">Developer Sandbox</p>
+            <button class="btn btn-outline" id="btnTestPayment" onclick="initiateTestPayment()">Test Payment (₹1.00)</button>
+        </div>
     </div>
 </div>
 
@@ -264,6 +269,44 @@
 
     // Init
     loadPricing('US');
+
+    async function initiateTestPayment() {
+        const btn = document.getElementById('btnTestPayment');
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = 'Processing...';
+
+        try {
+            const res = await fetch('/api/payment/initiate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: 100 })
+            });
+            const data = await res.json();
+
+            if (res.ok && data.redirectUrl) {
+                window.location.href = data.redirectUrl;
+            } else {
+                // If toast.js is available
+                if (typeof showToast === 'function') {
+                    showToast(data.message || 'Payment initiation failed', 'error');
+                } else {
+                    alert(data.message || 'Payment initiation failed');
+                }
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        } catch (e) {
+            console.error(e);
+            if (typeof showToast === 'function') {
+                showToast('Network error', 'error');
+            } else {
+                alert('Network error');
+            }
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    }
 </script>
 
 </body>
