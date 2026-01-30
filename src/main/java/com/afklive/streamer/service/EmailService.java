@@ -74,7 +74,7 @@ public class EmailService {
             MimeMessage message = emailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom("noreply@afklive.com");
+            helper.setFrom("no-reply@afklive.in");
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(htmlContent, true); // true = html

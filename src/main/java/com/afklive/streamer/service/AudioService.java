@@ -39,7 +39,7 @@ public class AudioService {
             Map.of(
                 "id", "trending_1",
                 "type", "TRENDING",
-                "title", "Viral Song 2024",
+                "title", "Viral Song 2026",
                 "artist", "Famous Artist",
                 "cover", "https://ui-avatars.com/api/?name=VS&background=FF0000&color=fff",
                 "ytUrl", "https://www.youtube.com/shorts/audio/1A2B3C4D"
