@@ -39,7 +39,9 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
                     .endpointOverride(URI.create(endpoint))
                     .region(Region.of(region))
                     .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(key, secret)))
-                    .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                    .serviceConfiguration(S3Configuration.builder()
+                            .checksumValidationEnabled(false)
+                            .pathStyleAccessEnabled(true).build())
                     .build();
         } else {
             // Fallback or initialization for test environment where env vars might be missing
