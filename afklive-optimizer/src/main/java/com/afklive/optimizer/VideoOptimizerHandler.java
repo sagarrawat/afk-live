@@ -39,7 +39,10 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
                     .endpointOverride(URI.create(endpoint))
                     .region(Region.of(region))
                     .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(key, secret)))
-                    .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                    .serviceConfiguration(S3Configuration.builder()
+                            .pathStyleAccessEnabled(true)
+                            .checksumValidationEnabled(false) // Disable checksum validation for DO Spaces compatibility
+                            .build())
                     .build();
         } else {
             // Fallback or initialization for test environment where env vars might be missing
@@ -101,7 +104,9 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
         } catch (Exception e) {
             context.getLogger().log("Error: " + e.getMessage());
             e.printStackTrace();
-            return String.format("{\"status\": \"error\", \"message\": \"%s\"}", e.getMessage());
+            // Return valid JSON string for error case
+            String safeMessage = e.getMessage() != null ? e.getMessage().replace("\"", "'") : "Unknown error";
+            return String.format("{\"status\": \"error\", \"message\": \"%s\"}", safeMessage);
         } finally {
             if (localInput != null && localInput.exists()) localInput.delete();
             if (localOutput != null && localOutput.exists()) localOutput.delete();
