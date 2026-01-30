@@ -46,7 +46,7 @@ public class VideoConversionService {
             ScheduledVideoRepository repository,
             @Value("${app.aws.access-key:}") String awsAccessKey,
             @Value("${app.aws.secret-key:}") String awsSecretKey,
-            @Value("${app.aws.region:}") String awsRegion,
+            @Value("${app.aws.region:us-east-1}") String awsRegion,
             @Value("${app.aws.function-name:}") String lambdaFunctionName) {
         this.storageService = storageService;
         this.userService = userService;
