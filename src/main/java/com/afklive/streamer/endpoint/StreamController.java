@@ -241,7 +241,19 @@ public class StreamController {
                 targetCredentialId = username;
             }
 
-            String key = youTubeService.getStreamKey(targetCredentialId);
+            String key;
+            try {
+                key = youTubeService.getStreamKey(targetCredentialId);
+            } catch (Exception e) {
+                // If the target credential ID (e.g., Google Sub ID) fails, it might be because
+                // tokens are stored under the user's email. Retry with the email to trigger
+                // YouTubeService's fallback logic.
+                if (!targetCredentialId.equals(username)) {
+                    key = youTubeService.getStreamKey(username);
+                } else {
+                    throw e;
+                }
+            }
 
             // If name wasn't resolved from DB, try fetching or default
             if (channelName == null) {
