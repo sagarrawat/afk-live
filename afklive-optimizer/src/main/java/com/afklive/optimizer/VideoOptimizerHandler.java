@@ -5,6 +5,7 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
@@ -13,6 +14,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -83,8 +85,12 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
             localInput = File.createTempFile("source_", ".mp4");
             localOutput = File.createTempFile("target_", ".mp4");
 
-            context.getLogger().log("Downloading: " + sourceKey);
-            s3.getObject(GetObjectRequest.builder().bucket(bucketName).key(sourceKey).build(), localInput.toPath());
+            context.getLogger().log("Downloading: " + sourceKey + " to " + localInput.getAbsolutePath());
+
+            try (FileOutputStream fos = new FileOutputStream(localInput)) {
+                s3.getObject(GetObjectRequest.builder().bucket(bucketName).key(sourceKey).build(),
+                        ResponseTransformer.toOutputStream(fos));
+            }
 
             context.getLogger().log("Optimizing " + simpleName + " to " + targetTitle + " (" + mode + ", " + height + "p)");
 

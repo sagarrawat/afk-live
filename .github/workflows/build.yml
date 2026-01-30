@@ -3,9 +3,6 @@ name: Java CI & CD
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'afklive-web/**'
-      - 'pom.xml'
   workflow_dispatch:
 
 jobs:

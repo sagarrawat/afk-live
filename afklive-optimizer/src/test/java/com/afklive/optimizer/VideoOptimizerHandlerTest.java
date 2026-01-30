@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -70,7 +71,7 @@ public class VideoOptimizerHandlerTest {
         assertTrue(result.contains("\"file_size\": 19")); // length of "dummy video content"
 
         // Verify interactions
-        verify(s3Client).getObject(any(GetObjectRequest.class), any(Path.class));
+        verify(s3Client).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
         verify(s3Client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
         verify(handler).executeCommand(anyList(), any(File.class));
     }
@@ -92,7 +93,7 @@ public class VideoOptimizerHandlerTest {
         assertTrue(result.contains("FFmpeg failed"));
 
         // Verify interactions
-        verify(s3Client).getObject(any(GetObjectRequest.class), any(Path.class));
+        verify(s3Client).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
         // PutObject should NOT be called
         verify(s3Client, never()).putObject(any(PutObjectRequest.class), any(RequestBody.class));
     }
