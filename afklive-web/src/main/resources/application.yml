@@ -76,6 +76,10 @@ app:
     bucket: ${DO_SPACES_BUCKET}
     access-key: ${DO_SPACES_KEY}
     secret-key: ${DO_SPACES_SECRET}
-
+  aws:
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key: ${AWS_SECRET_ACCESS_KEY}
+    region: eu-north-1
+    function-name: afklive-optimizer-lambda
 server:
   forward-headers-strategy: native
