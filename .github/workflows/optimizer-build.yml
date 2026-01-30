@@ -1,4 +1,4 @@
-name: Java CI & CD
+name: Afklive-optimizer CI & CD
 
 on:
   push:
