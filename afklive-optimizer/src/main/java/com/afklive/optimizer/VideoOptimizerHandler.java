@@ -4,14 +4,21 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.file.Files;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class VideoOptimizerHandler implements RequestHandler<Map<String, String>, String> {
 
@@ -33,34 +40,65 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
 
     @Override
     public String handleRequest(Map<String, String> event, Context context) {
-        String fileName = event.get("file_name");
-        String outputName = "optimized_" + fileName;
-        File localInput = new File("/tmp/" + fileName);
-        File localOutput = new File("/tmp/" + outputName);
+        String sourceKey = event.get("file_name");
+        String mode = event.getOrDefault("mode", "landscape");
+        String heightStr = event.getOrDefault("height", "1080");
+        int height = Integer.parseInt(heightStr);
+        String username = event.getOrDefault("username", "unknown");
+
+        String simpleName = new File(sourceKey).getName();
+        String baseTitle = simpleName.lastIndexOf('.') > 0 ? simpleName.substring(0, simpleName.lastIndexOf('.')) : simpleName;
+        String targetSuffix = String.format("_%s_%dp", mode, height);
+        String targetTitle = baseTitle + targetSuffix + ".mp4";
+
+        String outputKey = UUID.randomUUID().toString() + "_" + targetTitle;
+
+        File localInput = null;
+        File localOutput = null;
 
         try {
-            context.getLogger().log("Downloading: " + fileName);
-            s3.getObject(GetObjectRequest.builder().bucket(BUCKET_NAME).key(fileName).build(), localInput.toPath());
+            localInput = File.createTempFile("source_", ".mp4");
+            localOutput = File.createTempFile("target_", ".mp4");
 
-            context.getLogger().log("Optimizing with FFmpeg...");
-            ProcessBuilder pb = new ProcessBuilder(
-                    "/opt/bin/ffmpeg", "-y", "-i", localInput.getAbsolutePath(),
-                    "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", localOutput.getAbsolutePath()
-            );
+            context.getLogger().log("Downloading: " + sourceKey);
+            s3.getObject(GetObjectRequest.builder().bucket(BUCKET_NAME).key(sourceKey).build(), localInput.toPath());
+
+            context.getLogger().log("Optimizing " + simpleName + " to " + targetTitle + " (" + mode + ", " + height + "p)");
+
+            List<String> command = FFmpegCommandBuilder.buildOptimizeCommand(localInput.toPath(), localOutput.toPath(), mode, height);
+
+            ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
-            Process p = pb.start();
-            if (p.waitFor() != 0) throw new RuntimeException("FFmpeg failed");
+            Process process = pb.start();
 
-            context.getLogger().log("Uploading: " + outputName);
-            s3.putObject(PutObjectRequest.builder().bucket(BUCKET_NAME).key(outputName).build(), localOutput.toPath());
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(line);
+                }
+            }
 
-            return "Success: " + outputName;
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new RuntimeException("FFmpeg failed with code " + exitCode);
+            }
+
+            long fileSize = Files.size(localOutput.toPath());
+            context.getLogger().log("Uploading: " + outputKey + " (" + fileSize + " bytes)");
+
+            s3.putObject(PutObjectRequest.builder().bucket(BUCKET_NAME).key(outputKey).build(),
+                    RequestBody.fromFile(localOutput));
+
+            return String.format("{\"status\": \"success\", \"original_key\": \"%s\", \"optimized_key\": \"%s\", \"file_size\": %d}",
+                    sourceKey, outputKey, fileSize);
+
         } catch (Exception e) {
             context.getLogger().log("Error: " + e.getMessage());
-            return "Error: " + e.getMessage();
+            e.printStackTrace();
+            return String.format("{\"status\": \"error\", \"message\": \"%s\"}", e.getMessage());
         } finally {
-            if (localInput.exists()) localInput.delete();
-            if (localOutput.exists()) localOutput.delete();
+            if (localInput != null && localInput.exists()) localInput.delete();
+            if (localOutput != null && localOutput.exists()) localOutput.delete();
         }
     }
 }
