@@ -49,7 +49,7 @@
         </div>
 
         <div class="menu">
-            <a href="#" class="menu-item active" data-target="view-publish" onclick="switchView('publish')">
+            <a href="#" class="menu-item" data-target="view-publish" onclick="switchView('publish')">
                 <i class="fa-regular fa-paper-plane"></i>
                 <span>Queue</span>
             </a>
@@ -58,7 +58,7 @@
                 <span>Calendar</span>
             </a>
             <div class="menu-divider"></div>
-            <a href="#" class="menu-item" data-target="view-stream" onclick="switchView('stream')">
+            <a href="#" class="menu-item active" data-target="view-stream" onclick="switchView('stream')">
                 <i class="fa-solid fa-satellite-dish"></i>
                 <span>Live Studio</span>
             </a>
@@ -183,7 +183,7 @@
         </div>
 
         <!-- VIEW: STREAM (Alpine & Tailwind - Apple Style) -->
-        <div id="view-stream" class="view-section hidden h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
+        <div id="view-stream" class="view-section h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
             <div class="flex flex-col lg:flex-row h-full w-full">
 
                 <!-- LEFT: STAGE -->
@@ -369,14 +369,14 @@
                                             <label class="block text-xs font-medium text-gray-700">Title</label>
                                             <button id="ai-btn-title" @click="generateMetadata('title')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
                                         </div>
-                                        <input type="text" x-model="streamTitle" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Stream Title">
+                                        <input type="text" maxlength="100" x-model="streamTitle" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Stream Title">
                                     </div>
                                     <div>
                                         <div class="flex justify-between mb-1">
                                             <label class="block text-xs font-medium text-gray-700">Description</label>
                                             <button id="ai-btn-desc" @click="generateMetadata('desc')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
                                         </div>
-                                        <textarea x-model="streamDescription" rows="3" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Description"></textarea>
+                                        <textarea maxlength="5000" x-model="streamDescription" rows="3" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Description"></textarea>
                                     </div>
                                     <div class="grid grid-cols-2 gap-3">
                                         <div>
@@ -417,6 +417,7 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <h4 class="font-semibold text-sm text-gray-900 truncate" x-text="stream.title || 'Live Stream'"></h4>
+                                            <div class="text-[10px] text-blue-600 font-medium truncate" x-show="stream.destinationName" x-text="stream.destinationName"></div>
                                             <p class="text-xs text-gray-500 mt-0.5" x-text="getStreamDuration(stream.startTime)"></p>
                                             <div class="mt-3 flex items-center gap-2">
                                                 <button @click="stopStream(stream.id)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition flex items-center gap-1">

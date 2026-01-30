@@ -22,7 +22,7 @@ public class AiService {
 
     public String generateTitle(String context) {
         if (isAiEnabled()) {
-            return callGemini("Generate a catchy, viral YouTube video title about: " + context);
+            return callGemini("Generate exactly ONE catchy, viral YouTube video title about: " + context + ". Do not include any other text, quotes, or explanations.");
         }
         String[] templates = {
             "Amazing Video about " + context,
@@ -36,7 +36,7 @@ public class AiService {
 
     public String generateDescription(String title) {
         if (isAiEnabled()) {
-            return callGemini("Write a YouTube video description for a video titled: " + title);
+            return callGemini("Write a YouTube video description for a video titled: " + title + ". Do not include any other text.");
         }
         return "In this video, we dive deep into " + title + ". \n\n" +
                "Make sure to like and subscribe for more content about this topic! \n" +
