@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     checkYoutubeStatus();
     loadUserChannels();
     loadScheduledQueue();
+    switchView('stream');
 
     // Event Listeners
     setupEventListeners();

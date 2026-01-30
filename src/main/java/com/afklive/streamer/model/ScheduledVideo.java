@@ -11,8 +11,13 @@ public class ScheduledVideo {
     private Long id;
 
     private String username;
+
+    @Column(length = 255) // Still VARCHAR(255) for DB, validation handles 100
     private String title;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
     private String tags;
     private String privacyStatus;
     private String categoryId;

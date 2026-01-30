@@ -49,6 +49,8 @@ public class StreamService {
     private ScheduledVideoRepository scheduledVideoRepository;
     @Autowired
     private YouTubeService youTubeService;
+    @Autowired
+    private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepo;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -94,6 +96,14 @@ public class StreamService {
         // if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
         //    throw new IllegalStateException("You already have an active stream running!");
         // }
+
+        // Validation
+        if (title != null && title.length() > 100) {
+            throw new IllegalArgumentException("Title must be 100 characters or less.");
+        }
+        if (description != null && description.length() > 5000) {
+            throw new IllegalArgumentException("Description must be 5000 characters or less.");
+        }
 
         // 0. UPDATE METADATA (Optional)
         // If title/desc provided, try to update YouTube broadcast
@@ -254,6 +264,18 @@ public class StreamService {
                 }
             });
 
+            // Resolve Destination Name
+            String destName = "Unknown Destination";
+            try {
+                com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+                Optional<com.afklive.streamer.model.StreamDestination> destOpt = streamDestinationRepo.findByStreamKeyAndUser(key, user);
+                if (destOpt.isPresent()) {
+                    destName = destOpt.get().getName();
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve destination name for key: {}", key);
+            }
+
             // 5. SAVE STATE TO DATABASE
             StreamJob job = new StreamJob(
                     username,
@@ -266,7 +288,8 @@ public class StreamService {
                     title,
                     description,
                     privacy,
-                    java.time.LocalDateTime.now()
+                    java.time.LocalDateTime.now(),
+                    destName
             );
             job = streamJobRepo.save(job);
             final Long jobId = job.getId();

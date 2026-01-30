@@ -1,9 +1,6 @@
 package com.afklive.streamer.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -25,9 +22,15 @@ public class StreamJob {
     private String musicName;
     private String musicVolume;
 
+    private String destinationName;
+
     // Metadata
+    @Column(columnDefinition = "TEXT")
     private String title;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
     private String privacy;
     private java.time.LocalDateTime startTime;
 
@@ -42,7 +45,8 @@ public class StreamJob {
             String title,
             String description,
             String privacy,
-            java.time.LocalDateTime startTime
+            java.time.LocalDateTime startTime,
+            String destinationName
     ) {
         this.username = username;
         this.streamKey = streamKey;
@@ -54,6 +58,8 @@ public class StreamJob {
         this.title = title;
         this.description = description;
         this.privacy = privacy;
+        this.startTime = startTime;
+        this.destinationName = destinationName;
     }
 
 }
