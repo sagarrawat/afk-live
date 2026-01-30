@@ -13,6 +13,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.file.Files;
@@ -22,28 +23,43 @@ import java.util.UUID;
 
 public class VideoOptimizerHandler implements RequestHandler<Map<String, String>, String> {
 
-    // Using afklive-web configuration style (DO_SPACES_*)
-    private static final String DO_SPACES_ENDPOINT = System.getenv("DO_SPACES_ENDPOINT");
-    private static final String DO_SPACES_REGION = System.getenv("DO_SPACES_REGION");
-    private static final String DO_SPACES_KEY = System.getenv("DO_SPACES_KEY");
-    private static final String DO_SPACES_SECRET = System.getenv("DO_SPACES_SECRET");
-    private static final String DO_SPACES_BUCKET = System.getenv("DO_SPACES_BUCKET");
-
     private final S3Client s3;
     private final String bucketName;
 
+    // Default constructor for AWS Lambda
     public VideoOptimizerHandler() {
-        this.bucketName = DO_SPACES_BUCKET;
-        this.s3 = S3Client.builder()
-                .endpointOverride(URI.create(DO_SPACES_ENDPOINT))
-                .region(Region.of(DO_SPACES_REGION))
-                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(DO_SPACES_KEY, DO_SPACES_SECRET)))
-                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
-                .build();
+        String endpoint = System.getenv("DO_SPACES_ENDPOINT");
+        String region = System.getenv("DO_SPACES_REGION");
+        String key = System.getenv("DO_SPACES_KEY");
+        String secret = System.getenv("DO_SPACES_SECRET");
+        this.bucketName = System.getenv("DO_SPACES_BUCKET");
+
+        if (endpoint != null && region != null && key != null && secret != null) {
+            this.s3 = S3Client.builder()
+                    .endpointOverride(URI.create(endpoint))
+                    .region(Region.of(region))
+                    .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(key, secret)))
+                    .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                    .build();
+        } else {
+            // Fallback or initialization for test environment where env vars might be missing
+            // This prevents NPE during class instantiation in tests if we use a different constructor
+            this.s3 = null;
+        }
+    }
+
+    // Constructor for testing
+    public VideoOptimizerHandler(S3Client s3, String bucketName) {
+        this.s3 = s3;
+        this.bucketName = bucketName;
     }
 
     @Override
     public String handleRequest(Map<String, String> event, Context context) {
+        if (s3 == null) {
+            return "{\"status\": \"error\", \"message\": \"S3 Client not initialized\"}";
+        }
+
         String sourceKey = event.get("file_name");
         String mode = event.getOrDefault("mode", "landscape");
         String heightStr = event.getOrDefault("height", "1080");
@@ -71,21 +87,7 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
 
             List<String> command = FFmpegCommandBuilder.buildOptimizeCommand(localInput.toPath(), localOutput.toPath(), mode, height);
 
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
-                }
-            }
-
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                throw new RuntimeException("FFmpeg failed with code " + exitCode);
-            }
+            executeCommand(command, localOutput);
 
             long fileSize = Files.size(localOutput.toPath());
             context.getLogger().log("Uploading: " + outputKey + " (" + fileSize + " bytes)");
@@ -103,6 +105,25 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
         } finally {
             if (localInput != null && localInput.exists()) localInput.delete();
             if (localOutput != null && localOutput.exists()) localOutput.delete();
+        }
+    }
+
+    // Protected method for mocking process execution in tests
+    protected void executeCommand(List<String> command, File output) throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+        }
+
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new RuntimeException("FFmpeg failed with code " + exitCode);
         }
     }
 }

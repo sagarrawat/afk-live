@@ -1,38 +1,67 @@
 package com.afklive.streamer.service;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.Comparator;
-import java.util.stream.Stream;
-import java.util.Set;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.util.AppConstants;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.lambda.LambdaClient;
+import software.amazon.awssdk.services.lambda.model.InvokeRequest;
+import software.amazon.awssdk.services.lambda.model.InvokeResponse;
+
+import java.io.BufferedReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class VideoConversionService {
 
     private final FileStorageService storageService;
-    private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
-    private final Set<String> activeOptimizations = ConcurrentHashMap.newKeySet();
     private final UserService userService;
     private final ScheduledVideoRepository repository;
+    private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
+    private final Set<String> activeOptimizations = ConcurrentHashMap.newKeySet();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final LambdaClient lambdaClient;
+    private final String lambdaFunctionName;
+
+    public VideoConversionService(
+            FileStorageService storageService,
+            UserService userService,
+            ScheduledVideoRepository repository,
+            @Value("${app.aws.access-key:}") String awsAccessKey,
+            @Value("${app.aws.secret-key:}") String awsSecretKey,
+            @Value("${app.aws.region:us-east-1}") String awsRegion,
+            @Value("${app.aws.function-name:}") String lambdaFunctionName) {
+        this.storageService = storageService;
+        this.userService = userService;
+        this.repository = repository;
+        this.lambdaFunctionName = lambdaFunctionName;
+
+        if (awsAccessKey != null && !awsAccessKey.isEmpty() && awsSecretKey != null && !awsSecretKey.isEmpty()) {
+            this.lambdaClient = LambdaClient.builder()
+                    .region(Region.of(awsRegion))
+                    .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(awsAccessKey, awsSecretKey)))
+                    .build();
+        } else {
+            this.lambdaClient = null;
+        }
+    }
 
     @Async
     public void convertVideo(Path userDir, String username, String fileName) {
@@ -71,12 +100,74 @@ public class VideoConversionService {
         String progressKey = username + ":" + fileName;
         conversionProgress.put(progressKey, 0);
 
+        // Try Lambda Optimization first
+        if (lambdaClient != null && lambdaFunctionName != null && !lambdaFunctionName.isEmpty()) {
+            try {
+                log.info("Attempting optimization via Lambda for {}: {}", username, fileName);
+                Map<String, String> payload = new HashMap<>();
+                payload.put("file_name", scheduledVideo.getS3Key());
+                payload.put("mode", mode);
+                payload.put("height", String.valueOf(height));
+                payload.put("username", username);
+
+                String jsonPayload = objectMapper.writeValueAsString(payload);
+
+                InvokeRequest request = InvokeRequest.builder()
+                        .functionName(lambdaFunctionName)
+                        .payload(SdkBytes.fromUtf8String(jsonPayload))
+                        .build();
+
+                InvokeResponse response = lambdaClient.invoke(request);
+                String responseString = response.payload().asUtf8String();
+
+                // Parse response
+                JsonNode responseNode = objectMapper.readTree(responseString);
+
+                if (responseNode.has("status") && "success".equals(responseNode.get("status").asText())) {
+                    String optimizedKey = responseNode.get("optimized_key").asText();
+                    long fileSize = responseNode.get("file_size").asLong();
+
+                    log.info("Lambda optimization successful. New key: {}", optimizedKey);
+
+                    userService.checkStorageQuota(username, fileSize);
+                    userService.updateStorageUsage(username, fileSize);
+
+                    // Create NEW DB Entry
+                    ScheduledVideo newVideo = new ScheduledVideo();
+                    newVideo.setUsername(username);
+                    newVideo.setTitle(targetTitle);
+                    newVideo.setS3Key(optimizedKey);
+                    newVideo.setFileSize(fileSize);
+                    newVideo.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
+                    newVideo.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
+                    newVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.COMPLETED);
+                    newVideo.setCategoryId(scheduledVideo.getCategoryId());
+                    newVideo.setTags(scheduledVideo.getTags());
+
+                    repository.save(newVideo);
+
+                    conversionProgress.put(progressKey, 100);
+                    activeOptimizations.remove(lockKey);
+                    return;
+                } else {
+                    log.warn("Lambda optimization returned error or non-success status: {}", responseString);
+                    // Fallback to local processing
+                }
+
+            } catch (Exception e) {
+                log.error("Lambda invocation failed, falling back to local optimization", e);
+                // Fallback to local processing
+            }
+        } else {
+            log.info("Lambda not configured, using local optimization for {}", fileName);
+        }
+
         Path tempDir = null;
         try {
             tempDir = Files.createTempDirectory("optimize_" + username + "_");
             String sourceKey = scheduledVideo.getS3Key();
 
-            log.info("Starting optimization for {}: {} -> {} ({}p)", username, fileName, mode, height);
+            log.info("Starting local optimization for {}: {} -> {} ({}p)", username, fileName, mode, height);
 
             Path sourcePath = tempDir.resolve("source.mp4");
             storageService.downloadFileToPath(sourceKey, sourcePath);
