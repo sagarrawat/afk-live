@@ -1,0 +1,40 @@
+name: Java CI & CD
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'afklive-optimizer/**'
+      - 'pom.xml'
+  workflow_dispatch:
+
+jobs:
+  deploy-lambda:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Build ONLY the optimizer module
+      - name: Build Optimizer Module
+        run: mvn clean package -pl afklive-optimizer -am
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - name: Update Lambda Code
+        run: |
+          aws lambda update-function-code \
+            --function-name afklive-optimizer-lambda \
+            --zip-file fileb://afklive-optimizer/target/afklive-optimizer-1.0.0.jar
