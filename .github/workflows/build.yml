@@ -47,7 +47,6 @@ jobs:
   # JOB 2: Deploy Lambda to AWS (New!)
   deploy-lambda:
     runs-on: ubuntu-latest
-    needs: deploy-web
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,5 +72,5 @@ jobs:
       - name: Update Lambda Code
         run: |
           aws lambda update-function-code \
-            --function-name afklive-optimizer \
+            --function-name afklive-optimizer-lambda \
             --zip-file fileb://afklive-optimizer/target/afklive-optimizer-1.0.0.jar
