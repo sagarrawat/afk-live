@@ -22,18 +22,22 @@ import java.util.UUID;
 
 public class VideoOptimizerHandler implements RequestHandler<Map<String, String>, String> {
 
-    private static final String R2_ACCESS_KEY = System.getenv("R2_ACCESS_KEY");
-    private static final String R2_SECRET_KEY = System.getenv("R2_SECRET_KEY");
-    private static final String R2_ACCOUNT_ID = System.getenv("R2_ACCOUNT_ID");
-    private static final String BUCKET_NAME = System.getenv("BUCKET_NAME");
+    // Using afklive-web configuration style (DO_SPACES_*)
+    private static final String DO_SPACES_ENDPOINT = System.getenv("DO_SPACES_ENDPOINT");
+    private static final String DO_SPACES_REGION = System.getenv("DO_SPACES_REGION");
+    private static final String DO_SPACES_KEY = System.getenv("DO_SPACES_KEY");
+    private static final String DO_SPACES_SECRET = System.getenv("DO_SPACES_SECRET");
+    private static final String DO_SPACES_BUCKET = System.getenv("DO_SPACES_BUCKET");
 
     private final S3Client s3;
+    private final String bucketName;
 
     public VideoOptimizerHandler() {
+        this.bucketName = DO_SPACES_BUCKET;
         this.s3 = S3Client.builder()
-                .endpointOverride(URI.create("https://" + R2_ACCOUNT_ID + ".r2.cloudflarestorage.com"))
-                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(R2_ACCESS_KEY, R2_SECRET_KEY)))
-                .region(Region.US_EAST_1)
+                .endpointOverride(URI.create(DO_SPACES_ENDPOINT))
+                .region(Region.of(DO_SPACES_REGION))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(DO_SPACES_KEY, DO_SPACES_SECRET)))
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .build();
     }
@@ -61,7 +65,7 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
             localOutput = File.createTempFile("target_", ".mp4");
 
             context.getLogger().log("Downloading: " + sourceKey);
-            s3.getObject(GetObjectRequest.builder().bucket(BUCKET_NAME).key(sourceKey).build(), localInput.toPath());
+            s3.getObject(GetObjectRequest.builder().bucket(bucketName).key(sourceKey).build(), localInput.toPath());
 
             context.getLogger().log("Optimizing " + simpleName + " to " + targetTitle + " (" + mode + ", " + height + "p)");
 
@@ -86,7 +90,7 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
             long fileSize = Files.size(localOutput.toPath());
             context.getLogger().log("Uploading: " + outputKey + " (" + fileSize + " bytes)");
 
-            s3.putObject(PutObjectRequest.builder().bucket(BUCKET_NAME).key(outputKey).build(),
+            s3.putObject(PutObjectRequest.builder().bucket(bucketName).key(outputKey).build(),
                     RequestBody.fromFile(localOutput));
 
             return String.format("{\"status\": \"success\", \"original_key\": \"%s\", \"optimized_key\": \"%s\", \"file_size\": %d}",
