@@ -83,6 +83,10 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
             localInput = File.createTempFile("source_", ".mp4");
             localOutput = File.createTempFile("target_", ".mp4");
 
+            if (localInput.exists()) {
+                localInput.delete();
+            }
+
             context.getLogger().log("Downloading: " + sourceKey);
             s3.getObject(GetObjectRequest.builder().bucket(bucketName).key(sourceKey).build(), localInput.toPath());
 
