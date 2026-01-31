@@ -128,8 +128,8 @@ public class VideoConversionService {
                 JsonNode responseNode = objectMapper.readTree(responseString);
 
                 if (responseNode.has("status") && "success".equals(responseNode.get("status").asText())) {
-                    String optimizedKey = responseNode.get("optimized_key").asText();
-                    long fileSize = responseNode.get("file_size").asLong();
+                    String optimizedKey = responseNode.get("optimizedKey").asText();
+                    long fileSize = responseNode.get("fileSize").asLong();
 
                     log.info("Lambda optimization successful. New key: {}", optimizedKey);
 
