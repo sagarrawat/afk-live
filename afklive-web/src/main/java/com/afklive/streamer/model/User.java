@@ -31,6 +31,7 @@ public class User {
 
     private int streamSlots = 0;
     private LocalDateTime streamAccessExpiration;
+    private LocalDateTime planExpirationDate;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
@@ -178,6 +179,14 @@ public class User {
 
     public void setStreamAccessExpiration(LocalDateTime streamAccessExpiration) {
         this.streamAccessExpiration = streamAccessExpiration;
+    }
+
+    public LocalDateTime getPlanExpirationDate() {
+        return planExpirationDate;
+    }
+
+    public void setPlanExpirationDate(LocalDateTime planExpirationDate) {
+        this.planExpirationDate = planExpirationDate;
     }
 
     public java.util.List<SocialChannel> getChannels() {

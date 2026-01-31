@@ -39,7 +39,7 @@ public class PricingController {
         Map<String, Object> essentials = new java.util.HashMap<>(Map.of(
             "id", "ESSENTIALS",
             "title", "Essentials",
-            "price", isIndia ? "₹499" : "$6",
+            "price", isIndia ? "₹199" : "$6",
             "period", "/mo",
             "features", List.of("3 Channels", "Unlimited Scheduling", "Analytics", "HD Streaming")
         ));

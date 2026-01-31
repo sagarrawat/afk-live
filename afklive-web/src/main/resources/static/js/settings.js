@@ -7,6 +7,7 @@ document.addEventListener('alpine:init', () => {
         isLoading: false,
         paymentModalOpen: false,
         selectedPlan: null,
+        isProcessingPayment: false,
 
         async init() {
             await this.loadUser();
@@ -103,6 +104,14 @@ document.addEventListener('alpine:init', () => {
                  return;
             }
 
+            // Show Loader
+            const btn = document.querySelector('button[x-text="\'Confirm & Pay\'"]') || document.querySelector('#paymentModal button.bg-blue-600');
+            // Since Alpine component scope, standard DOM query might be tricky if not refs.
+            // But we can set a state variable if we bound it.
+            // Let's use global loader for simplicity or assume button text changes if bound.
+            // Adding a loading state to the component
+            this.isProcessingPayment = true;
+
             try {
                 const res = await apiFetch('/api/payment/initiate', {
                     method: 'POST',
@@ -115,9 +124,11 @@ document.addEventListener('alpine:init', () => {
                     window.location.href = data.redirectUrl;
                 } else {
                     showToast(data.message || "Payment initiation failed", "error");
+                    this.isProcessingPayment = false;
                 }
             } catch (e) {
                 showToast("Payment failed", "error");
+                this.isProcessingPayment = false;
             }
         },
 
