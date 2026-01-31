@@ -23,14 +23,15 @@ public class PricingController {
     private final EmailService emailService;
 
     @GetMapping("/pricing")
-    public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "US") String country) {
-        boolean isIndia = "IN".equalsIgnoreCase(country);
+    public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "IN") String country) {
+        // Default to India/INR as per requirement
+        boolean isIndia = true;
 
         // Tier 1: Free
         Map<String, Object> free = Map.of(
             "id", "FREE",
             "title", "Free",
-            "price", isIndia ? "₹0" : "$0",
+            "price", "₹0",
             "period", "/mo",
             "features", List.of("1 Channel", "10 Scheduled Posts", "Basic Streaming")
         );
@@ -39,13 +40,13 @@ public class PricingController {
         Map<String, Object> essentials = Map.of(
             "id", "ESSENTIALS",
             "title", "Essentials",
-            "price", isIndia ? "₹499" : "$6",
+            "price", "₹199",
             "period", "/mo",
             "features", List.of("3 Channels", "Unlimited Scheduling", "Analytics", "HD Streaming")
         );
 
         return ResponseEntity.ok(Map.of(
-            "currency", isIndia ? "INR" : "USD",
+            "currency", "INR",
             "plans", List.of(free, essentials)
         ));
     }

@@ -46,7 +46,7 @@ public class PaymentController {
             // Determine Amount (In Paise)
             long amount;
             if ("ESSENTIALS".equals(planId)) {
-                amount = 49900; // 499.00 INR
+                amount = 19900; // 199.00 INR
             } else {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan"));
             }
@@ -134,7 +134,7 @@ public class PaymentController {
                      Number amountNum = (Number) data.get("amount");
                      long amount = amountNum.longValue();
 
-                     if (amount == 49900) {
+                     if (amount == 19900) {
                          log.info("Upgrading user {} to ESSENTIALS", merchantUserId);
                          userService.updatePlan(merchantUserId, com.afklive.streamer.model.PlanType.ESSENTIALS);
                      }
