@@ -936,6 +936,7 @@
                                             <div x-show="user?.plan?.name === plan.title" class="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
                                                 CURRENT
                                             </div>
+                                            <div x-show="plan.badge" class="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg" x-text="plan.badge" :class="user?.plan?.name === plan.title ? 'mr-14' : ''"></div>
 
                                             <h4 class="text-lg font-bold text-gray-900" x-text="plan.title"></h4>
                                             <div class="mt-2 mb-4">

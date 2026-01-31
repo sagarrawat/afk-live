@@ -36,7 +36,7 @@ document.addEventListener('alpine:init', () => {
         async loadPlans() {
             this.isLoading = true;
             try {
-                const res = await apiFetch('/api/pricing?country=US');
+                const res = await apiFetch('/api/pricing?country=IN');
                 const data = await res.json();
                 this.plans = data.plans || [];
             } catch (e) {
@@ -90,17 +90,34 @@ document.addEventListener('alpine:init', () => {
 
         async processUpgrade() {
             if (!this.selectedPlan) return;
+
+            // Parse price string (e.g. ₹499) to number for payment
+            let amount = 0;
             try {
-                await apiFetch('/api/pricing/upgrade', {
+                amount = parseInt(this.selectedPlan.price.replace(/[^0-9]/g, '')) * 100; // to paise
+            } catch(e) {}
+
+            if (amount <= 0) {
+                 // Fallback for free or error
+                 this.paymentModalOpen = false;
+                 return;
+            }
+
+            try {
+                const res = await apiFetch('/api/payment/initiate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ planId: this.selectedPlan.id })
+                    body: JSON.stringify({ amount: amount, planId: this.selectedPlan.id })
                 });
-                showToast("Plan upgraded successfully!", "success");
-                this.paymentModalOpen = false;
-                this.loadUser(); // Refresh user info
+                const data = await res.json();
+
+                if (data.redirectUrl) {
+                    window.location.href = data.redirectUrl;
+                } else {
+                    showToast(data.message || "Payment initiation failed", "error");
+                }
             } catch (e) {
-                showToast("Upgrade failed", "error");
+                showToast("Payment failed", "error");
             }
         },
 
