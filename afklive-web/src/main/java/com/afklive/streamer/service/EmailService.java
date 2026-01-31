@@ -37,7 +37,7 @@ public class EmailService {
                "<h2 style='color: #1a1a2e; margin-top: 0;'>" + title + "</h2>" +
                "<div>" + bodyContent + "</div>" +
                "<div style='margin-top: 30px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; text-align: center;'>" +
-               "&copy; 2024 AFK Live Inc.</div>" +
+               "&copy; 2026 AFK Live.</div>" +
                "</div></body></html>";
     }
 
