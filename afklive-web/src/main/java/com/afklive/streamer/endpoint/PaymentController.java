@@ -5,8 +5,8 @@ import com.phonepe.sdk.pg.Env;
 import com.phonepe.sdk.pg.payments.v2.StandardCheckoutClient;
 import com.phonepe.sdk.pg.payments.v2.models.request.StandardCheckoutPayRequest;
 import com.phonepe.sdk.pg.payments.v2.models.response.StandardCheckoutPayResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,20 +18,29 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/payment")
-@RequiredArgsConstructor
 @Slf4j
 public class PaymentController {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+    private final StandardCheckoutClient phonePeClient;
+    private final String merchantId;
+    private final String callbackUrl;
 
-    private static final String MERCHANT_ID = "PGTESTPAYUAT";
-    private static final String SALT_KEY = "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399";
-    private static final Integer SALT_INDEX = 1;
-    private static final String CALLBACK_URL = "https://afklive.duckdns.org/api/payment/callback";
+    public PaymentController(
+            ObjectMapper objectMapper,
+            @Value("${app.phonepe.merchant-id}") String merchantId,
+            @Value("${app.phonepe.salt-key}") String saltKey,
+            @Value("${app.phonepe.salt-index}") Integer saltIndex,
+            @Value("${app.phonepe.env:SANDBOX}") String envStr,
+            @Value("${app.base-url}") String baseUrl) {
+        this.objectMapper = objectMapper;
+        this.merchantId = merchantId;
+        this.callbackUrl = baseUrl + "/api/payment/callback";
 
-    // Initialize SDK Client
-    // Note: Client Version is typically 1 unless specified otherwise
-    private final StandardCheckoutClient phonePeClient = StandardCheckoutClient.getInstance(MERCHANT_ID, SALT_KEY, SALT_INDEX, Env.SANDBOX);
+        Env env = Env.valueOf(envStr.toUpperCase());
+        this.phonePeClient = StandardCheckoutClient.getInstance(merchantId, saltKey, saltIndex, env);
+        log.info("Initialized PhonePe Client: Merchant={}, Env={}", merchantId, env);
+    }
 
     @PostMapping("/initiate")
     public ResponseEntity<?> initiatePayment(@RequestBody(required = false) Map<String, Object> body, Principal principal) {
