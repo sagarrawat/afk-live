@@ -21,7 +21,7 @@ public class UserService {
     private final EmailService emailService;
 
     public User getOrCreateUser(String username) {
-        return userRepository.findById(username)
+        User user = userRepository.findById(username)
                 .orElseGet(() -> {
                     User newUser = new User(username);
                     // OAuth users are pre-verified usually, or handle accordingly.
@@ -30,6 +30,21 @@ public class UserService {
                     emailService.sendWelcomeEmail(username);
                     return userRepository.save(newUser);
                 });
+        checkPlanExpirations(user);
+        return user;
+    }
+
+    private void checkPlanExpirations(User user) {
+        if (user.getPlanExpirationDate() != null) {
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            // If plan expired + 3 days grace period over -> Downgrade
+            if (now.isAfter(user.getPlanExpirationDate().plusDays(3))) {
+                log.info("Plan expired for user {}, downgrading to FREE", user.getUsername());
+                user.setPlanType(PlanType.FREE);
+                user.setPlanExpirationDate(null);
+                userRepository.save(user);
+            }
+        }
     }
 
     public void checkStorageQuota(String username, long fileSize) {
@@ -137,6 +152,13 @@ public class UserService {
         log.info("Updating plan for user {} to {}", username, newPlan);
         User user = getOrCreateUser(username);
         user.setPlanType(newPlan);
+
+        if (newPlan == PlanType.ESSENTIALS) {
+            user.setPlanExpirationDate(java.time.LocalDateTime.now().plusDays(30));
+        } else {
+            user.setPlanExpirationDate(null);
+        }
+
         userRepository.save(user);
         log.info("Plan updated saved to DB for {}", username);
     }

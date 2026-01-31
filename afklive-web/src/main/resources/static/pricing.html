@@ -17,6 +17,7 @@
         .price-card:hover { transform: translateY(-5px); }
         .price-card.popular { border-color: var(--primary); box-shadow: 0 10px 40px rgba(44, 104, 246, 0.1); position: relative; }
         .price-card.popular::before { content: "Most Popular"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+        .badge-discount { position: absolute; top: -12px; right: 20px; background: #ff4757; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
         .price { font-size: 3rem; font-weight: 800; margin: 20px 0; color: #1a1a1a; }
         .price span { font-size: 1rem; font-weight: 500; color: #666; }
         .features-list { list-style: none; padding: 0; margin: 30px 0; text-align: left; }
@@ -175,6 +176,7 @@
                 const isPop = index === 1 ? 'popular' : '';
                 const btnClass = index === 1 ? 'btn-primary' : 'btn-outline';
                 const featuresHtml = plan.features.map(f => `<li><i class="fa-solid fa-check"></i> ${f}</li>`).join('');
+                const badgeHtml = plan.badge ? `<div class="badge-discount">${plan.badge}</div>` : '';
 
                 let btnHtml = '';
 
@@ -191,7 +193,13 @@
                         btnHtml = `<button class="btn btn-outline btn-block" disabled style="visibility: hidden;">Included</button>`;
                     } else {
                         // Upgrade Option
-                        btnHtml = `<button class="btn ${btnClass} btn-block" onclick="openPaymentModal('${plan.id}', '${plan.title}', '${plan.price}')">Upgrade</button>`;
+                        // Parse price string (e.g. ₹499) to number for payment
+                        let priceVal = 0;
+                        try {
+                            priceVal = parseInt(plan.price.replace(/[^0-9]/g, '')) * 100; // to paise
+                        } catch(e) {}
+
+                        btnHtml = `<button class="btn ${btnClass} btn-block" onclick="initiatePlanPayment('${plan.id}', ${priceVal})">Upgrade</button>`;
                     }
                 } else {
                     // Not logged in
@@ -200,6 +208,7 @@
 
                 grid.innerHTML += `
                     <div class="price-card ${isPop}">
+                        ${badgeHtml}
                         <h3>${plan.title}</h3>
                         <div class="price">${plan.price}<span>${plan.period}</span></div>
                         <p>For individuals getting started.</p>
@@ -268,7 +277,38 @@
     }
 
     // Init
-    loadPricing('US');
+    loadPricing('IN');
+
+    async function initiatePlanPayment(planId, amount) {
+        if (!amount || amount <= 0) return;
+
+        const btn = event.target;
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+
+        try {
+            const res = await fetch('/api/payment/initiate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: amount, planId: planId })
+            });
+            const data = await res.json();
+
+            if (res.ok && data.redirectUrl) {
+                window.location.href = data.redirectUrl;
+            } else {
+                alert(data.message || 'Payment initiation failed');
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Network error');
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    }
 
     async function initiateTestPayment() {
         const btn = document.getElementById('btnTestPayment');

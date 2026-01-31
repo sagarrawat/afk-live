@@ -105,6 +105,9 @@
         <div id="verificationBanner" class="hidden warning-banner">
             ⚠️ Please verify your email address to access all features.
         </div>
+        <div id="planExpiryBanner" class="hidden warning-banner" style="background-color: #fff3cd; color: #856404; border-color: #ffeeba;">
+            ⚠️ Your plan has expired. Please renew within 3 days to avoid losing access to premium features. <a href="#" onclick="switchView('settings'); switchSettingsTab('plans');" style="text-decoration: underline; font-weight: bold;">Renew Now</a>
+        </div>
 
         <!-- VIEW: PUBLISH (Alpine + Tailwind) -->
         <div id="view-publish" class="view-section hidden bg-gray-50 font-sans" x-data="contentStudio">
@@ -936,6 +939,7 @@
                                             <div x-show="user?.plan?.name === plan.title" class="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
                                                 CURRENT
                                             </div>
+                                            <div x-show="plan.badge" class="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg" x-text="plan.badge" :class="user?.plan?.name === plan.title ? 'mr-14' : ''"></div>
 
                                             <h4 class="text-lg font-bold text-gray-900" x-text="plan.title"></h4>
                                             <div class="mt-2 mb-4">
