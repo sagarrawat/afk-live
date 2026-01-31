@@ -20,7 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -63,11 +63,13 @@ public class VideoOptimizerHandlerTest {
         }).when(handler).executeCommand(anyList(), any(File.class));
 
         // Act
-        String result = handler.handleRequest(event, context);
+        OptimizationResponse result = handler.handleRequest(event, context);
 
         // Assert
-        assertTrue(result.contains("\"status\": \"success\""));
-        assertTrue(result.contains("\"file_size\": 19")); // length of "dummy video content"
+        assertEquals("success", result.getStatus());
+        assertEquals(19L, result.getFileSize());
+        assertNotNull(result.getOptimizedKey());
+        assertEquals("test-video.mp4", result.getOriginalKey());
 
         // Verify interactions
         verify(s3Client).getObject(any(GetObjectRequest.class), any(Path.class));
@@ -85,11 +87,11 @@ public class VideoOptimizerHandlerTest {
         doThrow(new RuntimeException("FFmpeg failed")).when(handler).executeCommand(anyList(), any(File.class));
 
         // Act
-        String result = handler.handleRequest(event, context);
+        OptimizationResponse result = handler.handleRequest(event, context);
 
         // Assert
-        assertTrue(result.contains("\"status\": \"error\""));
-        assertTrue(result.contains("FFmpeg failed"));
+        assertEquals("error", result.getStatus());
+        assertTrue(result.getMessage().contains("FFmpeg failed"));
 
         // Verify interactions
         verify(s3Client).getObject(any(GetObjectRequest.class), any(Path.class));

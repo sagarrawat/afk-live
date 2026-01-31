@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class VideoOptimizerHandler implements RequestHandler<Map<String, String>, String> {
+public class VideoOptimizerHandler implements RequestHandler<Map<String, String>, OptimizationResponse> {
 
     private final S3Client s3;
     private final String bucketName;
@@ -58,9 +58,9 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
     }
 
     @Override
-    public String handleRequest(Map<String, String> event, Context context) {
+    public OptimizationResponse handleRequest(Map<String, String> event, Context context) {
         if (s3 == null) {
-            return "{\"status\": \"error\", \"message\": \"S3 Client not initialized\"}";
+            return new OptimizationResponse("error", null, null, null, "S3 Client not initialized");
         }
 
         String sourceKey = event.get("file_name");
@@ -102,15 +102,14 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
             s3.putObject(PutObjectRequest.builder().bucket(bucketName).key(outputKey).build(),
                     RequestBody.fromFile(localOutput));
 
-            return String.format("{\"status\": \"success\", \"original_key\": \"%s\", \"optimized_key\": \"%s\", \"file_size\": %d}",
-                    sourceKey, outputKey, fileSize);
+            return new OptimizationResponse("success", sourceKey, outputKey, fileSize, null);
 
         } catch (Exception e) {
             context.getLogger().log("Error: " + e.getMessage());
             e.printStackTrace();
-            // Return valid JSON string for error case
-            String safeMessage = e.getMessage() != null ? e.getMessage().replace("\"", "'") : "Unknown error";
-            return String.format("{\"status\": \"error\", \"message\": \"%s\"}", safeMessage);
+            // Return valid response for error case
+            String safeMessage = e.getMessage() != null ? e.getMessage() : "Unknown error";
+            return new OptimizationResponse("error", null, null, null, safeMessage);
         } finally {
             if (localInput != null && localInput.exists()) localInput.delete();
             if (localOutput != null && localOutput.exists()) localOutput.delete();
