@@ -5,6 +5,8 @@ import com.phonepe.sdk.pg.Env;
 import com.phonepe.sdk.pg.payments.v2.StandardCheckoutClient;
 import com.phonepe.sdk.pg.payments.v2.models.request.StandardCheckoutPayRequest;
 import com.phonepe.sdk.pg.payments.v2.models.response.StandardCheckoutPayResponse;
+import com.afklive.streamer.model.PaymentAudit;
+import com.afklive.streamer.repository.PaymentAuditRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -23,17 +25,20 @@ public class PaymentController {
 
     private final ObjectMapper objectMapper;
     private final StandardCheckoutClient phonePeClient;
+    private final PaymentAuditRepository paymentAuditRepository;
     private final String merchantId;
     private final String callbackUrl;
 
     public PaymentController(
             ObjectMapper objectMapper,
+            PaymentAuditRepository paymentAuditRepository,
             @Value("${app.phonepe.merchant-id}") String merchantId,
             @Value("${app.phonepe.salt-key}") String saltKey,
             @Value("${app.phonepe.salt-index}") Integer saltIndex,
             @Value("${app.phonepe.env:SANDBOX}") String envStr,
             @Value("${app.base-url}") String baseUrl) {
         this.objectMapper = objectMapper;
+        this.paymentAuditRepository = paymentAuditRepository;
         this.merchantId = merchantId;
         this.callbackUrl = baseUrl + "/api/payment/callback";
 
@@ -54,6 +59,10 @@ public class PaymentController {
             String userId = (principal != null) ? principal.getName() : "test-user-" + UUID.randomUUID().toString().substring(0, 8);
 
             log.info("Initiating payment via SDK V2: TxnId={}, User={}", merchantTransactionId, userId);
+
+            // Audit
+            PaymentAudit audit = new PaymentAudit(merchantTransactionId, userId, amount, "INITIATED");
+            paymentAuditRepository.save(audit);
 
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
                     .merchantOrderId(merchantTransactionId)
@@ -84,6 +93,24 @@ public class PaymentController {
                  byte[] decodedBytes = Base64.getDecoder().decode(encodedResponse);
                  String decodedJson = new String(decodedBytes, StandardCharsets.UTF_8);
                  log.info("Decoded Callback JSON: {}", decodedJson);
+
+                 Map<String, Object> responseMap = objectMapper.readValue(decodedJson, Map.class);
+                 Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
+                 if (data != null) {
+                     String merchantTransactionId = (String) data.get("merchantTransactionId");
+                     String state = (String) data.get("state"); // e.g. COMPLETED, FAILED
+                     String providerReferenceId = (String) data.get("transactionId"); // PhonePe ID
+
+                     if (merchantTransactionId != null) {
+                         paymentAuditRepository.findByTransactionId(merchantTransactionId).ifPresent(audit -> {
+                             audit.setStatus(state);
+                             audit.setProviderReferenceId(providerReferenceId);
+                             audit.setRawResponse(decodedJson);
+                             paymentAuditRepository.save(audit);
+                             log.info("Updated PaymentAudit for TxnId={}: Status={}", merchantTransactionId, state);
+                         });
+                     }
+                 }
              }
         } catch (Exception e) {
             log.error("Error parsing callback", e);
