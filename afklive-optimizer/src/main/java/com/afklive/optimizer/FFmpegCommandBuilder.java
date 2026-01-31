@@ -48,7 +48,7 @@ public class FFmpegCommandBuilder {
         command.add("-c:v");
         command.add("libx264");
         command.add("-preset");
-        command.add("medium");
+        command.add("ultrafast");
         command.add("-profile:v");
         command.add("high");
 

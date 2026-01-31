@@ -20,7 +20,7 @@ public class FFmpegCommandBuilder {
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                "ultrafast",
                 "-crf",
                 "23",
                 "-pix_fmt",
@@ -55,7 +55,7 @@ public class FFmpegCommandBuilder {
         command.add("-c:v");
         command.add("libx264");
         command.add("-preset");
-        command.add("superfast");
+        command.add("ultrafast");
         command.add("-b:v");
         command.add("4500k");
         command.add("-maxrate");
@@ -120,7 +120,7 @@ public class FFmpegCommandBuilder {
         command.add("-c:v");
         command.add("libx264");
         command.add("-preset");
-        command.add("medium");
+        command.add("ultrafast");
         command.add("-profile:v");
         command.add("high");
 
@@ -334,7 +334,7 @@ public class FFmpegCommandBuilder {
             // --- Encoding ---
             command.add("-map"); command.add(vLabel);
             command.add("-c:v"); command.add("libx264");
-            command.add("-preset"); command.add("veryfast");
+            command.add("-preset"); command.add("ultrafast");
 
             // Dynamic Bitrate Logic based on Max Height
             String bitrate = "4500k";
