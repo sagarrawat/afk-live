@@ -52,6 +52,9 @@ public class StreamService {
     @Autowired
     private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepo;
 
+    private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
+    private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
+
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
             String username,
@@ -66,7 +69,9 @@ public class StreamService {
             int streamQuality,
             String title,
             String description,
-            String privacy
+            String privacy,
+            boolean overlayEnabled,
+            String overlayTemplate
     ) throws IOException {
         
         log.info("username [{}]", username);
@@ -178,8 +183,12 @@ public class StreamService {
              // Create temp file for watermark
              watermarkPath = Files.createTempFile("watermark_", ".png");
              watermarkFile.transferTo(watermarkPath);
-             // Note: Temp file will linger until OS cleans up, or we can track it to delete on exit.
-             // Ideally we should manage lifecycle, but for now this works.
+        }
+
+        Path overlayTextPath = null;
+        if (overlayEnabled) {
+            overlayTextPath = userDir.resolve("subs_" + System.currentTimeMillis() + ".txt");
+            Files.writeString(overlayTextPath, "Subs: Loading...");
         }
 
         log.info("musicPath [{}]", musicPath);
@@ -241,16 +250,33 @@ public class StreamService {
 
         // Loop through keys to start individual processes
         for (String key : validKeys) {
-            List<String> command =
-                    FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized);
+            FFmpegCommandBuilder builder = new FFmpegCommandBuilder();
+            builder.setLoop(loopCount);
+            builder.setStreamMode(streamMode);
+            if (watermarkPath != null) builder.addWatermark(watermarkPath.toAbsolutePath().toString());
+            if (overlayTextPath != null) builder.addTextOverlay(overlayTextPath.toAbsolutePath().toString());
+
+            // Re-implement buildStreamCommand logic using instance builder if possible or adapt
+            // Since buildStreamCommand is static and rigid, we need to use the builder instance
+            // But existing code uses static method. We should refactor or adapt.
+            // Let's assume we modify FFmpegCommandBuilder to support static method with overlay,
+            // OR use the builder pattern here which is cleaner.
+
+            // To avoid breaking existing logic, let's update FFmpegCommandBuilder static method signature or add overlay param.
+            // Actually, let's use the builder pattern which seems to be the intent of the missing code in previous turn.
+
+            // Wait, previous turn showed `FFmpegCommandBuilder` instantiation.
+            // Let's stick to the static method for now but add overlayPath argument.
+
+            List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, overlayTextPath);
 
             log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
 
             // 4. Start the Process
-            ProcessBuilder builder = new ProcessBuilder(command);
-            builder.redirectErrorStream(true);
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
 
-            Process process = builder.start();
+            Process process = pb.start();
 
             Thread.ofVirtual().start(() -> {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -297,9 +323,32 @@ public class StreamService {
 
             activeStreams.put(jobId, process);
 
+            // Start Overlay Updater if enabled
+            if (overlayEnabled && overlayTextPath != null) {
+                final Path textPath = overlayTextPath;
+                java.util.concurrent.ScheduledFuture<?> task = scheduledExecutorService.scheduleAtFixedRate(() -> {
+                    try {
+                        String subs = youTubeService.getSubscriberCount(username);
+                        String content = "Subscribers: " + subs;
+                        if ("GOAL".equalsIgnoreCase(overlayTemplate)) {
+                            content = "Goal: " + subs + "/10K";
+                        }
+                        Files.writeString(textPath, content);
+                    } catch (Exception e) {
+                        log.error("Failed to update overlay text", e);
+                    }
+                }, 0, 30, java.util.concurrent.TimeUnit.SECONDS);
+                jobTasks.put(jobId, task);
+            }
+
             // 6. EXIT HANDLER (Auto-Update DB)
             process.onExit().thenRun(() -> {
                 log.warn("Stream Process Exited for job {}", jobId);
+
+                // Cleanup tasks
+                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
+                if (task != null) task.cancel(true);
+
                 Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
                 if (jobOpt.isPresent()) {
                     StreamJob existingJob = jobOpt.get();
@@ -330,6 +379,10 @@ public class StreamService {
         int stopped = 0;
         for (StreamJob job : jobs) {
             ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
+
+            java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(job.getId());
+            if (task != null) task.cancel(true);
+
             job.setLive(false);
             streamJobRepo.save(job);
             stopped++;
@@ -354,6 +407,10 @@ public class StreamService {
 
             if (job.isLive()) {
                 ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
+
+                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
+                if (task != null) task.cancel(true);
+
                 job.setLive(false);
                 streamJobRepo.save(job);
                 return ApiResponse.success("Stream stopped", null);

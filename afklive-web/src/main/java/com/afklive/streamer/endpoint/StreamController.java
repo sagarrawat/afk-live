@@ -78,6 +78,8 @@ public class StreamController {
                                                 @RequestParam(required = false) String title,
                                                 @RequestParam(required = false) String description,
                                                 @RequestParam(required = false) String privacy,
+                                                @RequestParam(required = false, defaultValue = "false") boolean overlayEnabled,
+                                                @RequestParam(required = false) String overlayTemplate,
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
@@ -85,7 +87,7 @@ public class StreamController {
         // Removed global lock (streamManager) to allow multiple streams per user.
         // Quota is checked inside StreamService via UserService.
         try {
-            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy));
+            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }

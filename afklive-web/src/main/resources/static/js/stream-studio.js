@@ -13,6 +13,8 @@ document.addEventListener('alpine:init', () => {
         streamPrivacy: 'public',
         streamQuality: '1080',
         streamOrientation: 'original',
+        overlayEnabled: false,
+        overlayTemplate: 'SIMPLE',
 
         // Controls
         loopVideo: true,
@@ -287,6 +289,8 @@ document.addEventListener('alpine:init', () => {
             fd.append("privacy", this.streamPrivacy);
             fd.append("streamMode", this.streamOrientation);
             fd.append("streamQuality", this.streamQuality);
+            fd.append("overlayEnabled", this.overlayEnabled);
+            fd.append("overlayTemplate", this.overlayTemplate);
 
             if(window.uploadedWatermarkFile) fd.append("watermarkFile", window.uploadedWatermarkFile);
 

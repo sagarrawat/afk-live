@@ -405,6 +405,24 @@
                                             </select>
                                         </div>
                                     </div>
+
+                                    <!-- Overlay Settings -->
+                                    <div class="mt-4 pt-3 border-t border-gray-100">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <label class="text-xs font-bold text-gray-700 uppercase tracking-wider">Subscriber Overlay</label>
+                                            <label class="switch scale-75">
+                                                <input type="checkbox" x-model="overlayEnabled">
+                                                <span class="slider round"></span>
+                                            </label>
+                                        </div>
+                                        <div x-show="overlayEnabled" class="space-y-2">
+                                            <label class="block text-xs font-medium text-gray-700">Template</label>
+                                            <select x-model="overlayTemplate" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                                                <option value="SIMPLE">Simple (Bottom Left)</option>
+                                                <option value="GOAL">Goal (10K)</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
                             </section>
                         </div>
@@ -1003,7 +1021,7 @@
                             <span class="text-lg font-bold text-gray-900" x-text="selectedPlan?.price"></span>
                         </div>
                         <div class="flex items-center gap-2 text-xs text-gray-500">
-                            <i class="fa-solid fa-lock"></i> Secure payment with Phonepe Gateway
+                            <i class="fa-solid fa-lock"></i> Secure payment with Stripe
                         </div>
                     </div>
 
