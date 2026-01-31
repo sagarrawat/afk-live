@@ -271,10 +271,11 @@ public class StreamController {
             }
             return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            if (e.getMessage().contains("401") || e.getMessage().contains("token")) {
+            String msg = e.getMessage();
+            if (msg != null && (msg.contains("401") || msg.contains("token") || msg.contains("not connected") || msg.contains("Authentication failed"))) {
                 return ResponseEntity.status(401).body(Map.of("message", "Not connected to YouTube"));
             }
-            return ResponseEntity.status(500).body(Map.of("message", "Failed: " + e.getMessage()));
+            return ResponseEntity.status(500).body(Map.of("message", "Failed: " + msg));
         }
     }
 

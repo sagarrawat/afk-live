@@ -30,6 +30,12 @@ public class AuthController {
 
     @PostMapping("/register")
     public String registerUser(@RequestParam String email, @RequestParam String password, @RequestParam String name, Model model, HttpServletRequest request) {
+        String passwordRegex = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=!_\\-]).{8,}$";
+        if (!password.matches(passwordRegex)) {
+            model.addAttribute("error", "Password must be at least 8 characters long, contain at least one digit, one uppercase letter, one lowercase letter, and one special character.");
+            return "register";
+        }
+
         try {
             String baseUrl = ServletUriComponentsBuilder.fromRequestUri(request)
                     .replacePath(null)

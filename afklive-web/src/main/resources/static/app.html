@@ -6,6 +6,8 @@
     <title>AFK Live</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- FullCalendar CSS Fix for Tailwind Conflict -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="css/theme.css">
@@ -52,10 +54,12 @@
             <a href="#" class="menu-item" data-target="view-publish" onclick="switchView('publish')">
                 <i class="fa-regular fa-paper-plane"></i>
                 <span>Queue</span>
+                <span class="ml-auto text-[9px] bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Beta</span>
             </a>
             <a href="#" class="menu-item" data-target="view-calendar" onclick="switchView('calendar')">
                 <i class="fa-regular fa-calendar"></i>
                 <span>Calendar</span>
+                <span class="ml-auto text-[9px] bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Beta</span>
             </a>
             <div class="menu-divider"></div>
             <a href="#" class="menu-item active" data-target="view-stream" onclick="switchView('stream')">
@@ -65,10 +69,12 @@
              <a href="#" class="menu-item" data-target="view-community" onclick="switchView('community')">
                 <i class="fa-regular fa-comments"></i>
                 <span>Engagement</span>
+                <span class="ml-auto text-[9px] bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Beta</span>
             </a>
             <a href="#" class="menu-item" data-target="view-analytics" onclick="switchView('analytics')">
                 <i class="fa-solid fa-chart-line"></i>
                 <span>Analytics</span>
+                <span class="ml-auto text-[9px] bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Beta</span>
             </a>
             <a href="#" class="menu-item" data-target="view-library" onclick="switchView('library')">
                 <i class="fa-regular fa-folder"></i>
@@ -961,9 +967,9 @@
 
                                             <button @click="openPayment(plan)"
                                                 class="w-full py-2 rounded-lg font-semibold transition"
-                                                :class="user?.plan?.name === plan.title ? 'bg-gray-100 text-gray-500 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/30'"
-                                                :disabled="user?.plan?.name === plan.title"
-                                                x-text="user?.plan?.name === plan.title ? 'Active' : 'Upgrade'">
+                                                :class="(user?.plan?.name === plan.title || (user?.plan?.name !== 'Free' && plan.title === 'Free')) ? 'bg-gray-100 text-gray-500 cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/30'"
+                                                :disabled="user?.plan?.name === plan.title || (user?.plan?.name !== 'Free' && plan.title === 'Free')"
+                                                x-text="user?.plan?.name === plan.title ? 'Active' : (user?.plan?.name !== 'Free' && plan.title === 'Free' ? 'Included' : 'Upgrade')">
                                             </button>
                                         </div>
                                     </template>

@@ -22,11 +22,15 @@ public class CommentController {
     private final ChannelService channelService;
 
     @GetMapping
-    public ResponseEntity<?> getComments(Principal principal) {
+    public ResponseEntity<?> getComments(Principal principal, @RequestParam(required = false) Long channelId) {
         if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
         try {
             String username = SecurityUtils.getEmail(principal);
             java.util.List<com.afklive.streamer.model.SocialChannel> channels = channelService.getChannels(username);
+
+            if (channelId != null) {
+                channels = channels.stream().filter(c -> c.getId().equals(channelId)).toList();
+            }
 
             java.util.Map<String, Object> result = new java.util.HashMap<>();
             java.util.List<Object> allItems = new java.util.ArrayList<>();
