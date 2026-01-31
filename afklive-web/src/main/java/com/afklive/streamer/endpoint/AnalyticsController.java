@@ -32,6 +32,7 @@ public class AnalyticsController {
     @GetMapping
     public ResponseEntity<?> getAnalytics(
             Principal principal,
+            @RequestParam(required = false) Long channelId,
             @RequestParam(required = false) String range) {
 
         if (principal == null) {
@@ -63,6 +64,10 @@ public class AnalyticsController {
 
         try {
             java.util.List<com.afklive.streamer.model.SocialChannel> channels = channelService.getChannels(username);
+
+            if (channelId != null) {
+                channels = channels.stream().filter(c -> c.getId().equals(channelId)).toList();
+            }
 
             // Aggregation maps: Date -> Summed Metrics
             java.util.TreeMap<String, Long> viewsByDate = new java.util.TreeMap<>();

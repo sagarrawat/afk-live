@@ -23,7 +23,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     checkYoutubeStatus();
     loadUserChannels();
     loadScheduledQueue();
-    switchView('stream');
+
+    // Restore active view
+    const savedView = localStorage.getItem('activeView') || 'stream';
+    switchView(savedView);
 
     // Event Listeners
     setupEventListeners();
@@ -86,6 +89,9 @@ function setupEventListeners() {
 
 /* --- NAVIGATION & VIEW SWITCHING --- */
 function switchView(viewName) {
+    // Persist selection
+    localStorage.setItem('activeView', viewName);
+
     // Hide all views
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
 
@@ -573,6 +579,13 @@ function renderChannelList(channels) {
 function filterViewByChannel(channel) {
     const nameEl = document.getElementById('currentChannelName');
     if(nameEl) nameEl.innerText = channel.name;
+
+    selectedChannelId = channel.id || null;
+
+    // Refresh active view
+    if(!document.getElementById('view-analytics').classList.contains('hidden')) initAnalytics();
+    if(!document.getElementById('view-community').classList.contains('hidden')) loadComments();
+
     showToast(`Switched to ${channel.name}`, 'info');
 }
 
@@ -1424,33 +1437,53 @@ async function saveEngagementSettings() {
 /* --- ANALYTICS/CALENDAR --- */
 async function initAnalytics() {
     const ctx = document.getElementById('analyticsChart');
+
+    // Initialize chart if needed
     if(ctx && window.Chart && !window.analyticsChartInstance) {
-        // Basic mock chart or real fetch if API existed
-        // For now, render a dummy chart so page isn't empty
         window.analyticsChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                labels: [],
                 datasets: [{
                     label: 'Views',
-                    data: [12, 19, 3, 5, 2, 3, 10],
+                    data: [],
                     borderColor: '#2c68f6',
                     tension: 0.4
                 }]
             },
             options: { responsive: true, maintainAspectRatio: false }
         });
+    }
 
-        // Mock data population
-        document.getElementById('totalViews').innerText = "1,245";
-        document.getElementById('totalSubs').innerText = "85";
-        document.getElementById('totalWatchTime').innerText = "120h";
+    // Fetch Real Data
+    const range = document.getElementById('analyticsRange').value || '28';
+    let url = `${API_URL}/analytics?range=${range}`;
+    if(selectedChannelId) url += `&channelId=${selectedChannelId}`;
+
+    try {
+        const res = await apiFetch(url);
+        const data = await res.json();
+
+        if (window.analyticsChartInstance) {
+            window.analyticsChartInstance.data.labels = data.labels;
+            window.analyticsChartInstance.data.datasets[0].data = data.views;
+            window.analyticsChartInstance.update();
+        }
+
+        if (data.summary) {
+            document.getElementById('totalViews').innerText = data.summary.totalViews.toLocaleString();
+            document.getElementById('totalSubs').innerText = data.summary.totalSubs.toLocaleString();
+            document.getElementById('totalWatchTime').innerText = (data.summary.totalWatchTime / 60).toFixed(1) + "h";
+        }
+    } catch(e) {
+        console.error("Analytics fetch failed", e);
     }
 }
 
 function initCalendar() {
     const el = document.getElementById('calendar');
-    if(el && window.FullCalendar && !el.innerHTML) {
+    // Ensure element is visible before rendering
+    if(el && window.FullCalendar && !el.innerHTML && el.offsetParent !== null) {
         const calendar = new FullCalendar.Calendar(el, {
             initialView: 'dayGridMonth',
             headerToolbar: {
@@ -1473,6 +1506,8 @@ function initCalendar() {
             }
         });
         calendar.render();
+        // Recalculate size to ensure proper layout
+        setTimeout(() => calendar.updateSize(), 200);
     }
 }
 
@@ -1487,7 +1522,9 @@ async function loadComments() {
     if(!listMain && !listStudio) return;
 
     try {
-        const res = await apiFetch(`${API_URL}/comments`);
+        let url = `${API_URL}/comments`;
+        if (selectedChannelId) url += `?channelId=${selectedChannelId}`;
+        const res = await apiFetch(url);
         const data = await res.json();
         currentComments = data.items || [];
 
