@@ -29,6 +29,9 @@ public class User {
     private boolean autoReplyUnrepliedEnabled = false;
     private String autoReplyUnrepliedMessage;
 
+    private int streamSlots = 0;
+    private LocalDateTime streamAccessExpiration;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
 
@@ -159,6 +162,22 @@ public class User {
 
     public void setAutoReplyUnrepliedMessage(String autoReplyUnrepliedMessage) {
         this.autoReplyUnrepliedMessage = autoReplyUnrepliedMessage;
+    }
+
+    public int getStreamSlots() {
+        return streamSlots;
+    }
+
+    public void setStreamSlots(int streamSlots) {
+        this.streamSlots = streamSlots;
+    }
+
+    public LocalDateTime getStreamAccessExpiration() {
+        return streamAccessExpiration;
+    }
+
+    public void setStreamAccessExpiration(LocalDateTime streamAccessExpiration) {
+        this.streamAccessExpiration = streamAccessExpiration;
     }
 
     public java.util.List<SocialChannel> getChannels() {

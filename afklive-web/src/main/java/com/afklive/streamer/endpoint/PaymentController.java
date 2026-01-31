@@ -37,6 +37,9 @@ public class PaymentController {
     public ResponseEntity<?> initiatePayment(@RequestBody(required = false) Map<String, Object> body, Principal principal) {
         try {
             long amount = 100; // 1.00 INR in paise
+            if (body != null && body.containsKey("amount")) {
+                amount = Long.parseLong(body.get("amount").toString());
+            }
 
             String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
             String userId = (principal != null) ? principal.getName() : "test-user-" + UUID.randomUUID().toString().substring(0, 8);

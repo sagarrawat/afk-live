@@ -23,7 +23,7 @@ public class PricingController {
     private final EmailService emailService;
 
     @GetMapping("/pricing")
-    public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "US") String country) {
+    public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "IN") String country) {
         boolean isIndia = "IN".equalsIgnoreCase(country);
 
         // Tier 1: Free
@@ -36,13 +36,17 @@ public class PricingController {
         );
 
         // Tier 2: Essentials
-        Map<String, Object> essentials = Map.of(
+        Map<String, Object> essentials = new java.util.HashMap<>(Map.of(
             "id", "ESSENTIALS",
             "title", "Essentials",
             "price", isIndia ? "₹499" : "$6",
             "period", "/mo",
             "features", List.of("3 Channels", "Unlimited Scheduling", "Analytics", "HD Streaming")
-        );
+        ));
+
+        if (isIndia) {
+            essentials.put("badge", "50% OFF");
+        }
 
         return ResponseEntity.ok(Map.of(
             "currency", isIndia ? "INR" : "USD",
