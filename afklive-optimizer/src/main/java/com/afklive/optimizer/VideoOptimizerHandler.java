@@ -74,7 +74,9 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
         String targetSuffix = String.format("_%s_%dp", mode, height);
         String targetTitle = baseTitle + targetSuffix + ".mp4";
 
-        String outputKey = UUID.randomUUID().toString() + "_" + targetTitle;
+        String outputKey = event.containsKey("output_key")
+                ? event.get("output_key")
+                : UUID.randomUUID().toString() + "_" + targetTitle;
 
         File localInput = null;
         File localOutput = null;
