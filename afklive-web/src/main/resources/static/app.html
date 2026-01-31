@@ -11,7 +11,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="css/theme.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔴</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 2 A22 22 0 0 1 46 24' fill='none' stroke='%23667eea' stroke-width='4' /%3E%3Cpath d='M46 24 A22 22 0 0 1 24 46' fill='none' stroke='%23764ba2' stroke-width='4' /%3E%3Cpolygon points='20,14 20,34 36,24' fill='%23764ba2' /%3E%3C/svg%3E">
     <script>
         tailwind.config = {
             theme: {
@@ -105,7 +105,10 @@
         <!-- Mobile Header -->
         <header class="mobile-header">
             <button class="hamburger" onclick="toggleMobileMenu()"><i class="fa-solid fa-bars"></i></button>
-            <span class="mobile-title">AFK Live</span>
+            <div class="afk-logo" style="transform: scale(0.6); transform-origin: left center;">
+                <div class="afk-icon"><div class="afk-play"></div></div>
+                <div class="afk-text">AFK<span class="afk-live">Live</span></div>
+            </div>
         </header>
 
         <div id="verificationBanner" class="hidden warning-banner">
