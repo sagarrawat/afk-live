@@ -9,6 +9,26 @@ document.addEventListener('alpine:init', () => {
         selectedPlan: null,
 
         async init() {
+            // Check for payment redirect params
+            const urlParams = new URLSearchParams(window.location.search);
+            const paymentStatus = urlParams.get('payment_status');
+
+            if (paymentStatus === 'pending') {
+                // Ideally poll backend for status update, or wait a bit then refresh user
+                // For MVP, we reload user and check if plan changed
+                showToast("Verifying payment...", "info");
+                setTimeout(async () => {
+                    await this.loadUser();
+                    if (this.user && this.user.plan && this.user.plan.name === 'Essentials') {
+                        showToast("Payment Successful! Plan Upgraded.", "success");
+                    } else {
+                        showToast("Payment processing or failed. Please check back later.", "warning");
+                    }
+                    // Clean URL
+                    window.history.replaceState({}, document.title, window.location.pathname + "?view=settings");
+                }, 2000);
+            }
+
             await this.loadUser();
             await this.loadChannels();
             // Listen for channel changes from global events if any
@@ -90,17 +110,33 @@ document.addEventListener('alpine:init', () => {
 
         async processUpgrade() {
             if (!this.selectedPlan) return;
+            const planId = this.selectedPlan.id;
+
+            // Direct upgrade for Free plan (downgrade/switch) if logic permits,
+            // but usually this function is called for Paid upgrades.
+            if (planId === 'FREE') {
+               // Call cancel/downgrade logic
+               this.cancelSubscription();
+               return;
+            }
+
             try {
-                await apiFetch('/api/pricing/upgrade', {
+                // 1. Initiate Payment
+                const res = await apiFetch('/api/payment/initiate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ planId: this.selectedPlan.id })
+                    body: JSON.stringify({ planId: planId })
                 });
-                showToast("Plan upgraded successfully!", "success");
-                this.paymentModalOpen = false;
-                this.loadUser(); // Refresh user info
+                const data = await res.json();
+
+                if (data.redirectUrl) {
+                    // 2. Redirect to PhonePe
+                    window.location.href = data.redirectUrl;
+                } else {
+                    showToast(data.message || "Payment initiation failed", "error");
+                }
             } catch (e) {
-                showToast("Upgrade failed", "error");
+                showToast("Payment Error: " + e.message, "error");
             }
         },
 

@@ -32,21 +32,39 @@ public class PaymentController {
     private static final int SALT_INDEX = 1;
     private static final String TARGET_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay";
     private static final String CALLBACK_URL = "https://afklive.duckdns.org/api/payment/callback";
+    private final com.afklive.streamer.service.UserService userService;
 
     @PostMapping("/initiate")
-    public ResponseEntity<?> initiatePayment(@RequestBody(required = false) Map<String, Object> body, Principal principal) {
+    public ResponseEntity<?> initiatePayment(@RequestBody Map<String, Object> body, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        String email = principal.getName(); // Email is username
+
         try {
-            long amount = 100; // 1.00 INR in paise
+            String planId = (String) body.get("planId");
+            if (planId == null) return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
+
+            // Determine Amount (In Paise)
+            long amount;
+            if ("ESSENTIALS".equals(planId)) {
+                amount = 49900; // 499.00 INR
+            } else {
+                return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan"));
+            }
 
             String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
-            String userId = (principal != null) ? principal.getName() : "test-user-" + UUID.randomUUID().toString().substring(0, 8);
+            // Store planId in userId field or custom param if supported? PhonePe passes back merchantUserId.
+            // We can encode planId in the transaction ID or store it in a DB.
+            // For simplicity, we'll assume the callback updates to "ESSENTIALS" if amount matches 499.
+
+            // Redirect to Settings page
+            String redirectUrl = "https://afklive.duckdns.org/studio?view=settings&payment_status=pending&txnId=" + merchantTransactionId;
 
             Map<String, Object> payload = new HashMap<>();
             payload.put("merchantId", MERCHANT_ID);
             payload.put("merchantTransactionId", merchantTransactionId);
-            payload.put("merchantUserId", userId);
+            payload.put("merchantUserId", email);
             payload.put("amount", amount);
-            payload.put("redirectUrl", "https://afklive.duckdns.org/pricing?payment=success");
+            payload.put("redirectUrl", redirectUrl);
             payload.put("redirectMode", "REDIRECT");
             payload.put("callbackUrl", CALLBACK_URL);
             payload.put("mobileNumber", "9999999999");
@@ -70,7 +88,7 @@ public class PaymentController {
 
             HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(requestBody, headers);
 
-            log.info("Initiating payment: TxnId={}, User={}", merchantTransactionId, userId);
+            log.info("Initiating payment: TxnId={}, User={}", merchantTransactionId, email);
 
             ResponseEntity<Map> response = restTemplate.postForEntity(TARGET_URL, requestEntity, Map.class);
             Map<String, Object> responseBody = response.getBody();
@@ -105,6 +123,24 @@ public class PaymentController {
                  byte[] decodedBytes = Base64.getDecoder().decode(encodedResponse);
                  String decodedJson = new String(decodedBytes, StandardCharsets.UTF_8);
                  log.info("Decoded Callback JSON: {}", decodedJson);
+
+                 Map<String, Object> responseMap = objectMapper.readValue(decodedJson, Map.class);
+                 String code = (String) responseMap.get("code");
+
+                 if ("PAYMENT_SUCCESS".equals(code)) {
+                     Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
+                     String merchantTransactionId = (String) data.get("merchantTransactionId");
+                     String merchantUserId = (String) data.get("merchantUserId"); // This is the email
+                     Number amountNum = (Number) data.get("amount");
+                     long amount = amountNum.longValue();
+
+                     if (amount == 49900) {
+                         log.info("Upgrading user {} to ESSENTIALS", merchantUserId);
+                         userService.updatePlan(merchantUserId, com.afklive.streamer.model.PlanType.ESSENTIALS);
+                     }
+                 } else {
+                     log.warn("Payment failed or pending: {}", code);
+                 }
              }
         } catch (Exception e) {
             log.error("Error parsing callback", e);
