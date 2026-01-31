@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.lambda.model.InvokeRequest;
@@ -22,6 +24,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
@@ -57,6 +60,13 @@ public class VideoConversionService {
             this.lambdaClient = LambdaClient.builder()
                     .region(Region.of(awsRegion))
                     .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(awsAccessKey, awsSecretKey)))
+                    .httpClientBuilder(ApacheHttpClient.builder()
+                            .socketTimeout(Duration.ofMinutes(10))     // Wait 10 mins for data
+                            .connectionTimeout(Duration.ofSeconds(10)))
+                    .overrideConfiguration(ClientOverrideConfiguration.builder()
+                            .apiCallTimeout(Duration.ofMinutes(10))        // Total time allowed for the whole operation
+                            .apiCallAttemptTimeout(Duration.ofMinutes(10)) // Time allowed for a single try
+                            .build())
                     .build();
         } else {
             this.lambdaClient = null;
@@ -248,11 +258,11 @@ public class VideoConversionService {
 
             // Download
             for (ScheduledVideo v : sourceVideos) {
-                 Path tempFile = tempDir.resolve(v.getId() + "_" + v.getTitle().replaceAll("[^a-zA-Z0-9.-]", "_"));
-                 try (InputStream is = storageService.downloadFile(v.getS3Key())) {
-                     Files.copy(is, tempFile);
-                 }
-                 inputs.add(tempFile);
+                Path tempFile = tempDir.resolve(v.getId() + "_" + v.getTitle().replaceAll("[^a-zA-Z0-9.-]", "_"));
+                try (InputStream is = storageService.downloadFile(v.getS3Key())) {
+                    Files.copy(is, tempFile);
+                }
+                inputs.add(tempFile);
             }
 
             Path output = tempDir.resolve("merged.mp4");
@@ -271,9 +281,9 @@ public class VideoConversionService {
 
             int exitCode = process.waitFor();
             if (exitCode != 0) {
-                 log.error("Merge failed (code {})", exitCode);
-                 conversionProgress.put(progressKey, -1);
-                 return;
+                log.error("Merge failed (code {})", exitCode);
+                conversionProgress.put(progressKey, -1);
+                return;
             }
 
             // Upload
@@ -307,8 +317,14 @@ public class VideoConversionService {
         if (tempDir != null) {
             try (Stream<Path> walk = Files.walk(tempDir)) {
                 walk.sorted(Comparator.reverseOrder())
-                    .forEach(p -> { try { Files.delete(p); } catch (Exception ignored) {} });
-            } catch (Exception ignored) {}
+                        .forEach(p -> {
+                            try {
+                                Files.delete(p);
+                            } catch (Exception ignored) {
+                            }
+                        });
+            } catch (Exception ignored) {
+            }
         }
     }
 }
