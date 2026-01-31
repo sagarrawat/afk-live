@@ -61,7 +61,9 @@ public class StreamSchedulerService {
                     0,    // streamQuality (default)
                     null, // Title
                     null, // Description
-                    null  // Privacy
+                    null, // Privacy
+                    false, // Overlay enabled
+                    null   // Overlay template
             );
 
             stream.setStatus(ScheduledStream.StreamStatus.COMPLETED); // Marked as "Started" basically

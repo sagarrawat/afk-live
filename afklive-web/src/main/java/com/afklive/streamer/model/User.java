@@ -18,6 +18,7 @@ public class User {
     private boolean enabled = true;
     private String verificationToken;
     private LocalDateTime lastVerificationSentAt;
+    private java.time.LocalDateTime planExpiration;
     private String resetToken;
     private String fullName;
     private String pictureUrl;
@@ -28,10 +29,6 @@ public class User {
     private boolean deleteNegativeComments = false;
     private boolean autoReplyUnrepliedEnabled = false;
     private String autoReplyUnrepliedMessage;
-
-    private int streamSlots = 0;
-    private LocalDateTime streamAccessExpiration;
-    private LocalDateTime planExpirationDate;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
@@ -101,6 +98,14 @@ public class User {
         this.lastVerificationSentAt = lastVerificationSentAt;
     }
 
+    public java.time.LocalDateTime getPlanExpiration() {
+        return planExpiration;
+    }
+
+    public void setPlanExpiration(java.time.LocalDateTime planExpiration) {
+        this.planExpiration = planExpiration;
+    }
+
     public String getResetToken() {
         return resetToken;
     }
@@ -163,30 +168,6 @@ public class User {
 
     public void setAutoReplyUnrepliedMessage(String autoReplyUnrepliedMessage) {
         this.autoReplyUnrepliedMessage = autoReplyUnrepliedMessage;
-    }
-
-    public int getStreamSlots() {
-        return streamSlots;
-    }
-
-    public void setStreamSlots(int streamSlots) {
-        this.streamSlots = streamSlots;
-    }
-
-    public LocalDateTime getStreamAccessExpiration() {
-        return streamAccessExpiration;
-    }
-
-    public void setStreamAccessExpiration(LocalDateTime streamAccessExpiration) {
-        this.streamAccessExpiration = streamAccessExpiration;
-    }
-
-    public LocalDateTime getPlanExpirationDate() {
-        return planExpirationDate;
-    }
-
-    public void setPlanExpirationDate(LocalDateTime planExpirationDate) {
-        this.planExpirationDate = planExpirationDate;
     }
 
     public java.util.List<SocialChannel> getChannels() {

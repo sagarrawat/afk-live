@@ -11,7 +11,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="css/theme.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔴</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 2 A22 22 0 0 1 46 24' fill='none' stroke='%23667eea' stroke-width='4' /%3E%3Cpath d='M46 24 A22 22 0 0 1 24 46' fill='none' stroke='%23764ba2' stroke-width='4' /%3E%3Cpolygon points='20,14 20,34 36,24' fill='%23764ba2' /%3E%3C/svg%3E">
     <script>
         tailwind.config = {
             theme: {
@@ -105,14 +105,14 @@
         <!-- Mobile Header -->
         <header class="mobile-header">
             <button class="hamburger" onclick="toggleMobileMenu()"><i class="fa-solid fa-bars"></i></button>
-            <span class="mobile-title">AFK Live</span>
+            <div class="afk-logo" style="transform: scale(0.6); transform-origin: left center;">
+                <div class="afk-icon"><div class="afk-play"></div></div>
+                <div class="afk-text">AFK<span class="afk-live">Live</span></div>
+            </div>
         </header>
 
         <div id="verificationBanner" class="hidden warning-banner">
             ⚠️ Please verify your email address to access all features.
-        </div>
-        <div id="planExpiryBanner" class="hidden warning-banner" style="background-color: #fff3cd; color: #856404; border-color: #ffeeba;">
-            ⚠️ Your plan has expired. Please renew within 3 days to avoid losing access to premium features. <a href="#" onclick="switchView('settings'); switchSettingsTab('plans');" style="text-decoration: underline; font-weight: bold;">Renew Now</a>
         </div>
 
         <!-- VIEW: PUBLISH (Alpine + Tailwind) -->
@@ -192,7 +192,7 @@
         </div>
 
         <!-- VIEW: STREAM (Alpine & Tailwind - Apple Style) -->
-        <div id="view-stream" class="view-section h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
+        <div id="view-stream" class="view-section hidden h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
             <div class="flex flex-col lg:flex-row h-full w-full">
 
                 <!-- LEFT: STAGE -->
@@ -402,6 +402,24 @@
                                                 <option value="1080">1080p</option>
                                                 <option value="720">720p</option>
                                                 <option value="2160">4K</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Overlay Settings -->
+                                    <div class="mt-4 pt-3 border-t border-gray-100">
+                                        <div class="flex items-center justify-between mb-2">
+                                            <label class="text-xs font-bold text-gray-700 uppercase tracking-wider">Subscriber Overlay</label>
+                                            <label class="switch scale-75">
+                                                <input type="checkbox" x-model="overlayEnabled">
+                                                <span class="slider round"></span>
+                                            </label>
+                                        </div>
+                                        <div x-show="overlayEnabled" class="space-y-2">
+                                            <label class="block text-xs font-medium text-gray-700">Template</label>
+                                            <select x-model="overlayTemplate" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                                                <option value="SIMPLE">Simple (Bottom Left)</option>
+                                                <option value="GOAL">Goal (10K)</option>
                                             </select>
                                         </div>
                                     </div>
@@ -914,6 +932,10 @@
                                                 <i class="fa-solid fa-hard-drive"></i>
                                                 <span>Storage Used: <span x-text="formattedStorage"></span></span>
                                             </div>
+                                            <div class="mt-1 flex items-center gap-2 text-sm text-gray-300">
+                                                <i class="fa-regular fa-calendar-check"></i>
+                                                <span>Expires: <span x-text="planExpirationDisplay"></span></span>
+                                            </div>
                                         </div>
                                         <div class="w-full md:w-64">
                                             <div class="flex justify-between text-xs mb-2 text-gray-400">
@@ -945,7 +967,6 @@
                                             <div x-show="user?.plan?.name === plan.title" class="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
                                                 CURRENT
                                             </div>
-                                            <div x-show="plan.badge" class="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg" x-text="plan.badge" :class="user?.plan?.name === plan.title ? 'mr-14' : ''"></div>
 
                                             <h4 class="text-lg font-bold text-gray-900" x-text="plan.title"></h4>
                                             <div class="mt-2 mb-4">

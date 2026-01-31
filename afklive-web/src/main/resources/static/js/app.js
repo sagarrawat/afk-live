@@ -24,17 +24,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadUserChannels();
     loadScheduledQueue();
 
+    // Handle URL overrides (e.g. from payment redirect)
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewFromUrl = urlParams.get('view');
+
+    if (viewFromUrl) {
+        localStorage.setItem('activeView', viewFromUrl);
+    }
+
     // Restore active view
     const savedView = localStorage.getItem('activeView') || 'stream';
     switchView(savedView);
-
-    // Check for payment success
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('payment') === 'success') {
-        showToast("Plan upgraded successfully!", "success");
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
 
     // Event Listeners
     setupEventListeners();
@@ -532,16 +532,6 @@ async function fetchUserInfo() {
             }
             if(data.plan) renderPlanInfo(data.plan);
             if(data.enabled === false) document.getElementById('verificationBanner').classList.remove('hidden');
-
-            // Check Expiration
-            if (data.planExpirationDate) {
-                const expDate = new Date(data.planExpirationDate);
-                const now = new Date();
-                if (now > expDate) {
-                    document.getElementById('planExpiryBanner').classList.remove('hidden');
-                }
-            }
-
             checkInitialStatus();
         } else {
             window.location.href = '/login';
