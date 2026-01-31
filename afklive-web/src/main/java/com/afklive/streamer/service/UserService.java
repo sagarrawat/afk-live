@@ -137,6 +137,13 @@ public class UserService {
         log.info("Updating plan for user {} to {}", username, newPlan);
         User user = getOrCreateUser(username);
         user.setPlanType(newPlan);
+
+        if (newPlan == PlanType.ESSENTIALS) {
+            user.setPlanExpiration(java.time.LocalDateTime.now().plusDays(30));
+        } else if (newPlan == PlanType.FREE) {
+            user.setPlanExpiration(null);
+        }
+
         userRepository.save(user);
         log.info("Plan updated saved to DB for {}", username);
     }

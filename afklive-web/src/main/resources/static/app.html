@@ -192,7 +192,7 @@
         </div>
 
         <!-- VIEW: STREAM (Alpine & Tailwind - Apple Style) -->
-        <div id="view-stream" class="view-section h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
+        <div id="view-stream" class="view-section hidden h-full p-0 overflow-hidden bg-gray-50 font-sans" x-data="streamStudio">
             <div class="flex flex-col lg:flex-row h-full w-full">
 
                 <!-- LEFT: STAGE -->
@@ -913,6 +913,10 @@
                                             <div class="mt-4 flex items-center gap-2 text-sm text-gray-300">
                                                 <i class="fa-solid fa-hard-drive"></i>
                                                 <span>Storage Used: <span x-text="formattedStorage"></span></span>
+                                            </div>
+                                            <div class="mt-1 flex items-center gap-2 text-sm text-gray-300">
+                                                <i class="fa-regular fa-calendar-check"></i>
+                                                <span>Expires: <span x-text="planExpirationDisplay"></span></span>
                                             </div>
                                         </div>
                                         <div class="w-full md:w-64">

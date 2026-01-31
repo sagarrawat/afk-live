@@ -18,6 +18,7 @@ public class User {
     private boolean enabled = true;
     private String verificationToken;
     private LocalDateTime lastVerificationSentAt;
+    private java.time.LocalDateTime planExpiration;
     private String resetToken;
     private String fullName;
     private String pictureUrl;
@@ -95,6 +96,14 @@ public class User {
 
     public void setLastVerificationSentAt(LocalDateTime lastVerificationSentAt) {
         this.lastVerificationSentAt = lastVerificationSentAt;
+    }
+
+    public java.time.LocalDateTime getPlanExpiration() {
+        return planExpiration;
+    }
+
+    public void setPlanExpiration(java.time.LocalDateTime planExpiration) {
+        this.planExpiration = planExpiration;
     }
 
     public String getResetToken() {

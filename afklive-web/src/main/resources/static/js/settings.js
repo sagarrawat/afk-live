@@ -103,6 +103,15 @@ document.addEventListener('alpine:init', () => {
             return `${used} / ${limit} MB`;
         },
 
+        get planExpirationDisplay() {
+            if (!this.user || !this.user.plan) return "";
+            if (this.user.plan.name === 'Free') return "Forever";
+            if (this.user.planExpiration) {
+                return new Date(this.user.planExpiration).toLocaleDateString();
+            }
+            return "Unknown";
+        },
+
         openPayment(plan) {
             this.selectedPlan = plan;
             this.paymentModalOpen = true;
