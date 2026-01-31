@@ -26,21 +26,16 @@ public class PaymentController {
     private final ObjectMapper objectMapper;
     private final StandardCheckoutClient phonePeClient;
     private final PaymentAuditRepository paymentAuditRepository;
-    private final String merchantId;
-    private final String callbackUrl;
 
     public PaymentController(
-            ObjectMapper objectMapper,
             PaymentAuditRepository paymentAuditRepository,
             @Value("${app.phonepe.merchant-id}") String merchantId,
             @Value("${app.phonepe.salt-key}") String saltKey,
             @Value("${app.phonepe.salt-index}") Integer saltIndex,
             @Value("${app.phonepe.env:SANDBOX}") String envStr,
             @Value("${app.base-url}") String baseUrl) {
-        this.objectMapper = objectMapper;
+        this.objectMapper = new ObjectMapper();
         this.paymentAuditRepository = paymentAuditRepository;
-        this.merchantId = merchantId;
-        this.callbackUrl = baseUrl + "/api/payment/callback";
 
         Env env = Env.valueOf(envStr.toUpperCase());
         this.phonePeClient = StandardCheckoutClient.getInstance(merchantId, saltKey, saltIndex, env);
@@ -67,7 +62,7 @@ public class PaymentController {
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
                     .merchantOrderId(merchantTransactionId)
                     .amount(amount)
-                    .redirectUrl("https://afklive.duckdns.org/app?payment=success")
+                    .redirectUrl("https://afklive.in/app?payment=success")
                     .build();
 
             StandardCheckoutPayResponse response = phonePeClient.pay(payRequest);
