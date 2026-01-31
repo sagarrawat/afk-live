@@ -81,10 +81,5 @@ app:
     secret-key: ${AWS_SECRET_ACCESS_KEY}
     region: eu-north-1
     function-name: afklive-optimizer-lambda
-  phonepe:
-    merchant-id: ${PHONEPE_MERCHANT_ID:PGTESTPAYUAT}
-    salt-key: ${PHONEPE_SALT_KEY:099eb0cd-02cf-4e2a-8aca-3e6c6aff0399}
-    salt-index: ${PHONEPE_SALT_INDEX:1}
-    env: ${PHONEPE_ENV:SANDBOX}
 server:
   forward-headers-strategy: native

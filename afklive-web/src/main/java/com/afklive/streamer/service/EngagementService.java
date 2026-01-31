@@ -26,7 +26,7 @@ public class EngagementService {
     private final YouTubeService youTubeService;
     private final AiService aiService;
 
-    @Scheduled(fixedRate = 3_60_000)
+    @Scheduled(fixedRate = 60000) // 1 min
     public void processEngagement() {
         List<User> users = userRepository.findAll();
         for (User user : users) {

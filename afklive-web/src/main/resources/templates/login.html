@@ -20,6 +20,8 @@
                 }
             }
         }
+        // Clear session persistence on fresh login
+        localStorage.removeItem('activeView');
     </script>
 </head>
 <body class="h-screen flex overflow-hidden bg-white font-sans text-gray-900">
@@ -45,7 +47,7 @@
 
         <!-- Footer -->
         <div class="z-10 text-sm text-gray-400">
-            &copy; 2026 AFK Live.
+            &copy; 2024 AFK Live Inc.
         </div>
 
         <!-- Background Decor -->

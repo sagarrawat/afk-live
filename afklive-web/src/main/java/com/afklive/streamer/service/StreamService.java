@@ -92,26 +92,6 @@ public class StreamService {
         int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
         userService.checkStreamQuota(username, activeCount);
 
-        // SLOT CHECK Logic
-        com.afklive.streamer.model.User currentUser = userService.getOrCreateUser(username);
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-
-        // If expiration is null or past, check slots
-        if (currentUser.getStreamAccessExpiration() == null || currentUser.getStreamAccessExpiration().isBefore(now)) {
-            if (currentUser.getStreamSlots() > 0) {
-                // Consume 1 slot
-                currentUser.setStreamSlots(currentUser.getStreamSlots() - 1);
-                currentUser.setStreamAccessExpiration(now.plusHours(24));
-                userService.saveUser(currentUser);
-                log.info("Consumed 1 stream slot for user {}. Slots remaining: {}", username, currentUser.getStreamSlots());
-            } else {
-                // No slots and no active pass
-                throw new IllegalStateException("No streaming slots available. Please upgrade or purchase slots.");
-            }
-        } else {
-            log.info("User {} has valid stream access until {}", username, currentUser.getStreamAccessExpiration());
-        }
-
         // REMOVED SINGLE STREAM CHECK TO ALLOW MULTIPLE STREAMS
         // if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
         //    throw new IllegalStateException("You already have an active stream running!");

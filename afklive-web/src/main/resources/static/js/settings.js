@@ -7,7 +7,6 @@ document.addEventListener('alpine:init', () => {
         isLoading: false,
         paymentModalOpen: false,
         selectedPlan: null,
-        isProcessingPayment: false,
 
         async init() {
             // Check for payment redirect params
@@ -57,7 +56,7 @@ document.addEventListener('alpine:init', () => {
         async loadPlans() {
             this.isLoading = true;
             try {
-                const res = await apiFetch('/api/pricing?country=IN');
+                const res = await apiFetch('/api/pricing?country=US');
                 const data = await res.json();
                 this.plans = data.plans || [];
             } catch (e) {
@@ -120,44 +119,33 @@ document.addEventListener('alpine:init', () => {
 
         async processUpgrade() {
             if (!this.selectedPlan) return;
+            const planId = this.selectedPlan.id;
 
-            // Parse price string (e.g. ₹499) to number for payment
-            let amount = 0;
-            try {
-                amount = parseInt(this.selectedPlan.price.replace(/[^0-9]/g, '')) * 100; // to paise
-            } catch(e) {}
-
-            if (amount <= 0) {
-                 // Fallback for free or error
-                 this.paymentModalOpen = false;
-                 return;
+            // Direct upgrade for Free plan (downgrade/switch) if logic permits,
+            // but usually this function is called for Paid upgrades.
+            if (planId === 'FREE') {
+               // Call cancel/downgrade logic
+               this.cancelSubscription();
+               return;
             }
 
-            // Show Loader
-            const btn = document.querySelector('button[x-text="\'Confirm & Pay\'"]') || document.querySelector('#paymentModal button.bg-blue-600');
-            // Since Alpine component scope, standard DOM query might be tricky if not refs.
-            // But we can set a state variable if we bound it.
-            // Let's use global loader for simplicity or assume button text changes if bound.
-            // Adding a loading state to the component
-            this.isProcessingPayment = true;
-
             try {
+                // 1. Initiate Payment
                 const res = await apiFetch('/api/payment/initiate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amount: amount, planId: this.selectedPlan.id })
+                    body: JSON.stringify({ planId: planId })
                 });
                 const data = await res.json();
 
                 if (data.redirectUrl) {
+                    // 2. Redirect to PhonePe
                     window.location.href = data.redirectUrl;
                 } else {
                     showToast(data.message || "Payment initiation failed", "error");
-                    this.isProcessingPayment = false;
                 }
             } catch (e) {
-                showToast("Payment failed", "error");
-                this.isProcessingPayment = false;
+                showToast("Payment Error: " + e.message, "error");
             }
         },
 
