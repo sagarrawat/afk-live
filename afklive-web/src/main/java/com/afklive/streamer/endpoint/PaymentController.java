@@ -61,7 +61,8 @@ public class PaymentController {
             String jsonPayload = objectMapper.writeValueAsString(payload);
             String base64Payload = Base64.getEncoder().encodeToString(jsonPayload.getBytes(StandardCharsets.UTF_8));
 
-            String stringToHash = base64Payload + "/pg/v1/pay" + SALT_KEY;
+            // Important: Checksum endpoint must match the request path
+            String stringToHash = base64Payload + "/apis/pg-sandbox/pg/v1/pay" + SALT_KEY;
             String checksum = sha256(stringToHash) + "###" + SALT_INDEX;
 
             HttpHeaders headers = new HttpHeaders();
