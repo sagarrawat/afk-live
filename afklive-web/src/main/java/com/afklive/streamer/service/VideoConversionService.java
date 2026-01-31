@@ -104,11 +104,15 @@ public class VideoConversionService {
         if (lambdaClient != null && lambdaFunctionName != null && !lambdaFunctionName.isEmpty()) {
             try {
                 log.info("Attempting optimization via Lambda for {}: {}", username, fileName);
+
+                String finalS3Key = UUID.randomUUID() + "_" + targetTitle;
+
                 Map<String, String> payload = new HashMap<>();
                 payload.put("file_name", scheduledVideo.getS3Key());
                 payload.put("mode", mode);
                 payload.put("height", String.valueOf(height));
                 payload.put("username", username);
+                payload.put("output_key", finalS3Key);
 
                 String jsonPayload = objectMapper.writeValueAsString(payload);
 

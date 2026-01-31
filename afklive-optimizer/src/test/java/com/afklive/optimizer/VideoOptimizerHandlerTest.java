@@ -78,6 +78,31 @@ public class VideoOptimizerHandlerTest {
     }
 
     @Test
+    public void testHandleRequest_WithOutputKey() throws Exception {
+        // Arrange
+        Map<String, String> event = new HashMap<>();
+        event.put("file_name", "test-video.mp4");
+        event.put("output_key", "custom-output-key.mp4");
+        event.put("username", "testuser");
+
+        doAnswer(invocation -> {
+            File output = invocation.getArgument(1);
+            Files.writeString(output.toPath(), "dummy content");
+            return null;
+        }).when(handler).executeCommand(anyList(), any(File.class));
+
+        // Act
+        OptimizationResponse result = handler.handleRequest(event, context);
+
+        // Assert
+        assertEquals("success", result.getStatus());
+        assertEquals("custom-output-key.mp4", result.getOptimizedKey());
+
+        // Verify upload used the custom key
+        verify(s3Client).putObject(argThat((PutObjectRequest r) -> r.key().equals("custom-output-key.mp4")), any(RequestBody.class));
+    }
+
+    @Test
     public void testHandleRequest_Failure() throws Exception {
         // Arrange
         Map<String, String> event = new HashMap<>();
