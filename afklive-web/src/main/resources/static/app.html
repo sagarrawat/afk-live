@@ -376,14 +376,14 @@
                                     <div>
                                         <div class="flex justify-between mb-1">
                                             <label class="block text-xs font-medium text-gray-700">Title</label>
-                                            <button id="ai-btn-title" @click="generateMetadata('title')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
+                                            <button id="ai-btn-title" @click="generateMetadata('title')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C12.5 7.5 16.5 11.5 22 12C16.5 12.5 12.5 16.5 12 22C11.5 16.5 7.5 12.5 2 12C7.5 11.5 11.5 7.5 12 2Z"/></svg> AI Magic</button>
                                         </div>
                                         <input type="text" maxlength="100" x-model="streamTitle" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Stream Title">
                                     </div>
                                     <div>
                                         <div class="flex justify-between mb-1">
                                             <label class="block text-xs font-medium text-gray-700">Description</label>
-                                            <button id="ai-btn-desc" @click="generateMetadata('desc')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Magic</button>
+                                            <button id="ai-btn-desc" @click="generateMetadata('desc')" class="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C12.5 7.5 16.5 11.5 22 12C16.5 12.5 12.5 16.5 12 22C11.5 16.5 7.5 12.5 2 12C7.5 11.5 11.5 7.5 12 2Z"/></svg> AI Magic</button>
                                         </div>
                                         <textarea maxlength="5000" x-model="streamDescription" rows="3" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition" placeholder="Description"></textarea>
                                     </div>
@@ -1021,7 +1021,7 @@
                             <span class="text-lg font-bold text-gray-900" x-text="selectedPlan?.price"></span>
                         </div>
                         <div class="flex items-center gap-2 text-xs text-gray-500">
-                            <i class="fa-solid fa-lock"></i> Secure payment with Stripe
+                            <i class="fa-solid fa-lock"></i> Secure payment with PhonePe
                         </div>
                     </div>
 
@@ -1324,7 +1324,7 @@
                     <div class="form-group">
                         <textarea id="scheduleDescription" class="composer-textarea" placeholder="What would you like to share?"></textarea>
                         <div class="composer-tools">
-                             <button class="tool-btn" onclick="aiGenerate('description')" title="AI Assist"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Write</button>
+                             <button class="tool-btn" onclick="aiGenerate('description')" title="AI Assist"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path d="M12 2C12.5 7.5 16.5 11.5 22 12C16.5 12.5 12.5 16.5 12 22C11.5 16.5 7.5 12.5 2 12C7.5 11.5 11.5 7.5 12 2Z"/></svg> AI Write</button>
                              <button class="tool-btn" onclick="document.getElementById('scheduleTags').focus()"><i class="fa-solid fa-hashtag"></i> Tags</button>
                         </div>
                     </div>
@@ -1368,7 +1368,10 @@
                     <!-- Details -->
                      <div class="form-row">
                         <div class="form-group">
-                            <label>Title</label>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <label style="margin:0;">Title</label>
+                                <button class="tool-btn" onclick="aiGenerate('title')" title="AI Assist" style="padding:2px 8px; font-size:0.75rem;"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path d="M12 2C12.5 7.5 16.5 11.5 22 12C16.5 12.5 12.5 16.5 12 22C11.5 16.5 7.5 12.5 2 12C7.5 11.5 11.5 7.5 12 2Z"/></svg> AI Write</button>
+                            </div>
                             <input type="text" id="scheduleTitle" class="form-input">
                         </div>
                          <div class="form-group">
@@ -1392,7 +1395,10 @@
                              </div>
                          </div>
                          <div class="form-group">
-                             <input type="text" id="scheduleTags" placeholder="Tags (comma separated)" class="form-input">
+                             <div style="position:relative;">
+                                 <input type="text" id="scheduleTags" placeholder="Tags (comma separated)" class="form-input" style="padding-right: 80px;">
+                                 <button onclick="aiGenerate('tags')" style="position:absolute; right:5px; top:50%; transform:translateY(-50%); border:none; background:none; color:#2c68f6; cursor:pointer; font-size:0.8rem; display:flex; align-items:center; gap:4px;"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C12.5 7.5 16.5 11.5 22 12C16.5 12.5 12.5 16.5 12 22C11.5 16.5 7.5 12.5 2 12C7.5 11.5 11.5 7.5 12 2Z"/></svg> AI</button>
+                             </div>
                          </div>
 
                          <div class="form-group">

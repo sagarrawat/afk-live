@@ -1347,15 +1347,43 @@ async function submitAutoSchedule() {
 
 /* --- AI --- */
 async function aiGenerate(type) {
-    const ctx = document.getElementById('scheduleTitle').value || "Video";
-    const target = type === 'description' ? document.getElementById('scheduleDescription') : null;
+    let target = null;
+    let context = "";
+
+    const titleVal = document.getElementById('scheduleTitle').value;
+    const descVal = document.getElementById('scheduleDescription').value;
+
+    if (type === 'title') {
+        target = document.getElementById('scheduleTitle');
+        const file = document.getElementById('scheduleFile').files[0];
+        context = titleVal || (file ? file.name : "Video content");
+    } else if (type === 'description') {
+        target = document.getElementById('scheduleDescription');
+        context = titleVal || "Video";
+    } else if (type === 'tags') {
+        target = document.getElementById('scheduleTags');
+        context = (titleVal || "") + " " + (descVal || "");
+        if (!context.trim()) context = "Video";
+    }
+
     if(!target) return;
+
+    const originalPlaceholder = target.placeholder;
     target.placeholder = "AI is writing...";
+    showToast(`Generating ${type}...`, "info");
+
     try {
-        const res = await apiFetch(`${API_URL}/ai/generate`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type, context: ctx}) });
+        const res = await apiFetch(`${API_URL}/ai/generate`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type, context: context}) });
         const data = await res.json();
-        target.value = data.result;
-    } catch(e) {}
+        if(data.result) {
+            target.value = data.result;
+            target.dispatchEvent(new Event('input'));
+        }
+    } catch(e) {
+        showToast("AI Generation Failed", "error");
+    } finally {
+        target.placeholder = originalPlaceholder;
+    }
 }
 
 /* --- SETTINGS --- */
