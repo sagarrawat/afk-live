@@ -78,6 +78,17 @@ public class EmailService {
         sendEmail(to, "You've upgraded to " + planName + "!", html);
     }
 
+    public void sendSupportTicket(String userEmail, String category, String message) {
+        String subject = "[Support] " + category + " - " + userEmail;
+        String content = "<p><strong>User:</strong> " + userEmail + "</p>" +
+                         "<p><strong>Category:</strong> " + category + "</p>" +
+                         "<hr>" +
+                         "<p style='white-space: pre-wrap;'>" + message + "</p>";
+
+        String html = createBaseHtml("New Support Ticket", content);
+        sendEmail("support@afklive.in", subject, html);
+    }
+
     private void sendEmail(String to, String subject, String htmlContent) {
         if (to == null || to.isEmpty()) {
             log.warn("Skipping email notification: No recipient address.");

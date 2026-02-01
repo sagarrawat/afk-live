@@ -1433,6 +1433,39 @@ async function loadInternalPricing() {
 /* --- MODALS --- */
 function openSupportModal() { document.getElementById('supportModal').classList.remove('hidden'); }
 
+async function submitSupportTicket() {
+    const category = document.getElementById('supportCategory').value;
+    const message = document.getElementById('supportMessage').value;
+
+    if (!message) return showToast("Please describe your issue", "error");
+
+    const btn = document.getElementById('btnSubmitTicket');
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+
+    try {
+        const res = await apiFetch('/api/support/ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category, message })
+        });
+
+        if (res.ok) {
+            showToast("Ticket submitted successfully", "success");
+            document.getElementById('supportMessage').value = '';
+            document.getElementById('supportModal').classList.add('hidden');
+        } else {
+            showToast("Failed to submit ticket", "error");
+        }
+    } catch (e) {
+        showToast("Network error", "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+}
+
 let selectedPlanId = null;
 function openPaymentModal(id, title, price) {
     selectedPlanId = id;
