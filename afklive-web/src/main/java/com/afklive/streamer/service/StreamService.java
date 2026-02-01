@@ -296,7 +296,7 @@ public class StreamService {
                     title,
                     description,
                     privacy,
-                    java.time.LocalDateTime.now(),
+                    java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")),
                     destName
             );
             job = streamJobRepo.save(job);

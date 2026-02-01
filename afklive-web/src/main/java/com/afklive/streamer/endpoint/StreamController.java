@@ -200,7 +200,7 @@ public class StreamController {
         if (stream.getStreamKeys() == null || stream.getStreamKeys().isEmpty()) {
              return ResponseEntity.badRequest().body(ApiResponse.error("At least one destination required"));
         }
-        if (stream.getScheduledTime() == null || stream.getScheduledTime().isBefore(java.time.LocalDateTime.now())) {
+        if (stream.getScheduledTime() == null || stream.getScheduledTime().isBefore(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")))) {
              return ResponseEntity.badRequest().body(ApiResponse.error("Scheduled time must be in the future"));
         }
 

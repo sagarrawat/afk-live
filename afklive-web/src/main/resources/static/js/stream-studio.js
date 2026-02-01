@@ -376,6 +376,8 @@ document.addEventListener('alpine:init', () => {
 
         getStreamDuration(startTime) {
             if(!startTime) return 'Starting...';
+            // Backend sends UTC ISO string. new Date() handles it correctly.
+            // If backend sends "2024-06-01T10:00:00Z", this works.
             const start = new Date(startTime).getTime();
             const diff = Math.max(0, this.now - start);
 

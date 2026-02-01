@@ -805,9 +805,9 @@ function extractFrame() {
 async function submitSchedule() {
     const file = document.getElementById('scheduleFile').files[0];
     const title = document.getElementById('scheduleTitle').value;
-    const time = document.getElementById('scheduleTime').value;
+    const timeVal = document.getElementById('scheduleTime').value;
 
-    if((!file && !selectedLibraryVideoId) || !title || !time) return showToast("Please fill Title, Time and select a Video.", "error");
+    if((!file && !selectedLibraryVideoId) || !title || !timeVal) return showToast("Please fill Title, Time and select a Video.", "error");
 
     const btn = document.getElementById('btnSchedule');
     btn.disabled = true;
@@ -817,8 +817,11 @@ async function submitSchedule() {
     if (selectedLibraryVideoId) formData.append("libraryVideoId", selectedLibraryVideoId);
     else formData.append("file", file);
 
+    // Convert local time to UTC ISO string
+    const utcTime = new Date(timeVal).toISOString();
+
     formData.append("title", title);
-    formData.append("scheduledTime", time);
+    formData.append("scheduledTime", utcTime);
     formData.append("description", document.getElementById('scheduleDescription').value);
     formData.append("privacyStatus", document.getElementById('schedulePrivacy').value);
     formData.append("categoryId", document.getElementById('scheduleCategory').value);
@@ -883,6 +886,7 @@ async function loadScheduledQueue() {
             const statusClass = v.status === 'UPLOADED' ? 'color:#00875a' : (v.status === 'FAILED' ? 'color:#e02424' : 'color:#6b778c');
             const thumbUrl = v.thumbnailS3Key ? `${API_URL}/videos/${v.id}/thumbnail` : null;
             const thumbHtml = thumbUrl ? `<img src="${thumbUrl}" style="width:100%;height:100%;object-fit:cover;">` : `<i class="fa-solid fa-film"></i>`;
+            // new Date(v.scheduledTime) handles 'Z' and converts to local time automatically
             list.innerHTML += `
                 <div class="queue-item">
                     <div class="queue-thumb">${thumbHtml}</div>
@@ -898,8 +902,8 @@ async function submitScheduledStream() {
     if(!selectedStreamVideo) return showToast("Please select a video source", "error");
     if(selectedKeys.length === 0) return showToast("Please select at least one destination", "error");
 
-    const scheduledTime = document.getElementById('streamScheduleTime').value;
-    if(!scheduledTime) return showToast("Please select a start time", "error");
+    const scheduledTimeVal = document.getElementById('streamScheduleTime').value;
+    if(!scheduledTimeVal) return showToast("Please select a start time", "error");
 
     const loopInfinite = document.getElementById('streamLoopInfinite').checked;
     const loopCount = loopInfinite ? -1 : document.getElementById('streamLoopCount').value;
@@ -907,7 +911,7 @@ async function submitScheduledStream() {
     const payload = {
         videoKey: selectedStreamVideo.s3Key,
         streamKeys: selectedKeys,
-        scheduledTime: scheduledTime,
+        scheduledTime: new Date(scheduledTimeVal).toISOString(),
         loopCount: loopCount,
         streamMode: "original", // Default to original for now
         muteVideoAudio: document.getElementById('streamMuteOriginal').checked

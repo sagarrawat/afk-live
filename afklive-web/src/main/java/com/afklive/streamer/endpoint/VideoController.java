@@ -23,7 +23,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.Principal;
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -149,7 +149,7 @@ public class VideoController {
             }
 
             // Parse time
-            LocalDateTime scheduledTime = LocalDateTime.parse(scheduledTimeStr);
+            ZonedDateTime scheduledTime = ZonedDateTime.parse(scheduledTimeStr);
 
             // Save Metadata
             ScheduledVideo video = new ScheduledVideo();
