@@ -3,6 +3,7 @@ package com.afklive.streamer.endpoint;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -28,10 +29,15 @@ public class PaymentController {
     private final RestTemplate restTemplate = new RestTemplate();
     private final com.afklive.streamer.service.UserService userService;
 
-    private static final String MERCHANT_ID = "PGTESTPAYUAT";
-    private static final String SALT_KEY = "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399";
-    private static final int SALT_INDEX = 1;
-    private static final String TARGET_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay";
+    @Value("${app.phonepe.merchant-id}")
+    private String merchantId;
+    @Value("${app.phonepe.salt-key}")
+    private String saltKey;
+    @Value("${app.phonepe.salt-index}")
+    private int saltIndex;
+    @Value("${app.phonepe.salt-env}")
+    private String saltEnv;
+
     private static final String CALLBACK_URL = "https://afklive.duckdns.org/api/payment/callback";
 
     @PostMapping("/initiate")
@@ -57,7 +63,7 @@ public class PaymentController {
             String redirectUrl = "https://afklive.duckdns.org/studio?view=settings&payment_status=pending&txnId=" + merchantTransactionId;
 
             Map<String, Object> payload = new HashMap<>();
-            payload.put("merchantId", MERCHANT_ID);
+            payload.put("merchantId", merchantId);
             payload.put("merchantTransactionId", merchantTransactionId);
             payload.put("merchantUserId", email);
             payload.put("amount", amount);
@@ -73,8 +79,8 @@ public class PaymentController {
             String jsonPayload = objectMapper.writeValueAsString(payload);
             String base64Payload = Base64.getEncoder().encodeToString(jsonPayload.getBytes(StandardCharsets.UTF_8));
 
-            String stringToHash = base64Payload + "/pg/v1/pay" + SALT_KEY;
-            String checksum = sha256(stringToHash) + "###" + SALT_INDEX;
+            String stringToHash = base64Payload + "/pg/v1/pay" + saltKey;
+            String checksum = sha256(stringToHash) + "###" + saltIndex;
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -87,7 +93,8 @@ public class PaymentController {
 
             log.info("Initiating payment: TxnId={}, User={}", merchantTransactionId, email);
 
-            ResponseEntity<Map> response = restTemplate.postForEntity(TARGET_URL, requestEntity, Map.class);
+            String targetUrl = saltEnv + "/pg/v1/pay";
+            ResponseEntity<Map> response = restTemplate.postForEntity(targetUrl, requestEntity, Map.class);
             Map<String, Object> responseBody = response.getBody();
 
             if (responseBody != null && Boolean.TRUE.equals(responseBody.get("success"))) {
