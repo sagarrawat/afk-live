@@ -250,24 +250,6 @@ public class StreamService {
 
         // Loop through keys to start individual processes
         for (String key : validKeys) {
-            FFmpegCommandBuilder builder = new FFmpegCommandBuilder();
-            builder.setLoop(loopCount);
-            builder.setStreamMode(streamMode);
-            if (watermarkPath != null) builder.addWatermark(watermarkPath.toAbsolutePath().toString());
-            if (overlayTextPath != null) builder.addTextOverlay(overlayTextPath.toAbsolutePath().toString());
-
-            // Re-implement buildStreamCommand logic using instance builder if possible or adapt
-            // Since buildStreamCommand is static and rigid, we need to use the builder instance
-            // But existing code uses static method. We should refactor or adapt.
-            // Let's assume we modify FFmpegCommandBuilder to support static method with overlay,
-            // OR use the builder pattern here which is cleaner.
-
-            // To avoid breaking existing logic, let's update FFmpegCommandBuilder static method signature or add overlay param.
-            // Actually, let's use the builder pattern which seems to be the intent of the missing code in previous turn.
-
-            // Wait, previous turn showed `FFmpegCommandBuilder` instantiation.
-            // Let's stick to the static method for now but add overlayPath argument.
-
             List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, overlayTextPath);
 
             log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
