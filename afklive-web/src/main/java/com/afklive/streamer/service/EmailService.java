@@ -3,12 +3,10 @@ package com.afklive.streamer.service;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -47,7 +45,7 @@ public class EmailService {
     public void sendUploadNotification(String to, String videoTitle, String status) {
         String content = "<p>Your video <strong>" + videoTitle + "</strong> status has changed to: <strong>" + status + "</strong></p>";
         String html = createBaseHtml("Video Update", content);
-        sendEmail(to, "AFK Live: Video " + status, html, null);
+        sendEmail(to, "AFK Live: Video " + status, html);
     }
 
     public void sendVerificationEmail(String to, String link) {
@@ -55,7 +53,7 @@ public class EmailService {
                          "<p><a href='" + link + "' style='background: #2c68f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Verify Email</a></p>" +
                          "<p>Or copy this link: " + link + "</p>";
         String html = createBaseHtml("Verify your email", content);
-        sendEmail(to, "Verify your email - AFK Live", html, null);
+        sendEmail(to, "Verify your email - AFK Live", html);
     }
 
     public void sendPasswordResetEmail(String to, String link) {
@@ -63,24 +61,24 @@ public class EmailService {
                          "<p><a href='" + link + "' style='background: #2c68f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Reset Password</a></p>" +
                          "<p>Or copy this link: " + link + "</p>";
         String html = createBaseHtml("Reset Password", content);
-        sendEmail(to, "Reset your password - AFK Live", html, null);
+        sendEmail(to, "Reset your password - AFK Live", html);
     }
 
     public void sendWelcomeEmail(String to) {
         String content = "<p>Welcome to AFK Live! We are excited to help you stream 24/7.</p>" +
                          "<p><a href='" + baseUrl + "'>Go to Studio</a></p>";
         String html = createBaseHtml("Welcome aboard! 🚀", content);
-        sendEmail(to, "Welcome to AFK Live! 🚀", html, null);
+        sendEmail(to, "Welcome to AFK Live! 🚀", html);
     }
 
     public void sendUpgradeEmail(String to, String planName) {
         String content = "<p>Thank you for upgrading to the <strong>" + planName + "</strong> plan.</p>" +
                          "<p>You now have access to premium features and more storage.</p>";
         String html = createBaseHtml("Upgrade Successful", content);
-        sendEmail(to, "You've upgraded to " + planName + "!", html, null);
+        sendEmail(to, "You've upgraded to " + planName + "!", html);
     }
 
-    public void sendSupportTicket(String userEmail, String category, String message, MultipartFile attachment) {
+    public void sendSupportTicket(String userEmail, String category, String message) {
         String subject = "[Support] " + category + " - " + userEmail;
         String content = "<p><strong>User:</strong> " + userEmail + "</p>" +
                          "<p><strong>Category:</strong> " + category + "</p>" +
@@ -88,10 +86,10 @@ public class EmailService {
                          "<p style='white-space: pre-wrap;'>" + message + "</p>";
 
         String html = createBaseHtml("New Support Ticket", content);
-        sendEmail("support@afklive.in", subject, html, attachment);
+        sendEmail("support@afklive.in", subject, html);
     }
 
-    private void sendEmail(String to, String subject, String htmlContent, MultipartFile attachment) {
+    private void sendEmail(String to, String subject, String htmlContent) {
         if (to == null || to.isEmpty()) {
             log.warn("Skipping email notification: No recipient address.");
             return;
@@ -105,10 +103,6 @@ public class EmailService {
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(htmlContent, true); // true = html
-
-            if (attachment != null && !attachment.isEmpty()) {
-                helper.addAttachment(attachment.getOriginalFilename(), new ByteArrayResource(attachment.getBytes()));
-            }
 
             emailSender.send(message);
             log.info("Email sent to {}", to);

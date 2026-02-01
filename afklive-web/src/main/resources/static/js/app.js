@@ -1436,7 +1436,6 @@ function openSupportModal() { document.getElementById('supportModal').classList.
 async function submitSupportTicket() {
     const category = document.getElementById('supportCategory').value;
     const message = document.getElementById('supportMessage').value;
-    const file = document.getElementById('supportFile').files[0];
 
     if (!message) return showToast("Please describe your issue", "error");
 
@@ -1445,26 +1444,16 @@ async function submitSupportTicket() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
 
-    const formData = new FormData();
-    formData.append("category", category);
-    formData.append("message", message);
-    if (file) {
-        formData.append("file", file);
-    }
-
     try {
-        // apiFetch handles 401/403 but usually expects us to set headers if JSON.
-        // For FormData, do NOT set Content-Type.
         const res = await apiFetch('/api/support/ticket', {
             method: 'POST',
-            body: formData
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category, message })
         });
 
         if (res.ok) {
             showToast("Ticket submitted successfully", "success");
             document.getElementById('supportMessage').value = '';
-            document.getElementById('supportFile').value = '';
-            document.getElementById('supportFileName').innerText = 'No file selected';
             document.getElementById('supportModal').classList.add('hidden');
         } else {
             showToast("Failed to submit ticket", "error");
