@@ -7,7 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Service
@@ -23,7 +24,7 @@ public class StreamSchedulerService {
     public void processScheduledStreams() {
         log.info("Checking for scheduled live streams...");
         List<ScheduledStream> dueStreams = repository.findByStatusAndScheduledTimeLessThanEqual(
-                ScheduledStream.StreamStatus.PENDING, LocalDateTime.now());
+                ScheduledStream.StreamStatus.PENDING, ZonedDateTime.now(ZoneId.of("UTC")));
 
         for (ScheduledStream stream : dueStreams) {
             startScheduledStream(stream);
