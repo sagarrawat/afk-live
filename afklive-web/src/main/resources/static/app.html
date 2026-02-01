@@ -1290,15 +1290,15 @@
 
 <!-- Support Modal -->
 <div id="supportModal" class="modal-overlay hidden">
-    <div class="modal-box" style="width: 400px;">
-        <div class="modal-header" style="border:none;">
+    <div class="modal-box" style="width: 450px;">
+        <div class="modal-header" style="border:none; padding-bottom: 0;">
             <h2>Contact Support</h2>
             <button onclick="document.getElementById('supportModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <p>Need help? Our team is available 24/7.</p>
+        <p style="color:#666; margin-bottom:20px; font-size: 0.9rem;">Need help? Our team is available 24/7 to assist you.</p>
 
         <div class="form-group">
-            <label>Category</label>
+            <label style="font-weight: 600; font-size: 0.85rem;">Category</label>
             <select id="supportCategory" class="form-input">
                 <option value="General">General Inquiry</option>
                 <option value="Billing">Billing & Plans</option>
@@ -1306,13 +1306,28 @@
                 <option value="Feedback">Feature Request / Feedback</option>
             </select>
         </div>
+
         <div class="form-group">
-            <label>Message</label>
-            <textarea id="supportMessage" class="form-input" rows="4" placeholder="Describe your issue..."></textarea>
+            <label style="font-weight: 600; font-size: 0.85rem;">Message</label>
+            <textarea id="supportMessage" class="form-input" rows="4" placeholder="Describe your issue in detail..." style="resize: vertical;"></textarea>
         </div>
 
-        <button id="btnSubmitTicket" class="btn btn-primary btn-block" onclick="submitSupportTicket()">Submit Ticket</button>
-        <button class="btn btn-text btn-block mt-2" onclick="document.getElementById('supportModal').classList.add('hidden')">Cancel</button>
+        <div class="form-group">
+            <label style="font-weight: 600; font-size: 0.85rem;">Attachment (Optional)</label>
+            <div class="border border-gray-300 rounded-lg p-3 bg-gray-50 flex items-center gap-3">
+                 <button onclick="document.getElementById('supportFile').click()" class="btn btn-sm btn-outline" style="background: white;">
+                    <i class="fa-solid fa-paperclip"></i> Choose File
+                 </button>
+                 <span id="supportFileName" style="font-size: 0.85rem; color: #666; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 200px;">No file selected</span>
+                 <input type="file" id="supportFile" accept="image/*,.pdf,.txt" hidden onchange="document.getElementById('supportFileName').innerText = this.files[0] ? this.files[0].name : 'No file selected'">
+            </div>
+            <small style="color: #888; font-size: 0.75rem; margin-top: 5px; display: block;">Screenshots or logs help us resolve issues faster.</small>
+        </div>
+
+        <div style="margin-top: 25px;">
+            <button id="btnSubmitTicket" class="btn btn-primary btn-block" onclick="submitSupportTicket()">Submit Ticket</button>
+            <button class="btn btn-text btn-block mt-2" onclick="document.getElementById('supportModal').classList.add('hidden')">Cancel</button>
+        </div>
     </div>
 </div>
 
