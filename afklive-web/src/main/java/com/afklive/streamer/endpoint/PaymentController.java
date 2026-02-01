@@ -26,37 +26,34 @@ public class PaymentController {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final RestTemplate restTemplate = new RestTemplate();
+    private final com.afklive.streamer.service.UserService userService;
 
     private static final String MERCHANT_ID = "PGTESTPAYUAT";
     private static final String SALT_KEY = "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399";
     private static final int SALT_INDEX = 1;
     private static final String TARGET_URL = "https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay";
     private static final String CALLBACK_URL = "https://afklive.duckdns.org/api/payment/callback";
-    private final com.afklive.streamer.service.UserService userService;
 
     @PostMapping("/initiate")
     public ResponseEntity<?> initiatePayment(@RequestBody Map<String, Object> body, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
-        String email = principal.getName(); // Email is username
+        String email = principal.getName();
 
         try {
             String planId = (String) body.get("planId");
-            if (planId == null) return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
-
-            // Determine Amount (In Paise)
-            long amount;
-            if ("ESSENTIALS".equals(planId)) {
-                amount = 19900; // 199.00 INR
-            } else {
-                return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan"));
+            // Default to ESSENTIALS if not provided, or handle error
+            if (planId == null || !"ESSENTIALS".equals(planId)) {
+                 // For now, we only support ESSENTIALS in this flow
+                 // return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan"));
+                 planId = "ESSENTIALS";
             }
 
-            String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
-            // Store planId in userId field or custom param if supported? PhonePe passes back merchantUserId.
-            // We can encode planId in the transaction ID or store it in a DB.
-            // For simplicity, we'll assume the callback updates to "ESSENTIALS" if amount matches 499.
+            long amount = 19900; // 199.00 INR
 
-            // Redirect to Settings page
+            // Generate Txn ID
+            String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
+
+            // Redirect URL (Success/Failure)
             String redirectUrl = "https://afklive.duckdns.org/studio?view=settings&payment_status=pending&txnId=" + merchantTransactionId;
 
             Map<String, Object> payload = new HashMap<>();
@@ -129,17 +126,13 @@ public class PaymentController {
 
                  if ("PAYMENT_SUCCESS".equals(code)) {
                      Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
-                     String merchantTransactionId = (String) data.get("merchantTransactionId");
-                     String merchantUserId = (String) data.get("merchantUserId"); // This is the email
+                     String merchantUserId = (String) data.get("merchantUserId");
                      Number amountNum = (Number) data.get("amount");
                      long amount = amountNum.longValue();
 
                      if (amount == 19900) {
-                         log.info("Upgrading user {} to ESSENTIALS", merchantUserId);
                          userService.updatePlan(merchantUserId, com.afklive.streamer.model.PlanType.ESSENTIALS);
                      }
-                 } else {
-                     log.warn("Payment failed or pending: {}", code);
                  }
              }
         } catch (Exception e) {
