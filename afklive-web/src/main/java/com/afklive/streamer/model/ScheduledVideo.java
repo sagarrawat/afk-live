@@ -1,7 +1,7 @@
 package com.afklive.streamer.model;
 
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 @Entity
 @Table(name = "scheduled_videos")
@@ -21,7 +21,7 @@ public class ScheduledVideo {
     private String tags;
     private String privacyStatus;
     private String categoryId;
-    private LocalDateTime scheduledTime;
+    private ZonedDateTime scheduledTime;
 
     private String s3Key;
     private String thumbnailS3Key;
@@ -107,11 +107,11 @@ public class ScheduledVideo {
         this.categoryId = categoryId;
     }
 
-    public LocalDateTime getScheduledTime() {
+    public ZonedDateTime getScheduledTime() {
         return scheduledTime;
     }
 
-    public void setScheduledTime(LocalDateTime scheduledTime) {
+    public void setScheduledTime(ZonedDateTime scheduledTime) {
         this.scheduledTime = scheduledTime;
     }
 

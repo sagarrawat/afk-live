@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Entity
@@ -24,7 +24,7 @@ public class ScheduledStream {
     @ElementCollection
     private List<String> streamKeys;
 
-    private LocalDateTime scheduledTime;
+    private ZonedDateTime scheduledTime;
 
     @Enumerated(EnumType.STRING)
     private StreamStatus status;

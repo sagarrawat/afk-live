@@ -32,7 +32,7 @@ public class StreamJob {
     private String description;
 
     private String privacy;
-    private java.time.LocalDateTime startTime;
+    private java.time.ZonedDateTime startTime;
 
     public StreamJob(
             String username,
@@ -45,7 +45,7 @@ public class StreamJob {
             String title,
             String description,
             String privacy,
-            java.time.LocalDateTime startTime,
+            java.time.ZonedDateTime startTime,
             String destinationName
     ) {
         this.username = username;

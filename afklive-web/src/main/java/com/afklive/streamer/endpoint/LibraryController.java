@@ -23,6 +23,8 @@ import org.springframework.http.MediaType;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.ZoneId;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
@@ -271,9 +273,10 @@ public class LibraryController {
                     if (videoIndex >= libraryVideos.size()) break;
 
                     ScheduledVideo video = libraryVideos.get(videoIndex);
-                    LocalDateTime schedule = LocalDateTime.of(currentDate, time);
+                    // Treat input time as UTC
+                    ZonedDateTime schedule = ZonedDateTime.of(currentDate, time, ZoneId.of("UTC"));
 
-                    if (schedule.isBefore(LocalDateTime.now())) {
+                    if (schedule.isBefore(ZonedDateTime.now(ZoneId.of("UTC")))) {
                         schedule = schedule.plusDays(1);
                     }
 
