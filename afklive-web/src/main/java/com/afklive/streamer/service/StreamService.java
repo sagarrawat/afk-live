@@ -52,6 +52,9 @@ public class StreamService {
     @Autowired
     private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepo;
 
+    private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
+    private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
+
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
             String username,
@@ -66,7 +69,9 @@ public class StreamService {
             int streamQuality,
             String title,
             String description,
-            String privacy
+            String privacy,
+            boolean overlayEnabled,
+            String overlayTemplate
     ) throws IOException {
         
         log.info("username [{}]", username);
@@ -91,26 +96,6 @@ public class StreamService {
         // Also check quota limits
         int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
         userService.checkStreamQuota(username, activeCount);
-
-        // SLOT CHECK Logic
-        com.afklive.streamer.model.User currentUser = userService.getOrCreateUser(username);
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-
-        // If expiration is null or past, check slots
-        if (currentUser.getStreamAccessExpiration() == null || currentUser.getStreamAccessExpiration().isBefore(now)) {
-            if (currentUser.getStreamSlots() > 0) {
-                // Consume 1 slot
-                currentUser.setStreamSlots(currentUser.getStreamSlots() - 1);
-                currentUser.setStreamAccessExpiration(now.plusHours(24));
-                userService.saveUser(currentUser);
-                log.info("Consumed 1 stream slot for user {}. Slots remaining: {}", username, currentUser.getStreamSlots());
-            } else {
-                // No slots and no active pass
-                throw new IllegalStateException("No streaming slots available. Please upgrade or purchase slots.");
-            }
-        } else {
-            log.info("User {} has valid stream access until {}", username, currentUser.getStreamAccessExpiration());
-        }
 
         // REMOVED SINGLE STREAM CHECK TO ALLOW MULTIPLE STREAMS
         // if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
@@ -198,8 +183,12 @@ public class StreamService {
              // Create temp file for watermark
              watermarkPath = Files.createTempFile("watermark_", ".png");
              watermarkFile.transferTo(watermarkPath);
-             // Note: Temp file will linger until OS cleans up, or we can track it to delete on exit.
-             // Ideally we should manage lifecycle, but for now this works.
+        }
+
+        Path overlayTextPath = null;
+        if (overlayEnabled) {
+            overlayTextPath = userDir.resolve("subs_" + System.currentTimeMillis() + ".txt");
+            Files.writeString(overlayTextPath, "Subs: Loading...");
         }
 
         log.info("musicPath [{}]", musicPath);
@@ -261,16 +250,15 @@ public class StreamService {
 
         // Loop through keys to start individual processes
         for (String key : validKeys) {
-            List<String> command =
-                    FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized);
+            List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, overlayTextPath);
 
             log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
 
             // 4. Start the Process
-            ProcessBuilder builder = new ProcessBuilder(command);
-            builder.redirectErrorStream(true);
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
 
-            Process process = builder.start();
+            Process process = pb.start();
 
             Thread.ofVirtual().start(() -> {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -317,9 +305,32 @@ public class StreamService {
 
             activeStreams.put(jobId, process);
 
+            // Start Overlay Updater if enabled
+            if (overlayEnabled && overlayTextPath != null) {
+                final Path textPath = overlayTextPath;
+                java.util.concurrent.ScheduledFuture<?> task = scheduledExecutorService.scheduleAtFixedRate(() -> {
+                    try {
+                        String subs = youTubeService.getSubscriberCount(username);
+                        String content = "Subscribers: " + subs;
+                        if ("GOAL".equalsIgnoreCase(overlayTemplate)) {
+                            content = "Goal: " + subs + "/10K";
+                        }
+                        Files.writeString(textPath, content);
+                    } catch (Exception e) {
+                        log.error("Failed to update overlay text", e);
+                    }
+                }, 0, 30, java.util.concurrent.TimeUnit.SECONDS);
+                jobTasks.put(jobId, task);
+            }
+
             // 6. EXIT HANDLER (Auto-Update DB)
             process.onExit().thenRun(() -> {
                 log.warn("Stream Process Exited for job {}", jobId);
+
+                // Cleanup tasks
+                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
+                if (task != null) task.cancel(true);
+
                 Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
                 if (jobOpt.isPresent()) {
                     StreamJob existingJob = jobOpt.get();
@@ -350,6 +361,10 @@ public class StreamService {
         int stopped = 0;
         for (StreamJob job : jobs) {
             ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
+
+            java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(job.getId());
+            if (task != null) task.cancel(true);
+
             job.setLive(false);
             streamJobRepo.save(job);
             stopped++;
@@ -374,6 +389,10 @@ public class StreamService {
 
             if (job.isLive()) {
                 ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
+
+                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
+                if (task != null) task.cancel(true);
+
                 job.setLive(false);
                 streamJobRepo.save(job);
                 return ApiResponse.success("Stream stopped", null);

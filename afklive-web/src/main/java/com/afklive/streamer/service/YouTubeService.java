@@ -188,6 +188,24 @@ public class YouTubeService {
         return response.getItems().getFirst().getSnippet().getTitle();
     }
 
+    @Cacheable(value = "sub_count", key = "#username")
+    public String getSubscriberCount(String username) {
+        try {
+            YouTube youtube = getYouTubeClient(username);
+            ChannelListResponse response = youtube.channels().list(Collections.singletonList("statistics"))
+                    .setMine(true)
+                    .execute();
+            if (response.getItems() == null || response.getItems().isEmpty()) {
+                return "0";
+            }
+            java.math.BigInteger count = response.getItems().getFirst().getStatistics().getSubscriberCount();
+            return count != null ? count.toString() : "0";
+        } catch (Exception e) {
+            log.error("Failed to fetch subscriber count for {}", username, e);
+            return "0"; // Fallback
+        }
+    }
+
     private String getChannelId(String username) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         ChannelListResponse response = youtube.channels().list(Collections.singletonList("id"))

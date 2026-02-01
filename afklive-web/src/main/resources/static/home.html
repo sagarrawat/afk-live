@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AFK Live - Stream While You Sleep</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 2 A22 22 0 0 1 46 24' fill='none' stroke='%23667eea' stroke-width='4' /%3E%3Cpath d='M46 24 A22 22 0 0 1 24 46' fill='none' stroke='%23764ba2' stroke-width='4' /%3E%3Cpolygon points='20,14 20,34 36,24' fill='%23764ba2' /%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <script>
@@ -19,7 +21,7 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; overflow-y: auto !important; height: auto !important; }
         .glass-nav { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,0.05); }
     </style>
 </head>
@@ -28,9 +30,9 @@
     <!-- Navbar -->
     <nav class="fixed top-0 w-full z-50 glass-nav transition-all duration-300" x-data="{ scrolled: false }" @scroll.window="scrolled = (window.pageYOffset > 20)">
         <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="text-2xl">🔴</span>
-                <span class="font-bold text-xl tracking-tight">AFK Live</span>
+            <div class="afk-logo" style="transform: scale(0.7); transform-origin: left center;">
+                <div class="afk-icon"><div class="afk-play"></div></div>
+                <div class="afk-text">AFK<span class="afk-live">Live</span></div>
             </div>
             <div class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
                 <a href="#features" class="hover:text-gray-900 transition">Features</a>
@@ -174,7 +176,7 @@
                     </div>
                     <ul class="space-y-3 mb-8 text-sm text-gray-600">
                         <li class="flex gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 1 Channel</li>
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 10 Scheduled Posts</li>
+                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 500MB Storage</li>
                         <li class="flex gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Basic Streaming</li>
                     </ul>
                     <a href="/register" class="block w-full py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold text-center rounded-xl transition">Get Started</a>
@@ -182,16 +184,16 @@
 
                 <!-- Essentials -->
                 <div class="bg-gray-900 p-8 rounded-3xl border border-gray-800 text-white shadow-2xl relative overflow-hidden">
-                    <div class="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">50% OFF</div>
+                    <div class="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">POPULAR</div>
                     <h3 class="text-xl font-bold">Essentials</h3>
                     <p class="text-gray-400 mt-2 text-sm">For growing channels</p>
                     <div class="my-6">
-                        <span class="text-4xl font-extrabold">₹499</span>
+                        <span class="text-4xl font-extrabold">₹199</span>
                         <span class="text-gray-400">/month</span>
                     </div>
                     <ul class="space-y-3 mb-8 text-sm text-gray-300">
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 3 Channels</li>
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Unlimited Scheduling</li>
+                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 5 Channels</li>
+                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 50GB Storage</li>
                         <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Analytics & HD Streaming</li>
                     </ul>
                     <a href="/register" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-center rounded-xl transition">Start Free Trial</a>
@@ -228,9 +230,9 @@
     <!-- Footer -->
     <footer class="bg-white border-t border-gray-100 py-12">
         <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-            <div class="flex items-center gap-2">
-                <span class="text-xl">🔴</span>
-                <span class="font-bold text-gray-900">AFK Live</span>
+            <div class="afk-logo" style="transform: scale(0.7); transform-origin: left center;">
+                <div class="afk-icon"><div class="afk-play"></div></div>
+                <div class="afk-text">AFK<span class="afk-live">Live</span></div>
             </div>
             <div class="text-sm text-gray-500">
                 &copy; 2024 AFK Live Inc. All rights reserved.

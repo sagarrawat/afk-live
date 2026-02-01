@@ -6,6 +6,19 @@ import java.util.List;
 
 public class FFmpegCommandBuilder {
 
+    private int loopCount = 1;
+    private String streamMode = "original";
+    private String watermarkPath;
+    private String textOverlayPath;
+
+    public void setLoop(int loopCount) {
+        this.loopCount = loopCount;
+    }
+
+    public void setStreamMode(String streamMode) {
+        this.streamMode = streamMode;
+    }
+
     public static List<String> buildConversionCommand(Path source, Path target) {
         String ffmpeg = "ffmpeg";
         java.io.File local = new java.io.File("bin/ffmpeg");
@@ -172,6 +185,14 @@ public class FFmpegCommandBuilder {
         return buildOptimizeCommand(input, output, "landscape", 1080);
     }
 
+    public void addWatermark(String watermarkPath) {
+        this.watermarkPath = watermarkPath;
+    }
+
+    public void addTextOverlay(String textPath) {
+        this.textOverlayPath = textPath;
+    }
+
     public static List<String> buildMixCommand(Path videoPath, Path audioPath, String volume, Path outputPath) {
         String ffmpeg = "ffmpeg";
         java.io.File local = new java.io.File("bin/ffmpeg");
@@ -214,7 +235,7 @@ public class FFmpegCommandBuilder {
             String streamMode,
             int maxHeight
     ) {
-        return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, false);
+        return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, false, null);
     }
 
     public static List<String> buildStreamCommand(
@@ -228,6 +249,22 @@ public class FFmpegCommandBuilder {
             String streamMode,
             int maxHeight,
             boolean isOptimized
+    ) {
+        return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, null);
+    }
+
+    public static List<String> buildStreamCommand(
+            Path videoPath,
+            List<String> streamKeys,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized,
+            Path textOverlayPath
     ) {
         String ffmpeg = "ffmpeg";
         java.io.File local = new java.io.File("bin/ffmpeg");
@@ -310,8 +347,20 @@ public class FFmpegCommandBuilder {
 
             if (hasWatermark) {
                 filterChains.add(String.format("[%d:v]scale=iw*0.15:-1[wm]", wmIdx));
-                filterChains.add(String.format("[%s][wm]overlay=main_w-overlay_w-20:20[vout]", vLabel));
-                vLabel = "[vout]";
+                filterChains.add(String.format("[%s][wm]overlay=main_w-overlay_w-20:20[vwm]", vLabel));
+                vLabel = "[vwm]";
+            }
+
+            // Text Overlay (Subscribers)
+            if (textOverlayPath != null) {
+                String safePath = textOverlayPath.toString().replace("\\", "/").replace(":", "\\:");
+                // Use a different output label
+                String nextLabel = "[vtext]";
+                // Draw text: White text with box, bottom left
+                String drawText = String.format("drawtext=textfile='%s':reload=1:fontcolor=white:fontsize=24:box=1:boxcolor=black@0.6:boxborderw=5:x=20:y=h-th-20", safePath);
+
+                filterChains.add(String.format("[%s]%s%s", vLabel.replace("[", "").replace("]", ""), drawText, nextLabel));
+                vLabel = nextLabel;
             }
 
             // Audio Logic

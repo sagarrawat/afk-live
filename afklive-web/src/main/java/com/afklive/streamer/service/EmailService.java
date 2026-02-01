@@ -19,12 +19,25 @@ public class EmailService {
     private final JavaMailSender emailSender;
 
     private String createBaseHtml(String title, String bodyContent) {
-        return "<html><body style='font-family: Arial, sans-serif; color: #333; line-height: 1.6;'>" +
-               "<div style='max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>" +
-               "<h2 style='color: #2c68f6;'>" + title + "</h2>" +
+        return "<html><body style='font-family: Arial, sans-serif; color: #333; line-height: 1.6; background-color: #f9fafb; margin: 0; padding: 20px;'>" +
+               "<div style='max-width: 600px; margin: 0 auto; background: #ffffff; padding: 30px; border: 1px solid #eee; border-radius: 12px;'>" +
+
+               // Logo Header
+               "<div style='display: flex; align-items: center; gap: 10px; margin-bottom: 30px;'>" +
+                   // Icon
+                   "<div style='width: 32px; height: 32px; position: relative; border-radius: 50%; border: 3px solid transparent; border-top-color: #667eea; border-right-color: #764ba2; box-sizing: border-box; display: flex; align-items: center; justify-content: center;'>" +
+                        "<div style='width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent #764ba2; margin-left: 3px;'></div>" +
+                   "</div>" +
+                   // Text
+                   "<div style='font-size: 20px; font-weight: 800; color: #1a1a2e; letter-spacing: -0.02em; font-family: sans-serif;'>" +
+                        "AFK<span style='color: #667eea;'>Live</span>" +
+                   "</div>" +
+               "</div>" +
+
+               "<h2 style='color: #1a1a2e; margin-top: 0;'>" + title + "</h2>" +
                "<div>" + bodyContent + "</div>" +
-               "<div style='margin-top: 20px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 10px;'>" +
-               "&copy; AFK Live Inc.</div>" +
+               "<div style='margin-top: 30px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; text-align: center;'>" +
+               "&copy; 2024 AFK Live Inc.</div>" +
                "</div></body></html>";
     }
 

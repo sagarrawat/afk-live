@@ -10,6 +10,7 @@ import com.afklive.streamer.util.SecurityUtils;
 import com.afklive.streamer.service.ChannelService;
 import com.afklive.streamer.service.YouTubeService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -65,19 +66,21 @@ public class StreamController {
         return ResponseEntity.ok(ApiResponse.success("ONLINE", Map.of("live", true, "activeStreams", jobs)));
     }
 
-    @PostMapping("/start")
+    @PostMapping(value = "/start", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<?>> start(@RequestParam("streamKey") List<String> streamKeys,
                                                 @RequestParam String videoKey,
                                                 @RequestParam(required = false) String musicName,
                                                 @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
                                                 @RequestParam(required = false, defaultValue = "-1") int loopCount,
-                                                @RequestPart(required = false) MultipartFile watermarkFile,
+                                                @RequestParam(required = false) MultipartFile watermarkFile,
                                                 @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
                                                 @RequestParam(required = false, defaultValue = "original") String streamMode,
                                                 @RequestParam(required = false, defaultValue = "0") int streamQuality,
                                                 @RequestParam(required = false) String title,
                                                 @RequestParam(required = false) String description,
                                                 @RequestParam(required = false) String privacy,
+                                                @RequestParam(required = false, defaultValue = "false") boolean overlayEnabled,
+                                                @RequestParam(required = false) String overlayTemplate,
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
@@ -85,7 +88,7 @@ public class StreamController {
         // Removed global lock (streamManager) to allow multiple streams per user.
         // Quota is checked inside StreamService via UserService.
         try {
-            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy));
+            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }

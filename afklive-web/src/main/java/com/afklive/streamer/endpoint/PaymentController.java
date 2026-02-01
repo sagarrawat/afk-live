@@ -62,7 +62,7 @@ public class PaymentController {
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
                     .merchantOrderId(merchantTransactionId)
                     .amount(amount)
-                    .redirectUrl("https://afklive.in/app?payment=success")
+                    .redirectUrl("https://afklive.in/studio?payment=success")
                     .build();
 
             StandardCheckoutPayResponse response = phonePeClient.pay(payRequest);
