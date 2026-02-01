@@ -276,9 +276,9 @@ public class StreamService {
             String destName = "Unknown Destination";
             try {
                 com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
-                Optional<com.afklive.streamer.model.StreamDestination> destOpt = streamDestinationRepo.findByStreamKeyAndUser(key, user);
-                if (destOpt.isPresent()) {
-                    destName = destOpt.get().getName();
+                List<com.afklive.streamer.model.StreamDestination> dests = streamDestinationRepo.findByStreamKeyAndUser(key, user);
+                if (!dests.isEmpty()) {
+                    destName = dests.get(0).getName();
                 }
             } catch (Exception e) {
                 log.warn("Failed to resolve destination name for key: {}", key);

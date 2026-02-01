@@ -43,7 +43,9 @@ public class DestinationController {
             return ResponseEntity.badRequest().body(ApiResponse.error("Name and Key are required"));
         }
 
-        // Check duplicates? Maybe allow duplicates for now.
+        if (!destinationRepository.findByStreamKeyAndUser(key, user).isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Stream key already exists"));
+        }
 
         StreamDestination dest = new StreamDestination(name, key, type, user);
         dest.setSelected(selected);
@@ -79,7 +81,17 @@ public class DestinationController {
                         return ResponseEntity.status(403).build();
                     }
                     if (body.containsKey("name")) dest.setName((String) body.get("name"));
-                    if (body.containsKey("key")) dest.setStreamKey((String) body.get("key"));
+                    if (body.containsKey("key")) {
+                        String newKey = (String) body.get("key");
+                        boolean exists = destinationRepository.findByStreamKeyAndUser(newKey, dest.getUser())
+                                .stream()
+                                .anyMatch(d -> !d.getId().equals(dest.getId()));
+
+                        if (exists) {
+                            return ResponseEntity.badRequest().body(ApiResponse.error("Stream key already exists"));
+                        }
+                        dest.setStreamKey(newKey);
+                    }
                     if (body.containsKey("selected")) dest.setSelected((Boolean) body.get("selected"));
 
                     return ResponseEntity.ok(destinationRepository.save(dest));

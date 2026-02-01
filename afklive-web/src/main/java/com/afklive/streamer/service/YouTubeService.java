@@ -305,17 +305,47 @@ public class YouTubeService {
 
     public String getStreamKey(String username) throws Exception {
         YouTube youtube = getYouTubeClient(username);
-        // "cdn" part contains the ingestion info (stream name/key)
-        LiveStreamListResponse response = youtube.liveStreams().list(Collections.singletonList("cdn"))
+
+        // 1. List existing streams to clean up old ones
+        LiveStreamListResponse response = youtube.liveStreams().list(Collections.singletonList("id,status"))
                 .setMine(true)
                 .execute();
 
-        if (response.getItems() == null || response.getItems().isEmpty()) {
-            throw new IllegalStateException("No live streams found for this channel. Please enable live streaming in YouTube Studio.");
+        if (response.getItems() != null) {
+            for (LiveStream stream : response.getItems()) {
+                String status = stream.getStatus().getStreamStatus();
+                // If stream is not active (streaming), delete it to rotate keys
+                if (!"active".equalsIgnoreCase(status)) {
+                    try {
+                        youtube.liveStreams().delete(stream.getId()).execute();
+                        log.info("Deleted inactive stream: {}", stream.getId());
+                    } catch (Exception e) {
+                        log.warn("Failed to delete inactive stream {}: {}", stream.getId(), e.getMessage());
+                    }
+                }
+            }
         }
 
-        // Usually the default stream is the first one or we pick the first available
-        return response.getItems().get(0).getCdn().getIngestionInfo().getStreamName();
+        // 2. Create a NEW Stream
+        LiveStream newStream = new LiveStream();
+
+        LiveStreamSnippet snippet = new LiveStreamSnippet();
+        snippet.setTitle("AFK Live Stream - " + java.time.LocalDateTime.now());
+        newStream.setSnippet(snippet);
+
+        CdnSettings cdn = new CdnSettings();
+        cdn.setIngestionType("rtmp");
+        cdn.setResolution("variable");
+        cdn.setFrameRate("variable");
+        newStream.setCdn(cdn);
+
+        LiveStream createdStream = youtube.liveStreams()
+                .insert(Collections.singletonList("snippet,cdn,status"), newStream)
+                .execute();
+
+        log.info("Created new stream with ID: {}", createdStream.getId());
+
+        return createdStream.getCdn().getIngestionInfo().getStreamName();
     }
 
     public void updateActiveBroadcast(String username, String title, String description, String privacyStatus) throws Exception {
