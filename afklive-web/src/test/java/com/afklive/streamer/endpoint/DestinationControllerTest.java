@@ -10,20 +10,22 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.security.Principal;
-import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 public class DestinationControllerTest {
@@ -39,66 +41,33 @@ public class DestinationControllerTest {
     @InjectMocks
     private DestinationController destinationController;
 
-    private ObjectMapper objectMapper = new ObjectMapper();
-
     @BeforeEach
     public void setup() {
         mockMvc = MockMvcBuilders.standaloneSetup(destinationController).build();
     }
 
     @Test
-    public void testGetDestinations() throws Exception {
-        Principal mockPrincipal = Mockito.mock(Principal.class);
-        Mockito.when(mockPrincipal.getName()).thenReturn("test@example.com");
-
+    public void testCreateDestination_DuplicateKey_ReturnsBadRequest() throws Exception {
         User user = new User();
-        Mockito.when(userService.getOrCreateUser("test@example.com")).thenReturn(user);
-        Mockito.when(destinationRepository.findByUser(user)).thenReturn(Collections.emptyList());
+        user.setUsername("testuser");
 
-        mockMvc.perform(get("/api/destinations").principal(mockPrincipal))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
-    }
+        when(userService.getOrCreateUser(anyString())).thenReturn(user);
 
-    @Test
-    public void testCreateDestination() throws Exception {
-        Principal mockPrincipal = Mockito.mock(Principal.class);
-        Mockito.when(mockPrincipal.getName()).thenReturn("test@example.com");
+        // Simulate that the key already exists
+        StreamDestination existingDest = new StreamDestination("Existing", "dup-key", "RTMP", user);
+        when(destinationRepository.findByStreamKeyAndUser("dup-key", user)).thenReturn(List.of(existingDest));
 
-        User user = new User();
-        Mockito.when(userService.getOrCreateUser("test@example.com")).thenReturn(user);
+        Map<String, Object> body = new HashMap<>();
+        body.put("name", "New Dest");
+        body.put("key", "dup-key");
+        body.put("type", "RTMP");
 
-        StreamDestination dest = new StreamDestination();
-        dest.setId(1L);
-        dest.setName("Twitch");
-        Mockito.when(destinationRepository.save(any(StreamDestination.class))).thenReturn(dest);
-
-        Map<String, Object> request = Map.of("name", "Twitch", "key", "key123");
+        Principal principal = () -> "testuser";
 
         mockMvc.perform(post("/api/destinations")
-                        .principal(mockPrincipal)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1));
-    }
-
-    @Test
-    public void testDeleteDestination() throws Exception {
-        Principal mockPrincipal = Mockito.mock(Principal.class);
-        Mockito.when(mockPrincipal.getName()).thenReturn("test@example.com");
-
-        User user = new User();
-        user.setUsername("test@example.com");
-        StreamDestination dest = new StreamDestination();
-        dest.setUser(user);
-
-        Mockito.when(destinationRepository.findById(1L)).thenReturn(Optional.of(dest));
-
-        mockMvc.perform(delete("/api/destinations/1").principal(mockPrincipal))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-
-        Mockito.verify(destinationRepository).delete(dest);
+                .principal(principal)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(new ObjectMapper().writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
     }
 }

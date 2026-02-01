@@ -9,5 +9,5 @@ import java.util.Optional;
 public interface StreamDestinationRepository extends JpaRepository<StreamDestination, Long> {
     List<StreamDestination> findByUser(User user);
     List<StreamDestination> findByUserAndSelectedTrue(User user);
-    Optional<StreamDestination> findByStreamKeyAndUser(String streamKey, User user);
+    List<StreamDestination> findByStreamKeyAndUser(String streamKey, User user);
 }
