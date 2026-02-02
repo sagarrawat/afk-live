@@ -32,6 +32,8 @@ public class PaymentAudit {
     @Column(columnDefinition = "TEXT")
     private String rawResponse;
 
+    private String planId;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

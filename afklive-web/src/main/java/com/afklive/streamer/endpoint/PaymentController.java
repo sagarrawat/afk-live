@@ -6,7 +6,9 @@ import com.phonepe.sdk.pg.payments.v2.StandardCheckoutClient;
 import com.phonepe.sdk.pg.payments.v2.models.request.StandardCheckoutPayRequest;
 import com.phonepe.sdk.pg.payments.v2.models.response.StandardCheckoutPayResponse;
 import com.afklive.streamer.model.PaymentAudit;
+import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.repository.PaymentAuditRepository;
+import com.afklive.streamer.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -26,9 +28,11 @@ public class PaymentController {
     private final ObjectMapper objectMapper;
     private final StandardCheckoutClient phonePeClient;
     private final PaymentAuditRepository paymentAuditRepository;
+    private final UserService userService;
 
     public PaymentController(
             PaymentAuditRepository paymentAuditRepository,
+            UserService userService,
             @Value("${app.phonepe.merchant-id}") String merchantId,
             @Value("${app.phonepe.salt-key}") String saltKey,
             @Value("${app.phonepe.salt-index}") Integer saltIndex,
@@ -36,6 +40,7 @@ public class PaymentController {
             @Value("${app.base-url}") String baseUrl) {
         this.objectMapper = new ObjectMapper();
         this.paymentAuditRepository = paymentAuditRepository;
+        this.userService = userService;
 
         Env env = Env.valueOf(envStr.toUpperCase());
         this.phonePeClient = StandardCheckoutClient.getInstance(merchantId, saltKey, saltIndex, env);
@@ -45,24 +50,39 @@ public class PaymentController {
     @PostMapping("/initiate")
     public ResponseEntity<?> initiatePayment(@RequestBody(required = false) Map<String, Object> body, Principal principal) {
         try {
-            long amount = 100; // 1.00 INR in paise
-            if (body != null && body.containsKey("amount")) {
+            String planId = null;
+            if (body != null && body.containsKey("planId")) {
+                planId = body.get("planId").toString();
+            }
+
+            long amount = 100; // Default fallback
+            if (planId != null) {
+                try {
+                    PlanType plan = PlanType.valueOf(planId);
+                    if (plan == PlanType.ESSENTIALS) {
+                        amount = 19900; // 199 INR
+                    }
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
+                }
+            } else if (body != null && body.containsKey("amount")) {
                 amount = Long.parseLong(body.get("amount").toString());
             }
 
             String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
             String userId = (principal != null) ? principal.getName() : "test-user-" + UUID.randomUUID().toString().substring(0, 8);
 
-            log.info("Initiating payment via SDK V2: TxnId={}, User={}", merchantTransactionId, userId);
+            log.info("Initiating payment via SDK V2: TxnId={}, User={}, Plan={}", merchantTransactionId, userId, planId);
 
             // Audit
             PaymentAudit audit = new PaymentAudit(merchantTransactionId, userId, amount, "INITIATED");
+            audit.setPlanId(planId);
             paymentAuditRepository.save(audit);
 
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
                     .merchantOrderId(merchantTransactionId)
                     .amount(amount)
-                    .redirectUrl("https://afklive.in/studio?payment=success")
+                    .redirectUrl("https://afklive.in/studio?view=settings&payment_status=pending")
                     .build();
 
             StandardCheckoutPayResponse response = phonePeClient.pay(payRequest);
@@ -103,6 +123,16 @@ public class PaymentController {
                              audit.setRawResponse(decodedJson);
                              paymentAuditRepository.save(audit);
                              log.info("Updated PaymentAudit for TxnId={}: Status={}", merchantTransactionId, state);
+
+                             if ("COMPLETED".equals(state) && audit.getPlanId() != null) {
+                                 try {
+                                     PlanType plan = PlanType.valueOf(audit.getPlanId());
+                                     userService.updatePlan(audit.getMerchantUserId(), plan);
+                                     log.info("Successfully upgraded user {} to plan {}", audit.getMerchantUserId(), plan);
+                                 } catch (Exception e) {
+                                     log.error("Failed to upgrade user plan after successful payment", e);
+                                 }
+                             }
                          });
                      }
                  }
