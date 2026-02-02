@@ -11,7 +11,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
-import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Service
@@ -31,7 +32,7 @@ public class VideoSchedulerService {
     public void processScheduledVideos() {
         log.info("Checking for scheduled videos...");
         List<ScheduledVideo> videosToUpload = repository.findByStatusAndScheduledTimeLessThanEqual(
-                ScheduledVideo.VideoStatus.PENDING, LocalDateTime.now());
+                ScheduledVideo.VideoStatus.PENDING, ZonedDateTime.now(ZoneId.of("UTC")));
 
         for (ScheduledVideo video : videosToUpload) {
             uploadVideo(video);

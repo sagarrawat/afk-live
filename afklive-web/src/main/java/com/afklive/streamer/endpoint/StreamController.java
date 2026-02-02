@@ -70,9 +70,10 @@ public class StreamController {
     public ResponseEntity<ApiResponse<?>> start(@RequestParam("streamKey") List<String> streamKeys,
                                                 @RequestParam String videoKey,
                                                 @RequestParam(required = false) String musicName,
+                                                @RequestPart(value = "musicFile", required = false) MultipartFile musicFile,
                                                 @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
                                                 @RequestParam(required = false, defaultValue = "-1") int loopCount,
-                                                @RequestParam(required = false) MultipartFile watermarkFile,
+                                                @RequestPart(value = "watermarkFile", required = false) MultipartFile watermarkFile,
                                                 @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
                                                 @RequestParam(required = false, defaultValue = "original") String streamMode,
                                                 @RequestParam(required = false, defaultValue = "0") int streamQuality,
@@ -88,6 +89,12 @@ public class StreamController {
         // Removed global lock (streamManager) to allow multiple streams per user.
         // Quota is checked inside StreamService via UserService.
         try {
+            if (musicFile != null && !musicFile.isEmpty()) {
+                // If a music file is uploaded directly, save it to the user's directory and use its name
+                String uploadedMusicName = fileUploadService.handleFileUpload(musicFile, email);
+                musicName = uploadedMusicName;
+            }
+
             return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
