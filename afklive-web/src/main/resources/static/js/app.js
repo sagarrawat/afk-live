@@ -1436,6 +1436,8 @@ function openSupportModal() { document.getElementById('supportModal').classList.
 async function submitSupportTicket() {
     const category = document.getElementById('supportCategory').value;
     const message = document.getElementById('supportMessage').value;
+    const fileInput = document.getElementById('supportAttachment');
+    const file = fileInput ? fileInput.files[0] : null;
 
     if (!message) return showToast("Please describe your issue", "error");
 
@@ -1444,16 +1446,23 @@ async function submitSupportTicket() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
 
+    const formData = new FormData();
+    formData.append('category', category);
+    formData.append('message', message);
+    if (file) {
+        formData.append('file', file);
+    }
+
     try {
         const res = await apiFetch('/api/support/ticket', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category, message })
+            body: formData
         });
 
         if (res.ok) {
             showToast("Ticket submitted successfully", "success");
             document.getElementById('supportMessage').value = '';
+            if (fileInput) fileInput.value = '';
             document.getElementById('supportModal').classList.add('hidden');
         } else {
             showToast("Failed to submit ticket", "error");

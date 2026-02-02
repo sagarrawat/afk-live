@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -78,6 +79,7 @@ public class EmailService {
         sendEmail(to, "You've upgraded to " + planName + "!", html);
     }
 
+    @Async
     public void sendSupportTicket(String userEmail, String category, String message) {
         String subject = "[Support] " + category + " - " + userEmail;
         String content = "<p><strong>User:</strong> " + userEmail + "</p>" +
