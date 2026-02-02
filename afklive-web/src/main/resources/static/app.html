@@ -1311,6 +1311,11 @@
             <textarea id="supportMessage" class="form-input" rows="4" placeholder="Describe your issue..."></textarea>
         </div>
 
+        <div class="form-group">
+            <label>Screenshot or Recording (Optional)</label>
+            <input type="file" id="supportAttachment" class="form-input" accept="image/*,video/*,.pdf">
+        </div>
+
         <button id="btnSubmitTicket" class="btn btn-primary btn-block" onclick="submitSupportTicket()">Submit Ticket</button>
         <button class="btn btn-text btn-block mt-2" onclick="document.getElementById('supportModal').classList.add('hidden')">Cancel</button>
     </div>
