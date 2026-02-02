@@ -26,7 +26,6 @@ public class SupportTicket {
     @Column(nullable = false)
     private String category;
 
-    @Lob
     @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
