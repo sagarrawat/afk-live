@@ -13,4 +13,5 @@ public interface ScheduledVideoRepository extends JpaRepository<ScheduledVideo, 
     List<ScheduledVideo> findByUsername(String username);
     List<ScheduledVideo> findByStatusAndScheduledTimeLessThanEqual(ScheduledVideo.VideoStatus status, ZonedDateTime time);
     Optional<ScheduledVideo> findByUsernameAndTitle(String username, String filename);
+    Optional<ScheduledVideo> findFirstByUsernameAndS3Key(String username, String s3Key);
 }
