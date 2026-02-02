@@ -12,12 +12,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
@@ -42,6 +44,7 @@ public class AdminController {
         List<SupportTicket> tickets = supportTicketRepository.findAllByOrderByCreatedAtDesc();
 
         long totalStorage = users.stream().mapToLong(User::getUsedStorageBytes).sum();
+        String formattedStorage = String.format("%.2f GB", totalStorage / (1024.0 * 1024.0 * 1024.0));
 
         model.addAttribute("users", users);
         model.addAttribute("activeStreamList", activeStreams);
@@ -49,7 +52,7 @@ public class AdminController {
         model.addAttribute("stats", Map.of(
             "totalUsers", users.size(),
             "activeStreams", activeStreams.size(),
-            "formattedStorage", (totalStorage / 1024 / 1024) + " MB",
+            "formattedStorage", formattedStorage,
             "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count()
         ));
 
@@ -65,6 +68,24 @@ public class AdminController {
         return "redirect:/admin";
     }
 
+    @PostMapping("/users/{username}/blacklist")
+    public String toggleUserBlacklist(@PathVariable String username, @RequestParam boolean enabled) {
+        userRepository.findById(username).ifPresent(user -> {
+            user.setEnabled(enabled);
+            userRepository.save(user);
+        });
+        return "redirect:/admin";
+    }
+
+    @PostMapping("/support/{id}/status")
+    public String updateTicketStatus(@PathVariable Long id, @RequestParam String status) {
+        supportTicketRepository.findById(id).ifPresent(ticket -> {
+            ticket.setStatus(status);
+            supportTicketRepository.save(ticket);
+        });
+        return "redirect:/admin";
+    }
+
     @GetMapping("/support/attachment/{id}")
     @ResponseBody
     public ResponseEntity<?> downloadAttachment(@PathVariable Long id) {
@@ -75,12 +96,23 @@ public class AdminController {
                     }
                     Resource file = storageService.loadFileAsResource(ticket.getAttachmentKey());
 
-                    ContentDisposition contentDisposition = ContentDisposition.builder("attachment")
+                    ContentDisposition contentDisposition = ContentDisposition.builder("inline")
                             .filename(ticket.getAttachmentName() != null ? ticket.getAttachmentName() : "attachment")
                             .build();
 
+                    // Try to guess content type
+                    String contentType = "application/octet-stream";
+                    if (ticket.getAttachmentName() != null) {
+                        String name = ticket.getAttachmentName().toLowerCase();
+                        if (name.endsWith(".png")) contentType = "image/png";
+                        else if (name.endsWith(".jpg") || name.endsWith(".jpeg")) contentType = "image/jpeg";
+                        else if (name.endsWith(".mp4")) contentType = "video/mp4";
+                        else if (name.endsWith(".pdf")) contentType = "application/pdf";
+                    }
+
                     return ResponseEntity.ok()
                             .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                            .contentType(MediaType.parseMediaType(contentType))
                             .body(file);
                 })
                 .orElse(ResponseEntity.notFound().build());
