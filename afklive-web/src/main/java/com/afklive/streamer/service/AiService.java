@@ -10,15 +10,22 @@ import org.springframework.web.client.RestTemplate;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 public class AiService {
 
-    @Value("${app.gemini.key:}")
-    private String geminiKey;
-
+    private final String geminiKey;
+    private final RestTemplate restTemplate;
     private final Random random = new Random();
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+    public AiService(@Value("${app.gemini.key:}") String geminiKey, RestTemplate restTemplate) {
+        this.geminiKey = geminiKey;
+        this.restTemplate = restTemplate;
+    }
 
     public String generateTitle(String context) {
         if (isAiEnabled()) {
@@ -53,21 +60,19 @@ public class AiService {
 
     public Map<String, String> generateStreamMetadata(String context) {
         if (isAiEnabled()) {
-            // Ideally we'd ask for JSON, but Gemini Text generation is freer.
-            // We'll make parallel calls or one big call and split. One big call is risky for parsing.
-            // Parallel is fine.
+            // Run parallel calls using Virtual Threads
+            CompletableFuture<String> titleFuture = CompletableFuture.supplyAsync(() -> generateTitle(context), executor);
+            CompletableFuture<String> descFuture = titleFuture.thenApplyAsync(this::generateDescription, executor);
+            CompletableFuture<String> tagsFuture = CompletableFuture.supplyAsync(() -> generateTags(context), executor);
+            CompletableFuture<String> tipFuture = CompletableFuture.supplyAsync(() -> callGemini("Give one short, engaging tip for a streamer streaming about: " + context + ". e.g. 'Ask chat to...'"), executor);
 
-            // Note: In production we'd use CompletableFuture to run these in parallel.
-            String title = generateTitle(context);
-            String desc = generateDescription(title);
-            String tags = generateTags(context);
-            String tip = callGemini("Give one short, engaging tip for a streamer streaming about: " + context + ". e.g. 'Ask chat to...'");
+            CompletableFuture.allOf(titleFuture, descFuture, tagsFuture, tipFuture).join();
 
             return Map.of(
-                "title", title,
-                "description", desc,
-                "tags", tags,
-                "tip", tip
+                "title", titleFuture.join(),
+                "description", descFuture.join(),
+                "tags", tagsFuture.join(),
+                "tip", tipFuture.join()
             );
         }
 
