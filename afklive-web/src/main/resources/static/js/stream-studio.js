@@ -180,6 +180,9 @@ document.addEventListener('alpine:init', () => {
                     if(res.ok) {
                         showToast("Music uploaded!", "success");
                         this.uploadedMusicName = file.name;
+                        this.stockTracks = [];
+                        this.libraryTracks = [];
+                        this.loadAudioLibrary();
                     } else showToast("Upload failed", "error");
                 });
         },
