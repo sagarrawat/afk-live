@@ -72,7 +72,7 @@ public class StreamController {
                                                 @RequestParam(required = false) String musicName,
                                                 @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
                                                 @RequestParam(required = false, defaultValue = "-1") int loopCount,
-                                                @RequestParam(required = false) MultipartFile watermarkFile,
+                                                @RequestPart(value = "watermarkFile", required = false) MultipartFile watermarkFile,
                                                 @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
                                                 @RequestParam(required = false, defaultValue = "original") String streamMode,
                                                 @RequestParam(required = false, defaultValue = "0") int streamQuality,
