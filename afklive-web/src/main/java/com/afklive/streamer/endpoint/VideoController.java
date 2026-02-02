@@ -6,6 +6,7 @@ import com.afklive.streamer.service.AudioService;
 import com.afklive.streamer.service.FFmpegCommandBuilder;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.service.VideoConversionService;
 import com.afklive.streamer.service.YouTubeService;
 import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class VideoController {
     private final YouTubeService youTubeService;
     private final UserService userService;
     private final AudioService audioService;
+    private final VideoConversionService videoConversionService;
 
     @GetMapping("/youtube/categories")
     public ResponseEntity<?> getVideoCategories(Principal principal) {
@@ -169,6 +171,9 @@ public class VideoController {
             video.setStatus(ScheduledVideo.VideoStatus.PENDING);
 
             repository.save(video);
+
+            // Trigger async check for optimization status
+            videoConversionService.checkOptimizationRequirement(video.getId());
 
             return ResponseEntity.ok(Map.of("success", true, "message", "Video scheduled successfully", "id", video.getId()));
         } catch (Exception e) {
