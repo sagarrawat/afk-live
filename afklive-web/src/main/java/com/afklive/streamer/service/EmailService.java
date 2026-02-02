@@ -17,6 +17,12 @@ public class EmailService {
     @Value("${app.base-url}")
     private String baseUrl;
 
+    @Value("${app.email.support}")
+    private String supportEmail;
+
+    @Value("${app.email.no-reply}")
+    private String noReplyEmail;
+
     private final JavaMailSender emailSender;
 
     private String createBaseHtml(String title, String bodyContent) {
@@ -88,7 +94,7 @@ public class EmailService {
                          "<p style='white-space: pre-wrap;'>" + message + "</p>";
 
         String html = createBaseHtml("New Support Ticket", content);
-        sendEmail("support@afklive.in", subject, html);
+        sendEmail(supportEmail, subject, html);
     }
 
     private void sendEmail(String to, String subject, String htmlContent) {
@@ -101,7 +107,7 @@ public class EmailService {
             MimeMessage message = emailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom("no-reply@afklive.in");
+            helper.setFrom(noReplyEmail);
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(htmlContent, true); // true = html
