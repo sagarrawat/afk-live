@@ -298,15 +298,11 @@ document.addEventListener('alpine:init', () => {
             if(window.uploadedWatermarkFile) fd.append("watermarkFile", window.uploadedWatermarkFile);
 
             try {
-                // Ensure no Content-Type header is manually set for FormData
-                // The browser will automatically set the correct Content-Type with boundary
-                const res = await fetch('/api/start', {
+                // apiFetch will handle errors (401, 500, etc.) globally
+                const res = await apiFetch('/api/start', {
                     method: 'POST',
                     body: fd
                 });
-
-                // Handle 401/403 manually since we bypassed apiFetch wrapper for safety
-                if (res.status === 401) { window.location.href = '/login'; return; }
 
                 const data = await res.json();
                 if(data.success) {
@@ -318,7 +314,6 @@ document.addEventListener('alpine:init', () => {
                 }
             } catch(e) {
                 console.error(e);
-                showToast("Error starting stream", "error");
             } finally {
                 this.isBusy = false;
             }

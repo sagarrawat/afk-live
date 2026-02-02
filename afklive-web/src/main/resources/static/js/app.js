@@ -500,20 +500,44 @@ async function submitJob() {
 
 /* --- API HELPER --- */
 async function apiFetch(url, options = {}) {
+    let res;
     try {
-        const res = await fetch(url, options);
-        if (res.status === 401 || res.status === 403) {
-            const body = await res.clone().json().catch(() => ({}));
-            if (body.message && (body.message.includes("YouTube") || body.message.includes("connected"))) {
-                document.getElementById('addChannelModal')?.classList.remove('hidden');
-                showToast("Please connect your YouTube channel.", "error");
-            } else {
+        res = await fetch(url, options);
+    } catch (e) {
+        showToast("Network Error: " + (e.message || "Connection failed"), "error");
+        throw e;
+    }
+
+    if (res.status === 401 || res.status === 403) {
+        const body = await res.clone().json().catch(() => ({}));
+        if (body.message && (body.message.includes("YouTube") || body.message.includes("connected"))) {
+            document.getElementById('addChannelModal')?.classList.remove('hidden');
+            showToast("Please connect your YouTube channel.", "error");
+        } else {
+            if (window.location.pathname !== '/login') {
                 window.location.href = '/login';
             }
-            throw new Error("Authentication required");
         }
-        return res;
-    } catch (e) { throw e; }
+        throw new Error("Authentication required");
+    }
+
+    if (!res.ok) {
+        let errorMsg = "Request failed (" + res.status + ")";
+        try {
+            const body = await res.clone().json();
+            if (body.message) errorMsg = body.message;
+            else if (body.error) errorMsg = body.error;
+        } catch (jsonErr) {
+            try {
+                const text = await res.clone().text();
+                if(text && text.length < 200) errorMsg = text;
+            } catch(textErr) {}
+        }
+        showToast(errorMsg, "error");
+        throw new Error(errorMsg);
+    }
+
+    return res;
 }
 
 /* --- USER & CHANNELS --- */
@@ -1025,9 +1049,18 @@ async function connectYouTubeDestination(channelId = null) {
         let url = `${API_URL}/youtube/key`;
         if (channelId) url += `?channelId=${channelId}`;
         const res = await fetch(url);
+
         if (res.status === 401) { window.location.href = '/oauth2/authorization/google-youtube?action=connect_youtube'; return; }
+
+        if (!res.ok) {
+            let errorMsg = "Request failed";
+            try { const body = await res.clone().json(); errorMsg = body.message || body.error || errorMsg; } catch(e){}
+            showToast(errorMsg, "error");
+            return;
+        }
+
         const data = await res.json();
-        if (res.ok && data.key) {
+        if (data.key) {
             // Post to backend
             await apiFetch('/api/destinations', {
                 method: 'POST',
