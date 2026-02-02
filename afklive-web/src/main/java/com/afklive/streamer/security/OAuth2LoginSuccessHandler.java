@@ -138,6 +138,10 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
         }
 
         // Redirect to Studio
-        getRedirectStrategy().sendRedirect(request, response, "/studio");
+        if ("ROLE_ADMIN".equals(user.getRole())) {
+            getRedirectStrategy().sendRedirect(request, response, "/admin");
+        } else {
+            getRedirectStrategy().sendRedirect(request, response, "/studio");
+        }
     }
 }

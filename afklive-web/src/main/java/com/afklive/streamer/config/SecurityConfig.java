@@ -20,6 +20,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
+import com.afklive.streamer.security.CustomAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import com.afklive.streamer.service.CustomUserDetailsService;
 
@@ -37,6 +38,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ClientRegistrationRepository clientRegistrationRepository,
                                            OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler,
+                                           CustomAuthenticationSuccessHandler customAuthenticationSuccessHandler,
                                            CustomUserDetailsService userDetailsService) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
@@ -50,7 +52,7 @@ public class SecurityConfig {
                         .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
 
                         // 3. PROTECTED: The Studio URL and internal index file
-                        // Removed /studio and /app.html from permitAll to force login
+                        .requestMatchers("/studio", "/app.html", "/app").hasRole("USER")
 
                         // 4. CATCH-ALL
                         .anyRequest().authenticated()
@@ -58,7 +60,7 @@ public class SecurityConfig {
                 .formLogin(form -> form
                         .loginPage("/login")
                         .loginProcessingUrl("/login")
-                        .defaultSuccessUrl("/studio", true)
+                        .successHandler(customAuthenticationSuccessHandler)
                         .permitAll()
                 )
                 .rememberMe(remember -> remember
