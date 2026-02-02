@@ -29,6 +29,7 @@ public class PaymentController {
     private final StandardCheckoutClient phonePeClient;
     private final PaymentAuditRepository paymentAuditRepository;
     private final UserService userService;
+    private final String baseUrl;
 
     public PaymentController(
             PaymentAuditRepository paymentAuditRepository,
@@ -41,6 +42,7 @@ public class PaymentController {
         this.objectMapper = new ObjectMapper();
         this.paymentAuditRepository = paymentAuditRepository;
         this.userService = userService;
+        this.baseUrl = baseUrl;
 
         Env env = Env.valueOf(envStr.toUpperCase());
         this.phonePeClient = StandardCheckoutClient.getInstance(merchantId, saltKey, saltIndex, env);
@@ -82,7 +84,7 @@ public class PaymentController {
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
                     .merchantOrderId(merchantTransactionId)
                     .amount(amount)
-                    .redirectUrl("https://afklive.in/studio?view=settings&payment_status=pending")
+                    .redirectUrl(this.baseUrl + "/studio?view=settings&payment_status=pending")
                     .build();
 
             StandardCheckoutPayResponse response = phonePeClient.pay(payRequest);

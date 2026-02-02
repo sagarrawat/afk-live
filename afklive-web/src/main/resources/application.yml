@@ -68,6 +68,9 @@ rate-limiter:
 
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  email:
+    support: ${APP_EMAIL_SUPPORT:support@afklive.in}
+    no-reply: ${APP_EMAIL_NO_REPLY:no-reply@afklive.in}
   gemini:
     key: ${GEMINI_API_KEY:}
   storage:
