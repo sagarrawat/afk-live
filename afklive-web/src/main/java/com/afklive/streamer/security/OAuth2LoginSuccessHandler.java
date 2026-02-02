@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -24,6 +25,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -124,6 +126,16 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             user.setPlanType(PlanType.FREE);
         }
         userRepository.save(user);
+
+        // Update Security Context with app roles (ROLE_USER/ROLE_ADMIN) from DB
+        List<GrantedAuthority> authorities = AuthorityUtils.createAuthorityList(user.getRole());
+        OAuth2AuthenticationToken newAuth = new OAuth2AuthenticationToken(
+                oauthUser,
+                authorities,
+                token.getAuthorizedClientRegistrationId()
+        );
+        SecurityContextHolder.getContext().setAuthentication(newAuth);
+        securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
 
         // Specific Handling for Channel Connection (Legacy or Direct Login with Scope)
         boolean hasYoutube = token.getAuthorizedClientRegistrationId().equals(AppConstants.OAUTH_GOOGLE_YOUTUBE)
