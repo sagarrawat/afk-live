@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -67,36 +68,78 @@ public class StreamController {
     }
 
     @PostMapping(value = "/start", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<?>> start(@RequestParam("streamKey") String streamKeys,
-                                                @RequestParam String videoKey,
-                                                @RequestParam(required = false) String musicName,
-                                                @RequestParam(value = "musicFile", required = false) MultipartFile musicFile,
-                                                @RequestParam(required = false, defaultValue = "1.0") String musicVolume,
-                                                @RequestParam(required = false, defaultValue = "-1") int loopCount,
-                                                @RequestParam(value = "watermarkFile", required = false) MultipartFile watermarkFile,
-                                                @RequestParam(required = false, defaultValue = "true") boolean muteVideoAudio,
-                                                @RequestParam(required = false, defaultValue = "original") String streamMode,
-                                                @RequestParam(required = false, defaultValue = "0") int streamQuality,
-                                                @RequestParam(required = false) String title,
-                                                @RequestParam(required = false) String description,
-                                                @RequestParam(required = false) String privacy,
-                                                @RequestParam(required = false, defaultValue = "false") boolean overlayEnabled,
-                                                @RequestParam(required = false) String overlayTemplate,
-                                                @RequestParam(required = false, defaultValue = "false") boolean autoReplyEnabled,
-                                                Principal principal) {
+    public ResponseEntity<ApiResponse<?>> start(MultipartHttpServletRequest request, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
-        String email = SecurityUtils.getEmail(principal);
-        // Removed global lock (streamManager) to allow multiple streams per user.
-        // Quota is checked inside StreamService via UserService.
         try {
+            String email = SecurityUtils.getEmail(principal);
+
+            // Extract parameters manually to control multipart parsing
+            String[] streamKeysArr = request.getParameterValues("streamKey");
+            if (streamKeysArr == null || streamKeysArr.length == 0) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("streamKey is required"));
+            }
+
+            String videoKey = request.getParameter("videoKey");
+            if (videoKey == null || videoKey.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("videoKey is required"));
+            }
+
+            String musicName = request.getParameter("musicName");
+            MultipartFile musicFile = request.getFile("musicFile");
+
+            String musicVolume = request.getParameter("musicVolume");
+            if (musicVolume == null || musicVolume.trim().isEmpty()) musicVolume = "1.0";
+
+            String loopCountStr = request.getParameter("loopCount");
+            int loopCount = -1;
+            if (loopCountStr != null && !loopCountStr.trim().isEmpty()) {
+                try {
+                    loopCount = Integer.parseInt(loopCountStr);
+                } catch (NumberFormatException e) {
+                    // Ignore, use default
+                }
+            }
+
+            MultipartFile watermarkFile = request.getFile("watermarkFile");
+
+            String muteStr = request.getParameter("muteVideoAudio");
+            boolean muteVideoAudio = (muteStr != null && !muteStr.trim().isEmpty()) ? Boolean.parseBoolean(muteStr) : true;
+
+            String streamMode = request.getParameter("streamMode");
+            if (streamMode == null || streamMode.trim().isEmpty()) streamMode = "original";
+
+            String qualStr = request.getParameter("streamQuality");
+            int streamQuality = 0;
+            if (qualStr != null && !qualStr.trim().isEmpty()) {
+                 try {
+                     streamQuality = Integer.parseInt(qualStr);
+                 } catch (NumberFormatException e) {
+                     // Ignore
+                 }
+            }
+
+            String title = request.getParameter("title");
+            String description = request.getParameter("description");
+            String privacy = request.getParameter("privacy");
+
+            String overlayStr = request.getParameter("overlayEnabled");
+            boolean overlayEnabled = (overlayStr != null && !overlayStr.trim().isEmpty()) ? Boolean.parseBoolean(overlayStr) : false;
+
+            String overlayTemplate = request.getParameter("overlayTemplate");
+
+            String autoReplyStr = request.getParameter("autoReplyEnabled");
+            boolean autoReplyEnabled = (autoReplyStr != null && !autoReplyStr.trim().isEmpty()) ? Boolean.parseBoolean(autoReplyStr) : false;
+
             if (musicFile != null && !musicFile.isEmpty()) {
                 // If a music file is uploaded directly, save it to the user's directory and use its name
                 String uploadedMusicName = fileUploadService.handleFileUpload(musicFile, email);
                 musicName = uploadedMusicName;
             }
 
-            return ResponseEntity.ok(streamService.startStream(email, java.util.Collections.singletonList(streamKeys), videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled));
+            List<String> streamKeysList = java.util.Arrays.asList(streamKeysArr);
+
+            return ResponseEntity.ok(streamService.startStream(email, streamKeysList, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }
