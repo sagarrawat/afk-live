@@ -35,7 +35,7 @@ public class EngagementService {
     private final AiService aiService;
     private final StreamJobRepository streamJobRepo;
 
-    @Scheduled(fixedRate = 60000) // 1 min
+    @Scheduled(fixedRate = 30_000) // 1 min
     public void processLiveEngagement() {
         List<StreamJob> jobs = streamJobRepo.findByIsLiveTrueAndAutoReplyEnabledTrue();
         Set<String> processedUsers = new java.util.HashSet<>();
