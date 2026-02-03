@@ -5,8 +5,8 @@ DELETE FROM users WHERE username = 'test@example.com';
 
 -- User: test@example.com / password
 -- User: test@example.com / password (ADMIN)
-INSERT INTO users (username, password, enabled, plan_type, full_name, used_storage_bytes, role, auto_reply_enabled, delete_negative_comments)
-VALUES ('test@example.com', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', true, 'FREE', 'Test User', 0, 'ROLE_ADMIN', false, false);
+INSERT INTO users (username, password, enabled, plan_type, full_name, used_storage_bytes, role, auto_reply_enabled, delete_negative_comments, auto_reply_unreplied_enabled)
+VALUES ('test@example.com', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', true, 'FREE', 'Test User', 0, 'ROLE_ADMIN', false, false, false);
 
 -- Mock Channel
 INSERT INTO social_channels (name, platform, profile_url, user_id)
