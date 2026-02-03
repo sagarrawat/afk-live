@@ -31,11 +31,6 @@
         input:checked + .slider { background-color: var(--primary); }
         input:checked + .slider:before { -webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px); }
 
-        /* Modal for Payment */
-        .payment-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 2000; backdrop-filter: blur(4px); }
-        .payment-box { background: white; padding: 30px; border-radius: 12px; width: 400px; max-width: 90%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
-        .payment-spinner { font-size: 3rem; color: var(--primary); margin: 20px 0; }
-
         @media (max-width: 768px) {
             .pricing-grid { grid-template-columns: 1fr; }
         }
@@ -130,29 +125,8 @@
     </div>
 </footer>
 
-<!-- Mock Payment Modal -->
-<div id="paymentModal" class="payment-modal">
-    <div class="payment-box">
-        <h2>Confirm Subscription</h2>
-        <p id="paymentPlanName">Upgrade Plan</p>
-        <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left;">
-            <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
-                <span>Total due today:</span>
-                <strong id="paymentAmount">$0.00</strong>
-            </div>
-            <div style="font-size: 0.9rem; color: #666;">
-                <i class="fa-solid fa-credit-card"></i> **** **** **** 4242
-            </div>
-        </div>
-        <button id="btnConfirmPayment" class="btn btn-primary btn-block btn-lg" onclick="processPayment()">Pay & Upgrade</button>
-        <button class="btn btn-text" onclick="closePaymentModal()" style="margin-top: 10px;">Cancel</button>
-    </div>
-</div>
-
 <script src="js/toast.js"></script>
 <script>
-    let selectedPlanId = null;
-
     async function loadPricing(country) {
         try {
             const res = await fetch(`/api/pricing?country=${country}`);
@@ -186,12 +160,10 @@
                         btnHtml = `<button class="btn btn-outline btn-block" disabled style="opacity:0.6; cursor:default; background: #eee;">Current Plan</button>`;
                     } else if (currentRank > planRank) {
                         // Lower Tier (Hide as per request)
-                        // "they should not see lower tier as upgrade option"
-                        // We can either hide the button or the whole card. Hiding the button is safer to keep grid layout.
                         btnHtml = `<button class="btn btn-outline btn-block" disabled style="visibility: hidden;">Included</button>`;
                     } else {
-                        // Upgrade Option
-                        btnHtml = `<button class="btn ${btnClass} btn-block" onclick="openPaymentModal('${plan.id}', '${plan.title}', '${plan.price}')">Upgrade</button>`;
+                        // Upgrade Option - Direct Payment Initiation
+                        btnHtml = `<button class="btn ${btnClass} btn-block" onclick="initiateUpgrade('${plan.id}')">Upgrade</button>`;
                     }
                 } else {
                     // Not logged in
@@ -215,50 +187,39 @@
         }
     }
 
-    function openPaymentModal(id, title, price) {
-        selectedPlanId = id;
-        document.getElementById('paymentPlanName').innerText = `Upgrading to ${title}`;
-        document.getElementById('paymentAmount').innerText = price;
-        document.getElementById('paymentModal').style.display = 'flex';
-    }
+    async function initiateUpgrade(planId) {
+        const isIndia = document.getElementById('countrySwitch').checked;
+        const url = isIndia ? '/api/payment/initiate' : '/api/payment/stripe/initiate';
+        const body = { planId: planId };
 
-    function closePaymentModal() {
-        document.getElementById('paymentModal').style.display = 'none';
-        selectedPlanId = null;
-    }
-
-    async function processPayment() {
-        if(!selectedPlanId) return;
-
-        const btn = document.getElementById('btnConfirmPayment');
-        const originalText = btn.innerText;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
-
-        // Mock delay
-        await new Promise(r => setTimeout(r, 1500));
+        if (typeof showToast === 'function') {
+            showToast("Initiating payment...", "info");
+        }
 
         try {
-            const res = await fetch('/api/pricing/upgrade', {
+            const res = await fetch(url, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ planId: selectedPlanId })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
             });
             const data = await res.json();
 
-            if (res.ok) {
-                showToast("Payment Successful! Plan Upgraded.", "success");
-                closePaymentModal();
-                setTimeout(() => window.location.reload(), 1500);
+            if (res.ok && data.redirectUrl) {
+                window.location.href = data.redirectUrl;
             } else {
-                showToast(data.message || "Upgrade failed", "error");
-                btn.disabled = false;
-                btn.innerText = originalText;
+                if (typeof showToast === 'function') {
+                    showToast(data.message || "Payment initiation failed", "error");
+                } else {
+                    alert(data.message || "Payment initiation failed");
+                }
             }
         } catch(e) {
-            showToast("Network Error", "error");
-            btn.disabled = false;
-            btn.innerText = originalText;
+            console.error(e);
+            if (typeof showToast === 'function') {
+                showToast("Network Error", "error");
+            } else {
+                alert("Network Error");
+            }
         }
     }
 

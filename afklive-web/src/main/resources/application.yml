@@ -90,5 +90,9 @@ app:
     salt-key: ${PHONEPE_SALT_KEY:099eb0cd-02cf-4e2a-8aca-3e6c6aff0399}
     salt-index: ${PHONEPE_SALT_INDEX:1}
     salt-env: ${PHONEPE_ENV:https://api-preprod.phonepe.com/apis/pg-sandbox}
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:}
+    publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
 server:
   forward-headers-strategy: native
