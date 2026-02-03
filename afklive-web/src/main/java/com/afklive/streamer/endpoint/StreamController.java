@@ -67,7 +67,7 @@ public class StreamController {
     }
 
     @PostMapping(value = "/start", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<?>> start(@RequestParam("streamKey") List<String> streamKeys,
+    public ResponseEntity<ApiResponse<?>> start(@RequestParam("streamKey") String streamKeys,
                                                 @RequestParam String videoKey,
                                                 @RequestParam(required = false) String musicName,
                                                 @RequestParam(value = "musicFile", required = false) MultipartFile musicFile,
@@ -96,7 +96,7 @@ public class StreamController {
                 musicName = uploadedMusicName;
             }
 
-            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled));
+            return ResponseEntity.ok(streamService.startStream(email, java.util.Collections.singletonList(streamKeys), videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }
