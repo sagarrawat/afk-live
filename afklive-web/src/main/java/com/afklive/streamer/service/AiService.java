@@ -129,6 +129,13 @@ public class AiService {
         return "Thanks for your comment! 😊";
     }
 
+    public String generateTwitterStyleReply(String commentText) {
+        if (isAiEnabled()) {
+            return callGemini("Write a very short, tweet-style reply to this live stream comment: '" + commentText + "'. It should be interactive and engaging. Max 100 characters. No quotes.");
+        }
+        return "Thanks for watching! 🔥";
+    }
+
     private boolean isAiEnabled() {
         return geminiKey != null && !geminiKey.isEmpty() && !geminiKey.contains("GEMINI_API_KEY");
     }

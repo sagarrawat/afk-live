@@ -206,7 +206,7 @@ public class YouTubeService {
         }
     }
 
-    private String getChannelId(String username) throws Exception {
+    public String getChannelId(String username) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         ChannelListResponse response = youtube.channels().list(Collections.singletonList("id"))
                 .setMine(true)
@@ -421,5 +421,49 @@ public class YouTubeService {
             youtube.liveBroadcasts().update(Collections.singletonList(parts), update).execute();
             log.info("Updated broadcast metadata for broadcast ID: {}", broadcast.getId());
         }
+    }
+
+    // --- LIVE CHAT ---
+
+    public String getActiveLiveChatId(String username) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        // Find active broadcast
+        LiveBroadcastListResponse response = youtube.liveBroadcasts().list(Collections.singletonList("id,snippet,status"))
+                .setMine(true)
+                .setBroadcastType("all") // We need active one
+                .execute();
+
+        if (response.getItems() != null) {
+            for (LiveBroadcast b : response.getItems()) {
+                String status = b.getStatus().getLifeCycleStatus();
+                if ("live".equals(status) || "liveStarting".equals(status)) {
+                    return b.getSnippet().getLiveChatId();
+                }
+            }
+        }
+        return null;
+    }
+
+    public LiveChatMessageListResponse getLiveChatMessages(String username, String liveChatId, String pageToken) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        YouTube.LiveChatMessages.List request = youtube.liveChatMessages().list(liveChatId, Collections.singletonList("snippet,authorDetails"));
+        if (pageToken != null && !pageToken.isEmpty()) {
+            request.setPageToken(pageToken);
+        }
+        return request.execute();
+    }
+
+    public void replyToLiveChat(String username, String liveChatId, String text) throws Exception {
+        YouTube youtube = getYouTubeClient(username);
+        LiveChatMessage message = new LiveChatMessage();
+        LiveChatMessageSnippet snippet = new LiveChatMessageSnippet();
+        snippet.setLiveChatId(liveChatId);
+        snippet.setType("textMessageEvent");
+        LiveChatTextMessageDetails details = new LiveChatTextMessageDetails();
+        details.setMessageText(text);
+        snippet.setTextMessageDetails(details);
+        message.setSnippet(snippet);
+
+        youtube.liveChatMessages().insert(Collections.singletonList("snippet"), message).execute();
     }
 }
