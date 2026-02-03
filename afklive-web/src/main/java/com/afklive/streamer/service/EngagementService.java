@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -41,14 +42,20 @@ public class EngagementService {
             if (!youTubeService.isConnected(user.getUsername())) return;
 
             CommentThreadListResponse response = youTubeService.getCommentThreads(user.getUsername());
-            if (response.getItems() == null) return;
+            if (response.getItems() == null || response.getItems().isEmpty()) return;
+
+            // Optimization: Fetch all existing comment IDs in one query to avoid N+1 problem
+            List<String> commentIds = response.getItems().stream()
+                    .map(thread -> thread.getSnippet().getTopLevelComment().getId())
+                    .toList();
+            Set<String> existingIds = processedRepository.findExistingCommentIds(commentIds);
 
             for (CommentThread thread : response.getItems()) {
                 String commentId = thread.getSnippet().getTopLevelComment().getId();
                 String text = thread.getSnippet().getTopLevelComment().getSnippet().getTextDisplay();
                 String videoId = thread.getSnippet().getVideoId();
 
-                if (processedRepository.existsByCommentId(commentId)) continue;
+                if (existingIds.contains(commentId)) continue;
 
                 // Process
                 String sentiment = aiService.analyzeSentiment(text);
