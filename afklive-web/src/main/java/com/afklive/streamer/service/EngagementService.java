@@ -2,12 +2,16 @@ package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.EngagementActivity;
 import com.afklive.streamer.model.ProcessedComment;
+import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.EngagementActivityRepository;
 import com.afklive.streamer.repository.ProcessedCommentRepository;
+import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.UserRepository;
 import com.google.api.services.youtube.model.CommentThread;
 import com.google.api.services.youtube.model.CommentThreadListResponse;
+import com.google.api.services.youtube.model.LiveChatMessage;
+import com.google.api.services.youtube.model.LiveChatMessageListResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +33,59 @@ public class EngagementService {
     private final EngagementActivityRepository activityRepository;
     private final YouTubeService youTubeService;
     private final AiService aiService;
+    private final StreamJobRepository streamJobRepo;
+
+    @Scheduled(fixedRate = 60000) // 1 min
+    public void processLiveEngagement() {
+        List<StreamJob> jobs = streamJobRepo.findByIsLiveTrueAndAutoReplyEnabledTrue();
+        Set<String> processedUsers = new java.util.HashSet<>();
+
+        for (StreamJob job : jobs) {
+            if (processedUsers.contains(job.getUsername())) continue;
+            processedUsers.add(job.getUsername());
+            processLiveChatForUser(job);
+        }
+    }
+
+    private void processLiveChatForUser(StreamJob job) {
+        try {
+            String username = job.getUsername();
+            if (!youTubeService.isConnected(username)) return;
+
+            String liveChatId = youTubeService.getActiveLiveChatId(username);
+            if (liveChatId == null) return;
+
+            LiveChatMessageListResponse response = youTubeService.getLiveChatMessages(username, liveChatId, job.getLastPageToken());
+
+            if (response.getItems() != null && !response.getItems().isEmpty()) {
+                job.setLastPageToken(response.getNextPageToken());
+                streamJobRepo.save(job);
+
+                String channelId = youTubeService.getChannelId(username);
+
+                for (LiveChatMessage msg : response.getItems()) {
+                    if (msg.getSnippet().getAuthorChannelId().equals(channelId)) continue;
+                    if (!"textMessageEvent".equals(msg.getSnippet().getType())) continue;
+
+                    String text = msg.getSnippet().getTextMessageDetails().getMessageText();
+
+                    // Generate Reply
+                    String reply = aiService.generateTwitterStyleReply(text);
+
+                    // Send Reply
+                    youTubeService.replyToLiveChat(username, liveChatId, reply);
+
+                    // Log
+                    logActivity(username, "LIVE_REPLY", msg.getId(), liveChatId, reply, null);
+                }
+            } else {
+                job.setLastPageToken(response.getNextPageToken());
+                streamJobRepo.save(job);
+            }
+        } catch (Exception e) {
+            log.error("Live engagement error for user {}", job.getUsername(), e);
+        }
+    }
 
     @Scheduled(fixedRate = 60000) // 1 min
     public void processEngagement() {

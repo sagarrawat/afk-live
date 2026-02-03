@@ -71,7 +71,8 @@ public class StreamService {
             String description,
             String privacy,
             boolean overlayEnabled,
-            String overlayTemplate
+            String overlayTemplate,
+            boolean autoReplyEnabled
     ) throws IOException {
         
         log.info("username [{}]", username);
@@ -297,7 +298,8 @@ public class StreamService {
                     description,
                     privacy,
                     java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")),
-                    destName
+                    destName,
+                    autoReplyEnabled
             );
             job = streamJobRepo.save(job);
             final Long jobId = job.getId();

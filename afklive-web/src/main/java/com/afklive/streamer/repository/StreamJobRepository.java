@@ -14,4 +14,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     // Admin: Find ALL live jobs
     List<StreamJob> findAllByIsLiveTrue();
+
+    // Auto-Reply
+    List<StreamJob> findByIsLiveTrueAndAutoReplyEnabledTrue();
 }

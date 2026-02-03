@@ -34,6 +34,9 @@ public class StreamJob {
     private String privacy;
     private java.time.ZonedDateTime startTime;
 
+    private boolean autoReplyEnabled;
+    private String lastPageToken;
+
     public StreamJob(
             String username,
             String streamKey,
@@ -46,7 +49,8 @@ public class StreamJob {
             String description,
             String privacy,
             java.time.ZonedDateTime startTime,
-            String destinationName
+            String destinationName,
+            boolean autoReplyEnabled
     ) {
         this.username = username;
         this.streamKey = streamKey;
@@ -60,6 +64,7 @@ public class StreamJob {
         this.privacy = privacy;
         this.startTime = startTime;
         this.destinationName = destinationName;
+        this.autoReplyEnabled = autoReplyEnabled;
     }
 
 }

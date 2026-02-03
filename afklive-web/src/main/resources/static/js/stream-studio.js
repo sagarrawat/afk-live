@@ -15,6 +15,7 @@ document.addEventListener('alpine:init', () => {
         streamOrientation: 'original',
         overlayEnabled: false,
         overlayTemplate: 'SIMPLE',
+        autoReplyEnabled: false,
 
         // Controls
         loopVideo: true,
@@ -294,6 +295,7 @@ document.addEventListener('alpine:init', () => {
             fd.append("streamQuality", this.streamQuality);
             fd.append("overlayEnabled", this.overlayEnabled);
             fd.append("overlayTemplate", this.overlayTemplate);
+            fd.append("autoReplyEnabled", this.autoReplyEnabled);
 
             if(window.uploadedWatermarkFile) fd.append("watermarkFile", window.uploadedWatermarkFile);
 

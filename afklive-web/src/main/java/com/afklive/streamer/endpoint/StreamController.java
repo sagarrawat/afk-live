@@ -82,6 +82,7 @@ public class StreamController {
                                                 @RequestParam(required = false) String privacy,
                                                 @RequestParam(required = false, defaultValue = "false") boolean overlayEnabled,
                                                 @RequestParam(required = false) String overlayTemplate,
+                                                @RequestParam(required = false, defaultValue = "false") boolean autoReplyEnabled,
                                                 Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
@@ -95,7 +96,7 @@ public class StreamController {
                 musicName = uploadedMusicName;
             }
 
-            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate));
+            return ResponseEntity.ok(streamService.startStream(email, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }
