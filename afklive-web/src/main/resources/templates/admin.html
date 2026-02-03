@@ -23,17 +23,20 @@
         }
     </script>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans" x-data="{ activeTab: 'overview', showTicketModal: false, selectedTicket: null }">
+<body class="bg-gray-50 text-gray-900 font-sans" x-data="{ activeTab: 'overview', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false }">
 
     <div class="min-h-screen flex flex-col">
         <!-- Header -->
-        <header class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-8 z-10 sticky top-0">
+        <header class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-8 z-10 sticky top-0">
             <div class="flex items-center gap-6">
+                <button @click="mobileMenuOpen = !mobileMenuOpen" class="md:hidden text-gray-600 focus:outline-none -mr-2">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
                 <div class="afk-logo" style="transform: scale(0.6); transform-origin: left center;">
                     <div class="afk-icon"><div class="afk-play"></div></div>
                     <div class="afk-text">AFK<span class="afk-live">Live</span></div>
                 </div>
-                <h1 class="font-bold text-xl tracking-tight text-gray-700 border-l pl-6 border-gray-300">Admin Console</h1>
+                <h1 class="font-bold text-xl tracking-tight text-gray-700 border-l pl-4 md:pl-6 border-gray-300 hidden md:block">Admin Console</h1>
             </div>
             <div class="flex items-center gap-4">
                 <form action="/logout" method="post">
@@ -44,23 +47,27 @@
 
         <div class="flex flex-1">
             <!-- Sidebar -->
-            <aside class="w-64 bg-white border-r border-gray-200 p-6 flex flex-col gap-1">
-                <button @click="activeTab = 'overview'"
+            <!-- Mobile Backdrop -->
+            <div x-show="mobileMenuOpen" class="fixed inset-0 z-40 bg-gray-900/50 backdrop-blur-sm md:hidden" @click="mobileMenuOpen = false" x-transition.opacity style="display:none;"></div>
+
+            <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 p-6 flex flex-col gap-1 transition-transform duration-300 md:static md:translate-x-0 transform"
+                   :class="mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'">
+                <button @click="activeTab = 'overview'; mobileMenuOpen = false"
                     class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
                     :class="activeTab === 'overview' ? 'bg-blue-50 text-primary' : 'text-gray-600 hover:bg-gray-50'">
                     <i class="fa-solid fa-chart-pie w-5 text-center"></i> Overview
                 </button>
-                <button @click="activeTab = 'streams'"
+                <button @click="activeTab = 'streams'; mobileMenuOpen = false"
                     class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
                     :class="activeTab === 'streams' ? 'bg-blue-50 text-primary' : 'text-gray-600 hover:bg-gray-50'">
                     <i class="fa-solid fa-satellite-dish w-5 text-center"></i> Active Streams
                 </button>
-                <button @click="activeTab = 'users'"
+                <button @click="activeTab = 'users'; mobileMenuOpen = false"
                     class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
                     :class="activeTab === 'users' ? 'bg-blue-50 text-primary' : 'text-gray-600 hover:bg-gray-50'">
                     <i class="fa-solid fa-users w-5 text-center"></i> Users
                 </button>
-                <button @click="activeTab = 'support'"
+                <button @click="activeTab = 'support'; mobileMenuOpen = false"
                     class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
                     :class="activeTab === 'support' ? 'bg-blue-50 text-primary' : 'text-gray-600 hover:bg-gray-50'">
                     <i class="fa-solid fa-life-ring w-5 text-center"></i> Support Tickets
@@ -68,7 +75,7 @@
             </aside>
 
             <!-- Content -->
-            <main class="flex-1 p-8 overflow-y-auto">
+            <main class="flex-1 p-4 md:p-8 overflow-y-auto">
 
                 <!-- OVERVIEW -->
                 <div x-show="activeTab === 'overview'" class="space-y-8 animate-fade-in">
@@ -125,6 +132,7 @@
                     </div>
 
                     <div th:unless="${supportTickets.empty}" class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                        <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead class="bg-gray-50 border-b border-gray-200">
                                 <tr>
@@ -181,6 +189,7 @@
                                 </tr>
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
 
@@ -193,6 +202,7 @@
                     </div>
 
                     <div th:unless="${activeStreamList.empty}" class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                        <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead class="bg-gray-50 border-b border-gray-200">
                                 <tr>
@@ -219,6 +229,7 @@
                                 </tr>
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
 
