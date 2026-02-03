@@ -206,10 +206,8 @@ public class StreamService {
             // Check if current file is already optimized (DB check)
             boolean isCurrentOptimized = false;
             try {
-                // Inefficient but safe: find by S3 key
-                Optional<ScheduledVideo> currentVideoOpt = scheduledVideoRepository.findByUsername(username).stream()
-                        .filter(v -> v.getS3Key() != null && v.getS3Key().equals(videoKey))
-                        .findFirst();
+                // Efficient: find by S3 key directly
+                Optional<ScheduledVideo> currentVideoOpt = scheduledVideoRepository.findFirstByUsernameAndS3Key(username, videoKey);
 
                 if (currentVideoOpt.isPresent()) {
                     ScheduledVideo v = currentVideoOpt.get();
