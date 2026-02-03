@@ -10,6 +10,9 @@ import com.google.api.services.youtube.model.CommentThread;
 import com.google.api.services.youtube.model.CommentThreadListResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -29,12 +32,17 @@ public class EngagementService {
 
     @Scheduled(fixedRate = 60000) // 1 min
     public void processEngagement() {
-        List<User> users = userRepository.findAll();
-        for (User user : users) {
-            if (user.isAutoReplyEnabled()) {
+        int page = 0;
+        int size = 100;
+        Slice<User> userSlice;
+
+        do {
+            userSlice = userRepository.findByAutoReplyEnabledTrue(PageRequest.of(page, size, Sort.by("username")));
+            for (User user : userSlice) {
                 processUserComments(user);
             }
-        }
+            page++;
+        } while (userSlice.hasNext());
     }
 
     public void processUserComments(User user) {
