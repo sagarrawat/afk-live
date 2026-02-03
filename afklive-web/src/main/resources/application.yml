@@ -92,3 +92,7 @@ app:
     salt-env: ${PHONEPE_ENV:https://api-preprod.phonepe.com/apis/pg-sandbox}
 server:
   forward-headers-strategy: native
+  tomcat:
+    max-swallow-size: 100MB
+    max-http-form-post-size: 100MB
+    max-parameter-count: 50000
