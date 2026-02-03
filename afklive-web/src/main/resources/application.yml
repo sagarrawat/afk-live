@@ -93,6 +93,7 @@ app:
 server:
   forward-headers-strategy: native
   tomcat:
+    max-part-count: 200
     max-swallow-size: 100MB
     max-http-form-post-size: 100MB
     max-parameter-count: 50000
