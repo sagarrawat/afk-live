@@ -247,6 +247,60 @@ public class VideoConversionService {
     }
 
     @Async
+    public void checkOptimizationRequirement(Long videoId) {
+        log.info("Checking optimization requirement for video ID: {}", videoId);
+        ScheduledVideo video = repository.findById(videoId).orElse(null);
+        if (video == null) {
+            log.error("Video not found for optimization check: {}", videoId);
+            return;
+        }
+
+        if (video.getS3Key() == null) {
+            log.warn("Video has no S3 key, skipping check: {}", videoId);
+            return;
+        }
+
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("check_" + videoId + "_");
+            Path tempFile = tempDir.resolve("check.mp4");
+
+            // Download from S3
+            storageService.downloadFileToPath(video.getS3Key(), tempFile);
+
+            List<String> command = FFmpegCommandBuilder.buildProbeCommand(tempFile);
+            Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+
+            String output = "";
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                output = reader.readLine(); // We expect just the codec name
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0 && output != null) {
+                String codec = output.trim();
+                log.info("Detected codec for video {}: {}", videoId, codec);
+
+                if ("h264".equalsIgnoreCase(codec)) {
+                    log.info("Video {} is already H.264. Marking as optimized.", videoId);
+                    video.setOptimizationStatus(ScheduledVideo.OptimizationStatus.COMPLETED);
+                    repository.save(video);
+                } else {
+                    log.info("Video {} is {}, optimization required.", videoId, codec);
+                    // Leave as NOT_OPTIMIZED (default)
+                }
+            } else {
+                log.error("Failed to probe video {}. Exit code: {}", videoId, exitCode);
+            }
+
+        } catch (Exception e) {
+            log.error("Error checking optimization requirement for video {}", videoId, e);
+        } finally {
+            cleanupTempDir(tempDir);
+        }
+    }
+
+    @Async
     public void mergeVideosAsync(List<ScheduledVideo> sourceVideos, String username, String outputName) {
         Path tempDir = null;
         String progressKey = username + ":" + outputName;

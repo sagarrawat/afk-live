@@ -78,4 +78,18 @@ class FFmpegCommandBuilderTest {
         // Should contain portrait specific filter (gblur)
         assertThat(command.toString()).contains("gblur=sigma=20");
     }
+
+    @Test
+    void testBuildProbeCommand() {
+        Path input = Paths.get("/tmp/check.mp4");
+        List<String> command = FFmpegCommandBuilder.buildProbeCommand(input);
+
+        // It might be "ffprobe" or absolute path depending on environment, but checking endsWith is safe
+        assertThat(command.get(0)).satisfiesAnyOf(
+                cmd -> assertThat(cmd).isEqualTo("ffprobe"),
+                cmd -> assertThat(cmd).endsWith("/ffprobe")
+        );
+
+        assertThat(command).contains("-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", input.toString());
+    }
 }

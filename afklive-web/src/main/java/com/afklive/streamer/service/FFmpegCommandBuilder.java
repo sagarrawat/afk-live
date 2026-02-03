@@ -429,6 +429,30 @@ public class FFmpegCommandBuilder {
         return command;
     }
 
+    public static List<String> buildProbeCommand(Path input) {
+        String ffprobe = "ffprobe";
+        java.io.File lambda = new java.io.File("/opt/bin/ffprobe");
+        if (lambda.exists()) {
+            ffprobe = lambda.getAbsolutePath();
+        } else {
+            java.io.File local = new java.io.File("bin/ffprobe");
+            if (local.exists()) ffprobe = local.getAbsolutePath();
+        }
+
+        List<String> command = new ArrayList<>();
+        command.add(ffprobe);
+        command.add("-v");
+        command.add("error");
+        command.add("-select_streams");
+        command.add("v:0");
+        command.add("-show_entries");
+        command.add("stream=codec_name");
+        command.add("-of");
+        command.add("default=noprint_wrappers=1:nokey=1");
+        command.add(input.toString());
+        return command;
+    }
+
     public static List<String> buildMergeCommand(List<Path> inputs, Path output) {
         String ffmpeg = "ffmpeg";
         java.io.File local = new java.io.File("bin/ffmpeg");
