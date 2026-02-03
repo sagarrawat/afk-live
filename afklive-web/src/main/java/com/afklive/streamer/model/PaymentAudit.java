@@ -27,6 +27,8 @@ public class PaymentAudit {
 
     private String status; // INITIATED, SUCCESS, FAILED
 
+    private String provider; // PHONEPE, STRIPE
+
     private String providerReferenceId;
 
     @Column(columnDefinition = "TEXT")

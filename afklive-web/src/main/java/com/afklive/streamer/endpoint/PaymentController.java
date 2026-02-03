@@ -8,7 +8,12 @@ import com.phonepe.sdk.pg.payments.v2.models.response.StandardCheckoutPayRespons
 import com.afklive.streamer.model.PaymentAudit;
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.repository.PaymentAuditRepository;
+import com.afklive.streamer.service.StripeService;
 import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.util.SecurityUtils;
+import com.stripe.model.Event;
+import com.stripe.model.checkout.Session;
+import com.stripe.net.Webhook;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -29,20 +34,26 @@ public class PaymentController {
     private final StandardCheckoutClient phonePeClient;
     private final PaymentAuditRepository paymentAuditRepository;
     private final UserService userService;
+    private final StripeService stripeService;
     private final String baseUrl;
+    private final String stripeWebhookSecret;
 
     public PaymentController(
             PaymentAuditRepository paymentAuditRepository,
             UserService userService,
+            StripeService stripeService,
             @Value("${app.phonepe.merchant-id}") String merchantId,
             @Value("${app.phonepe.salt-key}") String saltKey,
             @Value("${app.phonepe.salt-index}") Integer saltIndex,
             @Value("${app.phonepe.env:SANDBOX}") String envStr,
-            @Value("${app.base-url}") String baseUrl) {
+            @Value("${app.base-url}") String baseUrl,
+            @Value("${app.stripe.webhook-secret:}") String stripeWebhookSecret) {
         this.objectMapper = new ObjectMapper();
         this.paymentAuditRepository = paymentAuditRepository;
         this.userService = userService;
+        this.stripeService = stripeService;
         this.baseUrl = baseUrl;
+        this.stripeWebhookSecret = stripeWebhookSecret;
 
         Env env = Env.valueOf(envStr.toUpperCase());
         this.phonePeClient = StandardCheckoutClient.getInstance(merchantId, saltKey, saltIndex, env);
@@ -79,6 +90,7 @@ public class PaymentController {
             // Audit
             PaymentAudit audit = new PaymentAudit(merchantTransactionId, userId, amount, "INITIATED");
             audit.setPlanId(planId);
+            audit.setProvider("PHONEPE");
             paymentAuditRepository.save(audit);
 
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
@@ -95,6 +107,79 @@ public class PaymentController {
         } catch (Exception e) {
             log.error("Error initiating payment via SDK", e);
             return ResponseEntity.internalServerError().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/stripe/initiate")
+    public ResponseEntity<?> initiateStripePayment(@RequestBody Map<String, Object> body, Principal principal) {
+        try {
+            String planId = (String) body.get("planId");
+            if (planId == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
+            }
+
+            String userId = (principal != null) ? principal.getName() : "test-user-" + UUID.randomUUID().toString();
+            String email = (principal != null) ? SecurityUtils.getEmail(principal) : "test@example.com";
+
+            // Create Stripe Session
+            Session session = stripeService.createCheckoutSession(planId, userId, email);
+
+            if (session == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Failed to create session"));
+            }
+
+            // Audit
+            PaymentAudit audit = new PaymentAudit(session.getId(), userId, session.getAmountTotal(), "INITIATED");
+            audit.setPlanId(planId);
+            audit.setProvider("STRIPE");
+            paymentAuditRepository.save(audit);
+
+            return ResponseEntity.ok(Map.of("redirectUrl", session.getUrl()));
+
+        } catch (Exception e) {
+            log.error("Error initiating stripe payment", e);
+            return ResponseEntity.internalServerError().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/stripe/webhook")
+    public ResponseEntity<?> handleStripeWebhook(@RequestBody String payload, @RequestHeader("Stripe-Signature") String sigHeader) {
+        if (stripeWebhookSecret == null || stripeWebhookSecret.isBlank()) {
+            return ResponseEntity.status(500).body("Webhook secret not configured");
+        }
+
+        try {
+            Event event = Webhook.constructEvent(payload, sigHeader, stripeWebhookSecret);
+
+            if ("checkout.session.completed".equals(event.getType())) {
+                Session session = (Session) event.getDataObjectDeserializer().getObject().orElse(null);
+                if (session != null) {
+                    String sessionId = session.getId();
+                    log.info("Stripe Session Completed: {}", sessionId);
+
+                    paymentAuditRepository.findByTransactionId(sessionId).ifPresent(audit -> {
+                        audit.setStatus("COMPLETED");
+                        audit.setProviderReferenceId(session.getPaymentIntent());
+                        audit.setRawResponse(payload);
+                        paymentAuditRepository.save(audit);
+
+                        if (audit.getPlanId() != null) {
+                            try {
+                                PlanType plan = PlanType.valueOf(audit.getPlanId());
+                                userService.updatePlan(audit.getMerchantUserId(), plan);
+                                log.info("Successfully upgraded user {} to plan {}", audit.getMerchantUserId(), plan);
+                            } catch (Exception e) {
+                                log.error("Failed to upgrade user plan after successful payment", e);
+                            }
+                        }
+                    });
+                }
+            }
+
+            return ResponseEntity.ok("Received");
+        } catch (Exception e) {
+            log.error("Stripe Webhook Error", e);
+            return ResponseEntity.badRequest().body("Webhook Error: " + e.getMessage());
         }
     }
 

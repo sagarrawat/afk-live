@@ -24,14 +24,17 @@ public class PricingController {
 
     @GetMapping("/pricing")
     public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "IN") String country) {
-        // Default to India/INR as per requirement
-        boolean isIndia = true;
+        boolean isIndia = "IN".equalsIgnoreCase(country);
+
+        String currency = isIndia ? "INR" : "USD";
+        String freePrice = isIndia ? "₹0" : "$0";
+        String essentialsPrice = isIndia ? "₹199" : "$5";
 
         // Tier 1: Free
         Map<String, Object> free = Map.of(
             "id", "FREE",
             "title", "Free",
-            "price", "₹0",
+            "price", freePrice,
             "period", "/mo",
             "features", List.of("1 Channel", "10 Scheduled Posts", "Basic Streaming")
         );
@@ -40,13 +43,13 @@ public class PricingController {
         Map<String, Object> essentials = Map.of(
             "id", "ESSENTIALS",
             "title", "Essentials",
-            "price", "₹199",
+            "price", essentialsPrice,
             "period", "/mo",
             "features", List.of("3 Channels", "Unlimited Scheduling", "Analytics", "HD Streaming")
         );
 
         return ResponseEntity.ok(Map.of(
-            "currency", "INR",
+            "currency", currency,
             "plans", List.of(free, essentials)
         ));
     }
