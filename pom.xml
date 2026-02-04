@@ -20,7 +20,9 @@
     </properties>
 
     <modules>
+        <module>afklive-common</module>
         <module>afklive-web</module>
+        <module>afklive-jobs</module>
         <module>afklive-optimizer</module>
     </modules>
 
