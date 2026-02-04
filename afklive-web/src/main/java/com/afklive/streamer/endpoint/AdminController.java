@@ -84,10 +84,6 @@ public class AdminController {
         int quotaUsedToday = quotaTrackingService.getDailyUsage();
         Map<String, Long> quotaBreakdown = quotaTrackingService.getDailyBreakdown();
 
-        model.addAttribute("users", users);
-        model.addAttribute("activeStreamList", activeStreams);
-        model.addAttribute("supportTickets", tickets);
-        model.addAttribute("quotaBreakdown", quotaBreakdown);
         Double totalUnpaid = userRepository.sumUnpaidBalance();
         Long completedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("COMPLETED");
         Long initiatedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("INITIATED");
@@ -100,13 +96,13 @@ public class AdminController {
         model.addAttribute("supportTickets", ticketsPage); // Now a Page object
         model.addAttribute("userSearch", userSearch);
         model.addAttribute("activeTab", tab); // Pass tab to frontend
-
+        model.addAttribute("quotaBreakdown", quotaBreakdown);
+        
         model.addAttribute("stats", Map.of(
             "totalUsers", userRepository.count(),
             "activeStreams", streamJobRepo.countByIsLiveTrue(),
             "formattedStorage", formattedStorage,
-            "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count(),
-            "quotaUsedToday", quotaUsedToday
+            "quotaUsedToday", quotaUsedToday,
             "openTickets", supportTicketRepository.countByStatus("OPEN"),
             "totalUnpaid", String.format("%.2f INR", totalUnpaid != null ? totalUnpaid : 0.0),
             "completedPayments", String.format("%.2f INR", completedPayments),
