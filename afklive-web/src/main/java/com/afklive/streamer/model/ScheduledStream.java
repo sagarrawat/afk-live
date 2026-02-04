@@ -39,6 +39,7 @@ public class ScheduledStream {
     // To track active PID if needed, though StreamService manages active ones.
     // This is primarily for scheduling the *start*.
 
+    @Column(columnDefinition = "TEXT")
     private String errorMessage;
 
     public enum StreamStatus {

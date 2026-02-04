@@ -194,6 +194,10 @@ public class StreamController {
         if (principal == null) return ResponseEntity.status(401).build();
         String username = SecurityUtils.getEmail(principal);
 
+        if (fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Invalid filename"));
+        }
+
         try {
             ScheduledVideo video = scheduledVideoRepository.findByUsernameAndTitle(username, fileName)
                     .orElse(null);

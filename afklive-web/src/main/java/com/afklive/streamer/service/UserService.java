@@ -151,4 +151,29 @@ public class UserService {
     public void saveUser(User user) {
         userRepository.save(user);
     }
+
+    @Transactional
+    public void addUnpaidBalance(String username, double amount) {
+        // Ensure user exists first (optional but safe)
+        if (!userRepository.existsById(username)) {
+            getOrCreateUser(username);
+        }
+        userRepository.addUnpaidBalance(username, amount);
+    }
+
+    @Transactional
+    public void clearUnpaidBalance(String username, double amount) {
+        // Ensure user exists
+        if (!userRepository.existsById(username)) {
+            getOrCreateUser(username);
+        }
+        userRepository.deductUnpaidBalance(username, amount);
+    }
+
+    public boolean checkCreditLimit(String username) {
+        User user = getOrCreateUser(username);
+        // If unpaid balance is greater than or equal to credit limit, return false.
+        // E.g. limit 50, unpaid 50 -> false (blocked).
+        return user.getUnpaidBalance() < user.getCreditLimit();
+    }
 }

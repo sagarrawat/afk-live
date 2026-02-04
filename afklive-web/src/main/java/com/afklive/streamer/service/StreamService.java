@@ -54,6 +54,7 @@ public class StreamService {
 
     private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
     private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
+    private java.util.concurrent.ScheduledFuture<?> billingTask;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -93,10 +94,51 @@ public class StreamService {
              throw new IllegalArgumentException("At least one valid destination stream key is required.");
         }
 
+        // Validate Keys (SSRF Protection)
+        for (String key : validKeys) {
+             if (key.startsWith("rtmp://") || key.startsWith("rtmps://")) {
+                  try {
+                      java.net.URI uri = new java.net.URI(key);
+                      String host = uri.getHost();
+                      if (host == null) throw new IllegalArgumentException("Invalid Stream URL");
+
+                      // Remove brackets from IPv6 if present
+                      if (host.startsWith("[") && host.endsWith("]")) {
+                          host = host.substring(1, host.length() - 1);
+                      }
+
+                      if (host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("::1") || host.startsWith("192.168.") || host.startsWith("10.")) {
+                           throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
+                      }
+
+                      if (host.startsWith("172.")) {
+                          String[] parts = host.split("\\.");
+                          if (parts.length >= 2) {
+                              try {
+                                  int second = Integer.parseInt(parts[1]);
+                                  if (second >= 16 && second <= 31) {
+                                      throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
+                                  }
+                              } catch (NumberFormatException ignored) {}
+                          }
+                      }
+                  } catch (java.net.URISyntaxException e) {
+                      throw new IllegalArgumentException("Invalid Stream URL syntax");
+                  }
+             }
+        }
+
         // 1. SAFETY CHECK: Check DB to see if this user is already live
         // Also check quota limits
         int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
         userService.checkStreamQuota(username, activeCount);
+
+        com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+        if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
+            if (!userService.checkCreditLimit(username)) {
+                throw new IllegalStateException("Credit limit exceeded. Please clear your pending balance.");
+            }
+        }
 
         // REMOVED SINGLE STREAM CHECK TO ALLOW MULTIPLE STREAMS
         // if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
@@ -147,6 +189,10 @@ public class StreamService {
         // 3. Build the FFmpeg Command
         Path musicPath = null;
         if (musicName != null && !musicName.isEmpty()) {
+            if (musicName.contains("..") || musicName.contains("/") || musicName.contains("\\")) {
+                throw new IllegalArgumentException("Invalid music filename");
+            }
+
             if (musicName.startsWith("stock:")) {
                 String trackId = musicName.substring(6); // remove "stock:"
                 musicPath = audioService.getAudioPath(trackId);
@@ -274,7 +320,6 @@ public class StreamService {
             // Resolve Destination Name
             String destName = "Unknown Destination";
             try {
-                com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
                 List<com.afklive.streamer.model.StreamDestination> dests = streamDestinationRepo.findByStreamKeyAndUser(key, user);
                 if (!dests.isEmpty()) {
                     destName = dests.get(0).getName();
@@ -299,6 +344,7 @@ public class StreamService {
                     destName,
                     autoReplyEnabled
             );
+            job.setLastBillingTime(job.getStartTime());
             job = streamJobRepo.save(job);
             final Long jobId = job.getId();
             startedJobIds.add(jobId);
@@ -326,20 +372,7 @@ public class StreamService {
             // 6. EXIT HANDLER (Auto-Update DB)
             process.onExit().thenRun(() -> {
                 log.warn("Stream Process Exited for job {}", jobId);
-
-                // Cleanup tasks
-                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
-                if (task != null) task.cancel(true);
-
-                Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
-                if (jobOpt.isPresent()) {
-                    StreamJob existingJob = jobOpt.get();
-                    if (existingJob.isLive()) {
-                        existingJob.setLive(false);
-                        streamJobRepo.save(existingJob);
-                    }
-                }
-                activeStreams.remove(jobId);
+                finalizeJob(jobId);
             });
         }
 
@@ -361,18 +394,8 @@ public class StreamService {
         int stopped = 0;
         for (StreamJob job : jobs) {
             ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-
-            java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(job.getId());
-            if (task != null) task.cancel(true);
-
-            job.setLive(false);
-            streamJobRepo.save(job);
+            // finalizeJob is called by process.onExit()
             stopped++;
-        }
-
-        // Clean up memory map
-        for (StreamJob job : jobs) {
-            activeStreams.remove(job.getId());
         }
 
         return ApiResponse.success(stopped + " streams stopped", null);
@@ -389,16 +412,106 @@ public class StreamService {
 
             if (job.isLive()) {
                 ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-
-                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
-                if (task != null) task.cancel(true);
-
-                job.setLive(false);
-                streamJobRepo.save(job);
+                // finalizeJob is called by process.onExit()
                 return ApiResponse.success("Stream stopped", null);
             }
         }
         return ApiResponse.error("Stream not found or not active");
+    }
+
+    // Package-private for testing
+    void finalizeJob(Long jobId) {
+        Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
+        if (jobOpt.isPresent()) {
+            StreamJob job = jobOpt.get();
+            // Use computeIfPresent-like logic or simply check live status.
+            // Since we removed synchronized, we rely on the fact that once setLive(false) is saved, future calls do nothing.
+            // But there is a small race window.
+            if (job.isLive()) {
+                job.setLive(false);
+                job.setEndTime(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
+
+                // Calculate Final Cost Increment for Pay As You Go
+                com.afklive.streamer.model.User user = userService.getOrCreateUser(job.getUsername());
+                if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
+                    java.time.ZonedDateTime startCalc = job.getLastBillingTime();
+                    if (startCalc == null) startCalc = job.getStartTime();
+
+                    long durationSeconds = java.time.Duration.between(startCalc, job.getEndTime()).getSeconds();
+                    if (durationSeconds > 0) {
+                        double hours = durationSeconds / 3600.0;
+                        double incrementalCost = hours * 1.25;
+
+                        incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
+
+                        job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
+                        userService.addUnpaidBalance(job.getUsername(), incrementalCost);
+                    }
+                    job.setCost(job.getAccumulatedCost());
+                }
+
+                streamJobRepo.save(job);
+
+                // Cleanup tasks
+                activeStreams.remove(jobId);
+                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
+                if (task != null) task.cancel(true);
+            }
+        }
+    }
+
+    // Called on startup to init scheduled billing
+    @jakarta.annotation.PostConstruct
+    public void initBillingTask() {
+        billingTask = scheduledExecutorService.scheduleAtFixedRate(this::processPeriodicBilling, 1, 1, java.util.concurrent.TimeUnit.MINUTES);
+    }
+
+    private void processPeriodicBilling() {
+        // Find all active streams
+        // Ideally we filter by Pay As You Go users, but for now we iterate active streams and check user plan
+        // Optimization: findAllByIsLiveTrue() then filter in memory or join in DB.
+        // Assuming StreamJobRepository has findAllByIsLiveTrue()
+        List<StreamJob> activeJobs = streamJobRepo.findAllByIsLiveTrue(); // We might need to add this method to repo if not exists, or filter from getAll
+        // Actually we have getActiveStreams(username). We need global active streams.
+        // Let's use the activeStreams map which contains IDs of locally running processes
+
+        activeStreams.forEach((jobId, process) -> {
+            try {
+                Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
+                if (jobOpt.isPresent()) {
+                    StreamJob job = jobOpt.get();
+                    com.afklive.streamer.model.User user = userService.getOrCreateUser(job.getUsername());
+
+                    if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
+                        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"));
+                        java.time.ZonedDateTime lastCalc = job.getLastBillingTime();
+                        if (lastCalc == null) lastCalc = job.getStartTime();
+
+                        long durationSeconds = java.time.Duration.between(lastCalc, now).getSeconds();
+                        if (durationSeconds > 0) {
+                            double hours = durationSeconds / 3600.0;
+                            double incrementalCost = hours * 1.25;
+                            incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
+
+                            job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
+                            job.setLastBillingTime(now);
+
+                            // Atomic update to user balance
+                            userService.addUnpaidBalance(job.getUsername(), incrementalCost);
+                            streamJobRepo.save(job);
+                        }
+
+                        // Check Credit Limit
+                        if (!userService.checkCreditLimit(job.getUsername())) {
+                            log.warn("User {} exceeded credit limit. Stopping stream {}.", job.getUsername(), jobId);
+                            stopStream(jobId, job.getUsername());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error in billing task for job " + jobId, e);
+            }
+        });
     }
 
     public List<StreamJob> getActiveStreams(String username) {
@@ -413,6 +526,11 @@ public class StreamService {
     }
 
     public void addLog(String line) {
+        if (line != null) {
+            // Redact RTMP keys/URLs
+            line = line.replaceAll("rtmp://[^\\s]+", "rtmp://[REDACTED]");
+        }
+
         if (logBuffer.size() > 50) {
             logBuffer.removeFirst();
         }

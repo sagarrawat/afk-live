@@ -23,7 +23,7 @@
         }
     </script>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans" x-data="{ activeTab: 'overview', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false }">
+<body class="bg-gray-50 text-gray-900 font-sans" th:attr="x-data='{ activeTab: \'' + ${activeTab} + '\', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false, showLimitModal: false, selectedUser: null }'">
 
     <div class="min-h-screen flex flex-col">
         <!-- Header -->
@@ -166,6 +166,25 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Billing Overview -->
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mt-6">
+                        <h3 class="text-lg font-bold mb-4 text-gray-800">Billing Overview (Pay As You Go)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="p-4 bg-orange-50 rounded-xl border border-orange-100">
+                                <p class="text-xs text-orange-600 font-semibold uppercase">Total Outstanding (Unpaid)</p>
+                                <p class="text-2xl font-bold text-orange-800 mt-1" th:text="${stats.totalUnpaid}">0.00 INR</p>
+                            </div>
+                            <div class="p-4 bg-green-50 rounded-xl border border-green-100">
+                                <p class="text-xs text-green-600 font-semibold uppercase">Total Revenue (Completed)</p>
+                                <p class="text-2xl font-bold text-green-800 mt-1" th:text="${stats.completedPayments}">0.00 INR</p>
+                            </div>
+                             <div class="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                                <p class="text-xs text-gray-500 font-semibold uppercase">Pending Transactions</p>
+                                <p class="text-2xl font-bold text-gray-700 mt-1" th:text="${stats.pendingPayments}">0.00 INR</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- SUPPORT TICKETS -->
@@ -193,7 +212,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr th:each="ticket : ${supportTickets}" class="hover:bg-gray-50 transition">
+                                <tr th:each="ticket : ${supportTickets.content}" class="hover:bg-gray-50 transition">
                                     <td class="px-6 py-4 text-sm text-gray-500" th:text="${#temporals.format(ticket.createdAt, 'yyyy-MM-dd HH:mm')}">Date</td>
                                     <td class="px-6 py-4 text-sm font-medium text-gray-900" th:text="${ticket.userEmail}">user</td>
                                     <td class="px-6 py-4 text-sm text-gray-600">
@@ -241,7 +260,7 @@
 
                     <!-- Mobile Card View -->
                     <div class="md:hidden space-y-4">
-                        <div th:each="ticket : ${supportTickets}" class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                        <div th:each="ticket : ${supportTickets.content}" class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                             <div class="flex justify-between items-start mb-3">
                                 <div>
                                     <span class="text-xs text-gray-500 block mb-1" th:text="${#temporals.format(ticket.createdAt, 'yyyy-MM-dd HH:mm')}">Date</span>
@@ -277,6 +296,20 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Pagination (Shared) -->
+                    <div class="flex justify-between items-center mt-6" th:if="${supportTickets.totalPages > 1}">
+                        <span class="text-sm text-gray-500">
+                            Page <span th:text="${supportTickets.number + 1}">1</span> of <span th:text="${supportTickets.totalPages}">10</span>
+                        </span>
+                        <div class="flex gap-2">
+                            <a th:if="${!supportTickets.first}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                            <button th:if="${supportTickets.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+
+                            <a th:if="${!supportTickets.last}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                            <button th:if="${supportTickets.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
+                        </div>
+                    </div>
                 </div>
                 </div>
 
@@ -301,7 +334,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr th:each="stream : ${activeStreamList}" class="hover:bg-gray-50 transition">
+                                <tr th:each="stream : ${activeStreamList.content}" class="hover:bg-gray-50 transition">
                                     <td class="px-6 py-4 text-sm font-medium text-gray-900" th:text="${stream.username}">user</td>
                                     <td class="px-6 py-4 text-sm text-gray-600" th:text="${stream.title}">Title</td>
                                     <td class="px-6 py-4 text-sm text-gray-500" th:text="${#temporals.format(stream.startTime, 'HH:mm:ss')}">10:00</td>
@@ -318,11 +351,33 @@
                         </table>
                         </div>
                     </div>
+
+                    <!-- Pagination -->
+                    <div class="flex justify-between items-center mt-6" th:if="${activeStreamList.totalPages > 1}">
+                        <span class="text-sm text-gray-500">
+                            Page <span th:text="${activeStreamList.number + 1}">1</span> of <span th:text="${activeStreamList.totalPages}">10</span>
+                        </span>
+                        <div class="flex gap-2">
+                            <a th:if="${!activeStreamList.first}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                            <button th:if="${activeStreamList.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+
+                            <a th:if="${!activeStreamList.last}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                            <button th:if="${activeStreamList.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- USERS -->
                 <div x-show="activeTab === 'users'" class="space-y-6 animate-fade-in" style="display:none;">
-                    <h2 class="text-2xl font-bold">User Management</h2>
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-2xl font-bold">User Management</h2>
+                        <form action="/admin" method="get" class="flex gap-2">
+                            <input type="hidden" name="tab" value="users">
+                            <input type="text" name="userSearch" placeholder="Search users..." th:value="${userSearch}" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Search</button>
+                            <a href="/admin?tab=users" th:if="${userSearch != null && !userSearch.isEmpty()}" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">Clear</a>
+                        </form>
+                    </div>
 
                     <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
                         <div class="overflow-x-auto">
@@ -331,6 +386,8 @@
                                     <tr>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Username</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Plan</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Unpaid Bal.</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Limit</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Role</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Storage</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
@@ -338,7 +395,7 @@
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
-                                    <tr th:each="user : ${users}" class="hover:bg-gray-50 transition">
+                                    <tr th:each="user : ${users.content}" class="hover:bg-gray-50 transition">
                                         <td class="px-6 py-4">
                                             <div class="flex items-center gap-3">
                                                 <img th:src="${user.pictureUrl}" class="w-8 h-8 rounded-full bg-gray-200 object-cover">
@@ -352,6 +409,20 @@
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800" th:text="${user.planType}">
                                                 FREE
                                             </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm font-medium text-gray-700">
+                                            <span th:text="${T(java.lang.String).format('%.2f INR', user.unpaidBalance)}">0.00</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">
+                                            <div class="flex items-center gap-2">
+                                                <span th:text="${T(java.lang.String).format('%.0f', user.creditLimit)}">50</span>
+                                                <button @click="selectedUser = { username: $el.getAttribute('data-username'), limit: $el.getAttribute('data-limit') }; showLimitModal = true"
+                                                        th:data-username="${user.username}"
+                                                        th:data-limit="${user.creditLimit}"
+                                                        class="text-gray-400 hover:text-blue-600">
+                                                    <i class="fa-solid fa-pen-to-square"></i>
+                                                </button>
+                                            </div>
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-500" th:text="${user.role}">USER</td>
                                         <td class="px-6 py-4 text-sm text-gray-500 font-mono" th:text="${T(java.lang.String).format('%.2f GB', user.usedStorageBytes / 1073741824.0)}">0 GB</td>
@@ -376,6 +447,20 @@
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="flex justify-between items-center mt-6" th:if="${users.totalPages > 1}">
+                        <span class="text-sm text-gray-500">
+                            Page <span th:text="${users.number + 1}">1</span> of <span th:text="${users.totalPages}">10</span>
+                        </span>
+                        <div class="flex gap-2">
+                            <a th:if="${!users.first}" th:href="@{/admin(tab='users', userPage=${users.number - 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                            <button th:if="${users.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+
+                            <a th:if="${!users.last}" th:href="@{/admin(tab='users', userPage=${users.number + 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                            <button th:if="${users.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
                         </div>
                     </div>
                 </div>
@@ -436,6 +521,24 @@
                 </div>
             </div>
         </div>
+
+        <!-- Limit Edit Modal -->
+        <div x-show="showLimitModal" class="fixed inset-0 z-50 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4" x-transition.opacity style="display:none;">
+            <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6" @click.outside="showLimitModal = false">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">Edit Credit Limit</h3>
+                <form x-bind:action="'/admin/users/' + selectedUser?.username + '/limit'" method="post">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Limit (INR)</label>
+                        <input type="number" name="limit" step="0.01" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedUser.limit">
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" @click="showLimitModal = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition shadow-sm">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
     </div>
 
     <script>
