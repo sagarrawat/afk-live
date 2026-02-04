@@ -25,14 +25,12 @@ public class PlanService {
                 String defaultPrice = switch (type) {
                     case FREE -> "₹0";
                     case ESSENTIALS -> "₹199";
-                    case TEAM -> "₹999";
                     default -> "₹0";
                 };
 
                 String defaultCycle = switch (type) {
                     case FREE -> "Hourly";
                     case ESSENTIALS -> "Monthly";
-                    case TEAM -> "Monthly";
                     default -> "Monthly";
                 };
 

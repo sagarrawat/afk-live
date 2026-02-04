@@ -31,8 +31,6 @@ public class PricingController {
         List<PlanConfig> configs = planService.getAllPlans();
 
         for (PlanConfig p : configs) {
-            if (p.getPlanType() == PlanType.TEAM) continue; // Skip Team for now
-
             String price = p.getPrice() != null ? p.getPrice() : "₹0";
 
             List<String> features = new java.util.ArrayList<>();
