@@ -71,6 +71,9 @@ app:
   email:
     support: ${APP_EMAIL_SUPPORT:support@afklive.in}
     no-reply: ${APP_EMAIL_NO_REPLY:no-reply@afklive.in}
+  zeptomail:
+    url: ${ZEPTOMAIL_URL:https://api.zeptomail.in/v1.1/email}
+    token: ${ZEPTOMAIL_TOKEN}
   gemini:
     key: ${GEMINI_API_KEY:}
   storage:

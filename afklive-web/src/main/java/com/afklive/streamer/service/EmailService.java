@@ -1,13 +1,17 @@
 package com.afklive.streamer.service;
 
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.Collections;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -23,7 +27,26 @@ public class EmailService {
     @Value("${app.email.no-reply}")
     private String noReplyEmail;
 
-    private final JavaMailSender emailSender;
+    @Value("${app.zeptomail.url}")
+    private String zeptoMailUrl;
+
+    @Value("${app.zeptomail.token}")
+    private String zeptoMailToken;
+
+    private final RestTemplate restTemplate;
+
+    // DTOs for ZeptoMail API
+    private record EmailAddress(String address, String name) {}
+
+    // Wrapper for recipient to match structure: [{"email_address": {...}}]
+    private record ToRecipient(EmailAddress email_address) {}
+
+    private record EmailRequest(
+            EmailAddress from,
+            List<ToRecipient> to,
+            String subject,
+            String htmlbody
+    ) {}
 
     private String createBaseHtml(String title, String bodyContent) {
         return "<html><head><style>@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }</style></head>" +
@@ -104,20 +127,28 @@ public class EmailService {
         }
 
         try {
-            MimeMessage message = emailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            EmailAddress recipient = new EmailAddress(to, "User");
+            ToRecipient toRecipient = new ToRecipient(recipient);
 
-            helper.setFrom(noReplyEmail);
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(htmlContent, true); // true = html
+            EmailRequest request = new EmailRequest(
+                    new EmailAddress(noReplyEmail, "AFK Live"),
+                    Collections.singletonList(toRecipient),
+                    subject,
+                    htmlContent
+            );
 
-            emailSender.send(message);
-            log.info("Email sent to {}", to);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Zoho-enczapikey " + zeptoMailToken);
+            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+
+            HttpEntity<EmailRequest> entity = new HttpEntity<>(request, headers);
+
+            restTemplate.postForObject(zeptoMailUrl, entity, String.class);
+            log.info("Email sent to {} via ZeptoMail", to);
+
         } catch (Exception e) {
             log.warn("Failed to send email to {}: {}", to, e.getMessage());
-            // Fallback: Just log it since we might not have valid SMTP config in dev
-            log.info("[MOCK EMAIL] To: {}, Subject: {}, Body: {}", to, subject, htmlContent);
         }
     }
 }
