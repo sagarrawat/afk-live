@@ -8,6 +8,7 @@ import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.SupportTicketRepository;
 import com.afklive.streamer.service.StreamService;
 import com.afklive.streamer.service.FileStorageService;
+import com.afklive.streamer.service.QuotaTrackingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -36,6 +37,7 @@ public class AdminController {
     private final StreamService streamService;
     private final SupportTicketRepository supportTicketRepository;
     private final FileStorageService storageService;
+    private final QuotaTrackingService quotaTrackingService;
 
     @GetMapping
     public String adminDashboard(Model model) {
@@ -46,14 +48,20 @@ public class AdminController {
         long totalStorage = users.stream().mapToLong(User::getUsedStorageBytes).sum();
         String formattedStorage = String.format("%.2f GB", totalStorage / (1024.0 * 1024.0 * 1024.0));
 
+        // Quota Stats
+        int quotaUsedToday = quotaTrackingService.getDailyUsage();
+        Map<String, Long> quotaBreakdown = quotaTrackingService.getDailyBreakdown();
+
         model.addAttribute("users", users);
         model.addAttribute("activeStreamList", activeStreams);
         model.addAttribute("supportTickets", tickets);
+        model.addAttribute("quotaBreakdown", quotaBreakdown);
         model.addAttribute("stats", Map.of(
             "totalUsers", users.size(),
             "activeStreams", activeStreams.size(),
             "formattedStorage", formattedStorage,
-            "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count()
+            "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count(),
+            "quotaUsedToday", quotaUsedToday
         ));
 
         return "admin";
