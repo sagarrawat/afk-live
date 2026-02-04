@@ -36,6 +36,7 @@ public class StreamJob {
 
     private boolean autoReplyEnabled;
     private String lastPageToken;
+    private String liveChatId;
 
     public StreamJob(
             String username,
