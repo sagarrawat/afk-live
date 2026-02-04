@@ -21,4 +21,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     // Auto-Reply
     List<StreamJob> findByIsLiveTrueAndAutoReplyEnabledTrue();
+
+    // History
+    Page<StreamJob> findByUsernameOrderByStartTimeDesc(String username, Pageable pageable);
 }
