@@ -58,11 +58,16 @@ public class PricingController {
 
             features.add("Storage: " + formatStorage(p.getMaxStorageBytes()));
 
+            String cycle = p.getBillingCycle() != null ? "/" + p.getBillingCycle().toLowerCase() : "/mo";
+            if (p.getBillingCycle() != null && (p.getBillingCycle().equalsIgnoreCase("Hourly") || p.getBillingCycle().equalsIgnoreCase("Hour"))) {
+                 cycle = "/hr";
+            }
+
             planList.add(Map.of(
                     "id", p.getPlanType().name(),
                     "title", p.getDisplayName(),
                     "price", price,
-                    "period", "/mo",
+                    "period", cycle,
                     "features", features
             ));
         }

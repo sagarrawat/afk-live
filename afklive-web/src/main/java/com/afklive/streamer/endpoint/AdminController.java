@@ -157,13 +157,14 @@ public class AdminController {
     public String updatePlan(@RequestParam PlanType planType,
                              @RequestParam String displayName,
                              @RequestParam String price,
+                             @RequestParam String billingCycle,
                              @RequestParam double maxStorageGB,
                              @RequestParam int maxScheduledPosts,
                              @RequestParam int maxActiveStreams,
                              @RequestParam int maxChannels,
                              @RequestParam int maxResolution) {
         long maxStorageBytes = (long) (maxStorageGB * 1024 * 1024 * 1024);
-        PlanConfig config = new PlanConfig(planType, displayName, price, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution);
+        PlanConfig config = new PlanConfig(planType, displayName, price, billingCycle, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution);
         planService.updatePlan(config);
         return "redirect:/admin?tab=plans";
     }

@@ -156,6 +156,7 @@
                                     <tr>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Plan Name</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Price</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Cycle</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Storage</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Streams</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Channels</th>
@@ -167,6 +168,7 @@
                                     <tr th:each="plan : ${plans}" class="hover:bg-gray-50 transition">
                                         <td class="px-6 py-4 text-sm font-medium text-gray-900" th:text="${plan.displayName}">Name</td>
                                         <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.price}">Price</td>
+                                        <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.billingCycle}">Cycle</td>
                                         <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.maxStorageBytes / (1024*1024*1024)} + ' GB'">Storage</td>
                                         <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.maxActiveStreams == 2147483647 ? 'Unlimited' : plan.maxActiveStreams}">Streams</td>
                                         <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.maxChannels}">Channels</td>
@@ -176,6 +178,7 @@
                                                 th:data-type="${plan.planType}"
                                                 th:data-name="${plan.displayName}"
                                                 th:data-price="${plan.price}"
+                                                th:data-cycle="${plan.billingCycle}"
                                                 th:data-storage="${plan.maxStorageBytes}"
                                                 th:data-streams="${plan.maxActiveStreams}"
                                                 th:data-channels="${plan.maxChannels}"
@@ -185,6 +188,7 @@
                                                     type: $el.getAttribute('data-type'),
                                                     name: $el.getAttribute('data-name'),
                                                     price: $el.getAttribute('data-price'),
+                                                    cycle: $el.getAttribute('data-cycle'),
                                                     storage: $el.getAttribute('data-storage') / (1024*1024*1024),
                                                     streams: $el.getAttribute('data-streams'),
                                                     channels: $el.getAttribute('data-channels'),
@@ -595,6 +599,16 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Price</label>
                             <input type="text" name="price" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedPlan.price">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Billing Cycle</label>
+                            <select name="billingCycle" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedPlan.cycle">
+                                <option value="Hourly">Hourly</option>
+                                <option value="Daily">Daily</option>
+                                <option value="Weekly">Weekly</option>
+                                <option value="Monthly">Monthly</option>
+                                <option value="Yearly">Yearly</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Max Storage (GB)</label>

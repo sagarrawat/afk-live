@@ -29,10 +29,18 @@ public class PlanService {
                     default -> "₹0";
                 };
 
+                String defaultCycle = switch (type) {
+                    case FREE -> "Hourly";
+                    case ESSENTIALS -> "Monthly";
+                    case TEAM -> "Monthly";
+                    default -> "Monthly";
+                };
+
                 PlanConfig config = new PlanConfig(
                         type,
                         type.getDisplayName(),
                         defaultPrice,
+                        defaultCycle,
                         type.getMaxStorageBytes(),
                         type.getMaxScheduledPosts(),
                         type.getMaxActiveStreams(),

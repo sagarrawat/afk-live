@@ -2,7 +2,8 @@ package com.afklive.streamer.model;
 
 public enum PlanType {
     FREE("Pay As You Go", 1 * 1024 * 1024 * 1024L, 10, Integer.MAX_VALUE, 1, 720),
-    ESSENTIALS("Essentials", 10 * 1024 * 1024 * 1024L, Integer.MAX_VALUE, 1, 3, 1080);
+    ESSENTIALS("Essentials", 10 * 1024 * 1024 * 1024L, Integer.MAX_VALUE, 1, 3, 1080),
+    TEAM("Team", 100 * 1024 * 1024 * 1024L, Integer.MAX_VALUE, 3, 100, 1440);
 
     private final String displayName;
     private final long maxStorageBytes;
