@@ -158,7 +158,7 @@
     </section>
 
     <!-- Pricing -->
-    <section id="pricing" class="py-24 bg-white">
+    <section id="pricing" class="py-24 bg-white" x-data="{ plans: [] }" x-init="fetch('/api/pricing').then(r => r.json()).then(d => plans = d.plans)">
         <div class="max-w-7xl mx-auto px-6">
             <div class="text-center mb-16">
                 <h2 class="text-3xl font-bold tracking-tight mb-4">Simple, transparent pricing</h2>
@@ -166,37 +166,33 @@
             </div>
 
             <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                <!-- Pay As You Go -->
-                <div class="bg-white p-8 rounded-3xl border border-gray-200 hover:border-blue-200 hover:shadow-lg transition">
-                    <h3 class="text-xl font-bold text-gray-900">Pay As You Go</h3>
-                    <p class="text-gray-500 mt-2 text-sm">For flexible creators</p>
-                    <div class="my-6">
-                        <span class="text-4xl font-extrabold text-gray-900">₹1.25</span>
-                        <span class="text-gray-500">/hour</span>
+                <template x-for="(plan, index) in plans" :key="plan.id">
+                    <div :class="index === 1 ? 'bg-gray-900 border-gray-800 text-white shadow-2xl relative overflow-hidden' : 'bg-white border-gray-200 hover:border-blue-200 hover:shadow-lg text-gray-900'" class="p-8 rounded-3xl border transition">
+                        <div x-show="index === 1" class="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">POPULAR</div>
+                        <h3 class="text-xl font-bold" x-text="plan.title"></h3>
+                        <p class="mt-2 text-sm" :class="index === 1 ? 'text-gray-400' : 'text-gray-500'">For creators</p>
+                        <div class="my-6">
+                            <span class="text-4xl font-extrabold" x-text="plan.price"></span>
+                            <span :class="index === 1 ? 'text-gray-400' : 'text-gray-500'" x-text="plan.period"></span>
+                        </div>
+                        <ul class="space-y-3 mb-8 text-sm" :class="index === 1 ? 'text-gray-300' : 'text-gray-600'">
+                            <template x-for="feature in plan.features">
+                                <li class="flex gap-2">
+                                    <svg class="w-5 h-5" :class="index === 1 ? 'text-blue-400' : 'text-blue-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                    <span x-text="feature"></span>
+                                </li>
+                            </template>
+                        </ul>
+                        <a href="/register" class="block w-full py-3 px-4 font-bold text-center rounded-xl transition"
+                           :class="index === 1 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'"
+                           x-text="index === 1 ? 'Start Free Trial' : 'Start Streaming'">
+                        </a>
                     </div>
-                    <ul class="space-y-3 mb-8 text-sm text-gray-600">
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 1 Channel</li>
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 1GB Storage</li>
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Unlimited Active Streams</li>
-                    </ul>
-                    <a href="/register" class="block w-full py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold text-center rounded-xl transition">Start Streaming</a>
-                </div>
+                </template>
 
-                <!-- Essentials -->
-                <div class="bg-gray-900 p-8 rounded-3xl border border-gray-800 text-white shadow-2xl relative overflow-hidden">
-                    <div class="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">POPULAR</div>
-                    <h3 class="text-xl font-bold">Essentials</h3>
-                    <p class="text-gray-400 mt-2 text-sm">For growing channels</p>
-                    <div class="my-6">
-                        <span class="text-4xl font-extrabold">₹199</span>
-                        <span class="text-gray-400">/month</span>
-                    </div>
-                    <ul class="space-y-3 mb-8 text-sm text-gray-300">
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 3 Channels</li>
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 50GB Storage</li>
-                        <li class="flex gap-2"><svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Analytics & HD Streaming</li>
-                    </ul>
-                    <a href="/register" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-center rounded-xl transition">Start Free Trial</a>
+                <!-- Loading State -->
+                <div x-show="plans.length === 0" class="col-span-2 text-center text-gray-500 py-12">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
                 </div>
             </div>
         </div>
