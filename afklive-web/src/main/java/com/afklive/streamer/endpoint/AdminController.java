@@ -6,6 +6,7 @@ import com.afklive.streamer.model.SupportTicket;
 import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.SupportTicketRepository;
+import com.afklive.streamer.repository.PaymentAuditRepository;
 import com.afklive.streamer.service.StreamService;
 import com.afklive.streamer.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class AdminController {
     private final StreamService streamService;
     private final SupportTicketRepository supportTicketRepository;
     private final FileStorageService storageService;
+    private final PaymentAuditRepository paymentAuditRepository;
 
     @GetMapping
     public String adminDashboard(Model model) {
@@ -46,6 +48,15 @@ public class AdminController {
         long totalStorage = users.stream().mapToLong(User::getUsedStorageBytes).sum();
         String formattedStorage = String.format("%.2f GB", totalStorage / (1024.0 * 1024.0 * 1024.0));
 
+        Double totalUnpaid = userRepository.sumUnpaidBalance();
+        Long completedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("COMPLETED");
+        Long initiatedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("INITIATED");
+        // Also check PENDING if needed, but SDK usually sets INITIATED then COMPLETED/FAILED
+
+        // Convert paise to Rupees
+        double completedPayments = completedPaymentsPaise != null ? completedPaymentsPaise / 100.0 : 0.0;
+        double pendingPayments = initiatedPaymentsPaise != null ? initiatedPaymentsPaise / 100.0 : 0.0;
+
         model.addAttribute("users", users);
         model.addAttribute("activeStreamList", activeStreams);
         model.addAttribute("supportTickets", tickets);
@@ -53,7 +64,10 @@ public class AdminController {
             "totalUsers", users.size(),
             "activeStreams", activeStreams.size(),
             "formattedStorage", formattedStorage,
-            "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count()
+            "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count(),
+            "totalUnpaid", String.format("%.2f INR", totalUnpaid != null ? totalUnpaid : 0.0),
+            "completedPayments", String.format("%.2f INR", completedPayments),
+            "pendingPayments", String.format("%.2f INR", pendingPayments)
         ));
 
         return "admin";

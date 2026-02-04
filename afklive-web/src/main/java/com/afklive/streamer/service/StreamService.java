@@ -356,7 +356,7 @@ public class StreamService {
         int stopped = 0;
         for (StreamJob job : jobs) {
             ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-            finalizeJob(job.getId());
+            // finalizeJob is called by process.onExit()
             stopped++;
         }
 
@@ -374,14 +374,15 @@ public class StreamService {
 
             if (job.isLive()) {
                 ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-                finalizeJob(jobId);
+                // finalizeJob is called by process.onExit()
                 return ApiResponse.success("Stream stopped", null);
             }
         }
         return ApiResponse.error("Stream not found or not active");
     }
 
-    private void finalizeJob(Long jobId) {
+    // Package-private for testing
+    void finalizeJob(Long jobId) {
         Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
         if (jobOpt.isPresent()) {
             StreamJob job = jobOpt.get();

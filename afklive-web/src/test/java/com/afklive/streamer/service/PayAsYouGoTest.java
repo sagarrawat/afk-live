@@ -117,8 +117,8 @@ class PayAsYouGoTest {
         user.setPlanType(PlanType.FREE);
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
 
-        // Execute
-        streamService.stopStream(jobId, username);
+        // Execute - calling finalizeJob directly as we are testing billing logic
+        streamService.finalizeJob(jobId);
 
         // Verify cost: 2 hours * 1.25 = 2.50
         // Allow small delta for execution time
@@ -151,7 +151,7 @@ class PayAsYouGoTest {
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
 
         // Execute
-        streamService.stopStream(jobId, username);
+        streamService.finalizeJob(jobId);
 
         // Verify cost: 0.25 hours * 1.25 = 0.3125
         verify(userServiceMock).addUnpaidBalance(eq(username), doubleThat(cost -> Math.abs(cost - 0.3125) < 0.0001));

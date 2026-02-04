@@ -23,4 +23,7 @@ public interface UserRepository extends JpaRepository<User, String> {
     @Modifying
     @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance - :amount WHERE u.username = :username")
     void deductUnpaidBalance(@Param("username") String username, @Param("amount") double amount);
+
+    @Query("SELECT COALESCE(SUM(u.unpaidBalance), 0) FROM User u")
+    Double sumUnpaidBalance();
 }
