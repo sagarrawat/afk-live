@@ -1038,7 +1038,7 @@
 
                                         <div class="text-right">
                                             <button @click="payBalance()"
-                                                class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg shadow-green-500/30 transition transform active:scale-95"
+                                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg shadow-blue-500/30 transition transform active:scale-95"
                                                 :disabled="(user?.unpaidBalance || 0) <= 0"
                                                 :class="(user?.unpaidBalance || 0) <= 0 ? 'opacity-50 cursor-not-allowed' : ''">
                                                 Pay Now
@@ -1049,7 +1049,36 @@
 
                                     <div class="mt-6 pt-6 border-t border-gray-100">
                                         <h4 class="text-sm font-semibold text-gray-800 mb-3">Usage History</h4>
-                                        <p class="text-sm text-gray-500 italic">Detailed usage logs coming soon.</p>
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full text-left">
+                                                <thead class="bg-gray-50 border-b border-gray-100">
+                                                    <tr>
+                                                        <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Stream</th>
+                                                        <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Started</th>
+                                                        <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Ended</th>
+                                                        <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Duration</th>
+                                                        <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Cost</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-gray-50">
+                                                    <template x-for="job in usageHistory" :key="job.id">
+                                                        <tr class="hover:bg-gray-50 transition">
+                                                            <td class="px-4 py-3">
+                                                                <div class="text-sm font-medium text-gray-900" x-text="job.title || 'Untitled Stream'"></div>
+                                                                <div class="text-xs text-gray-500" x-text="job.destinationName || 'Unknown Destination'"></div>
+                                                            </td>
+                                                            <td class="px-4 py-3 text-sm text-gray-500" x-text="new Date(job.startTime).toLocaleString()"></td>
+                                                            <td class="px-4 py-3 text-sm text-gray-500" x-text="job.endTime ? new Date(job.endTime).toLocaleString() : 'Live'"></td>
+                                                            <td class="px-4 py-3 text-sm text-gray-500 font-mono" x-text="getDurationString(job.startTime, job.endTime)"></td>
+                                                            <td class="px-4 py-3 text-sm font-medium text-gray-900 text-right" x-text="formatCurrency(job.accumulatedCost || 0)"></td>
+                                                        </tr>
+                                                    </template>
+                                                    <tr x-show="!isLoading && usageHistory.length === 0">
+                                                        <td colspan="5" class="px-4 py-8 text-center text-gray-500 text-sm">No usage history found.</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 </div>
                             </section>

@@ -4,6 +4,8 @@ document.addEventListener('alpine:init', () => {
         user: null,
         channels: [],
         plans: [],
+        usageHistory: [],
+        usagePage: 0,
         isLoading: false,
         paymentModalOpen: false,
         selectedPlan: null,
@@ -71,6 +73,41 @@ document.addEventListener('alpine:init', () => {
             if (tab === 'plans' && this.plans.length === 0) {
                 this.loadPlans();
             }
+            if (tab === 'usage') {
+                this.loadUsageHistory();
+            }
+        },
+
+        async loadUsageHistory() {
+            this.isLoading = true;
+            try {
+                const res = await apiFetch(`/api/stream/history?page=${this.usagePage || 0}&size=20`);
+                const data = await res.json();
+                if (data.data && data.data.content) {
+                    this.usageHistory = data.data.content;
+                }
+            } catch (e) {
+                console.error("Failed to load usage history", e);
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
+        getDurationString(start, end) {
+            if (!start) return '-';
+            const startTime = new Date(start).getTime();
+            const endTime = end ? new Date(end).getTime() : Date.now();
+            const diffMs = endTime - startTime;
+            if (diffMs < 0) return '0s';
+
+            const diffSecs = Math.floor(diffMs / 1000);
+            const hours = Math.floor(diffSecs / 3600);
+            const minutes = Math.floor((diffSecs % 3600) / 60);
+            const seconds = diffSecs % 60;
+
+            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+            if (minutes > 0) return `${minutes}m ${seconds}s`;
+            return `${seconds}s`;
         },
 
         // Channel Actions

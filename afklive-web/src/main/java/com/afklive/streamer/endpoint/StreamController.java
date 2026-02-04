@@ -10,6 +10,8 @@ import com.afklive.streamer.util.SecurityUtils;
 import com.afklive.streamer.service.ChannelService;
 import com.afklive.streamer.service.YouTubeService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -39,6 +41,8 @@ public class StreamController {
     private StreamManagerService streamManager;
     @Autowired
     private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepo;
+    @Autowired
+    private com.afklive.streamer.repository.StreamJobRepository streamJobRepository;
     private FileStorageService storageService;
     @Autowired
     private ScheduledVideoRepository scheduledVideoRepository;
@@ -368,5 +372,12 @@ public class StreamController {
 
         // Mock success
         return ResponseEntity.ok(ApiResponse.success("Scheduled stop at " + timeStr, null));
+    }
+
+    @GetMapping("/stream/history")
+    public ResponseEntity<?> getStreamHistory(Principal principal, @PageableDefault(size = 20) Pageable pageable) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String email = SecurityUtils.getEmail(principal);
+        return ResponseEntity.ok(ApiResponse.success("Success", streamJobRepository.findByUsernameOrderByStartTimeDesc(email, pageable)));
     }
 }
