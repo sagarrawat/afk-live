@@ -54,6 +54,11 @@ public class AdminController {
             @RequestParam(defaultValue = "10") int ticketSize,
             @RequestParam(defaultValue = "overview") String tab
     ) {
+        // Validate tab
+        if (!List.of("overview", "streams", "users", "support").contains(tab)) {
+            tab = "overview";
+        }
+
         // Users
         Page<User> usersPage;
         if (userSearch != null && !userSearch.trim().isEmpty()) {

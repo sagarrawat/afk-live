@@ -23,7 +23,7 @@
         }
     </script>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans" th:x-data="|{ activeTab: '${activeTab}', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false, showLimitModal: false, selectedUser: null }|">
+<body class="bg-gray-50 text-gray-900 font-sans" th:attr="x-data='{ activeTab: \'' + ${activeTab} + '\', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false, showLimitModal: false, selectedUser: null }'">
 
     <div class="min-h-screen flex flex-col">
         <!-- Header -->
@@ -211,20 +211,6 @@
                             </tbody>
                         </table>
                         </div>
-
-                        <!-- Pagination -->
-                        <div class="flex justify-between items-center mt-4" th:if="${supportTickets.totalPages > 1}">
-                            <span class="text-sm text-gray-500">
-                                Page <span th:text="${supportTickets.number + 1}">1</span> of <span th:text="${supportTickets.totalPages}">10</span>
-                            </span>
-                            <div class="flex gap-2">
-                                <a th:if="${!supportTickets.first}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
-                                <button th:if="${supportTickets.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
-
-                                <a th:if="${!supportTickets.last}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
-                                <button th:if="${supportTickets.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- Mobile Card View -->
@@ -263,6 +249,20 @@
                                     View Ticket
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Pagination (Shared) -->
+                    <div class="flex justify-between items-center mt-6" th:if="${supportTickets.totalPages > 1}">
+                        <span class="text-sm text-gray-500">
+                            Page <span th:text="${supportTickets.number + 1}">1</span> of <span th:text="${supportTickets.totalPages}">10</span>
+                        </span>
+                        <div class="flex gap-2">
+                            <a th:if="${!supportTickets.first}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                            <button th:if="${supportTickets.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+
+                            <a th:if="${!supportTickets.last}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                            <button th:if="${supportTickets.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
                         </div>
                     </div>
                 </div>
@@ -305,19 +305,19 @@
                             </tbody>
                         </table>
                         </div>
+                    </div>
 
-                        <!-- Pagination -->
-                        <div class="flex justify-between items-center mt-4" th:if="${activeStreamList.totalPages > 1}">
-                            <span class="text-sm text-gray-500">
-                                Page <span th:text="${activeStreamList.number + 1}">1</span> of <span th:text="${activeStreamList.totalPages}">10</span>
-                            </span>
-                            <div class="flex gap-2">
-                                <a th:if="${!activeStreamList.first}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
-                                <button th:if="${activeStreamList.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+                    <!-- Pagination -->
+                    <div class="flex justify-between items-center mt-6" th:if="${activeStreamList.totalPages > 1}">
+                        <span class="text-sm text-gray-500">
+                            Page <span th:text="${activeStreamList.number + 1}">1</span> of <span th:text="${activeStreamList.totalPages}">10</span>
+                        </span>
+                        <div class="flex gap-2">
+                            <a th:if="${!activeStreamList.first}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                            <button th:if="${activeStreamList.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
 
-                                <a th:if="${!activeStreamList.last}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
-                                <button th:if="${activeStreamList.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
-                            </div>
+                            <a th:if="${!activeStreamList.last}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                            <button th:if="${activeStreamList.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
                         </div>
                     </div>
                 </div>
@@ -403,19 +403,19 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
 
-                        <!-- Pagination -->
-                        <div class="flex justify-between items-center px-6 py-4 border-t border-gray-200" th:if="${users.totalPages > 1}">
-                            <span class="text-sm text-gray-500">
-                                Page <span th:text="${users.number + 1}">1</span> of <span th:text="${users.totalPages}">10</span>
-                            </span>
-                            <div class="flex gap-2">
-                                <a th:if="${!users.first}" th:href="@{/admin(tab='users', userPage=${users.number - 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
-                                <button th:if="${users.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+                    <!-- Pagination -->
+                    <div class="flex justify-between items-center mt-6" th:if="${users.totalPages > 1}">
+                        <span class="text-sm text-gray-500">
+                            Page <span th:text="${users.number + 1}">1</span> of <span th:text="${users.totalPages}">10</span>
+                        </span>
+                        <div class="flex gap-2">
+                            <a th:if="${!users.first}" th:href="@{/admin(tab='users', userPage=${users.number - 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                            <button th:if="${users.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
 
-                                <a th:if="${!users.last}" th:href="@{/admin(tab='users', userPage=${users.number + 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
-                                <button th:if="${users.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
-                            </div>
+                            <a th:if="${!users.last}" th:href="@{/admin(tab='users', userPage=${users.number + 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                            <button th:if="${users.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
                         </div>
                     </div>
                 </div>
