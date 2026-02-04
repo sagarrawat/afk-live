@@ -21,6 +21,8 @@ public class User {
     private java.time.LocalDateTime planExpiration;
     private String resetToken;
     private String fullName;
+
+    @Column(columnDefinition = "TEXT")
     private String pictureUrl;
 
     private String role = "ROLE_USER";
@@ -28,6 +30,8 @@ public class User {
     private boolean autoReplyEnabled = false;
     private boolean deleteNegativeComments = false;
     private boolean autoReplyUnrepliedEnabled = false;
+
+    @Column(columnDefinition = "TEXT")
     private String autoReplyUnrepliedMessage;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)

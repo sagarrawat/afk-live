@@ -35,6 +35,8 @@ public class StreamJob {
     private java.time.ZonedDateTime startTime;
 
     private boolean autoReplyEnabled;
+
+    @Column(columnDefinition = "TEXT")
     private String lastPageToken;
 
     public StreamJob(
