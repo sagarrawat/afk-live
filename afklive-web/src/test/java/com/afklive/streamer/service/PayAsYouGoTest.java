@@ -1,5 +1,6 @@
 package com.afklive.streamer.service;
 
+import com.afklive.streamer.model.PlanConfig;
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.model.User;
@@ -39,6 +40,7 @@ class PayAsYouGoTest {
     @Mock private YouTubeService youTubeService;
     @Mock private StreamDestinationRepository streamDestinationRepo;
     @Mock private EmailService emailService;
+    @Mock private PlanService planService;
 
     @InjectMocks
     private StreamService streamService;
@@ -50,7 +52,7 @@ class PayAsYouGoTest {
         MockitoAnnotations.openMocks(this);
         // Use a "real" UserService (partially mocked) for logic tests
         // But for StreamService injection we use userServiceMock
-        realUserService = new UserService(userRepository, null, emailService);
+        realUserService = new UserService(userRepository, null, emailService, planService);
     }
 
     @Test
@@ -87,6 +89,10 @@ class PayAsYouGoTest {
         String username = "test@stream.com";
         User user = new User(username);
         user.setPlanType(PlanType.FREE);
+
+        PlanConfig config = new PlanConfig();
+        config.setMaxResolution(720);
+        when(planService.getPlanConfig(any())).thenReturn(config);
 
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
         when(userServiceMock.checkCreditLimit(username)).thenReturn(false);

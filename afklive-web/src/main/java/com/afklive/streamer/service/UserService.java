@@ -19,6 +19,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final PlanService planService;
 
     public User getOrCreateUser(String username) {
         return userRepository.findById(username)
@@ -34,7 +35,7 @@ public class UserService {
 
     public void checkStorageQuota(String username, long fileSize) {
         User user = getOrCreateUser(username);
-        long limit = user.getPlanType().getMaxStorageBytes();
+        long limit = planService.getPlanConfig(user.getPlanType()).getMaxStorageBytes();
         if (user.getUsedStorageBytes() + fileSize > limit) {
             throw new IllegalStateException("Storage quota exceeded. Limit: " + (limit / 1024 / 1024) + "MB.");
         }
@@ -50,9 +51,9 @@ public class UserService {
 
     public void checkStreamQuota(String username, int currentActiveCount) {
         User user = getOrCreateUser(username);
-        int limit = user.getPlanType().getMaxActiveStreams();
+        int limit = planService.getPlanConfig(user.getPlanType()).getMaxActiveStreams();
         if (currentActiveCount >= limit) {
-             throw new IllegalStateException("Active stream limit reached (" + limit + ") for plan " + user.getPlanType().getDisplayName());
+             throw new IllegalStateException("Active stream limit reached (" + limit + ") for plan " + planService.getPlanConfig(user.getPlanType()).getDisplayName());
         }
     }
 

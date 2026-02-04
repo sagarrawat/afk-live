@@ -1,6 +1,8 @@
 package com.afklive.streamer.endpoint;
 
+import com.afklive.streamer.model.PlanConfig;
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.service.PlanService;
 import com.afklive.streamer.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,6 +20,7 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final PlanService planService;
 
     @GetMapping("/api/user-info")
     public Map<String, Object> getUser(@AuthenticationPrincipal Object principal) {
@@ -46,16 +49,19 @@ public class UserController {
         User user = userService.getOrCreateUser(username);
         if (user.getFullName() != null) name = user.getFullName();
 
+        PlanConfig planConfig = planService.getPlanConfig(user.getPlanType());
+
         return Map.of(
                 "name", name,
                 "email", username,
                 "picture", picture,
                 "enabled", user.isEnabled(),
                 "plan", Map.of(
-                    "name", user.getPlanType().getDisplayName(),
-                    "storageLimit", user.getPlanType().getMaxStorageBytes(),
+                    "id", user.getPlanType().name(),
+                    "name", planConfig.getDisplayName(),
+                    "storageLimit", planConfig.getMaxStorageBytes(),
                     "storageUsed", user.getUsedStorageBytes(),
-                    "streamLimit", user.getPlanType().getMaxActiveStreams()
+                    "streamLimit", planConfig.getMaxActiveStreams()
                 )
         );
     }
@@ -94,16 +100,19 @@ public class UserController {
             name = user.getFullName();
         }
 
+        PlanConfig planConfig = planService.getPlanConfig(user.getPlanType());
+
         return Map.of(
                 "name", name,
                 "email", email,
                 "picture", picture,
                 "enabled", user.isEnabled(),
                 "plan", Map.of(
-                        "name", user.getPlanType().getDisplayName(),
-                        "storageLimit", user.getPlanType().getMaxStorageBytes(),
+                        "id", user.getPlanType().name(),
+                        "name", planConfig.getDisplayName(),
+                        "storageLimit", planConfig.getMaxStorageBytes(),
                         "storageUsed", user.getUsedStorageBytes(),
-                        "streamLimit", user.getPlanType().getMaxActiveStreams()
+                        "streamLimit", planConfig.getMaxActiveStreams()
                 )
         );
     }
