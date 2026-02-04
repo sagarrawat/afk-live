@@ -25,6 +25,9 @@ public class User {
 
     private String role = "ROLE_USER";
 
+    private double unpaidBalance = 0.0;
+    private double creditLimit = 50.0;
+
     private boolean autoReplyEnabled = false;
     private boolean deleteNegativeComments = false;
     private boolean autoReplyUnrepliedEnabled = false;
@@ -136,6 +139,22 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public double getUnpaidBalance() {
+        return unpaidBalance;
+    }
+
+    public void setUnpaidBalance(double unpaidBalance) {
+        this.unpaidBalance = unpaidBalance;
+    }
+
+    public double getCreditLimit() {
+        return creditLimit;
+    }
+
+    public void setCreditLimit(double creditLimit) {
+        this.creditLimit = creditLimit;
     }
 
     public boolean isAutoReplyEnabled() {

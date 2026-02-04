@@ -1,7 +1,7 @@
 package com.afklive.streamer.model;
 
 public enum PlanType {
-    FREE("Free", 1 * 1024 * 1024 * 1024L, 10, 1, 1, 720),
+    FREE("Pay As You Go", 1 * 1024 * 1024 * 1024L, 10, 1, 1, 720),
     ESSENTIALS("Essentials", 10 * 1024 * 1024 * 1024L, Integer.MAX_VALUE, 1, 3, 1080),
     TEAM("Team", 100 * 1024 * 1024 * 1024L, Integer.MAX_VALUE, 3, 100, 1440);
 

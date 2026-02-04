@@ -33,6 +33,8 @@ public class StreamJob {
 
     private String privacy;
     private java.time.ZonedDateTime startTime;
+    private java.time.ZonedDateTime endTime;
+    private Double cost;
 
     private boolean autoReplyEnabled;
     private String lastPageToken;

@@ -98,6 +98,13 @@ public class StreamService {
         int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
         userService.checkStreamQuota(username, activeCount);
 
+        com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+        if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
+            if (!userService.checkCreditLimit(username)) {
+                throw new IllegalStateException("Credit limit exceeded. Please clear your pending balance.");
+            }
+        }
+
         // REMOVED SINGLE STREAM CHECK TO ALLOW MULTIPLE STREAMS
         // if (streamJobRepo.findByUsernameAndIsLiveTrue(username).isPresent()) {
         //    throw new IllegalStateException("You already have an active stream running!");
@@ -274,7 +281,6 @@ public class StreamService {
             // Resolve Destination Name
             String destName = "Unknown Destination";
             try {
-                com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
                 List<com.afklive.streamer.model.StreamDestination> dests = streamDestinationRepo.findByStreamKeyAndUser(key, user);
                 if (!dests.isEmpty()) {
                     destName = dests.get(0).getName();
@@ -326,20 +332,7 @@ public class StreamService {
             // 6. EXIT HANDLER (Auto-Update DB)
             process.onExit().thenRun(() -> {
                 log.warn("Stream Process Exited for job {}", jobId);
-
-                // Cleanup tasks
-                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
-                if (task != null) task.cancel(true);
-
-                Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
-                if (jobOpt.isPresent()) {
-                    StreamJob existingJob = jobOpt.get();
-                    if (existingJob.isLive()) {
-                        existingJob.setLive(false);
-                        streamJobRepo.save(existingJob);
-                    }
-                }
-                activeStreams.remove(jobId);
+                finalizeJob(jobId);
             });
         }
 
@@ -361,18 +354,8 @@ public class StreamService {
         int stopped = 0;
         for (StreamJob job : jobs) {
             ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-
-            java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(job.getId());
-            if (task != null) task.cancel(true);
-
-            job.setLive(false);
-            streamJobRepo.save(job);
+            finalizeJob(job.getId());
             stopped++;
-        }
-
-        // Clean up memory map
-        for (StreamJob job : jobs) {
-            activeStreams.remove(job.getId());
         }
 
         return ApiResponse.success(stopped + " streams stopped", null);
@@ -389,16 +372,43 @@ public class StreamService {
 
             if (job.isLive()) {
                 ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-
-                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
-                if (task != null) task.cancel(true);
-
-                job.setLive(false);
-                streamJobRepo.save(job);
+                finalizeJob(jobId);
                 return ApiResponse.success("Stream stopped", null);
             }
         }
         return ApiResponse.error("Stream not found or not active");
+    }
+
+    private synchronized void finalizeJob(Long jobId) {
+        Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
+        if (jobOpt.isPresent()) {
+            StreamJob job = jobOpt.get();
+            if (job.isLive()) {
+                job.setLive(false);
+                job.setEndTime(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
+
+                // Calculate Cost for Pay As You Go (FREE plan type)
+                com.afklive.streamer.model.User user = userService.getOrCreateUser(job.getUsername());
+                if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
+                    long durationSeconds = java.time.Duration.between(job.getStartTime(), job.getEndTime()).getSeconds();
+                    double hours = durationSeconds / 3600.0;
+                    double cost = hours * 1.25;
+
+                    // Round to 4 decimal places
+                    cost = Math.round(cost * 10000.0) / 10000.0;
+
+                    job.setCost(cost);
+                    userService.addUnpaidBalance(job.getUsername(), cost);
+                }
+
+                streamJobRepo.save(job);
+
+                // Cleanup tasks
+                activeStreams.remove(jobId);
+                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
+                if (task != null) task.cancel(true);
+            }
+        }
     }
 
     public List<StreamJob> getActiveStreams(String username) {

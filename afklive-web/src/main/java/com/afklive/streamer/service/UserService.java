@@ -151,4 +151,28 @@ public class UserService {
     public void saveUser(User user) {
         userRepository.save(user);
     }
+
+    @Transactional
+    public void addUnpaidBalance(String username, double amount) {
+        User user = getOrCreateUser(username);
+        user.setUnpaidBalance(user.getUnpaidBalance() + amount);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void clearUnpaidBalance(String username, double amount) {
+        User user = getOrCreateUser(username);
+        double current = user.getUnpaidBalance();
+        // Allow reducing balance below zero (credit)? No, user wants to clear balance.
+        // But if they pay more, they might have negative unpaid balance (which implies credit).
+        user.setUnpaidBalance(current - amount);
+        userRepository.save(user);
+    }
+
+    public boolean checkCreditLimit(String username) {
+        User user = getOrCreateUser(username);
+        // If unpaid balance is greater than or equal to credit limit, return false.
+        // E.g. limit 50, unpaid 50 -> false (blocked).
+        return user.getUnpaidBalance() < user.getCreditLimit();
+    }
 }
