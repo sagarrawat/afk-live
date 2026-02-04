@@ -5,6 +5,8 @@ import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.repository.PlanConfigRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,9 +22,23 @@ public class PlanService {
     public void initPlans() {
         if (planConfigRepository.count() == 0) {
             for (PlanType type : PlanType.values()) {
+                String defaultPrice = switch (type) {
+                    case FREE -> "₹0";
+                    case ESSENTIALS -> "₹199";
+                    default -> "₹0";
+                };
+
+                String defaultCycle = switch (type) {
+                    case FREE -> "Hourly";
+                    case ESSENTIALS -> "Monthly";
+                    default -> "Monthly";
+                };
+
                 PlanConfig config = new PlanConfig(
                         type,
                         type.getDisplayName(),
+                        defaultPrice,
+                        defaultCycle,
                         type.getMaxStorageBytes(),
                         type.getMaxScheduledPosts(),
                         type.getMaxActiveStreams(),
@@ -34,16 +50,19 @@ public class PlanService {
         }
     }
 
+    @Cacheable("plans")
     public List<PlanConfig> getAllPlans() {
         return planConfigRepository.findAll();
     }
 
+    @Cacheable("planConfig")
     public PlanConfig getPlanConfig(PlanType planType) {
         return planConfigRepository.findById(planType)
                 .orElseThrow(() -> new IllegalArgumentException("Plan config not found for type: " + planType));
     }
 
     @Transactional
+    @CacheEvict(value = {"plans", "planConfig"}, allEntries = true)
     public PlanConfig updatePlan(PlanConfig planConfig) {
         return planConfigRepository.save(planConfig);
     }

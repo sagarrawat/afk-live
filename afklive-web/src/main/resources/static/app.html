@@ -846,7 +846,7 @@
                         <template x-for="item in [
                             {id: 'general', icon: 'fa-user', label: 'General'},
                             {id: 'channels', icon: 'fa-share-nodes', label: 'Channels'},
-                            {id: 'plans', icon: 'fa-credit-card', label: 'Plan & Billing'},
+                            {id: 'plans', icon: 'fa-credit-card', label: 'Plans'},
                             {id: 'usage', icon: 'fa-file-invoice-dollar', label: 'Billing'}
                         ]">
                             <button @click="switchTab(item.id)"
@@ -996,7 +996,7 @@
                                             <h4 class="text-lg font-bold text-gray-900" x-text="plan.title"></h4>
                                             <div class="mt-2 mb-4">
                                                 <span class="text-3xl font-bold text-gray-900" x-text="plan.price"></span>
-                                                <span class="text-sm text-gray-500">/month</span>
+                                                <span class="text-sm text-gray-500" x-text="plan.period"></span>
                                             </div>
 
                                             <ul class="space-y-3 mb-8 flex-1">

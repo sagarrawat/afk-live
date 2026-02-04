@@ -31,10 +31,7 @@ public class PricingController {
         List<PlanConfig> configs = planService.getAllPlans();
 
         for (PlanConfig p : configs) {
-            if (p.getPlanType() == PlanType.TEAM) continue; // Skip Team for now
-
-            String price = "₹0";
-            if (p.getPlanType() == PlanType.ESSENTIALS) price = "₹199";
+            String price = p.getPrice() != null ? p.getPrice() : "₹0";
 
             List<String> features = new java.util.ArrayList<>();
             features.add(p.getMaxChannels() + " Channels");
@@ -59,11 +56,16 @@ public class PricingController {
 
             features.add("Storage: " + formatStorage(p.getMaxStorageBytes()));
 
+            String cycle = p.getBillingCycle() != null ? "/" + p.getBillingCycle().toLowerCase() : "/mo";
+            if (p.getBillingCycle() != null && (p.getBillingCycle().equalsIgnoreCase("Hourly") || p.getBillingCycle().equalsIgnoreCase("Hour"))) {
+                 cycle = "/hr";
+            }
+
             planList.add(Map.of(
                     "id", p.getPlanType().name(),
                     "title", p.getDisplayName(),
                     "price", price,
-                    "period", "/mo",
+                    "period", cycle,
                     "features", features
             ));
         }
