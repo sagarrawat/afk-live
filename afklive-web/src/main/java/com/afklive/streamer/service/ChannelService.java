@@ -15,11 +15,13 @@ public class ChannelService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final YouTubeService youTubeService;
+    private final PlanService planService;
 
-    public ChannelService(UserRepository userRepository, UserService userService, YouTubeService youTubeService) {
+    public ChannelService(UserRepository userRepository, UserService userService, YouTubeService youTubeService, PlanService planService) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.youTubeService = youTubeService;
+        this.planService = planService;
     }
 
     @Transactional
@@ -65,7 +67,7 @@ public class ChannelService {
     public SocialChannel addChannel(String username, String channelName, String platform) {
         User user = userService.getOrCreateUser(username);
 
-        int limit = user.getPlanType().getMaxChannels();
+        int limit = planService.getPlanConfig(user.getPlanType()).getMaxChannels();
         if (user.getChannels().size() >= limit) {
             throw new IllegalStateException("Plan limit reached. Upgrade to add more channels.");
         }

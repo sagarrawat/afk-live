@@ -3,6 +3,8 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.model.SupportTicket;
+import com.afklive.streamer.model.PlanConfig;
+import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.SupportTicketRepository;
@@ -10,6 +12,7 @@ import com.afklive.streamer.repository.PaymentAuditRepository;
 import com.afklive.streamer.service.StreamService;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.QuotaTrackingService;
+import com.afklive.streamer.service.PlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -43,6 +46,7 @@ public class AdminController {
     private final FileStorageService storageService;
     private final QuotaTrackingService quotaTrackingService;
     private final PaymentAuditRepository paymentAuditRepository;
+    private final PlanService planService;
 
     @GetMapping
     public String adminDashboard(
@@ -57,7 +61,7 @@ public class AdminController {
             @RequestParam(defaultValue = "overview") String tab
     ) {
         // Validate tab
-        if (!List.of("overview", "streams", "users", "support").contains(tab)) {
+        if (!List.of("overview", "streams", "users", "support", "plans").contains(tab)) {
             tab = "overview";
         }
 
@@ -97,7 +101,8 @@ public class AdminController {
         model.addAttribute("userSearch", userSearch);
         model.addAttribute("activeTab", tab); // Pass tab to frontend
         model.addAttribute("quotaBreakdown", quotaBreakdown);
-        
+        model.addAttribute("plans", planService.getAllPlans());
+
         model.addAttribute("stats", Map.of(
             "totalUsers", userRepository.count(),
             "activeStreams", streamJobRepo.countByIsLiveTrue(),
@@ -146,6 +151,19 @@ public class AdminController {
             supportTicketRepository.save(ticket);
         });
         return "redirect:/admin";
+    }
+
+    @PostMapping("/plans/update")
+    public String updatePlan(@RequestParam PlanType planType,
+                             @RequestParam String displayName,
+                             @RequestParam long maxStorageBytes,
+                             @RequestParam int maxScheduledPosts,
+                             @RequestParam int maxActiveStreams,
+                             @RequestParam int maxChannels,
+                             @RequestParam int maxResolution) {
+        PlanConfig config = new PlanConfig(planType, displayName, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution);
+        planService.updatePlan(config);
+        return "redirect:/admin?tab=plans";
     }
 
     @GetMapping("/support/attachment/{id}")

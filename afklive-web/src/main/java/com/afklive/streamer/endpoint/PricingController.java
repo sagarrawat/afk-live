@@ -1,8 +1,10 @@
 package com.afklive.streamer.endpoint;
 
+import com.afklive.streamer.model.PlanConfig;
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.service.EmailService;
+import com.afklive.streamer.service.PlanService;
 import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -21,34 +23,69 @@ public class PricingController {
 
     private final UserService userService;
     private final EmailService emailService;
+    private final PlanService planService;
 
     @GetMapping("/pricing")
     public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "IN") String country) {
-        // Default to India/INR as per requirement
-        boolean isIndia = true;
+        List<Map<String, Object>> planList = new java.util.ArrayList<>();
+        List<PlanConfig> configs = planService.getAllPlans();
 
-        // Tier 1: Free
-        Map<String, Object> free = Map.of(
-            "id", "FREE",
-            "title", "Free",
-            "price", "₹0",
-            "period", "/mo",
-            "features", List.of("1 Channel", "10 Scheduled Posts", "Basic Streaming")
-        );
+        for (PlanConfig p : configs) {
+            if (p.getPlanType() == PlanType.TEAM) continue; // Skip Team for now
 
-        // Tier 2: Essentials
-        Map<String, Object> essentials = Map.of(
-            "id", "ESSENTIALS",
-            "title", "Essentials",
-            "price", "₹199",
-            "period", "/mo",
-            "features", List.of("3 Channels", "Unlimited Scheduling", "Analytics", "HD Streaming")
-        );
+            String price = "₹0";
+            if (p.getPlanType() == PlanType.ESSENTIALS) price = "₹199";
+
+            List<String> features = new java.util.ArrayList<>();
+            features.add(p.getMaxChannels() + " Channels");
+
+            if (p.getMaxScheduledPosts() == Integer.MAX_VALUE) {
+                features.add("Unlimited Scheduling");
+            } else {
+                features.add(p.getMaxScheduledPosts() + " Scheduled Posts");
+            }
+
+            if (p.getMaxActiveStreams() == Integer.MAX_VALUE) {
+                features.add("Unlimited Concurrent Streams");
+            } else {
+                features.add(p.getMaxActiveStreams() + " Concurrent Streams");
+            }
+
+            if (p.getMaxResolution() >= 1080) {
+                features.add("HD Streaming");
+            } else {
+                features.add("Basic Streaming");
+            }
+
+            features.add("Storage: " + formatStorage(p.getMaxStorageBytes()));
+
+            planList.add(Map.of(
+                    "id", p.getPlanType().name(),
+                    "title", p.getDisplayName(),
+                    "price", price,
+                    "period", "/mo",
+                    "features", features
+            ));
+        }
+
+        // Sort ensuring FREE is first
+        planList.sort((a, b) -> {
+            if ("FREE".equals(a.get("id"))) return -1;
+            if ("FREE".equals(b.get("id"))) return 1;
+            return 0;
+        });
 
         return ResponseEntity.ok(Map.of(
-            "currency", "INR",
-            "plans", List.of(free, essentials)
+                "currency", "INR",
+                "plans", planList
         ));
+    }
+
+    private String formatStorage(long bytes) {
+        if (bytes >= 1024 * 1024 * 1024) {
+            return (bytes / (1024 * 1024 * 1024)) + " GB";
+        }
+        return (bytes / (1024 * 1024)) + " MB";
     }
 
     @PostMapping("/pricing/upgrade")

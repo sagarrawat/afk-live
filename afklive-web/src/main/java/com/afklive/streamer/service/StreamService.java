@@ -51,6 +51,8 @@ public class StreamService {
     private YouTubeService youTubeService;
     @Autowired
     private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepo;
+    @Autowired
+    private PlanService planService;
 
     private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
     private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
@@ -241,7 +243,7 @@ public class StreamService {
         log.info("musicPath [{}]", musicPath);
 
         // Get User Plan Limits
-        int planMax = userService.getOrCreateUser(username).getPlanType().getMaxResolution();
+        int planMax = planService.getPlanConfig(user.getPlanType()).getMaxResolution();
         int maxHeight = (streamQuality > 0 && streamQuality < planMax) ? streamQuality : planMax;
 
         // CHECK FOR OPTIMIZED VERSION
