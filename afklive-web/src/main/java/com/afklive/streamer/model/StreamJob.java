@@ -36,6 +36,9 @@ public class StreamJob {
     private java.time.ZonedDateTime endTime;
     private Double cost;
 
+    private java.time.ZonedDateTime lastBillingTime;
+    private double accumulatedCost = 0.0;
+
     private boolean autoReplyEnabled;
     private String lastPageToken;
 

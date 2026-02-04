@@ -38,6 +38,7 @@ class PayAsYouGoTest {
     @Mock private ScheduledVideoRepository scheduledVideoRepository;
     @Mock private YouTubeService youTubeService;
     @Mock private StreamDestinationRepository streamDestinationRepo;
+    @Mock private EmailService emailService;
 
     @InjectMocks
     private StreamService streamService;
@@ -49,7 +50,7 @@ class PayAsYouGoTest {
         MockitoAnnotations.openMocks(this);
         // Use a "real" UserService (partially mocked) for logic tests
         // But for StreamService injection we use userServiceMock
-        realUserService = new UserService(userRepository, null, null);
+        realUserService = new UserService(userRepository, null, emailService);
     }
 
     @Test
@@ -71,15 +72,14 @@ class PayAsYouGoTest {
 
     @Test
     void testBalanceUpdates() {
-        User user = new User("test@balance.com");
-        user.setUnpaidBalance(10.0);
-        when(userRepository.findById("test@balance.com")).thenReturn(Optional.of(user));
+        when(userRepository.existsById("test@balance.com")).thenReturn(true);
 
+        // Logic moved to UserRepository, but we can verify calls
         realUserService.addUnpaidBalance("test@balance.com", 5.5);
-        assertEquals(15.5, user.getUnpaidBalance());
+        verify(userRepository).addUnpaidBalance("test@balance.com", 5.5);
 
         realUserService.clearUnpaidBalance("test@balance.com", 5.5);
-        assertEquals(10.0, user.getUnpaidBalance());
+        verify(userRepository).deductUnpaidBalance("test@balance.com", 5.5);
     }
 
     @Test
@@ -128,5 +128,34 @@ class PayAsYouGoTest {
         assertNotNull(job.getCost());
         assertEquals(2.50, job.getCost(), 0.1);
         assertFalse(job.isLive());
+    }
+
+    @Test
+    void testFractionalCostCalculation() {
+        String username = "test@fractional.com";
+        long jobId = 2L;
+
+        StreamJob job = new StreamJob();
+        job.setId(jobId);
+        job.setUsername(username);
+        job.setLive(true);
+        job.setPid(12345L);
+        // Start time 15 minutes ago
+        job.setStartTime(ZonedDateTime.now().minusMinutes(15));
+        job.setLastBillingTime(job.getStartTime());
+
+        when(streamJobRepository.findById(jobId)).thenReturn(Optional.of(job));
+
+        User user = new User(username);
+        user.setPlanType(PlanType.FREE);
+        when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
+
+        // Execute
+        streamService.stopStream(jobId, username);
+
+        // Verify cost: 0.25 hours * 1.25 = 0.3125
+        verify(userServiceMock).addUnpaidBalance(eq(username), doubleThat(cost -> Math.abs(cost - 0.3125) < 0.0001));
+
+        assertEquals(0.3125, job.getCost(), 0.0001);
     }
 }

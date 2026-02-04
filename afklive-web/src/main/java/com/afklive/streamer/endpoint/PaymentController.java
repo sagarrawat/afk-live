@@ -62,6 +62,9 @@ public class PaymentController {
                 if ("BALANCE_CLEAR".equals(planId)) {
                     if (body != null && body.containsKey("amount")) {
                         amount = Long.parseLong(body.get("amount").toString());
+                        if (amount <= 0) {
+                            return ResponseEntity.badRequest().body(Map.of("message", "Amount must be positive"));
+                        }
                     } else {
                         return ResponseEntity.badRequest().body(Map.of("message", "Amount required for balance clear"));
                     }

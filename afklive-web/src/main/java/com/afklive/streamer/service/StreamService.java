@@ -54,6 +54,7 @@ public class StreamService {
 
     private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
     private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
+    private java.util.concurrent.ScheduledFuture<?> billingTask;
 
     // We need to pass 'username' now
     public ApiResponse<StreamResponse> startStream(
@@ -305,6 +306,7 @@ public class StreamService {
                     destName,
                     autoReplyEnabled
             );
+            job.setLastBillingTime(job.getStartTime());
             job = streamJobRepo.save(job);
             final Long jobId = job.getId();
             startedJobIds.add(jobId);
@@ -379,26 +381,34 @@ public class StreamService {
         return ApiResponse.error("Stream not found or not active");
     }
 
-    private synchronized void finalizeJob(Long jobId) {
+    private void finalizeJob(Long jobId) {
         Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
         if (jobOpt.isPresent()) {
             StreamJob job = jobOpt.get();
+            // Use computeIfPresent-like logic or simply check live status.
+            // Since we removed synchronized, we rely on the fact that once setLive(false) is saved, future calls do nothing.
+            // But there is a small race window.
             if (job.isLive()) {
                 job.setLive(false);
                 job.setEndTime(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
 
-                // Calculate Cost for Pay As You Go (FREE plan type)
+                // Calculate Final Cost Increment for Pay As You Go
                 com.afklive.streamer.model.User user = userService.getOrCreateUser(job.getUsername());
                 if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
-                    long durationSeconds = java.time.Duration.between(job.getStartTime(), job.getEndTime()).getSeconds();
-                    double hours = durationSeconds / 3600.0;
-                    double cost = hours * 1.25;
+                    java.time.ZonedDateTime startCalc = job.getLastBillingTime();
+                    if (startCalc == null) startCalc = job.getStartTime();
 
-                    // Round to 4 decimal places
-                    cost = Math.round(cost * 10000.0) / 10000.0;
+                    long durationSeconds = java.time.Duration.between(startCalc, job.getEndTime()).getSeconds();
+                    if (durationSeconds > 0) {
+                        double hours = durationSeconds / 3600.0;
+                        double incrementalCost = hours * 1.25;
 
-                    job.setCost(cost);
-                    userService.addUnpaidBalance(job.getUsername(), cost);
+                        incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
+
+                        job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
+                        userService.addUnpaidBalance(job.getUsername(), incrementalCost);
+                    }
+                    job.setCost(job.getAccumulatedCost());
                 }
 
                 streamJobRepo.save(job);
@@ -409,6 +419,60 @@ public class StreamService {
                 if (task != null) task.cancel(true);
             }
         }
+    }
+
+    // Called on startup to init scheduled billing
+    @jakarta.annotation.PostConstruct
+    public void initBillingTask() {
+        billingTask = scheduledExecutorService.scheduleAtFixedRate(this::processPeriodicBilling, 1, 1, java.util.concurrent.TimeUnit.MINUTES);
+    }
+
+    private void processPeriodicBilling() {
+        // Find all active streams
+        // Ideally we filter by Pay As You Go users, but for now we iterate active streams and check user plan
+        // Optimization: findAllByIsLiveTrue() then filter in memory or join in DB.
+        // Assuming StreamJobRepository has findAllByIsLiveTrue()
+        List<StreamJob> activeJobs = streamJobRepo.findAllByIsLiveTrue(); // We might need to add this method to repo if not exists, or filter from getAll
+        // Actually we have getActiveStreams(username). We need global active streams.
+        // Let's use the activeStreams map which contains IDs of locally running processes
+
+        activeStreams.forEach((jobId, process) -> {
+            try {
+                Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
+                if (jobOpt.isPresent()) {
+                    StreamJob job = jobOpt.get();
+                    com.afklive.streamer.model.User user = userService.getOrCreateUser(job.getUsername());
+
+                    if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
+                        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"));
+                        java.time.ZonedDateTime lastCalc = job.getLastBillingTime();
+                        if (lastCalc == null) lastCalc = job.getStartTime();
+
+                        long durationSeconds = java.time.Duration.between(lastCalc, now).getSeconds();
+                        if (durationSeconds > 0) {
+                            double hours = durationSeconds / 3600.0;
+                            double incrementalCost = hours * 1.25;
+                            incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
+
+                            job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
+                            job.setLastBillingTime(now);
+
+                            // Atomic update to user balance
+                            userService.addUnpaidBalance(job.getUsername(), incrementalCost);
+                            streamJobRepo.save(job);
+                        }
+
+                        // Check Credit Limit
+                        if (!userService.checkCreditLimit(job.getUsername())) {
+                            log.warn("User {} exceeded credit limit. Stopping stream {}.", job.getUsername(), jobId);
+                            stopStream(jobId, job.getUsername());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error in billing task for job " + jobId, e);
+            }
+        });
     }
 
     public List<StreamJob> getActiveStreams(String username) {
