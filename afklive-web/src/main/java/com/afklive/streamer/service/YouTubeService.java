@@ -12,6 +12,7 @@ import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
 import com.afklive.streamer.util.AppConstants;
 import com.afklive.streamer.model.ETagStore;
 import com.afklive.streamer.repository.ETagStoreRepository;
+import com.afklive.streamer.aspect.YoutubeQuota;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -121,6 +122,7 @@ public class YouTubeService {
 
     // --- VIDEO UPLOAD ---
 
+    @YoutubeQuota(apiName = "videos.insert", cost = 1600)
     public String uploadVideo(String username, InputStream fileStream, String title, String description, String tags, String privacyStatus, String categoryId) throws Exception {
         YouTube youtube = getYouTubeClient(username);
 
@@ -150,6 +152,7 @@ public class YouTubeService {
         return returnedVideo.getId();
     }
 
+    @YoutubeQuota(apiName = "thumbnails.set", cost = 50)
     public void uploadThumbnail(String username, String videoId, InputStream thumbnailStream) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         InputStreamContent mediaContent = new InputStreamContent("application/octet-stream", thumbnailStream);
@@ -175,6 +178,7 @@ public class YouTubeService {
 
     // --- COMMENTS ---
 
+    @YoutubeQuota(apiName = "commentThreads.list", cost = 1)
     public CommentThreadListResponse getCommentThreads(String username) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         String key = "commentThreads:" + username;
@@ -246,6 +250,7 @@ public class YouTubeService {
         return response.getItems().getFirst().getId();
     }
 
+    @YoutubeQuota(apiName = "commentThreads.insert", cost = 50)
     public void addComment(String username, String videoId, String text) throws Exception {
         YouTube youtube = getYouTubeClient(username);
 
@@ -291,6 +296,7 @@ public class YouTubeService {
     }
 
     @CacheEvict(value = {"comments", "unreplied_comments"}, key = "#username")
+    @YoutubeQuota(apiName = "comments.insert", cost = 50)
     public String replyToComment(String username, String parentId, String text) throws Exception {
         YouTube youtube = getYouTubeClient(username);
 
@@ -305,6 +311,7 @@ public class YouTubeService {
     }
 
     @CacheEvict(value = {"comments", "unreplied_comments"}, key = "#username")
+    @YoutubeQuota(apiName = "comments.delete", cost = 50)
     public void deleteComment(String username, String commentId) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         youtube.comments().delete(commentId).execute();
@@ -454,6 +461,7 @@ public class YouTubeService {
 
     // --- LIVE CHAT ---
 
+    @YoutubeQuota(apiName = "liveBroadcasts.list", cost = 1)
     public String getActiveLiveChatId(String username) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         // Find active broadcast
@@ -473,6 +481,7 @@ public class YouTubeService {
         return null;
     }
 
+    @YoutubeQuota(apiName = "liveChatMessages.list", cost = 1)
     public LiveChatMessageListResponse getLiveChatMessages(String username, String liveChatId, String pageToken) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         YouTube.LiveChatMessages.List request = youtube.liveChatMessages().list(liveChatId, Collections.singletonList("snippet,authorDetails"));
@@ -482,6 +491,7 @@ public class YouTubeService {
         return request.execute();
     }
 
+    @YoutubeQuota(apiName = "liveChatMessages.insert", cost = 50)
     public void replyToLiveChat(String username, String liveChatId, String text) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         LiveChatMessage message = new LiveChatMessage();

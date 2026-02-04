@@ -9,6 +9,7 @@ import com.afklive.streamer.repository.SupportTicketRepository;
 import com.afklive.streamer.repository.PaymentAuditRepository;
 import com.afklive.streamer.service.StreamService;
 import com.afklive.streamer.service.FileStorageService;
+import com.afklive.streamer.service.QuotaTrackingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -40,6 +41,7 @@ public class AdminController {
     private final StreamService streamService;
     private final SupportTicketRepository supportTicketRepository;
     private final FileStorageService storageService;
+    private final QuotaTrackingService quotaTrackingService;
     private final PaymentAuditRepository paymentAuditRepository;
 
     @GetMapping
@@ -78,6 +80,14 @@ public class AdminController {
         long totalStorage = userRepository.sumUsedStorageBytes();
         String formattedStorage = String.format("%.2f GB", totalStorage / (1024.0 * 1024.0 * 1024.0));
 
+        // Quota Stats
+        int quotaUsedToday = quotaTrackingService.getDailyUsage();
+        Map<String, Long> quotaBreakdown = quotaTrackingService.getDailyBreakdown();
+
+        model.addAttribute("users", users);
+        model.addAttribute("activeStreamList", activeStreams);
+        model.addAttribute("supportTickets", tickets);
+        model.addAttribute("quotaBreakdown", quotaBreakdown);
         Double totalUnpaid = userRepository.sumUnpaidBalance();
         Long completedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("COMPLETED");
         Long initiatedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("INITIATED");
@@ -95,6 +105,8 @@ public class AdminController {
             "totalUsers", userRepository.count(),
             "activeStreams", streamJobRepo.countByIsLiveTrue(),
             "formattedStorage", formattedStorage,
+            "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count(),
+            "quotaUsedToday", quotaUsedToday
             "openTickets", supportTicketRepository.countByStatus("OPEN"),
             "totalUnpaid", String.format("%.2f INR", totalUnpaid != null ? totalUnpaid : 0.0),
             "completedPayments", String.format("%.2f INR", completedPayments),
