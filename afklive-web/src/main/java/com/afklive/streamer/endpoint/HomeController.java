@@ -21,4 +21,14 @@ public class HomeController {
         }
         return "forward:/home.html";
     }
+
+    @GetMapping("/terms")
+    public String terms() {
+        return "forward:/terms.html";
+    }
+
+    @GetMapping("/privacy")
+    public String privacy() {
+        return "forward:/privacy.html";
+    }
 }
