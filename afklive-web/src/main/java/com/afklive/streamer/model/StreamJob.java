@@ -33,6 +33,11 @@ public class StreamJob {
 
     private String privacy;
     private java.time.ZonedDateTime startTime;
+    private java.time.ZonedDateTime endTime;
+    private Double cost;
+
+    private java.time.ZonedDateTime lastBillingTime;
+    private double accumulatedCost = 0.0;
 
     private boolean autoReplyEnabled;
 
