@@ -82,6 +82,15 @@ public class AdminController {
         return "redirect:/admin";
     }
 
+    @PostMapping("/users/{username}/limit")
+    public String updateUserLimit(@PathVariable String username, @RequestParam double limit) {
+        userRepository.findById(username).ifPresent(user -> {
+            user.setCreditLimit(limit);
+            userRepository.save(user);
+        });
+        return "redirect:/admin";
+    }
+
     @PostMapping("/users/{username}/blacklist")
     public String toggleUserBlacklist(@PathVariable String username, @RequestParam boolean enabled) {
         userRepository.findById(username).ifPresent(user -> {
