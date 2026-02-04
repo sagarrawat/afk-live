@@ -1,9 +1,11 @@
 package com.afklive.streamer.service;
 
+import com.afklive.streamer.model.AppSetting;
 import com.afklive.streamer.model.EngagementActivity;
 import com.afklive.streamer.model.ProcessedComment;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.repository.AppSettingRepository;
 import com.afklive.streamer.repository.EngagementActivityRepository;
 import com.afklive.streamer.repository.ProcessedCommentRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
@@ -34,9 +36,12 @@ public class EngagementService {
     private final YouTubeService youTubeService;
     private final AiService aiService;
     private final StreamJobRepository streamJobRepo;
+    private final AppSettingRepository appSettingRepository;
 
     @Scheduled(fixedRate = 30_000) // 1 min
     public void processLiveEngagement() {
+        if (!isEngagementEnabled()) return;
+
         List<StreamJob> jobs = streamJobRepo.findByIsLiveTrueAndAutoReplyEnabledTrue();
         Set<String> processedUsers = new java.util.HashSet<>();
 
@@ -52,7 +57,14 @@ public class EngagementService {
             String username = job.getUsername();
             if (!youTubeService.isConnected(username)) return;
 
-            String liveChatId = youTubeService.getActiveLiveChatId(username);
+            String liveChatId = job.getLiveChatId();
+            if (liveChatId == null || liveChatId.isEmpty()) {
+                liveChatId = youTubeService.getActiveLiveChatId(username);
+                if (liveChatId != null) {
+                    job.setLiveChatId(liveChatId);
+                    streamJobRepo.save(job);
+                }
+            }
             if (liveChatId == null) return;
 
             LiveChatMessageListResponse response = youTubeService.getLiveChatMessages(username, liveChatId, job.getLastPageToken());
@@ -89,6 +101,8 @@ public class EngagementService {
 
     @Scheduled(fixedRate = 60000) // 1 min
     public void processEngagement() {
+        if (!isEngagementEnabled()) return;
+
         int page = 0;
         int size = 100;
         Slice<User> userSlice;
@@ -100,6 +114,12 @@ public class EngagementService {
             }
             page++;
         } while (userSlice.hasNext());
+    }
+
+    private boolean isEngagementEnabled() {
+        return appSettingRepository.findById("ENGAGEMENT_CRON_ENABLED")
+                .map(setting -> Boolean.parseBoolean(setting.getSettingValue()))
+                .orElse(true); // Default to true if not set
     }
 
     public void processUserComments(User user) {

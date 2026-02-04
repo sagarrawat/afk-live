@@ -43,6 +43,7 @@ public class StreamJob {
 
     @Column(columnDefinition = "TEXT")
     private String lastPageToken;
+    private String liveChatId;
 
     public StreamJob(
             String username,

@@ -1,6 +1,7 @@
 package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.repository.AppSettingRepository;
 import com.afklive.streamer.repository.EngagementActivityRepository;
 import com.afklive.streamer.repository.ProcessedCommentRepository;
 import com.afklive.streamer.repository.UserRepository;
@@ -40,6 +41,9 @@ class EngagementServiceTest {
 
     @Mock
     private AiService aiService;
+
+    @Mock
+    private AppSettingRepository appSettingRepository;
 
     @InjectMocks
     private EngagementService engagementService;
