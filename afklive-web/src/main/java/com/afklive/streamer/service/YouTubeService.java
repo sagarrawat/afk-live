@@ -10,6 +10,9 @@ import com.google.api.services.youtube.model.*;
 import com.google.api.services.youtubeAnalytics.v2.YouTubeAnalytics;
 import com.google.api.services.youtubeAnalytics.v2.model.QueryResponse;
 import com.afklive.streamer.util.AppConstants;
+import com.afklive.streamer.model.ETagStore;
+import com.afklive.streamer.repository.ETagStoreRepository;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.CacheEvict;
@@ -25,6 +28,7 @@ import org.springframework.stereotype.Service;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class YouTubeService {
@@ -32,13 +36,16 @@ public class YouTubeService {
 
     private final AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager;
     private final com.afklive.streamer.service.ChannelService channelService;
+    private final ETagStoreRepository etagStoreRepository;
     private static final String APPLICATION_NAME = "AFK Live Streamer";
     private static final GsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
     public YouTubeService(@Qualifier("serviceAuthorizedClientManager") AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager,
-                          @org.springframework.context.annotation.Lazy com.afklive.streamer.service.ChannelService channelService) {
+                          @org.springframework.context.annotation.Lazy com.afklive.streamer.service.ChannelService channelService,
+                          ETagStoreRepository etagStoreRepository) {
         this.authorizedClientManager = authorizedClientManager;
         this.channelService = channelService;
+        this.etagStoreRepository = etagStoreRepository;
     }
 
     // --- HELPER METHODS ---
@@ -168,13 +175,35 @@ public class YouTubeService {
 
     // --- COMMENTS ---
 
-    @Cacheable(value = "comments", key = "#username")
     public CommentThreadListResponse getCommentThreads(String username) throws Exception {
         YouTube youtube = getYouTubeClient(username);
-        return youtube.commentThreads().list(Collections.singletonList("snippet,replies"))
+        String key = "commentThreads:" + username;
+        Optional<ETagStore> storedEtag = etagStoreRepository.findById(key);
+
+        YouTube.CommentThreads.List request = youtube.commentThreads().list(Collections.singletonList("snippet,replies"))
                 .setAllThreadsRelatedToChannelId(getChannelId(username))
-                .setMaxResults(20L)
-                .execute();
+                .setMaxResults(20L);
+
+        if (storedEtag.isPresent()) {
+            request.getRequestHeaders().setIfNoneMatch(storedEtag.get().getEtag());
+        }
+
+        try {
+            CommentThreadListResponse response = request.execute();
+            // 200 OK
+            String newEtag = response.getEtag();
+            if (newEtag != null) {
+                ETagStore store = new ETagStore(key, newEtag, java.time.LocalDateTime.now());
+                etagStoreRepository.save(store);
+            }
+            return response;
+        } catch (GoogleJsonResponseException e) {
+            if (e.getStatusCode() == 304) {
+                log.debug("304 Not Modified for commentThreads of user {}", username);
+                return null;
+            }
+            throw e;
+        }
     }
 
     public String getChannelName(String username) throws Exception {

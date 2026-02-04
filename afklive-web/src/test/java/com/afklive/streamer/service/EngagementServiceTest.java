@@ -84,6 +84,21 @@ class EngagementServiceTest {
     }
 
     @Test
+    void processUserComments_shouldDoNothing_WhenYouTubeReturnsNull() throws Exception {
+        // Arrange
+        when(youTubeService.isConnected("testuser")).thenReturn(true);
+        // Simulate 304 Not Modified
+        when(youTubeService.getCommentThreads("testuser")).thenReturn(null);
+
+        // Act
+        engagementService.processUserComments(testUser);
+
+        // Assert
+        verify(processedRepository, never()).findExistingCommentIds(anyCollection());
+        verify(aiService, never()).analyzeSentiment(anyString());
+    }
+
+    @Test
     void processUserComments_shouldSkipExistingComments() throws Exception {
         // Arrange
         when(youTubeService.isConnected("testuser")).thenReturn(true);
