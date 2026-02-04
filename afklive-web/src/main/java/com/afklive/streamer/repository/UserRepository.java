@@ -1,6 +1,7 @@
 package com.afklive.streamer.repository;
 
 import com.afklive.streamer.model.User;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,6 +17,8 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     Slice<User> findByAutoReplyEnabledTrue(Pageable pageable);
 
+    Page<User> findByUsernameContainingIgnoreCaseOrFullNameContainingIgnoreCase(String username, String fullName, Pageable pageable);
+
     @Modifying
     @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance + :amount WHERE u.username = :username")
     void addUnpaidBalance(@Param("username") String username, @Param("amount") double amount);
@@ -26,4 +29,7 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     @Query("SELECT COALESCE(SUM(u.unpaidBalance), 0) FROM User u")
     Double sumUnpaidBalance();
+
+    @Query("SELECT COALESCE(SUM(u.usedStorageBytes), 0) FROM User u")
+    Long sumUsedStorageBytes();
 }

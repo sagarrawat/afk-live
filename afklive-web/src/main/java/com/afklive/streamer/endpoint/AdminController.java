@@ -23,6 +23,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.util.List;
 import java.util.Map;
@@ -40,31 +43,54 @@ public class AdminController {
     private final PaymentAuditRepository paymentAuditRepository;
 
     @GetMapping
-    public String adminDashboard(Model model) {
-        List<User> users = userRepository.findAll();
-        List<StreamJob> activeStreams = streamJobRepo.findAllByIsLiveTrue();
-        List<SupportTicket> tickets = supportTicketRepository.findAllByOrderByCreatedAtDesc();
+    public String adminDashboard(
+            Model model,
+            @RequestParam(defaultValue = "0") int userPage,
+            @RequestParam(defaultValue = "10") int userSize,
+            @RequestParam(required = false) String userSearch,
+            @RequestParam(defaultValue = "0") int streamPage,
+            @RequestParam(defaultValue = "10") int streamSize,
+            @RequestParam(defaultValue = "0") int ticketPage,
+            @RequestParam(defaultValue = "10") int ticketSize,
+            @RequestParam(defaultValue = "overview") String tab
+    ) {
+        // Users
+        Page<User> usersPage;
+        if (userSearch != null && !userSearch.trim().isEmpty()) {
+            usersPage = userRepository.findByUsernameContainingIgnoreCaseOrFullNameContainingIgnoreCase(
+                    userSearch.trim(), userSearch.trim(), PageRequest.of(userPage, userSize, Sort.by("username")));
+        } else {
+            usersPage = userRepository.findAll(PageRequest.of(userPage, userSize, Sort.by("username")));
+        }
 
-        long totalStorage = users.stream().mapToLong(User::getUsedStorageBytes).sum();
+        // Active Streams
+        Page<StreamJob> streamsPage = streamJobRepo.findAllByIsLiveTrue(PageRequest.of(streamPage, streamSize));
+
+        // Tickets
+        Page<SupportTicket> ticketsPage = supportTicketRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(ticketPage, ticketSize));
+
+        // Stats
+        long totalStorage = userRepository.sumUsedStorageBytes();
         String formattedStorage = String.format("%.2f GB", totalStorage / (1024.0 * 1024.0 * 1024.0));
 
         Double totalUnpaid = userRepository.sumUnpaidBalance();
         Long completedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("COMPLETED");
         Long initiatedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("INITIATED");
-        // Also check PENDING if needed, but SDK usually sets INITIATED then COMPLETED/FAILED
 
-        // Convert paise to Rupees
         double completedPayments = completedPaymentsPaise != null ? completedPaymentsPaise / 100.0 : 0.0;
         double pendingPayments = initiatedPaymentsPaise != null ? initiatedPaymentsPaise / 100.0 : 0.0;
 
-        model.addAttribute("users", users);
-        model.addAttribute("activeStreamList", activeStreams);
-        model.addAttribute("supportTickets", tickets);
+        model.addAttribute("users", usersPage); // Now a Page object
+        model.addAttribute("activeStreamList", streamsPage); // Now a Page object
+        model.addAttribute("supportTickets", ticketsPage); // Now a Page object
+        model.addAttribute("userSearch", userSearch);
+        model.addAttribute("activeTab", tab); // Pass tab to frontend
+
         model.addAttribute("stats", Map.of(
-            "totalUsers", users.size(),
-            "activeStreams", activeStreams.size(),
+            "totalUsers", userRepository.count(),
+            "activeStreams", streamJobRepo.countByIsLiveTrue(),
             "formattedStorage", formattedStorage,
-            "openTickets", tickets.stream().filter(t -> "OPEN".equals(t.getStatus())).count(),
+            "openTickets", supportTicketRepository.countByStatus("OPEN"),
             "totalUnpaid", String.format("%.2f INR", totalUnpaid != null ? totalUnpaid : 0.0),
             "completedPayments", String.format("%.2f INR", completedPayments),
             "pendingPayments", String.format("%.2f INR", pendingPayments)

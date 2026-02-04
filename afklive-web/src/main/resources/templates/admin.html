@@ -23,7 +23,7 @@
         }
     </script>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans" x-data="{ activeTab: 'overview', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false, showLimitModal: false, selectedUser: null }">
+<body class="bg-gray-50 text-gray-900 font-sans" th:x-data="|{ activeTab: '${activeTab}', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false, showLimitModal: false, selectedUser: null }|">
 
     <div class="min-h-screen flex flex-col">
         <!-- Header -->
@@ -167,7 +167,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr th:each="ticket : ${supportTickets}" class="hover:bg-gray-50 transition">
+                                <tr th:each="ticket : ${supportTickets.content}" class="hover:bg-gray-50 transition">
                                     <td class="px-6 py-4 text-sm text-gray-500" th:text="${#temporals.format(ticket.createdAt, 'yyyy-MM-dd HH:mm')}">Date</td>
                                     <td class="px-6 py-4 text-sm font-medium text-gray-900" th:text="${ticket.userEmail}">user</td>
                                     <td class="px-6 py-4 text-sm text-gray-600">
@@ -211,11 +211,25 @@
                             </tbody>
                         </table>
                         </div>
+
+                        <!-- Pagination -->
+                        <div class="flex justify-between items-center mt-4" th:if="${supportTickets.totalPages > 1}">
+                            <span class="text-sm text-gray-500">
+                                Page <span th:text="${supportTickets.number + 1}">1</span> of <span th:text="${supportTickets.totalPages}">10</span>
+                            </span>
+                            <div class="flex gap-2">
+                                <a th:if="${!supportTickets.first}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                                <button th:if="${supportTickets.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+
+                                <a th:if="${!supportTickets.last}" th:href="@{/admin(tab='support', ticketPage=${supportTickets.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                                <button th:if="${supportTickets.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Mobile Card View -->
                     <div class="md:hidden space-y-4">
-                        <div th:each="ticket : ${supportTickets}" class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                        <div th:each="ticket : ${supportTickets.content}" class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                             <div class="flex justify-between items-start mb-3">
                                 <div>
                                     <span class="text-xs text-gray-500 block mb-1" th:text="${#temporals.format(ticket.createdAt, 'yyyy-MM-dd HH:mm')}">Date</span>
@@ -275,7 +289,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr th:each="stream : ${activeStreamList}" class="hover:bg-gray-50 transition">
+                                <tr th:each="stream : ${activeStreamList.content}" class="hover:bg-gray-50 transition">
                                     <td class="px-6 py-4 text-sm font-medium text-gray-900" th:text="${stream.username}">user</td>
                                     <td class="px-6 py-4 text-sm text-gray-600" th:text="${stream.title}">Title</td>
                                     <td class="px-6 py-4 text-sm text-gray-500" th:text="${#temporals.format(stream.startTime, 'HH:mm:ss')}">10:00</td>
@@ -291,12 +305,34 @@
                             </tbody>
                         </table>
                         </div>
+
+                        <!-- Pagination -->
+                        <div class="flex justify-between items-center mt-4" th:if="${activeStreamList.totalPages > 1}">
+                            <span class="text-sm text-gray-500">
+                                Page <span th:text="${activeStreamList.number + 1}">1</span> of <span th:text="${activeStreamList.totalPages}">10</span>
+                            </span>
+                            <div class="flex gap-2">
+                                <a th:if="${!activeStreamList.first}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number - 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                                <button th:if="${activeStreamList.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+
+                                <a th:if="${!activeStreamList.last}" th:href="@{/admin(tab='streams', streamPage=${activeStreamList.number + 1})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                                <button th:if="${activeStreamList.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- USERS -->
                 <div x-show="activeTab === 'users'" class="space-y-6 animate-fade-in" style="display:none;">
-                    <h2 class="text-2xl font-bold">User Management</h2>
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-2xl font-bold">User Management</h2>
+                        <form action="/admin" method="get" class="flex gap-2">
+                            <input type="hidden" name="tab" value="users">
+                            <input type="text" name="userSearch" placeholder="Search users..." th:value="${userSearch}" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Search</button>
+                            <a href="/admin?tab=users" th:if="${userSearch != null && !userSearch.isEmpty()}" class="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">Clear</a>
+                        </form>
+                    </div>
 
                     <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
                         <div class="overflow-x-auto">
@@ -314,7 +350,7 @@
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
-                                    <tr th:each="user : ${users}" class="hover:bg-gray-50 transition">
+                                    <tr th:each="user : ${users.content}" class="hover:bg-gray-50 transition">
                                         <td class="px-6 py-4">
                                             <div class="flex items-center gap-3">
                                                 <img th:src="${user.pictureUrl}" class="w-8 h-8 rounded-full bg-gray-200 object-cover">
@@ -366,6 +402,20 @@
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="flex justify-between items-center px-6 py-4 border-t border-gray-200" th:if="${users.totalPages > 1}">
+                            <span class="text-sm text-gray-500">
+                                Page <span th:text="${users.number + 1}">1</span> of <span th:text="${users.totalPages}">10</span>
+                            </span>
+                            <div class="flex gap-2">
+                                <a th:if="${!users.first}" th:href="@{/admin(tab='users', userPage=${users.number - 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Prev</a>
+                                <button th:if="${users.first}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Prev</button>
+
+                                <a th:if="${!users.last}" th:href="@{/admin(tab='users', userPage=${users.number + 1}, userSearch=${userSearch})}" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm">Next</a>
+                                <button th:if="${users.last}" class="px-3 py-1 bg-gray-100 border rounded text-gray-400 text-sm cursor-not-allowed">Next</button>
+                            </div>
                         </div>
                     </div>
                 </div>
