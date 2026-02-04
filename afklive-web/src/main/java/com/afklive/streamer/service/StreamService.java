@@ -94,6 +94,40 @@ public class StreamService {
              throw new IllegalArgumentException("At least one valid destination stream key is required.");
         }
 
+        // Validate Keys (SSRF Protection)
+        for (String key : validKeys) {
+             if (key.startsWith("rtmp://") || key.startsWith("rtmps://")) {
+                  try {
+                      java.net.URI uri = new java.net.URI(key);
+                      String host = uri.getHost();
+                      if (host == null) throw new IllegalArgumentException("Invalid Stream URL");
+
+                      // Remove brackets from IPv6 if present
+                      if (host.startsWith("[") && host.endsWith("]")) {
+                          host = host.substring(1, host.length() - 1);
+                      }
+
+                      if (host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("::1") || host.startsWith("192.168.") || host.startsWith("10.")) {
+                           throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
+                      }
+
+                      if (host.startsWith("172.")) {
+                          String[] parts = host.split("\\.");
+                          if (parts.length >= 2) {
+                              try {
+                                  int second = Integer.parseInt(parts[1]);
+                                  if (second >= 16 && second <= 31) {
+                                      throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
+                                  }
+                              } catch (NumberFormatException ignored) {}
+                          }
+                      }
+                  } catch (java.net.URISyntaxException e) {
+                      throw new IllegalArgumentException("Invalid Stream URL syntax");
+                  }
+             }
+        }
+
         // 1. SAFETY CHECK: Check DB to see if this user is already live
         // Also check quota limits
         int activeCount = (int) streamJobRepo.countByUsernameAndIsLiveTrue(username);
@@ -155,6 +189,10 @@ public class StreamService {
         // 3. Build the FFmpeg Command
         Path musicPath = null;
         if (musicName != null && !musicName.isEmpty()) {
+            if (musicName.contains("..") || musicName.contains("/") || musicName.contains("\\")) {
+                throw new IllegalArgumentException("Invalid music filename");
+            }
+
             if (musicName.startsWith("stock:")) {
                 String trackId = musicName.substring(6); // remove "stock:"
                 musicPath = audioService.getAudioPath(trackId);
@@ -488,6 +526,11 @@ public class StreamService {
     }
 
     public void addLog(String line) {
+        if (line != null) {
+            // Redact RTMP keys/URLs
+            line = line.replaceAll("rtmp://[^\\s]+", "rtmp://[REDACTED]");
+        }
+
         if (logBuffer.size() > 50) {
             logBuffer.removeFirst();
         }
