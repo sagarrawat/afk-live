@@ -139,7 +139,7 @@ public class EmailService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Zoho-enczapikey " + zeptoMailToken);
+            headers.set("Authorization", zeptoMailToken);
             headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
 
             HttpEntity<EmailRequest> entity = new HttpEntity<>(request, headers);
