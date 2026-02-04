@@ -61,8 +61,19 @@ public class EmailService {
                // Header with Logo
                "<tr><td style='padding: 30px 30px 20px 30px; text-align: left;'>" +
                    "<a href='" + baseUrl + "' style='text-decoration: none; display: inline-block;'>" +
-                       "<span style='font-size: 24px; line-height: 24px;'>🔴</span> " +
-                       "<span style='font-size: 24px; font-weight: 800; color: #1a1a2e; font-family: sans-serif; vertical-align: middle;'>AFK<span style='color: #667eea;'>Live</span></span>" +
+                       "<table border='0' cellpadding='0' cellspacing='0' style='margin: 0; padding: 0;'>" +
+                           "<tr>" +
+                               "<td style='padding-right: 12px; vertical-align: middle;'>" +
+                                   // CSS Icon
+                                   "<div style='width: 32px; height: 32px; border: 3px solid transparent; border-top-color: #667eea; border-right-color: #764ba2; border-radius: 50%; box-sizing: border-box; position: relative;'>" +
+                                       "<div style='width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent #764ba2; position: absolute; top: 8px; left: 12px;'></div>" +
+                                   "</div>" +
+                               "</td>" +
+                               "<td style='vertical-align: middle;'>" +
+                                   "<span style='font-size: 24px; font-weight: 800; color: #1a1a2e; font-family: sans-serif; line-height: 32px;'>AFK<span style='color: #667eea;'>Live</span></span>" +
+                               "</td>" +
+                           "</tr>" +
+                       "</table>" +
                    "</a>" +
                "</td></tr>" +
 
