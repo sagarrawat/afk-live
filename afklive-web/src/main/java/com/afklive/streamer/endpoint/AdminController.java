@@ -156,12 +156,14 @@ public class AdminController {
     @PostMapping("/plans/update")
     public String updatePlan(@RequestParam PlanType planType,
                              @RequestParam String displayName,
-                             @RequestParam long maxStorageBytes,
+                             @RequestParam String price,
+                             @RequestParam double maxStorageGB,
                              @RequestParam int maxScheduledPosts,
                              @RequestParam int maxActiveStreams,
                              @RequestParam int maxChannels,
                              @RequestParam int maxResolution) {
-        PlanConfig config = new PlanConfig(planType, displayName, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution);
+        long maxStorageBytes = (long) (maxStorageGB * 1024 * 1024 * 1024);
+        PlanConfig config = new PlanConfig(planType, displayName, price, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution);
         planService.updatePlan(config);
         return "redirect:/admin?tab=plans";
     }

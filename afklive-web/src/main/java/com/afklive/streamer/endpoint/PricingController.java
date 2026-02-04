@@ -33,8 +33,7 @@ public class PricingController {
         for (PlanConfig p : configs) {
             if (p.getPlanType() == PlanType.TEAM) continue; // Skip Team for now
 
-            String price = "₹0";
-            if (p.getPlanType() == PlanType.ESSENTIALS) price = "₹199";
+            String price = p.getPrice() != null ? p.getPrice() : "₹0";
 
             List<String> features = new java.util.ArrayList<>();
             features.add(p.getMaxChannels() + " Channels");

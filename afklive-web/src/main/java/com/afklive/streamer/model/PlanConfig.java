@@ -16,6 +16,7 @@ public class PlanConfig {
     private PlanType planType;
 
     private String displayName;
+    private String price;
     private long maxStorageBytes;
     private int maxScheduledPosts;
     private int maxActiveStreams;

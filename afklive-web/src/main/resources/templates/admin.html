@@ -155,6 +155,7 @@
                                 <thead class="bg-gray-50 border-b border-gray-200">
                                     <tr>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Plan Name</th>
+                                        <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Price</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Storage</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Streams</th>
                                         <th class="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Channels</th>
@@ -165,6 +166,7 @@
                                 <tbody class="divide-y divide-gray-100">
                                     <tr th:each="plan : ${plans}" class="hover:bg-gray-50 transition">
                                         <td class="px-6 py-4 text-sm font-medium text-gray-900" th:text="${plan.displayName}">Name</td>
+                                        <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.price}">Price</td>
                                         <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.maxStorageBytes / (1024*1024*1024)} + ' GB'">Storage</td>
                                         <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.maxActiveStreams == 2147483647 ? 'Unlimited' : plan.maxActiveStreams}">Streams</td>
                                         <td class="px-6 py-4 text-sm text-gray-600" th:text="${plan.maxChannels}">Channels</td>
@@ -173,6 +175,7 @@
                                             <button
                                                 th:data-type="${plan.planType}"
                                                 th:data-name="${plan.displayName}"
+                                                th:data-price="${plan.price}"
                                                 th:data-storage="${plan.maxStorageBytes}"
                                                 th:data-streams="${plan.maxActiveStreams}"
                                                 th:data-channels="${plan.maxChannels}"
@@ -181,7 +184,8 @@
                                                 @click="selectedPlan = {
                                                     type: $el.getAttribute('data-type'),
                                                     name: $el.getAttribute('data-name'),
-                                                    storage: $el.getAttribute('data-storage'),
+                                                    price: $el.getAttribute('data-price'),
+                                                    storage: $el.getAttribute('data-storage') / (1024*1024*1024),
                                                     streams: $el.getAttribute('data-streams'),
                                                     channels: $el.getAttribute('data-channels'),
                                                     posts: $el.getAttribute('data-posts'),
@@ -589,9 +593,12 @@
 
                     <div class="grid grid-cols-2 gap-4 mb-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Max Storage (Bytes)</label>
-                            <input type="number" name="maxStorageBytes" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedPlan.storage">
-                            <p class="text-xs text-gray-500 mt-1" x-text="(selectedPlan?.storage / (1024*1024*1024)).toFixed(2) + ' GB'"></p>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                            <input type="text" name="price" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedPlan.price">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Max Storage (GB)</label>
+                            <input type="number" step="0.01" name="maxStorageGB" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedPlan.storage">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Max Active Streams</label>
