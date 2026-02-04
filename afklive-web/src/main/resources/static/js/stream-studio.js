@@ -19,7 +19,7 @@ document.addEventListener('alpine:init', () => {
 
         // Controls
         loopVideo: true,
-        muteOriginal: true,
+        muteOriginal: false,
 
         // Audio State
         audioTab: 'upload',
@@ -43,6 +43,11 @@ document.addEventListener('alpine:init', () => {
             this.loadAudioLibrary();
             window.addEventListener('destination-added', () => this.loadDestinations());
             window.alpineStudio = this;
+
+            // Watchers to ensure unmute if no audio selected
+            this.$watch('uploadedMusicName', v => { if(!v && !this.selectedStockId && !this.selectedLibraryMusicName) this.muteOriginal = false; });
+            this.$watch('selectedStockId', v => { if(!v && !this.uploadedMusicName && !this.selectedLibraryMusicName) this.muteOriginal = false; });
+            this.$watch('selectedLibraryMusicName', v => { if(!v && !this.uploadedMusicName && !this.selectedStockId) this.muteOriginal = false; });
         },
 
         // --- TABS & UI ---
@@ -79,7 +84,8 @@ document.addEventListener('alpine:init', () => {
             try {
                 const res = await apiFetch('/api/library');
                 const data = await res.json();
-                this.libraryVideos = data.data || [];
+                // Filter out audio files
+                this.libraryVideos = (data.data || []).filter(v => !v.title.match(/\.(mp3|wav|aac|flac|m4a)$/i));
             } catch(e) {
                 console.error(e);
                 showToast("Failed to load library", "error");

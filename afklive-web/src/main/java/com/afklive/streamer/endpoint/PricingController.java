@@ -31,7 +31,10 @@ public class PricingController {
         List<PlanConfig> configs = planService.getAllPlans();
 
         for (PlanConfig p : configs) {
-            String price = p.getPrice() != null ? p.getPrice() : "₹0";
+            String price = p.getPrice() != null ? p.getPrice() : "0";
+            if (!price.startsWith("₹") && !price.startsWith("$") && !price.equals("Free")) {
+                price = "₹" + price;
+            }
 
             List<String> features = new java.util.ArrayList<>();
             features.add(p.getMaxChannels() + " Channels");

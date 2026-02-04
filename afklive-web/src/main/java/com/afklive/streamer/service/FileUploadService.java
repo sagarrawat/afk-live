@@ -23,6 +23,21 @@ public class FileUploadService {
         String originalName = file.getOriginalFilename();
         String fileName = generateProcessedFileName(originalName);
 
+        // Ensure unique filename
+        String baseName = fileName;
+        String extension = "";
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            baseName = fileName.substring(0, dotIndex);
+            extension = fileName.substring(dotIndex);
+        }
+
+        int counter = 1;
+        while (repository.findByUsernameAndTitle(username, fileName).isPresent()) {
+            fileName = baseName + "-" + counter + extension;
+            counter++;
+        }
+
         long size = file.getSize();
         userService.checkStorageQuota(username, size);
 

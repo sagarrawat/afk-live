@@ -107,6 +107,34 @@ function switchView(viewName) {
     const target = document.getElementById(`view-${viewName}`);
     if(target) target.classList.remove('hidden');
 
+    // Check Channel Requirement for Analytics/Engagement
+    const overlayId = 'noChannelOverlay';
+    let overlay = document.getElementById(overlayId);
+
+    if ((viewName === 'community' || viewName === 'analytics') && !selectedChannelId) {
+        showToast("Connect channel to see", "warning");
+        if(target) {
+            target.style.opacity = '0.3';
+            target.style.pointerEvents = 'none';
+        }
+        if(!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = overlayId;
+            overlay.className = 'absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white px-6 py-4 rounded-xl shadow-xl font-bold text-gray-700 z-50 flex flex-col items-center gap-2';
+            overlay.innerHTML = '<i class="fa-solid fa-link text-2xl text-blue-500"></i><span>Connect channel to see</span>';
+            document.querySelector('.content-area').appendChild(overlay);
+            // Position relative to content area
+            document.querySelector('.content-area').style.position = 'relative';
+        }
+        overlay.classList.remove('hidden');
+    } else {
+        if(target) {
+            target.style.opacity = '';
+            target.style.pointerEvents = '';
+        }
+        if(overlay) overlay.classList.add('hidden');
+    }
+
     // Update Menu Active State
     document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
     document.querySelector(`[data-target="view-${viewName}"]`)?.classList.add('active');
@@ -615,8 +643,8 @@ function filterViewByChannel(channel) {
     selectedChannelId = channel.id || null;
 
     // Refresh active view
-    if(!document.getElementById('view-analytics').classList.contains('hidden')) initAnalytics();
-    if(!document.getElementById('view-community').classList.contains('hidden')) loadComments();
+    const currentView = localStorage.getItem('activeView');
+    if(currentView) switchView(currentView);
 
     showToast(`Switched to ${channel.name}`, 'info');
 }
@@ -907,6 +935,7 @@ async function loadScheduledQueue() {
         list.innerHTML = '';
         if(videos.length === 0) { list.innerHTML = `<div class="empty-state">No posts in queue.</div>`; return; }
         videos.forEach(v => {
+            if (v.status === 'LIBRARY') return;
             const statusClass = v.status === 'UPLOADED' ? 'color:#00875a' : (v.status === 'FAILED' ? 'color:#e02424' : 'color:#6b778c');
             const thumbUrl = v.thumbnailS3Key ? `${API_URL}/videos/${v.id}/thumbnail` : null;
             const thumbHtml = thumbUrl ? `<img src="${thumbUrl}" style="width:100%;height:100%;object-fit:cover;">` : `<i class="fa-solid fa-film"></i>`;
