@@ -107,7 +107,9 @@ public class EngagementService {
             if (!youTubeService.isConnected(user.getUsername())) return;
 
             CommentThreadListResponse response = youTubeService.getCommentThreads(user.getUsername());
-            if (response.getItems() == null || response.getItems().isEmpty()) return;
+
+            // Handle 304 Not Modified or empty response
+            if (response == null || response.getItems() == null || response.getItems().isEmpty()) return;
 
             // Optimization: Fetch all existing comment IDs in one query to avoid N+1 problem
             List<String> commentIds = response.getItems().stream()
