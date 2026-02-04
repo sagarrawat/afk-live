@@ -16,7 +16,7 @@ public class EngagementActivity {
     private String videoId;
     private String createdCommentId; // The ID of the NEW comment created (for replies)
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 2000)
     private String content; // Reply text or original comment text if deleted
 
     private LocalDateTime timestamp = LocalDateTime.now();

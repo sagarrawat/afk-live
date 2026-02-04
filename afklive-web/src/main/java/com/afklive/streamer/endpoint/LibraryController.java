@@ -19,9 +19,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 
 import java.io.InputStream;
 import java.time.LocalDate;
@@ -165,21 +162,15 @@ public class LibraryController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getLibraryVideos(
-            java.security.Principal principal,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) {
+    public ResponseEntity<?> getLibraryVideos(java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
 
-        Page<ScheduledVideo> videoPage = repository.findByUsernameAndStatus(
-                username,
-                ScheduledVideo.VideoStatus.LIBRARY,
-                PageRequest.of(page, size, Sort.by("id").descending())
-        );
+        List<ScheduledVideo> videos = repository.findByUsername(username).stream()
+                .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
+                .collect(Collectors.toList());
 
-        return ResponseEntity.ok(ApiResponse.success("Library fetched", videoPage));
+        return ResponseEntity.ok(ApiResponse.success("Library fetched", videos));
     }
 
     @GetMapping("/stream/{id}")

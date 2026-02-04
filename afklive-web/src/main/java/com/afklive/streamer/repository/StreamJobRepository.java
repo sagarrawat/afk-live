@@ -1,8 +1,6 @@
 package com.afklive.streamer.repository;
 
 import com.afklive.streamer.model.StreamJob;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -16,8 +14,6 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     // Admin: Find ALL live jobs
     List<StreamJob> findAllByIsLiveTrue();
-    Page<StreamJob> findAllByIsLiveTrue(Pageable pageable);
-    long countByIsLiveTrue();
 
     // Auto-Reply
     List<StreamJob> findByIsLiveTrueAndAutoReplyEnabledTrue();

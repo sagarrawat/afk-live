@@ -158,37 +158,6 @@ document.addEventListener('alpine:init', () => {
             } catch (e) {
                 showToast("Cancellation failed", "error");
             }
-        },
-
-        formatCurrency(value) {
-            return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value);
-        },
-
-        async payBalance() {
-            if (!this.user || this.user.unpaidBalance <= 0) return;
-
-            try {
-                // Calculate amount in paise (100 * INR)
-                const amountInPaise = Math.round(this.user.unpaidBalance * 100);
-
-                const res = await apiFetch('/api/payment/initiate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        planId: 'BALANCE_CLEAR',
-                        amount: amountInPaise
-                    })
-                });
-                const data = await res.json();
-
-                if (data.redirectUrl) {
-                    window.location.href = data.redirectUrl;
-                } else {
-                    showToast(data.message || "Payment initiation failed", "error");
-                }
-            } catch (e) {
-                showToast("Payment Error: " + e.message, "error");
-            }
         }
     }));
 });

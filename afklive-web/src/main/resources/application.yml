@@ -33,7 +33,7 @@ spring:
               - https://www.googleapis.com/auth/youtube.force-ssl
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:afklive}
     driver-class-name: org.postgresql.Driver
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD:password}
@@ -69,11 +69,8 @@ rate-limiter:
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
   email:
-    support: ${APP_EMAIL_SUPPORT}
-    no-reply: ${APP_EMAIL_NO_REPLY}
-  zeptomail:
-    url: ${ZEPTOMAIL_URL}
-    token: ${ZEPTOMAIL_TOKEN}
+    support: ${APP_EMAIL_SUPPORT:support@afklive.in}
+    no-reply: ${APP_EMAIL_NO_REPLY:no-reply@afklive.in}
   gemini:
     key: ${GEMINI_API_KEY:}
   storage:
@@ -89,8 +86,8 @@ app:
     region: eu-north-1
     function-name: afklive-optimizer-lambda
   phonepe:
-    merchant-id: ${PHONEPE_MERCHANT_ID}
-    salt-key: ${PHONEPE_SALT_KEY}
+    merchant-id: ${PHONEPE_MERCHANT_ID:PGTESTPAYUAT}
+    salt-key: ${PHONEPE_SALT_KEY:099eb0cd-02cf-4e2a-8aca-3e6c6aff0399}
     salt-index: ${PHONEPE_SALT_INDEX:1}
     salt-env: ${PHONEPE_ENV:https://api-preprod.phonepe.com/apis/pg-sandbox}
 server:

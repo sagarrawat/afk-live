@@ -11,7 +11,6 @@ document.addEventListener('alpine:init', () => {
         libPage: 1,
         libLimit: 20,
         libTotal: 0,
-        libTotalPages: 0,
 
         // Calendar State
         calendarLoaded: false,
@@ -58,13 +57,10 @@ document.addEventListener('alpine:init', () => {
         async loadLibrary() {
             this.isLoadingLibrary = true;
             try {
-                const res = await apiFetch(`/api/library?page=${this.libPage - 1}&size=${this.libLimit}`);
+                const res = await apiFetch('/api/library');
                 const data = await res.json();
-
-                const pageData = data.data; // Page object
-                this.libraryVideos = (pageData.content || []).map(v => ({...v, progress: 0}));
-                this.libTotal = pageData.totalElements;
-                this.libTotalPages = pageData.totalPages;
+                this.libraryVideos = (data.data || []).map(v => ({...v, progress: 0}));
+                this.libTotal = this.libraryVideos.length;
 
                 // Check if any need polling
                 if (this.libraryVideos.some(v => v.optimizationStatus === 'IN_PROGRESS')) {

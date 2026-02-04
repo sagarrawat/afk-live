@@ -187,17 +187,6 @@
                             </div>
                         </template>
                     </div>
-
-                    <!-- Pagination -->
-                    <div class="flex justify-between items-center py-4 border-t border-gray-200 mb-10" x-show="!isLoadingLibrary && libTotal > libLimit">
-                         <span class="text-sm text-gray-500">
-                             Page <span x-text="libPage"></span> of <span x-text="libTotalPages"></span>
-                         </span>
-                         <div class="flex gap-2">
-                             <button @click="libPage--; loadLibrary()" :disabled="libPage <= 1" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed">Prev</button>
-                             <button @click="libPage++; loadLibrary()" :disabled="libPage >= libTotalPages" class="px-3 py-1 bg-white border rounded hover:bg-gray-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
-                         </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -846,8 +835,7 @@
                         <template x-for="item in [
                             {id: 'general', icon: 'fa-user', label: 'General'},
                             {id: 'channels', icon: 'fa-share-nodes', label: 'Channels'},
-                            {id: 'plans', icon: 'fa-credit-card', label: 'Plan & Billing'},
-                            {id: 'usage', icon: 'fa-file-invoice-dollar', label: 'Billing'}
+                            {id: 'plans', icon: 'fa-credit-card', label: 'Plan & Billing'}
                         ]">
                             <button @click="switchTab(item.id)"
                                 class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
@@ -1019,38 +1007,6 @@
                                             </button>
                                         </div>
                                     </template>
-                                </div>
-                            </section>
-                        </div>
-
-                        <!-- TAB: USAGE (BILLING) -->
-                        <div x-show="activeTab === 'usage'" class="p-8 animate-fade-in space-y-8 overflow-y-auto">
-                            <section>
-                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Pay As You Go Balance</h3>
-
-                                <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-                                    <div class="flex justify-between items-start">
-                                        <div>
-                                            <p class="text-sm text-gray-500 uppercase tracking-wider font-medium">Unpaid Balance</p>
-                                            <div class="text-4xl font-bold text-gray-900 mt-2" x-text="formatCurrency(user?.unpaidBalance || 0)">₹0.00</div>
-                                            <p class="text-xs text-gray-400 mt-1" x-show="user?.creditLimit">Credit Limit: <span x-text="formatCurrency(user?.creditLimit)"></span></p>
-                                        </div>
-
-                                        <div class="text-right">
-                                            <button @click="payBalance()"
-                                                class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg shadow-green-500/30 transition transform active:scale-95"
-                                                :disabled="(user?.unpaidBalance || 0) <= 0"
-                                                :class="(user?.unpaidBalance || 0) <= 0 ? 'opacity-50 cursor-not-allowed' : ''">
-                                                Pay Now
-                                            </button>
-                                            <p class="text-xs text-gray-400 mt-2" x-show="(user?.unpaidBalance || 0) > 0">Clear your balance to continue streaming</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-6 pt-6 border-t border-gray-100">
-                                        <h4 class="text-sm font-semibold text-gray-800 mb-3">Usage History</h4>
-                                        <p class="text-sm text-gray-500 italic">Detailed usage logs coming soon.</p>
-                                    </div>
                                 </div>
                             </section>
                         </div>

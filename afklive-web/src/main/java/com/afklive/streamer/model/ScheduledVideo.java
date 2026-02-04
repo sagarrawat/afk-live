@@ -18,7 +18,6 @@ public class ScheduledVideo {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(columnDefinition = "TEXT")
     private String tags;
     private String privacyStatus;
     private String categoryId;
@@ -28,7 +27,6 @@ public class ScheduledVideo {
     private String thumbnailS3Key;
     private String youtubeVideoId;
 
-    @Column(columnDefinition = "TEXT")
     private String firstComment;
 
     private Long fileSize; // in bytes
@@ -38,7 +36,6 @@ public class ScheduledVideo {
     @Enumerated(EnumType.STRING)
     private VideoStatus status = VideoStatus.PENDING;
 
-    @Column(columnDefinition = "TEXT")
     private String errorMessage;
 
     @Enumerated(EnumType.STRING)

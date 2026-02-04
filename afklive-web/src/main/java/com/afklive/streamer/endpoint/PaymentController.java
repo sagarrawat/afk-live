@@ -59,24 +59,13 @@ public class PaymentController {
 
             long amount = 100; // Default fallback
             if (planId != null) {
-                if ("BALANCE_CLEAR".equals(planId)) {
-                    if (body != null && body.containsKey("amount")) {
-                        amount = Long.parseLong(body.get("amount").toString());
-                        if (amount <= 0) {
-                            return ResponseEntity.badRequest().body(Map.of("message", "Amount must be positive"));
-                        }
-                    } else {
-                        return ResponseEntity.badRequest().body(Map.of("message", "Amount required for balance clear"));
+                try {
+                    PlanType plan = PlanType.valueOf(planId);
+                    if (plan == PlanType.ESSENTIALS) {
+                        amount = 19900; // 199 INR
                     }
-                } else {
-                    try {
-                        PlanType plan = PlanType.valueOf(planId);
-                        if (plan == PlanType.ESSENTIALS) {
-                            amount = 19900; // 199 INR
-                        }
-                    } catch (IllegalArgumentException e) {
-                        return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
-                    }
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
                 }
             } else if (body != null && body.containsKey("amount")) {
                 amount = Long.parseLong(body.get("amount").toString());
@@ -138,18 +127,12 @@ public class PaymentController {
                              log.info("Updated PaymentAudit for TxnId={}: Status={}", merchantTransactionId, state);
 
                              if ("COMPLETED".equals(state) && audit.getPlanId() != null) {
-                                 if ("BALANCE_CLEAR".equals(audit.getPlanId())) {
-                                     double rupees = audit.getAmount() / 100.0;
-                                     userService.clearUnpaidBalance(audit.getMerchantUserId(), rupees);
-                                     log.info("Cleared balance: {} INR for {}", rupees, audit.getMerchantUserId());
-                                 } else {
-                                     try {
-                                         PlanType plan = PlanType.valueOf(audit.getPlanId());
-                                         userService.updatePlan(audit.getMerchantUserId(), plan);
-                                         log.info("Successfully upgraded user {} to plan {}", audit.getMerchantUserId(), plan);
-                                     } catch (Exception e) {
-                                         log.error("Failed to upgrade user plan after successful payment", e);
-                                     }
+                                 try {
+                                     PlanType plan = PlanType.valueOf(audit.getPlanId());
+                                     userService.updatePlan(audit.getMerchantUserId(), plan);
+                                     log.info("Successfully upgraded user {} to plan {}", audit.getMerchantUserId(), plan);
+                                 } catch (Exception e) {
+                                     log.error("Failed to upgrade user plan after successful payment", e);
                                  }
                              }
                          });
