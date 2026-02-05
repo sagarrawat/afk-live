@@ -33,7 +33,14 @@ import static org.assertj.core.api.Assertions.assertThat;
     "GOOGLE_CLIENT_ID=test",
     "GOOGLE_CLIENT_SECRET=test",
     "GOOGLE_YOUTUBE_CLIENT_ID=test",
-    "GOOGLE_YOUTUBE_CLIENT_SECRET=test"
+    "GOOGLE_YOUTUBE_CLIENT_SECRET=test",
+    "spring.security.oauth2.client.registration.google.client-id=test",
+    "spring.security.oauth2.client.registration.google.client-secret=test",
+    "spring.security.oauth2.client.registration.google-youtube.client-id=test",
+    "spring.security.oauth2.client.registration.google-youtube.client-secret=test",
+    "spring.security.oauth2.client.registration.google-youtube.provider=google",
+    "spring.security.oauth2.client.registration.google-youtube.authorization-grant-type=authorization_code",
+    "spring.security.oauth2.client.registration.google-youtube.redirect-uri={baseUrl}/login/oauth2/code/{registrationId}"
 })
 @ActiveProfiles("test")
 public class StreamServiceBenchmarkTest {
