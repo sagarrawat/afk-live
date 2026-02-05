@@ -33,7 +33,7 @@ spring:
               - https://www.googleapis.com/auth/youtube.force-ssl
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:afkdb}
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:afkdb}?reWriteBatchedInserts=true
     driver-class-name: org.postgresql.Driver
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD:password}
