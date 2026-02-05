@@ -85,7 +85,8 @@ document.addEventListener('alpine:init', () => {
                 const res = await apiFetch('/api/library');
                 const data = await res.json();
                 // Filter out audio files
-                this.libraryVideos = (data.data || []).filter(v => !v.title.match(/\.(mp3|wav|aac|flac|m4a)$/i));
+                const items = (data.data && data.data.content) ? data.data.content : (data.data || []);
+                this.libraryVideos = items.filter(v => !v.title.match(/\.(mp3|wav|aac|flac|m4a)$/i));
             } catch(e) {
                 console.error(e);
                 showToast("Failed to load library", "error");

@@ -1281,11 +1281,18 @@ async function loadLibraryVideos() {
     try {
         const res = await apiFetch(`${API_URL}/library`);
         const result = await res.json();
-        libraryPagination.data = result.data || [];
-        libraryPagination.total = libraryPagination.data.length;
+
+        if (result.data && result.data.content) {
+            libraryPagination.data = result.data.content;
+            libraryPagination.total = result.data.totalElements;
+        } else {
+            libraryPagination.data = result.data || [];
+            libraryPagination.total = libraryPagination.data.length;
+        }
+
         libraryPagination.page = 1;
         renderLibraryPage();
-    } catch(e){ list.innerHTML = '<div class="empty-state">Failed to load library.</div>'; }
+    } catch(e){ if(list) list.innerHTML = '<div class="empty-state">Failed to load library.</div>'; }
 }
 
 function renderLibraryPage() {
