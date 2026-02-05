@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
-@Table(name = "social_channels")
+@Table(name = "social_channels", indexes = {
+    @Index(name = "idx_social_user", columnList = "user_id")
+})
 public class SocialChannel {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

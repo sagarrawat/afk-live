@@ -4,7 +4,12 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_user_verif_token", columnList = "verification_token"),
+    @Index(name = "idx_user_reset_token", columnList = "reset_token"),
+    @Index(name = "idx_user_autoreply", columnList = "auto_reply_enabled"),
+    @Index(name = "idx_user_fullname", columnList = "full_name")
+})
 public class User {
     @Id
     private String username; // Email from OAuth

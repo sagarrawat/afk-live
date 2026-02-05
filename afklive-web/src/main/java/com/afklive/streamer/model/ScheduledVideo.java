@@ -4,7 +4,11 @@ import jakarta.persistence.*;
 import java.time.ZonedDateTime;
 
 @Entity
-@Table(name = "scheduled_videos")
+@Table(name = "scheduled_videos", indexes = {
+    @Index(name = "idx_schedvideo_user_status", columnList = "username, status"),
+    @Index(name = "idx_schedvideo_status_time", columnList = "status, scheduled_time"),
+    @Index(name = "idx_schedvideo_user_title", columnList = "username, title")
+})
 public class ScheduledVideo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
