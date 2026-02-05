@@ -1481,7 +1481,7 @@ function loadBenefits() {
 async function loadInternalPricing() {
     const grid = document.getElementById('internalPlanGrid');
     if(!grid) return;
-    grid.innerHTML = "Loading...";
+    grid.innerHTML = '<div class="col-span-full text-center py-10"><div class="afk-loader mb-2"><div class="afk-loader-play"></div></div><p class="text-gray-500">Loading plans...</p></div>';
     try {
         const res = await apiFetch('/api/pricing?country=US');
         const data = await res.json();
@@ -1604,6 +1604,21 @@ async function initAnalytics() {
     let url = `${API_URL}/analytics?range=${range}`;
     if(selectedChannelId) url += `&channelId=${selectedChannelId}`;
 
+    // Loader for chart
+    const chartCard = document.querySelector('.chart-card');
+    if(chartCard) {
+        let loader = document.getElementById('analyticsLoader');
+        if(!loader) {
+            loader = document.createElement('div');
+            loader.id = 'analyticsLoader';
+            loader.className = 'absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 backdrop-blur-sm rounded-lg';
+            loader.innerHTML = '<div class="afk-loader mb-2"><div class="afk-loader-play"></div></div><span class="text-sm text-gray-500">Loading data...</span>';
+            chartCard.style.position = 'relative';
+            chartCard.appendChild(loader);
+        }
+        loader.classList.remove('hidden');
+    }
+
     try {
         const res = await apiFetch(url);
         const data = await res.json();
@@ -1619,8 +1634,12 @@ async function initAnalytics() {
             document.getElementById('totalSubs').innerText = data.summary.totalSubs.toLocaleString();
             document.getElementById('totalWatchTime').innerText = (data.summary.totalWatchTime / 60).toFixed(1) + "h";
         }
+        const loader = document.getElementById('analyticsLoader');
+        if(loader) loader.classList.add('hidden');
     } catch(e) {
         console.error("Analytics fetch failed", e);
+        const loader = document.getElementById('analyticsLoader');
+        if(loader) loader.classList.add('hidden');
     }
 }
 
@@ -1664,6 +1683,10 @@ async function loadComments() {
     const listStudio = document.getElementById('studioChatList');
 
     if(!listMain && !listStudio) return;
+
+    const loaderHtml = '<div class="text-center py-10"><div class="afk-loader"><div class="afk-loader-play"></div></div></div>';
+    if(listMain && !listMain.children.length) listMain.innerHTML = loaderHtml;
+    if(listStudio && !listStudio.children.length) listStudio.innerHTML = loaderHtml;
 
     try {
         let url = `${API_URL}/comments`;

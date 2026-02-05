@@ -132,7 +132,7 @@
                 <!-- Queue List -->
                 <div class="flex-1 overflow-y-auto">
                     <div x-show="isLoadingQueue" class="text-center py-12 text-gray-500">
-                        <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i>
+                        <div class="afk-loader mb-2"><div class="afk-loader-play"></div></div>
                         <p>Loading queue...</p>
                     </div>
 
@@ -743,7 +743,7 @@
                 <div class="flex-1 overflow-y-auto">
                     <!-- Loading State -->
                     <div x-show="isLoadingLibrary" class="text-center py-20 text-gray-500">
-                        <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-4 text-blue-500"></i>
+                        <div class="afk-loader mb-4"><div class="afk-loader-play"></div></div>
                         <p>Loading your library...</p>
                     </div>
 
@@ -982,7 +982,8 @@
                             <section>
                                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Available Plans</h3>
                                 <div x-show="isLoading" class="text-center py-8 text-gray-500">
-                                    <i class="fa-solid fa-spinner fa-spin"></i> Loading plans...
+                                    <div class="afk-loader mb-2"><div class="afk-loader-play"></div></div>
+                                    <p>Loading plans...</p>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <template x-for="plan in plans" :key="plan.id">
@@ -1668,7 +1669,7 @@
 <!-- GLOBAL LOADER -->
 <div id="globalLoader" class="fixed inset-0 z-[300] bg-gray-900/50 backdrop-blur-sm flex items-center justify-center hidden" style="display: none;">
     <div class="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center animate-fade-in">
-        <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-600 mb-4"></i>
+        <div class="afk-loader mb-4"><div class="afk-loader-play"></div></div>
         <p class="font-medium text-gray-700 text-lg" id="globalLoaderText">Processing...</p>
     </div>
 </div>
