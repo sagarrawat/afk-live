@@ -31,7 +31,6 @@ public class StreamService {
     @Autowired
     private StreamJobRepository streamJobRepo;
 
-    public final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
     private final List<String> logBuffer =
             Collections.synchronizedList(new ArrayList<>());
 
