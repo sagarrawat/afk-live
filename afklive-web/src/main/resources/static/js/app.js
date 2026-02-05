@@ -558,6 +558,19 @@ async function submitJob() {
 async function apiFetch(url, options = {}) {
     let res;
     try {
+        // Attach CSRF Token
+        if (!options.method || (options.method.toUpperCase() !== 'GET' && options.method.toUpperCase() !== 'HEAD')) {
+            const csrfToken = getCookie('XSRF-TOKEN');
+            if (csrfToken) {
+                if (!options.headers) options.headers = {};
+                // Handle Headers object or plain object
+                if (options.headers instanceof Headers) {
+                    options.headers.append('X-XSRF-TOKEN', csrfToken);
+                } else {
+                    options.headers['X-XSRF-TOKEN'] = csrfToken;
+                }
+            }
+        }
         res = await fetch(url, options);
     } catch (e) {
         showToast("Network Error: " + (e.message || "Connection failed"), "error");
