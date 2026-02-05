@@ -84,11 +84,15 @@ public class EngagementService {
                     // Generate Reply
                     String reply = aiService.generateTwitterStyleReply(text);
 
-                    // Send Reply
-                    youTubeService.replyToLiveChat(username, liveChatId, reply);
+                    if (reply != null) {
+                        // Send Reply
+                        youTubeService.replyToLiveChat(username, liveChatId, reply);
 
-                    // Log
-                    logActivity(username, "LIVE_REPLY", msg.getId(), liveChatId, reply, null);
+                        // Log
+                        logActivity(username, "LIVE_REPLY", msg.getId(), liveChatId, reply, null);
+                    } else {
+                        log.warn("AI failed to generate reply for msg: {}", msg.getId());
+                    }
                 }
             } else {
                 job.setLastPageToken(response.getNextPageToken());

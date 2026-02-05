@@ -29,7 +29,8 @@ public class AiService {
 
     public String generateTitle(String context) {
         if (isAiEnabled()) {
-            return callGemini("Generate exactly ONE catchy, viral YouTube video title about: " + context + ". Do not include any other text, quotes, or explanations.");
+            String title = callGemini("Generate exactly ONE catchy, viral YouTube video title about: " + context + ". Do not include any other text, quotes, or explanations.");
+            if (title != null) return title;
         }
         String[] templates = {
             "Amazing Video about " + context,
@@ -43,7 +44,8 @@ public class AiService {
 
     public String generateDescription(String title) {
         if (isAiEnabled()) {
-            return callGemini("Write a YouTube video description for a video titled: " + title + ". Do not include any other text.");
+            String desc = callGemini("Write a YouTube video description for a video titled: " + title + ". Do not include any other text.");
+            if (desc != null) return desc;
         }
         return "In this video, we dive deep into " + title + ". \n\n" +
                "Make sure to like and subscribe for more content about this topic! \n" +
@@ -52,7 +54,8 @@ public class AiService {
 
     public String generateTags(String context) {
         if (isAiEnabled()) {
-            return callGemini("Generate 10 comma-separated YouTube tags for a video about: " + context);
+            String tags = callGemini("Generate 10 comma-separated YouTube tags for a video about: " + context);
+            if (tags != null) return tags;
         }
         String base = context.toLowerCase().replaceAll("\\s+", ",");
         return base + ",viral,trending,2024,guide,tutorial,review";
@@ -64,7 +67,10 @@ public class AiService {
             CompletableFuture<String> titleFuture = CompletableFuture.supplyAsync(() -> generateTitle(context), executor);
             CompletableFuture<String> descFuture = titleFuture.thenApplyAsync(this::generateDescription, executor);
             CompletableFuture<String> tagsFuture = CompletableFuture.supplyAsync(() -> generateTags(context), executor);
-            CompletableFuture<String> tipFuture = CompletableFuture.supplyAsync(() -> callGemini("Give one short, engaging tip for a streamer streaming about: " + context + ". e.g. 'Ask chat to...'"), executor);
+            CompletableFuture<String> tipFuture = CompletableFuture.supplyAsync(() -> {
+                String tip = callGemini("Give one short, engaging tip for a streamer streaming about: " + context + ". e.g. 'Ask chat to...'");
+                return tip != null ? tip : "Ask chat where they are watching from!";
+            }, executor);
 
             CompletableFuture.allOf(titleFuture, descFuture, tagsFuture, tipFuture).join();
 
@@ -86,7 +92,8 @@ public class AiService {
 
     public String analyzeSentiment(String text) {
         if (isAiEnabled()) {
-            return callGemini("Analyze sentiment of this comment: '" + text + "'. Return only one word: POSITIVE, NEGATIVE, or NEUTRAL.");
+            String sentiment = callGemini("Analyze sentiment of this comment: '" + text + "'. Return only one word: POSITIVE, NEGATIVE, or NEUTRAL.");
+            if (sentiment != null) return sentiment;
         }
         if (text.toLowerCase().contains("bad") || text.toLowerCase().contains("hate") || text.toLowerCase().contains("awful")) return "NEGATIVE";
         if (text.toLowerCase().contains("good") || text.toLowerCase().contains("love") || text.toLowerCase().contains("great")) return "POSITIVE";
@@ -124,14 +131,18 @@ public class AiService {
 
     public String generateSingleReply(String commentText) {
         if (isAiEnabled()) {
-            return callGemini("Write a single, short, engaging, and friendly reply to this YouTube comment: '" + commentText + "'. Do not use quotes.");
+            String reply = callGemini("Write a single, short, engaging, and friendly reply to this YouTube comment: '" + commentText + "'. Do not use quotes.");
+            if (reply != null) return reply;
         }
         return "Thanks for your comment! 😊";
     }
 
     public String generateTwitterStyleReply(String commentText) {
         if (isAiEnabled()) {
-            return callGemini("Write a very short, tweet-style reply to this live stream comment: '" + commentText + "'. It should be interactive and engaging. Max 100 characters. No quotes.");
+            String reply = callGemini("Write a very short, tweet-style reply to this live stream comment: '" + commentText + "'. It should be interactive and engaging. Max 100 characters. No quotes.");
+            if (reply != null) return reply;
+            // If API fails, return null so caller knows to skip reply
+            return null;
         }
         return "Thanks for watching! 🔥";
     }
@@ -173,6 +184,6 @@ public class AiService {
             System.err.println("Gemini API failed: " + e.getMessage());
             // In a real production app, we would log the full response body if it's a 4xx error
         }
-        return prompt; // Fallback
+        return null; // Fallback to null instead of prompt
     }
 }

@@ -1,15 +1,21 @@
 package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.repository.AppSettingRepository;
 import com.afklive.streamer.repository.EngagementActivityRepository;
 import com.afklive.streamer.repository.ProcessedCommentRepository;
+import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.UserRepository;
 import com.google.api.services.youtube.model.Comment;
 import com.google.api.services.youtube.model.CommentSnippet;
 import com.google.api.services.youtube.model.CommentThread;
 import com.google.api.services.youtube.model.CommentThreadListResponse;
 import com.google.api.services.youtube.model.CommentThreadSnippet;
+import com.google.api.services.youtube.model.LiveChatMessage;
+import com.google.api.services.youtube.model.LiveChatMessageListResponse;
+import com.google.api.services.youtube.model.LiveChatMessageSnippet;
+import com.google.api.services.youtube.model.LiveChatTextMessageDetails;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -44,6 +51,9 @@ class EngagementServiceTest {
 
     @Mock
     private AppSettingRepository appSettingRepository;
+
+    @Mock
+    private StreamJobRepository streamJobRepo;
 
     @InjectMocks
     private EngagementService engagementService;
@@ -128,6 +138,47 @@ class EngagementServiceTest {
         verify(processedRepository, times(1)).findExistingCommentIds(anyCollection());
         verify(aiService, never()).analyzeSentiment("Nice video!"); // Should be skipped
         verify(aiService, times(1)).analyzeSentiment("Great content!"); // Should be processed
+    }
+
+    @Test
+    void processLiveEngagement_shouldSkipReply_WhenAiReturnsNull() throws Exception {
+        // Arrange
+        StreamJob job = new StreamJob();
+        job.setUsername("testuser");
+        job.setLiveChatId("chat123");
+        job.setAutoReplyEnabled(true);
+        job.setLive(true);
+
+        when(appSettingRepository.findById("ENGAGEMENT_CRON_ENABLED")).thenReturn(Optional.empty()); // Defaults to true
+        when(streamJobRepo.findByIsLiveTrueAndAutoReplyEnabledTrue()).thenReturn(Collections.singletonList(job));
+        when(youTubeService.isConnected("testuser")).thenReturn(true);
+
+        LiveChatMessage msg = new LiveChatMessage();
+        msg.setId("msg1");
+        LiveChatMessageSnippet snippet = new LiveChatMessageSnippet();
+        snippet.setType("textMessageEvent");
+        snippet.setAuthorChannelId("otherChannel"); // Not me
+        LiveChatTextMessageDetails details = new LiveChatTextMessageDetails();
+        details.setMessageText("Hello Streamer!");
+        snippet.setTextMessageDetails(details);
+        msg.setSnippet(snippet);
+
+        LiveChatMessageListResponse response = new LiveChatMessageListResponse();
+        response.setItems(Collections.singletonList(msg));
+        response.setNextPageToken("nextPage");
+
+        when(youTubeService.getLiveChatMessages(eq("testuser"), eq("chat123"), any())).thenReturn(response);
+        when(youTubeService.getChannelId("testuser")).thenReturn("myChannelId");
+
+        // SIMULATE AI FAILURE
+        when(aiService.generateTwitterStyleReply("Hello Streamer!")).thenReturn(null);
+
+        // Act
+        engagementService.processLiveEngagement();
+
+        // Assert
+        verify(youTubeService, never()).replyToLiveChat(anyString(), anyString(), anyString());
+        verify(activityRepository, never()).save(any()); // Should not log activity if no reply sent
     }
 
     private CommentThread createCommentThread(String commentId, String videoId, String text) {
