@@ -23,6 +23,7 @@ import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
 import com.afklive.streamer.security.CustomAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import com.afklive.streamer.service.CustomUserDetailsService;
 
 import java.util.function.Consumer;
@@ -80,7 +81,7 @@ public class SecurityConfig {
                         .successHandler(oAuth2LoginSuccessHandler)
                 )
                 .logout(logout -> logout
-                        .logoutUrl("/logout")
+                        .logoutRequestMatcher(PathPatternRequestMatcher.pathPattern("/logout"))
                         .logoutSuccessUrl("/") // Back to Home after logout
                         .permitAll()
                 )
