@@ -11,3 +11,12 @@ CREATE TABLE IF NOT EXISTS oauth2_authorized_client (
   created_at timestamp DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (client_registration_id, principal_name)
 );
+
+-- PostgreSQL Full Text Search Indexes
+-- These creation statements are idempotent (IF NOT EXISTS)
+
+-- Optimize video search by title
+CREATE INDEX IF NOT EXISTS idx_schedvideo_title_fts ON scheduled_videos USING GIN (to_tsvector('english', coalesce(title, '')));
+
+-- Optimize user search by username and full name
+CREATE INDEX IF NOT EXISTS idx_user_search_fts ON users USING GIN (to_tsvector('english', username || ' ' || coalesce(full_name, '')));

@@ -1,6 +1,8 @@
 package com.afklive.streamer.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -22,8 +24,11 @@ public class ScheduledStream {
     private String videoKey; // S3 Key or Filename
 
     @ElementCollection
+    @NotEmpty(message = "At least one destination required")
     private List<String> streamKeys;
 
+    @jakarta.validation.constraints.NotNull(message = "Scheduled time is required")
+    @Future(message = "Scheduled time must be in the future")
     private ZonedDateTime scheduledTime;
 
     @Enumerated(EnumType.STRING)

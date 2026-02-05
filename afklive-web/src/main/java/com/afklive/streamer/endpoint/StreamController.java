@@ -248,20 +248,12 @@ public class StreamController {
     }
 
     @PostMapping("/stream/schedule")
-    public ResponseEntity<?> scheduleStream(@RequestBody com.afklive.streamer.model.ScheduledStream stream, Principal principal) {
+    public ResponseEntity<?> scheduleStream(@jakarta.validation.Valid @RequestBody com.afklive.streamer.model.ScheduledStream stream, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
 
         stream.setUsername(email);
         stream.setStatus(com.afklive.streamer.model.ScheduledStream.StreamStatus.PENDING);
-
-        // Basic validation
-        if (stream.getStreamKeys() == null || stream.getStreamKeys().isEmpty()) {
-             return ResponseEntity.badRequest().body(ApiResponse.error("At least one destination required"));
-        }
-        if (stream.getScheduledTime() == null || stream.getScheduledTime().isBefore(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")))) {
-             return ResponseEntity.badRequest().body(ApiResponse.error("Scheduled time must be in the future"));
-        }
 
         scheduledStreamRepo.save(stream);
         return ResponseEntity.ok(ApiResponse.success("Stream Scheduled", stream));
@@ -357,11 +349,10 @@ public class StreamController {
     }
 
     @PostMapping("/stream/{id}/stop-at")
-    public ResponseEntity<?> setStreamEndTime(@PathVariable Long id, @RequestBody Map<String, String> body, Principal principal) {
+    public ResponseEntity<?> setStreamEndTime(@PathVariable Long id, @jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.StopStreamRequest request, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
 
-        String timeStr = body.get("time"); // "HH:mm"
-        if (timeStr == null) return ResponseEntity.badRequest().body(ApiResponse.error("Time required"));
+        String timeStr = request.getTime(); // "HH:mm"
 
         // Here we would implement the actual scheduling logic using a ScheduledExecutorService
         // that calls streamService.stopStream(id, email) at the calculated delay.
