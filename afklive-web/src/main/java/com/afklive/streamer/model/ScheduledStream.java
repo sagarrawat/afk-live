@@ -27,6 +27,7 @@ public class ScheduledStream {
     @NotEmpty(message = "At least one destination required")
     private List<String> streamKeys;
 
+    @jakarta.validation.constraints.NotNull(message = "Scheduled time is required")
     @Future(message = "Scheduled time must be in the future")
     private ZonedDateTime scheduledTime;
 

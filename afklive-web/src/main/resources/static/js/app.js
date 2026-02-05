@@ -581,8 +581,14 @@ async function apiFetch(url, options = {}) {
         let errorMsg = "Request failed (" + res.status + ")";
         try {
             const body = await res.clone().json();
-            if (body.message) errorMsg = body.message;
-            else if (body.error) errorMsg = body.error;
+            if (res.status === 400 && body.errors && Array.isArray(body.errors)) {
+                // Handle Spring Validation Errors
+                errorMsg = body.errors.map(e => e.defaultMessage).join("<br>");
+            } else if (body.message) {
+                errorMsg = body.message;
+            } else if (body.error) {
+                errorMsg = body.error;
+            }
         } catch (jsonErr) {
             try {
                 const text = await res.clone().text();
