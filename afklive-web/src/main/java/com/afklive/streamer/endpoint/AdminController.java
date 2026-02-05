@@ -123,7 +123,7 @@ public class AdminController {
         streamJobRepo.findById(id).ifPresent(job -> {
             streamService.stopStream(id, job.getUsername());
         });
-        return "redirect:/admin";
+        return "redirect:/admin?tab=streams";
     }
 
     @PostMapping("/users/{username}/limit")
@@ -132,7 +132,7 @@ public class AdminController {
             user.setCreditLimit(limit);
             userRepository.save(user);
         });
-        return "redirect:/admin";
+        return "redirect:/admin?tab=users";
     }
 
     @PostMapping("/users/{username}/blacklist")
@@ -141,7 +141,7 @@ public class AdminController {
             user.setEnabled(enabled);
             userRepository.save(user);
         });
-        return "redirect:/admin";
+        return "redirect:/admin?tab=users";
     }
 
     @PostMapping("/support/{id}/status")
@@ -150,7 +150,7 @@ public class AdminController {
             ticket.setStatus(status);
             supportTicketRepository.save(ticket);
         });
-        return "redirect:/admin";
+        return "redirect:/admin?tab=support";
     }
 
     @PostMapping("/plans/update")

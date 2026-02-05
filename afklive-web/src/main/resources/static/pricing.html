@@ -153,6 +153,20 @@
 <script>
     let selectedPlanId = null;
 
+    function getCookie(name) {
+        if (!document.cookie) {
+            return null;
+        }
+        const xsrfCookies = document.cookie.split(';')
+            .map(c => c.trim())
+            .filter(c => c.startsWith(name + '='));
+
+        if (xsrfCookies.length === 0) {
+            return null;
+        }
+        return decodeURIComponent(xsrfCookies[0].substring(name.length + 1));
+    }
+
     async function loadPricing(country) {
         try {
             const res = await fetch(`/api/pricing?country=${country}`);
@@ -239,9 +253,13 @@
         await new Promise(r => setTimeout(r, 1500));
 
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            const csrfToken = getCookie('XSRF-TOKEN');
+            if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
+
             const res = await fetch('/api/pricing/upgrade', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: headers,
                 body: JSON.stringify({ planId: selectedPlanId })
             });
             const data = await res.json();
@@ -277,9 +295,13 @@
         btn.innerText = 'Processing...';
 
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            const csrfToken = getCookie('XSRF-TOKEN');
+            if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
+
             const res = await fetch('/api/payment/initiate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify({ amount: 100 })
             });
             const data = await res.json();
