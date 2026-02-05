@@ -50,25 +50,19 @@ public class LibraryController {
     private final com.afklive.streamer.service.VideoConversionService conversionService;
 
     @PostMapping("/import-youtube")
-    public ResponseEntity<?> importFromYouTube(@RequestBody Map<String, String> payload, java.security.Principal principal) {
+    public ResponseEntity<?> importFromYouTube(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.ImportRequest request, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
-        String url = payload.get("url");
-        if (url == null || url.isEmpty()) return ResponseEntity.badRequest().body(ApiResponse.error("Missing URL"));
 
-        importService.downloadFromYouTube(url, username);
+        importService.downloadFromYouTube(request.getUrl(), username);
         return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
     }
 
     @PostMapping("/merge")
-    public ResponseEntity<?> mergeVideos(@RequestBody Map<String, List<String>> payload, java.security.Principal principal) {
+    public ResponseEntity<?> mergeVideos(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.MergeRequest request, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
-        List<String> files = payload.get("files");
-
-        if (files == null || files.size() < 2) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("Select at least 2 videos to merge"));
-        }
+        List<String> files = request.getFiles();
 
         // Verify ownership
         List<ScheduledVideo> userVideos = repository.findByUsername(username);
@@ -251,25 +245,21 @@ public class LibraryController {
 
     @PostMapping("/auto-schedule")
     public ResponseEntity<?> autoSchedule(
-            @RequestBody Map<String, Object> payload,
+            @jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.AutoScheduleRequest request,
             java.security.Principal principal
     ) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
 
         try {
-            List<String> timeSlots = (List<String>) payload.get("timeSlots"); // e.g. ["10:00", "14:00"]
-            String startDateStr = (String) payload.get("startDate"); // "2023-10-27"
-
-            if (timeSlots == null || timeSlots.isEmpty() || startDateStr == null) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("Missing timeSlots or startDate"));
-            }
+            List<String> timeSlots = request.getTimeSlots();
+            String startDateStr = request.getStartDate();
 
             LocalDate currentDate = LocalDate.parse(startDateStr);
             List<LocalTime> times = timeSlots.stream().map(LocalTime::parse).sorted().toList();
 
-            boolean useAi = Boolean.TRUE.equals(payload.get("useAi"));
-            String topic = (String) payload.get("topic");
+            boolean useAi = request.isUseAi();
+            String topic = request.getTopic();
 
             // Get all LIBRARY videos for user
             List<ScheduledVideo> libraryVideos = repository.findByUsername(username).stream()
