@@ -2,6 +2,30 @@ const API_URL = "/api";
 let currentUser = null;
 let selectedStreamVideo = null; // Fix ReferenceError
 
+function getCookie(name) {
+    if (!document.cookie) {
+        return null;
+    }
+    const xsrfCookies = document.cookie.split(';')
+        .map(c => c.trim())
+        .filter(c => c.startsWith(name + '='));
+
+    if (xsrfCookies.length === 0) {
+        return null;
+    }
+    return decodeURIComponent(xsrfCookies[0].substring(name.length + 1));
+}
+
+// Utility: Debounce
+window.debounce = function(func, wait) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+    };
+};
+
 // Global Loader
 window.showLoader = function(msg = "Loading...") {
     document.getElementById('globalLoaderText').innerText = msg;
@@ -87,12 +111,16 @@ function setupEventListeners() {
     if(thumbInput) thumbInput.addEventListener("change", handleThumbnailSelect);
 
     // Live Preview
-    document.getElementById('scheduleTitle')?.addEventListener('input', e => {
+    const updatePreviewTitle = debounce((e) => {
         document.getElementById('previewTitleMock').innerText = e.target.value || "Video Title";
-    });
-    document.getElementById('scheduleDescription')?.addEventListener('input', e => {
+    }, 300);
+
+    const updatePreviewDesc = debounce((e) => {
         document.getElementById('previewDescMock').innerText = e.target.value || "Description will appear here...";
-    });
+    }, 300);
+
+    document.getElementById('scheduleTitle')?.addEventListener('input', updatePreviewTitle);
+    document.getElementById('scheduleDescription')?.addEventListener('input', updatePreviewDesc);
 }
 
 /* --- NAVIGATION & VIEW SWITCHING --- */
@@ -901,6 +929,11 @@ async function submitSchedule() {
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_URL}/videos/schedule`, true);
+
+    const csrfToken = getCookie('XSRF-TOKEN');
+    if (csrfToken) {
+        xhr.setRequestHeader('X-XSRF-TOKEN', csrfToken);
+    }
 
     xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {

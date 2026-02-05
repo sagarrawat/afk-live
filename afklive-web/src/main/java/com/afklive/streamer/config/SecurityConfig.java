@@ -22,6 +22,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
 import com.afklive.streamer.security.CustomAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import com.afklive.streamer.service.CustomUserDetailsService;
 
 import java.util.function.Consumer;
@@ -41,7 +42,10 @@ public class SecurityConfig {
                                            CustomAuthenticationSuccessHandler customAuthenticationSuccessHandler,
                                            CustomUserDetailsService userDetailsService) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .ignoringRequestMatchers("/api/payment/callback")
+                )
                 .authorizeHttpRequests(auth -> auth
                         // 1. PUBLIC: Landing page, assets
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
