@@ -5,12 +5,14 @@ on:
     branches: [ main ]
     paths:
       - 'afklive-web/**'
+      - 'afklive-jobs/**'
+      - 'afklive-common/**'
       - 'pom.xml'
   workflow_dispatch:
 
 jobs:
-  # JOB 1: Deploy Web App to DigitalOcean
-  deploy-web:
+  # JOB 1: Deploy Apps to DigitalOcean
+  deploy-apps:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,12 +25,11 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # Build ONLY the web module (saves time)
-      - name: Build Web Module
-        run: mvn clean package -pl afklive-web -am
+      # Build Web and Jobs modules
+      - name: Build Applications
+        run: mvn clean package -pl afklive-web,afklive-jobs -am
 
-      # Fix: Path is now inside the sub-module
-      - name: Copy JAR to DigitalOcean VM
+      - name: Copy Web JAR to DigitalOcean VM
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_HOST }}
@@ -38,7 +39,17 @@ jobs:
           target: "/opt/afklive/"
           strip_components: 2
 
-      - name: Restart Server
+      - name: Copy Jobs JAR to DigitalOcean VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "afklive-jobs/target/jobs.jar"
+          target: "/opt/afklive/"
+          strip_components: 2
+
+      - name: Restart Servers
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
@@ -46,3 +57,4 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
             sudo systemctl restart afklive
+            sudo systemctl restart afklive-jobs || echo "afklive-jobs service not found or failed to restart"

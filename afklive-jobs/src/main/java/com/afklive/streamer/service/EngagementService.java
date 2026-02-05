@@ -38,7 +38,6 @@ public class EngagementService {
     private final StreamJobRepository streamJobRepo;
     private final AppSettingRepository appSettingRepository;
 
-    @Scheduled(fixedRate = 30_000) // 1 min
     public void processLiveEngagement() {
         if (!isEngagementEnabled()) return;
 
@@ -99,7 +98,6 @@ public class EngagementService {
         }
     }
 
-    @Scheduled(fixedRate = 60000) // 1 min
     public void processEngagement() {
         if (!isEngagementEnabled()) return;
 
