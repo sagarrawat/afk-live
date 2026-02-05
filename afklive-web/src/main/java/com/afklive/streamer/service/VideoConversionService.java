@@ -27,7 +27,11 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 @Service
 @Slf4j
@@ -36,7 +40,9 @@ public class VideoConversionService {
     private final FileStorageService storageService;
     private final UserService userService;
     private final ScheduledVideoRepository repository;
-    private final ConcurrentHashMap<String, Integer> conversionProgress = new ConcurrentHashMap<>();
+    private final Cache<String, Integer> conversionProgress = Caffeine.newBuilder()
+            .expireAfterWrite(30, TimeUnit.MINUTES)
+            .build();
     private final Set<String> activeOptimizations = ConcurrentHashMap.newKeySet();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -243,7 +249,7 @@ public class VideoConversionService {
     public Optional<Integer> getProgress(String username, String fileName) {
         String progressKey = username + ":" + fileName;
         // Also check if optimized version exists? No, just track progress
-        return Optional.ofNullable(this.conversionProgress.get(progressKey));
+        return Optional.ofNullable(this.conversionProgress.getIfPresent(progressKey));
     }
 
     @Async
