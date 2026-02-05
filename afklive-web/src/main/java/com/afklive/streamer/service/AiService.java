@@ -102,7 +102,7 @@ public class AiService {
 
     public List<String> generateReplySuggestions(String commentText) {
         if (isAiEnabled()) {
-            String prompt = "Generate 3 short, engaging, and polite reply suggestions for this YouTube comment: '" + commentText + "'. Return them as a pipe-separated string (e.g. Reply 1|Reply 2|Reply 3). Do not include numbering or quotes.";
+            String prompt = "You are a YouTuber. Generate 3 short, engaging, and polite reply suggestions for this comment: '" + commentText + "'. Return them as a pipe-separated string (e.g. Reply 1|Reply 2|Reply 3). Do not include numbering or quotes.";
             String result = callGemini(prompt);
             if (result != null && !result.isEmpty()) {
                 String[] splits = result.split("\\|");
@@ -131,20 +131,28 @@ public class AiService {
 
     public String generateSingleReply(String commentText) {
         if (isAiEnabled()) {
-            String reply = callGemini("Write a single, short, engaging, and friendly reply to this YouTube comment: '" + commentText + "'. Do not use quotes.");
+            String reply = callGemini("You are a YouTuber. Write a single, short, engaging, and friendly reply to this comment: '" + commentText + "'. Do not use quotes. Max 100 characters.");
             if (reply != null) return reply;
         }
         return "Thanks for your comment! 😊";
     }
 
-    public String generateTwitterStyleReply(String commentText) {
+    public String generateTwitterStyleReply(String commentText, String streamContext) {
         if (isAiEnabled()) {
-            String reply = callGemini("Write a very short, tweet-style reply to this live stream comment: '" + commentText + "'. It should be interactive and engaging. Max 100 characters. No quotes.");
+            String contextPart = (streamContext != null && !streamContext.isEmpty()) ? " about '" + streamContext + "'" : "";
+            String prompt = "You are a live streamer streaming" + contextPart + ". Write a short, engaging reply to this live chat message: '" + commentText + "'. Max 100 chars. Do NOT start with 'Reply:'. Do NOT use quotes. Be casual and fun.";
+
+            String reply = callGemini(prompt);
             if (reply != null) return reply;
             // If API fails, return null so caller knows to skip reply
             return null;
         }
         return "Thanks for watching! 🔥";
+    }
+
+    // Deprecated method for backward compatibility if needed, though we will update callers
+    public String generateTwitterStyleReply(String commentText) {
+        return generateTwitterStyleReply(commentText, null);
     }
 
     private boolean isAiEnabled() {

@@ -82,7 +82,7 @@ public class EngagementService {
                     String text = msg.getSnippet().getTextMessageDetails().getMessageText();
 
                     // Generate Reply
-                    String reply = aiService.generateTwitterStyleReply(text);
+                    String reply = aiService.generateTwitterStyleReply(text, job.getTitle());
 
                     if (reply != null) {
                         // Send Reply

@@ -33,11 +33,9 @@ class AiServiceTest {
                 .thenThrow(new RestClientException("API Error"));
 
         // Act
-        String result = aiService.generateTwitterStyleReply("Hello");
+        String result = aiService.generateTwitterStyleReply("Hello", "Stream Context");
 
         // Assert
-        // CURRENT behavior is returning the prompt. AFTER FIX it should return null.
-        // I will assert null here assuming I will fix it.
         assertNull(result, "Should return null when API fails");
     }
 

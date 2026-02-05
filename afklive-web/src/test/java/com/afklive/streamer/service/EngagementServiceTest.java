@@ -148,6 +148,7 @@ class EngagementServiceTest {
         job.setLiveChatId("chat123");
         job.setAutoReplyEnabled(true);
         job.setLive(true);
+        job.setTitle("My Stream");
 
         when(appSettingRepository.findById("ENGAGEMENT_CRON_ENABLED")).thenReturn(Optional.empty()); // Defaults to true
         when(streamJobRepo.findByIsLiveTrueAndAutoReplyEnabledTrue()).thenReturn(Collections.singletonList(job));
@@ -171,7 +172,7 @@ class EngagementServiceTest {
         when(youTubeService.getChannelId("testuser")).thenReturn("myChannelId");
 
         // SIMULATE AI FAILURE
-        when(aiService.generateTwitterStyleReply("Hello Streamer!")).thenReturn(null);
+        when(aiService.generateTwitterStyleReply("Hello Streamer!", "My Stream")).thenReturn(null);
 
         // Act
         engagementService.processLiveEngagement();
