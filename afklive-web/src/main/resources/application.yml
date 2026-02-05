@@ -8,6 +8,10 @@ spring:
       max-request-size: 10GB
       file-size-threshold: 2KB
       resolve-lazily: true
+logging:
+  level:
+    com.zaxxer.hikari: WARN
+    org.hibernate.engine.jdbc: WARN
   security:
     oauth2:
       client:
@@ -76,11 +80,6 @@ spring:
           starttls:
             enable: ${SMTP_STARTTLS_ENABLE:true}
 
-logging:
-  level:
-    com.zaxxer.hikari: WARN
-    org.hibernate.engine.jdbc: WARN
-    
 rate-limiter:
   capacity: 10
   refill-tokens: 1

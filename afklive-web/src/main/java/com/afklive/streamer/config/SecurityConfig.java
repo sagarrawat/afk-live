@@ -23,6 +23,7 @@ import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
 import com.afklive.streamer.security.CustomAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import com.afklive.streamer.service.CustomUserDetailsService;
 
 import java.util.function.Consumer;
@@ -49,7 +50,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 1. PUBLIC: Landing page, assets
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
-                        .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
+                        .requestMatchers("/login", "/logout", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
                         .requestMatchers("/api/payment/callback", "/api/payment/initiate").permitAll()
 
                         // 2. ADMIN
@@ -80,8 +81,11 @@ public class SecurityConfig {
                         .successHandler(oAuth2LoginSuccessHandler)
                 )
                 .logout(logout -> logout
-                        .logoutUrl("/logout")
-                        .logoutSuccessUrl("/") // Back to Home after logout
+                        .logoutRequestMatcher(new AntPathRequestMatcher("/logout"))
+                        .logoutSuccessUrl("/")
+                        .invalidateHttpSession(true)
+                        .clearAuthentication(true)
+                        .deleteCookies("JSESSIONID", "XSRF-TOKEN")
                         .permitAll()
                 )
                 .exceptionHandling(e -> e
