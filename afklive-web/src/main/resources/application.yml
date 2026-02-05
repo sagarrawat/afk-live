@@ -8,6 +8,10 @@ spring:
       max-request-size: 10GB
       file-size-threshold: 2KB
       resolve-lazily: true
+logging:
+  level:
+    com.zaxxer.hikari: WARN
+    org.hibernate.engine.jdbc: WARN
   security:
     oauth2:
       client:
