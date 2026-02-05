@@ -3,6 +3,7 @@ package com.afklive.streamer.service;
 import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.UserRepository;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -90,6 +91,7 @@ public class ChannelService {
     @Transactional(readOnly = true)
     public List<SocialChannel> getChannels(String username) {
         User user = userService.getOrCreateUser(username);
+        Hibernate.initialize(user.getChannels());
         return user.getChannels();
     }
 
