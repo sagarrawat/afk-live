@@ -1481,7 +1481,7 @@ function loadBenefits() {
 async function loadInternalPricing() {
     const grid = document.getElementById('internalPlanGrid');
     if(!grid) return;
-    grid.innerHTML = '<div class="col-span-full text-center py-10"><div class="afk-loader mb-2"></div><p class="text-gray-500">Loading plans...</p></div>';
+    grid.innerHTML = '<div class="col-span-full text-center py-10"><div class="afk-loader mb-2"><div class="afk-loader-play"></div></div><p class="text-gray-500">Loading plans...</p></div>';
     try {
         const res = await apiFetch('/api/pricing?country=US');
         const data = await res.json();
@@ -1612,7 +1612,7 @@ async function initAnalytics() {
             loader = document.createElement('div');
             loader.id = 'analyticsLoader';
             loader.className = 'absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 backdrop-blur-sm rounded-lg';
-            loader.innerHTML = '<div class="afk-loader mb-2"></div><span class="text-sm text-gray-500">Loading data...</span>';
+            loader.innerHTML = '<div class="afk-loader mb-2"><div class="afk-loader-play"></div></div><span class="text-sm text-gray-500">Loading data...</span>';
             chartCard.style.position = 'relative';
             chartCard.appendChild(loader);
         }
@@ -1684,7 +1684,7 @@ async function loadComments() {
 
     if(!listMain && !listStudio) return;
 
-    const loaderHtml = '<div class="text-center py-10"><div class="afk-loader"></div></div>';
+    const loaderHtml = '<div class="text-center py-10"><div class="afk-loader"><div class="afk-loader-play"></div></div></div>';
     if(listMain && !listMain.children.length) listMain.innerHTML = loaderHtml;
     if(listStudio && !listStudio.children.length) listStudio.innerHTML = loaderHtml;
 
