@@ -30,6 +30,8 @@ public class PaymentController {
     private final PaymentAuditRepository paymentAuditRepository;
     private final UserService userService;
     private final String baseUrl;
+    private final String saltKey;
+    private final Integer saltIndex;
 
     public PaymentController(
             PaymentAuditRepository paymentAuditRepository,
@@ -43,6 +45,8 @@ public class PaymentController {
         this.paymentAuditRepository = paymentAuditRepository;
         this.userService = userService;
         this.baseUrl = baseUrl;
+        this.saltKey = saltKey;
+        this.saltIndex = saltIndex;
 
         Env env = Env.valueOf(envStr.toUpperCase());
         this.phonePeClient = StandardCheckoutClient.getInstance(merchantId, saltKey, saltIndex, env);
@@ -111,16 +115,36 @@ public class PaymentController {
 
     @PostMapping("/callback")
     public ResponseEntity<?> handleCallback(@RequestBody String body, @RequestHeader(value = "X-VERIFY", required = false) String xVerify) {
-        log.info("Payment Callback Received: {}", body);
-        log.info("X-VERIFY: {}", xVerify);
+        log.info("Payment Callback Received: length={}", body.length());
 
         try {
              Map<String, Object> callbackData = objectMapper.readValue(body, Map.class);
              String encodedResponse = (String) callbackData.get("response");
-             if(encodedResponse != null) {
+
+             if(encodedResponse != null && xVerify != null) {
+                 // Checksum verification
+                 // SHA256(base64Body + salt) + ### + saltIndex
+                 String toHash = encodedResponse + saltKey;
+                 java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                 byte[] hash = digest.digest(toHash.getBytes(StandardCharsets.UTF_8));
+                 StringBuilder hexString = new StringBuilder();
+                 for (byte b : hash) {
+                     String hex = Integer.toHexString(0xff & b);
+                     if (hex.length() == 1) hexString.append('0');
+                     hexString.append(hex);
+                 }
+                 String calculatedChecksum = hexString.toString() + "###" + saltIndex;
+
+                 if (!calculatedChecksum.equals(xVerify)) {
+                     log.error("Checksum verification failed. Received: {}, Calculated: {}", xVerify, calculatedChecksum);
+                     return ResponseEntity.badRequest().body("Invalid Checksum");
+                 }
+
                  byte[] decodedBytes = Base64.getDecoder().decode(encodedResponse);
                  String decodedJson = new String(decodedBytes, StandardCharsets.UTF_8);
-                 log.info("Decoded Callback JSON: {}", decodedJson);
+
+                 // Removed PII logging
+                 // log.info("Decoded Callback JSON: {}", decodedJson);
 
                  Map<String, Object> responseMap = objectMapper.readValue(decodedJson, Map.class);
                  Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
