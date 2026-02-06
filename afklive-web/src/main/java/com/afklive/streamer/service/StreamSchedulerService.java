@@ -4,7 +4,6 @@ import com.afklive.streamer.model.ScheduledStream;
 import com.afklive.streamer.repository.ScheduledStreamRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
@@ -20,7 +19,7 @@ public class StreamSchedulerService {
     private final StreamService streamService;
     private final StreamManagerService streamManager;
 
-    @Scheduled(fixedRate = 60000) // Every minute
+    // Run via JobRunr
     public void processScheduledStreams() {
         log.info("Checking for scheduled live streams...");
         List<ScheduledStream> dueStreams = repository.findByStatusAndScheduledTimeLessThanEqual(

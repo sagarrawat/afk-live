@@ -7,7 +7,6 @@ import com.afklive.streamer.repository.SocialChannelRepository;
 import com.afklive.streamer.util.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
@@ -28,7 +27,7 @@ public class VideoSchedulerService {
     private final SnapchatService snapchatService;
     private final EmailService emailService;
 
-    @Scheduled(fixedRate = 60000) // Run every minute
+    // Run via JobRunr
     public void processScheduledVideos() {
         log.info("Checking for scheduled videos...");
         List<ScheduledVideo> videosToUpload = repository.findByStatusAndScheduledTimeLessThanEqual(

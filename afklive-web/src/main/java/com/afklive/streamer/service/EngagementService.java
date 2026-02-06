@@ -19,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -38,7 +37,7 @@ public class EngagementService {
     private final StreamJobRepository streamJobRepo;
     private final AppSettingRepository appSettingRepository;
 
-    @Scheduled(fixedRate = 30_000) // 1 min
+    // Run via JobRunr (30s)
     public void processLiveEngagement() {
         if (!isEngagementEnabled()) return;
 
@@ -103,7 +102,7 @@ public class EngagementService {
         }
     }
 
-    @Scheduled(fixedRate = 60000) // 1 min
+    // Run via JobRunr (1 min)
     public void processEngagement() {
         if (!isEngagementEnabled()) return;
 

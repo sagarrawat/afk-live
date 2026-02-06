@@ -122,3 +122,10 @@ server:
     max-swallow-size: 100MB
     max-http-form-post-size: 100MB
     max-parameter-count: 50000
+
+org:
+  jobrunr:
+    background-job-server:
+      enabled: true
+    dashboard:
+      enabled: true
