@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 public class StreamService {
     @Autowired
     private StreamJobRepository streamJobRepo;
+    @Autowired
+    private AppConfigService appConfigService;
 
     private final List<String> logBuffer =
             Collections.synchronizedList(new ArrayList<>());
@@ -136,6 +138,14 @@ public class StreamService {
 
         com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
         if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
+            // Check Global Rate Limit
+            int globalMaxStreams = appConfigService.getGlobalStreamLimit();
+
+            long currentActive = streamJobRepo.countByIsLiveTrue();
+            if (currentActive >= globalMaxStreams) {
+                throw new IllegalStateException("Platform capacity reached for Pay As You Go users. Please try again later or upgrade to Essentials.");
+            }
+
             if (!userService.checkCreditLimit(username)) {
                 throw new IllegalStateException("Credit limit exceeded. Please clear your pending balance.");
             }

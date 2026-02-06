@@ -13,6 +13,7 @@ import com.afklive.streamer.service.StreamService;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.QuotaTrackingService;
 import com.afklive.streamer.service.PlanService;
+import com.afklive.streamer.service.AppConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -47,6 +48,7 @@ public class AdminController {
     private final QuotaTrackingService quotaTrackingService;
     private final PaymentAuditRepository paymentAuditRepository;
     private final PlanService planService;
+    private final AppConfigService appConfigService;
 
     @GetMapping
     public String adminDashboard(
@@ -95,6 +97,9 @@ public class AdminController {
         double completedPayments = completedPaymentsPaise != null ? completedPaymentsPaise / 100.0 : 0.0;
         double pendingPayments = initiatedPaymentsPaise != null ? initiatedPaymentsPaise / 100.0 : 0.0;
 
+        // Global Stream Limit
+        model.addAttribute("globalStreamLimit", appConfigService.getGlobalStreamLimit());
+
         model.addAttribute("users", usersPage); // Now a Page object
         model.addAttribute("activeStreamList", streamsPage); // Now a Page object
         model.addAttribute("supportTickets", ticketsPage); // Now a Page object
@@ -115,6 +120,12 @@ public class AdminController {
         ));
 
         return "admin";
+    }
+
+    @PostMapping("/settings/stream-limit")
+    public String updateStreamLimit(@RequestParam int limit) {
+        appConfigService.setGlobalStreamLimit(limit);
+        return "redirect:/admin?tab=overview";
     }
 
     @PostMapping("/streams/{id}/stop")
