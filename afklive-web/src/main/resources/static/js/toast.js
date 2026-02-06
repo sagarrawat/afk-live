@@ -20,6 +20,13 @@ function showToast(message, type = 'info') {
         document.body.appendChild(container);
     }
 
+    // Prevent duplicates
+    const existing = Array.from(container.children).find(child => {
+        const msgSpan = child.querySelector('.toast-message');
+        return msgSpan && msgSpan.innerHTML === message;
+    });
+    if (existing) return;
+
     // Create toast element
     const toast = document.createElement('div');
 
@@ -71,7 +78,7 @@ function showToast(message, type = 'info') {
 
     toast.innerHTML = `
         <span style="font-size: 18px;">${icon}</span>
-        <span style="flex: 1;">${message}</span>
+        <span class="toast-message" style="flex: 1;">${message}</span>
         <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:inherit;opacity:0.6;"><i class="fa-solid fa-xmark"></i></button>
     `;
 
