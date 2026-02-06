@@ -45,7 +45,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .ignoringRequestMatchers("/api/payment/callback")
+                        .ignoringRequestMatchers("/api/payment/callback", "/api/payment/initiate")
                 )
                 .authorizeHttpRequests(auth -> auth
                         // 1. PUBLIC: Landing page, assets
