@@ -13,6 +13,8 @@ public class JobRunrConfig {
 
     @Bean
     public StorageProvider storageProvider(DataSource dataSource, JobMapper jobMapper) {
-        return SqlStorageProviderFactory.using(dataSource);
+        StorageProvider storageProvider = SqlStorageProviderFactory.using(dataSource);
+        storageProvider.setJobMapper(jobMapper);
+        return storageProvider;
     }
 }
