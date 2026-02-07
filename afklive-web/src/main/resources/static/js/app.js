@@ -1430,7 +1430,14 @@ function openYouTubeImportModal() { document.getElementById('youtubeImportModal'
 async function submitYouTubeImport() {
     const url = document.getElementById('ytImportUrl').value;
     if(!url) return;
-    try { await apiFetch(`${API_URL}/library/import-youtube`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url}) }); showToast("Import started", "success"); setTimeout(loadLibraryVideos, 2000); } catch(e){}
+    try { await apiFetch(`${API_URL}/library/import-youtube`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url}) }); showToast("Import started", "success"); setTimeout(loadLibraryVideos, 2000); document.getElementById('youtubeImportModal').classList.add('hidden'); } catch(e){}
+}
+
+function openGoogleDriveImportModal() { document.getElementById('googleDriveImportModal').classList.remove('hidden'); }
+async function submitGoogleDriveImport() {
+    const url = document.getElementById('gdriveImportUrl').value;
+    if(!url) return;
+    try { await apiFetch(`${API_URL}/library/import-drive`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url}) }); showToast("Import started", "success"); setTimeout(loadLibraryVideos, 2000); document.getElementById('googleDriveImportModal').classList.add('hidden'); } catch(e){}
 }
 
 async function mergeSelectedVideos() {
