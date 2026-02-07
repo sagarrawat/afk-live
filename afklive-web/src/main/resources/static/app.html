@@ -706,9 +706,19 @@
                     </div>
 
                     <div class="flex items-center gap-3 flex-wrap">
-                        <button onclick="openYouTubeImportModal()" class="bg-white border border-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition flex items-center gap-2 shadow-sm">
-                            <i class="fa-brands fa-youtube text-red-600"></i> Import
-                        </button>
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" @click.outside="open = false" class="bg-white border border-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition flex items-center gap-2 shadow-sm">
+                                <i class="fa-solid fa-cloud-arrow-down text-blue-600"></i> Import <i class="fa-solid fa-chevron-down text-xs ml-1"></i>
+                            </button>
+                            <div x-show="open" class="absolute top-full right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-20 overflow-hidden" style="display:none;" x-transition>
+                                <button onclick="openYouTubeImportModal();" @click="open = false" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition">
+                                    <i class="fa-brands fa-youtube text-red-600 text-lg w-5 text-center"></i> From YouTube
+                                </button>
+                                <button onclick="openGoogleDriveImportModal();" @click="open = false" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition">
+                                    <i class="fa-brands fa-google-drive text-green-600 text-lg w-5 text-center"></i> From Google Drive
+                                </button>
+                            </div>
+                        </div>
                         <button onclick="document.getElementById('bulkUploadInput').click()" class="bg-white border border-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition flex items-center gap-2 shadow-sm">
                             <i class="fa-solid fa-cloud-arrow-up"></i> Upload
                         </button>
@@ -1161,6 +1171,25 @@
         <div class="modal-actions" style="margin-top: 20px; text-align: right;">
             <button class="btn btn-text" onclick="document.getElementById('optimizeModal').classList.add('hidden')">Cancel</button>
             <button class="btn btn-primary" onclick="submitOptimization()">Start Optimization</button>
+        </div>
+    </div>
+</div>
+
+<!-- Google Drive Import Modal -->
+<div id="googleDriveImportModal" class="modal-overlay hidden">
+    <div class="modal-box" style="width: 450px;">
+        <div class="modal-header" style="border:none; padding-bottom: 10px;">
+            <h2>Import from Google Drive</h2>
+            <button onclick="document.getElementById('googleDriveImportModal').classList.add('hidden')" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-group">
+            <label>File Link (Public)</label>
+            <input type="text" id="gdriveImportUrl" class="form-input" placeholder="https://drive.google.com/file/d/...">
+            <small style="color:#666;">Ensure the link is accessible to anyone with the link (no login required).</small>
+        </div>
+        <div class="modal-actions" style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-text" onclick="document.getElementById('googleDriveImportModal').classList.add('hidden')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitGoogleDriveImport()">Import</button>
         </div>
     </div>
 </div>

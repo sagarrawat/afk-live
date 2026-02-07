@@ -58,6 +58,15 @@ public class LibraryController {
         return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
     }
 
+    @PostMapping("/import-drive")
+    public ResponseEntity<?> importFromGoogleDrive(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.ImportRequest request, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+
+        importService.downloadFromGoogleDrive(request.getUrl(), username);
+        return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
+    }
+
     @PostMapping("/merge")
     public ResponseEntity<?> mergeVideos(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.MergeRequest request, java.security.Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));

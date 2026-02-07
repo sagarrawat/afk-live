@@ -27,9 +27,18 @@ public class ImportService {
 
     @Async
     public CompletableFuture<Boolean> downloadFromYouTube(String url, String username) {
+        return executeYtDlp(url, username, "YouTube");
+    }
+
+    @Async
+    public CompletableFuture<Boolean> downloadFromGoogleDrive(String url, String username) {
+        return executeYtDlp(url, username, "Google Drive");
+    }
+
+    private CompletableFuture<Boolean> executeYtDlp(String url, String username, String sourceLabel) {
         Path tempDir = null;
         try {
-            tempDir = Files.createTempDirectory("yt_import_");
+            tempDir = Files.createTempDirectory("import_");
             String uniqueId = UUID.randomUUID().toString();
             // Output template: temp_dir/uuid_title.ext
             String outputTemplate = tempDir.resolve(uniqueId + "_%(title)s.%(ext)s").toString();
@@ -142,11 +151,11 @@ public class ImportService {
             video.setFileSize(size);
             repository.save(video);
 
-            log.info("Successfully imported video from YouTube: {}", originalName);
+            log.info("Successfully imported video from {}: {}", sourceLabel, originalName);
             return CompletableFuture.completedFuture(true);
 
         } catch (Exception e) {
-            log.error("Error importing from YouTube", e);
+            log.error("Error importing from " + sourceLabel, e);
             return CompletableFuture.completedFuture(false);
         } finally {
             // Cleanup
