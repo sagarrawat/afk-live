@@ -41,6 +41,7 @@ class PayAsYouGoTest {
     @Mock private StreamDestinationRepository streamDestinationRepo;
     @Mock private EmailService emailService;
     @Mock private PlanService planService;
+    @Mock private AppConfigService appConfigService;
 
     @InjectMocks
     private StreamService streamService;
@@ -96,6 +97,7 @@ class PayAsYouGoTest {
 
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
         when(userServiceMock.checkCreditLimit(username)).thenReturn(false);
+        when(appConfigService.getGlobalStreamLimit()).thenReturn(100);
 
         assertThrows(IllegalStateException.class, () -> {
             streamService.startStream(username, java.util.List.of("key"), "vid", null, null, 0, null, true, "original", 720, null, null, null, false, null, false);
