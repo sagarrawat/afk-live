@@ -647,6 +647,14 @@ async function loadUserChannels() {
         userChannels = await res.json();
         renderChannelList(userChannels);
         renderChannelDropdown(userChannels);
+
+        // Restore selection or default to first
+        if (userChannels.length > 0) {
+            const savedId = localStorage.getItem('activeChannelId');
+            const target = userChannels.find(c => c.id == savedId) || userChannels[0];
+            // Update state silently first to ensure UI is ready
+            filterViewByChannel(target, true); // true = quiet mode (no toast)
+        }
     } catch(e) {}
 }
 
@@ -683,17 +691,24 @@ function renderChannelList(channels) {
     }
 }
 
-function filterViewByChannel(channel) {
+function filterViewByChannel(channel, quiet = false) {
     const nameEl = document.getElementById('currentChannelName');
     if(nameEl) nameEl.innerText = channel.name;
 
     selectedChannelId = channel.id || null;
 
+    // Persist
+    if (selectedChannelId) {
+        localStorage.setItem('activeChannelId', selectedChannelId);
+    } else {
+        localStorage.removeItem('activeChannelId');
+    }
+
     // Refresh active view
     const currentView = localStorage.getItem('activeView');
     if(currentView) switchView(currentView);
 
-    showToast(`Switched to ${channel.name}`, 'info');
+    if (!quiet) showToast(`Switched to ${channel.name}`, 'info');
 }
 
 function renderChannelDropdown(channels) {
