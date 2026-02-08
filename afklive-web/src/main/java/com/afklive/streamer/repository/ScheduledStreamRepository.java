@@ -9,6 +9,6 @@ import java.util.List;
 
 @Repository
 public interface ScheduledStreamRepository extends JpaRepository<ScheduledStream, Long> {
-    List<ScheduledStream> findByUsername(String username);
+    List<ScheduledStream> findByUserEmail(String email);
     List<ScheduledStream> findByStatusAndScheduledTimeLessThanEqual(ScheduledStream.StreamStatus status, ZonedDateTime time);
 }

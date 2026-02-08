@@ -1,5 +1,7 @@
 package com.afklive.streamer.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -8,11 +10,16 @@ import java.time.LocalDateTime;
     @Index(name = "idx_user_verif_token", columnList = "verification_token"),
     @Index(name = "idx_user_reset_token", columnList = "reset_token"),
     @Index(name = "idx_user_autoreply", columnList = "auto_reply_enabled"),
-    @Index(name = "idx_user_fullname", columnList = "full_name")
+    @Index(name = "idx_user_fullname", columnList = "full_name"),
+    @Index(name = "idx_user_email", columnList = "email")
 })
 public class User {
     @Id
-    private String username; // Email from OAuth
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true)
+    private String email; // Formerly username, Email from OAuth
 
     @Enumerated(EnumType.STRING)
     private PlanType planType = PlanType.FREE;
@@ -48,18 +55,37 @@ public class User {
     public User() {
     }
 
-    public User(String username) {
-        this.username = username;
+    public User(String email) {
+        this.email = email;
     }
 
     // Getters and Setters
 
-    public String getUsername() {
-        return username;
+    public Long getId() {
+        return id;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    @JsonProperty("username")
+    public String getUsername() {
+        return email;
+    }
+
+    @JsonProperty("username")
     public void setUsername(String username) {
-        this.username = username;
+        this.email = username;
+    }
+
+    // Direct access to email if needed
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public PlanType getPlanType() {

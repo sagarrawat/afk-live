@@ -3,7 +3,6 @@ package com.afklive.streamer.service;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
-import com.afklive.streamer.repository.SocialChannelRepository;
 import com.afklive.streamer.util.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +19,6 @@ public class VideoSchedulerService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VideoSchedulerService.class);
 
     private final ScheduledVideoRepository repository;
-    private final SocialChannelRepository channelRepository;
     private final FileStorageService storageService;
     private final YouTubeService youTubeService;
     private final InstagramService instagramService;
@@ -47,15 +45,13 @@ public class VideoSchedulerService {
             InputStream fileStream = storageService.downloadFile(video.getS3Key());
             String videoId = null;
             String platform = AppConstants.PLATFORM_YOUTUBE;
-            String credentialId = video.getUsername(); // Default to owner
+            String credentialId = video.getUsername(); // Default to owner email
 
-            if (video.getSocialChannelId() != null) {
-                SocialChannel channel = channelRepository.findById(video.getSocialChannelId()).orElse(null);
-                if (channel != null) {
-                    platform = channel.getPlatform();
-                    if (channel.getCredentialId() != null) {
-                        credentialId = channel.getCredentialId();
-                    }
+            SocialChannel channel = video.getSocialChannel();
+            if (channel != null) {
+                platform = channel.getPlatform();
+                if (channel.getCredentialId() != null) {
+                    credentialId = channel.getCredentialId();
                 }
             }
 

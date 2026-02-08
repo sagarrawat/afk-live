@@ -19,11 +19,16 @@ public class ScheduledStream {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String username;
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
 
     private String videoKey; // S3 Key or Filename
 
     @ElementCollection
+    @CollectionTable(name = "scheduled_stream_stream_keys", joinColumns = @JoinColumn(name = "scheduled_stream_id"))
+    @Column(name = "stream_keys")
     @NotEmpty(message = "At least one destination required")
     private List<String> streamKeys;
 
@@ -46,6 +51,15 @@ public class ScheduledStream {
 
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
+    public String getUsername() {
+        return user != null ? user.getUsername() : null;
+    }
+
+    public void setUsername(String username) {
+        // no-op, use setUser
+    }
 
     public enum StreamStatus {
         PENDING,

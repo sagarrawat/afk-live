@@ -74,7 +74,7 @@ public class LibraryController {
         List<String> files = request.getFiles();
 
         // Verify ownership
-        List<ScheduledVideo> userVideos = repository.findByUsername(username);
+        List<ScheduledVideo> userVideos = repository.findByUserEmail(username);
         List<String> safeFiles = files.stream()
                 .filter(f -> userVideos.stream().anyMatch(v -> v.getTitle().equals(f) && v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY))
                 .collect(Collectors.toList());
@@ -153,7 +153,7 @@ public class LibraryController {
 
     private void createLibraryEntry(String username, String filename, String key, long size) {
         ScheduledVideo video = new ScheduledVideo();
-        video.setUsername(username);
+        video.setUser(userService.getOrCreateUser(username));
         video.setTitle(filename);
         video.setS3Key(key);
         video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
@@ -176,7 +176,7 @@ public class LibraryController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
 
-        Page<ScheduledVideo> videoPage = repository.findByUsernameAndStatus(
+        Page<ScheduledVideo> videoPage = repository.findByUserEmailAndStatus(
                 username,
                 ScheduledVideo.VideoStatus.LIBRARY,
                 PageRequest.of(page, size, Sort.by("id").descending())
@@ -191,7 +191,7 @@ public class LibraryController {
         String username = SecurityUtils.getEmail(principal);
 
         ScheduledVideo video = repository.findById(id).orElse(null);
-        if (video == null || !video.getUsername().equals(username)) {
+        if (video == null || !video.getUser().getEmail().equals(username)) {
             return ResponseEntity.notFound().build();
         }
 
@@ -225,7 +225,7 @@ public class LibraryController {
         if (video == null) {
             return ResponseEntity.notFound().build();
         }
-        if (!video.getUsername().equals(username)) {
+        if (!video.getUser().getEmail().equals(username)) {
             return ResponseEntity.status(403).body(ApiResponse.error("Forbidden"));
         }
 
@@ -271,7 +271,7 @@ public class LibraryController {
             String topic = request.getTopic();
 
             // Get all LIBRARY videos for user
-            List<ScheduledVideo> libraryVideos = repository.findByUsername(username).stream()
+            List<ScheduledVideo> libraryVideos = repository.findByUserEmail(username).stream()
                     .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
                     .collect(Collectors.toList());
 

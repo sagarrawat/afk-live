@@ -44,7 +44,7 @@ public class UserFileService {
 
     public List<String> listConvertedVideos(String username) throws IOException {
         // Query database instead of file system to support S3 and Local storage uniformly
-        List<ScheduledVideo> videos = scheduledVideoRepository.findByUsername(username);
+        List<ScheduledVideo> videos = scheduledVideoRepository.findByUserEmail(username);
 
         return videos.stream()
                 .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
@@ -65,7 +65,7 @@ public class UserFileService {
     }
 
     public List<ScheduledVideo> listAudioFiles(String username) {
-        List<ScheduledVideo> videos = scheduledVideoRepository.findByUsername(username);
+        List<ScheduledVideo> videos = scheduledVideoRepository.findByUserEmail(username);
         return videos.stream()
                 .filter(v -> {
                     if (v.getTitle() == null) return false;

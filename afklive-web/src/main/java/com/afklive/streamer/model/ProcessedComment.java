@@ -12,7 +12,12 @@ public class ProcessedComment {
 
     private String commentId;
     private String videoId;
-    private String username; // Owner username
+
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
+
     private LocalDateTime processedAt = LocalDateTime.now();
     private String sentiment;
     private String actionTaken; // LIKED, DELETED, IGNORED
@@ -26,8 +31,13 @@ public class ProcessedComment {
     public String getVideoId() { return videoId; }
     public void setVideoId(String videoId) { this.videoId = videoId; }
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
+    public String getUsername() { return user != null ? user.getUsername() : null; }
+
+    public void setUsername(String username) { /* use setUser */ }
 
     public LocalDateTime getProcessedAt() { return processedAt; }
     public void setProcessedAt(LocalDateTime processedAt) { this.processedAt = processedAt; }

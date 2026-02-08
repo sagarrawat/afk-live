@@ -10,9 +10,9 @@ import java.util.Optional;
 
 public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     // Find the active job for a specific user
-    Optional<StreamJob> findByUsernameAndIsLiveTrue(String username);
-    List<StreamJob> findAllByUsernameAndIsLiveTrue(String username);
-    long countByUsernameAndIsLiveTrue(String username);
+    Optional<StreamJob> findByUserEmailAndIsLiveTrue(String email);
+    List<StreamJob> findAllByUserEmailAndIsLiveTrue(String email);
+    long countByUserEmailAndIsLiveTrue(String email);
 
     // Admin: Find ALL live jobs
     List<StreamJob> findAllByIsLiveTrue();
@@ -23,5 +23,5 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     List<StreamJob> findByIsLiveTrueAndAutoReplyEnabledTrue();
 
     // History
-    Page<StreamJob> findByUsernameOrderByStartTimeDesc(String username, Pageable pageable);
+    Page<StreamJob> findByUserEmailOrderByStartTimeDesc(String email, Pageable pageable);
 }

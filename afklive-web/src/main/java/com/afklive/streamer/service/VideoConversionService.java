@@ -1,6 +1,7 @@
 package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.ScheduledVideo;
+import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.util.AppConstants;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -99,7 +100,7 @@ public class VideoConversionService {
             return;
         }
 
-        ScheduledVideo scheduledVideo = repository.findByUsernameAndTitle(username, fileName)
+        ScheduledVideo scheduledVideo = repository.findByUserEmailAndTitle(username, fileName)
                 .orElse(null);
 
         if (scheduledVideo == null) {
@@ -154,7 +155,7 @@ public class VideoConversionService {
 
                     // Create NEW DB Entry
                     ScheduledVideo newVideo = new ScheduledVideo();
-                    newVideo.setUsername(username);
+                    newVideo.setUser(userService.getOrCreateUser(username));
                     newVideo.setTitle(targetTitle);
                     newVideo.setS3Key(optimizedKey);
                     newVideo.setFileSize(fileSize);
@@ -218,7 +219,7 @@ public class VideoConversionService {
 
                 // Create NEW DB Entry
                 ScheduledVideo newVideo = new ScheduledVideo();
-                newVideo.setUsername(username);
+                newVideo.setUser(userService.getOrCreateUser(username));
                 newVideo.setTitle(targetTitle);
                 newVideo.setS3Key(newKey);
                 newVideo.setFileSize(newSize);
@@ -354,7 +355,7 @@ public class VideoConversionService {
 
             // DB
             ScheduledVideo video = new ScheduledVideo();
-            video.setUsername(username);
+            video.setUser(userService.getOrCreateUser(username));
             video.setTitle(outputName);
             video.setS3Key(s3Key);
             video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);

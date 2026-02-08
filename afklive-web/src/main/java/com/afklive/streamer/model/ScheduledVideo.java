@@ -14,7 +14,10 @@ public class ScheduledVideo {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String username;
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
 
     @Column(length = 255) // Still VARCHAR(255) for DB, validation handles 100
     private String title;
@@ -37,7 +40,13 @@ public class ScheduledVideo {
 
     private Long fileSize; // in bytes
 
-    private Long socialChannelId; // Link to specific channel
+    @ManyToOne
+    @JoinColumn(name = "social_channel_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private SocialChannel socialChannel;
+
+    @Transient
+    private Long transientSocialChannelId;
 
     @Enumerated(EnumType.STRING)
     private VideoStatus status = VideoStatus.PENDING;
@@ -66,12 +75,21 @@ public class ScheduledVideo {
         this.id = id;
     }
 
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
     public String getUsername() {
-        return username;
+        return user != null ? user.getUsername() : null;
     }
 
     public void setUsername(String username) {
-        this.username = username;
+        // use setUser
     }
 
     public String getTitle() {
@@ -178,12 +196,21 @@ public class ScheduledVideo {
         this.fileSize = fileSize;
     }
 
+    public SocialChannel getSocialChannel() {
+        return socialChannel;
+    }
+
+    public void setSocialChannel(SocialChannel socialChannel) {
+        this.socialChannel = socialChannel;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("socialChannelId")
     public Long getSocialChannelId() {
-        return socialChannelId;
+        return socialChannel != null ? socialChannel.getId() : transientSocialChannelId;
     }
 
     public void setSocialChannelId(Long socialChannelId) {
-        this.socialChannelId = socialChannelId;
+        this.transientSocialChannelId = socialChannelId;
     }
 
     public OptimizationStatus getOptimizationStatus() {

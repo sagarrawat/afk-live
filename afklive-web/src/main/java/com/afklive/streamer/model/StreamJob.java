@@ -20,7 +20,11 @@ public class StreamJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String username;
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
+
     private String streamKey;
     private String fileName;
     private boolean isLive;
@@ -51,8 +55,17 @@ public class StreamJob {
     private String lastPageToken;
     private String liveChatId;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
+    public String getUsername() {
+        return user != null ? user.getUsername() : null;
+    }
+
+    public void setUsername(String username) {
+        // use setUser
+    }
+
     public StreamJob(
-            String username,
+            User user,
             String streamKey,
             String fileName,
             String musicName,
@@ -66,7 +79,7 @@ public class StreamJob {
             String destinationName,
             boolean autoReplyEnabled
     ) {
-        this.username = username;
+        this.user = user;
         this.streamKey = streamKey;
         this.fileName = fileName;
         this.musicName = musicName;

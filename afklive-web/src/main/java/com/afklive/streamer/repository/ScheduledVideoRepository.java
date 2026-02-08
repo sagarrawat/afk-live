@@ -12,10 +12,10 @@ import java.util.Optional;
 
 @Repository
 public interface ScheduledVideoRepository extends JpaRepository<ScheduledVideo, Long> {
-    List<ScheduledVideo> findByUsername(String username);
-    Page<ScheduledVideo> findByUsername(String username, Pageable pageable);
-    Page<ScheduledVideo> findByUsernameAndStatus(String username, ScheduledVideo.VideoStatus status, Pageable pageable);
+    List<ScheduledVideo> findByUserEmail(String email);
+    Page<ScheduledVideo> findByUserEmail(String email, Pageable pageable);
+    Page<ScheduledVideo> findByUserEmailAndStatus(String email, ScheduledVideo.VideoStatus status, Pageable pageable);
     List<ScheduledVideo> findByStatusAndScheduledTimeLessThanEqual(ScheduledVideo.VideoStatus status, ZonedDateTime time);
-    Optional<ScheduledVideo> findByUsernameAndTitle(String username, String filename);
-    Optional<ScheduledVideo> findFirstByUsernameAndS3Key(String username, String s3Key);
+    Optional<ScheduledVideo> findByUserEmailAndTitle(String email, String filename);
+    Optional<ScheduledVideo> findFirstByUserEmailAndS3Key(String email, String s3Key);
 }

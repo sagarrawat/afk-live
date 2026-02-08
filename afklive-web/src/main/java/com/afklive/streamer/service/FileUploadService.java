@@ -33,7 +33,7 @@ public class FileUploadService {
         }
 
         int counter = 1;
-        while (repository.findByUsernameAndTitle(username, fileName).isPresent()) {
+        while (repository.findByUserEmailAndTitle(username, fileName).isPresent()) {
             fileName = baseName + "-" + counter + extension;
             counter++;
         }
@@ -46,7 +46,7 @@ public class FileUploadService {
 
         // Create DB Entry so it can be converted/listed
         ScheduledVideo video = new ScheduledVideo();
-        video.setUsername(username);
+        video.setUser(userService.getOrCreateUser(username));
         video.setTitle(fileName);
         video.setS3Key(s3Key);
         video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);

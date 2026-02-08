@@ -11,21 +11,22 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, String> {
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
     Optional<User> findByVerificationToken(String token);
     Optional<User> findByResetToken(String token);
 
     Slice<User> findByAutoReplyEnabledTrue(Pageable pageable);
 
-    Page<User> findByUsernameContainingIgnoreCaseOrFullNameContainingIgnoreCase(String username, String fullName, Pageable pageable);
+    Page<User> findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(String email, String fullName, Pageable pageable);
 
     @Modifying
-    @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance + :amount WHERE u.username = :username")
-    void addUnpaidBalance(@Param("username") String username, @Param("amount") double amount);
+    @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance + :amount WHERE u.email = :email")
+    void addUnpaidBalance(@Param("email") String email, @Param("amount") double amount);
 
     @Modifying
-    @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance - :amount WHERE u.username = :username")
-    void deductUnpaidBalance(@Param("username") String username, @Param("amount") double amount);
+    @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance - :amount WHERE u.email = :email")
+    void deductUnpaidBalance(@Param("email") String email, @Param("amount") double amount);
 
     @Query("SELECT COALESCE(SUM(u.unpaidBalance), 0) FROM User u")
     Double sumUnpaidBalance();

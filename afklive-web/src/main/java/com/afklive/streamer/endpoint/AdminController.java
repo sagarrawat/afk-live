@@ -70,10 +70,10 @@ public class AdminController {
         // Users
         Page<User> usersPage;
         if (userSearch != null && !userSearch.trim().isEmpty()) {
-            usersPage = userRepository.findByUsernameContainingIgnoreCaseOrFullNameContainingIgnoreCase(
-                    userSearch.trim(), userSearch.trim(), PageRequest.of(userPage, userSize, Sort.by("username")));
+            usersPage = userRepository.findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(
+                    userSearch.trim(), userSearch.trim(), PageRequest.of(userPage, userSize, Sort.by("email")));
         } else {
-            usersPage = userRepository.findAll(PageRequest.of(userPage, userSize, Sort.by("username")));
+            usersPage = userRepository.findAll(PageRequest.of(userPage, userSize, Sort.by("email")));
         }
 
         // Active Streams
@@ -139,7 +139,7 @@ public class AdminController {
 
     @PostMapping("/users/{username}/limit")
     public String updateUserLimit(@PathVariable String username, @RequestParam double limit) {
-        userRepository.findById(username).ifPresent(user -> {
+        userRepository.findByEmail(username).ifPresent(user -> {
             user.setCreditLimit(limit);
             userRepository.save(user);
         });
@@ -148,7 +148,7 @@ public class AdminController {
 
     @PostMapping("/users/{username}/blacklist")
     public String toggleUserBlacklist(@PathVariable String username, @RequestParam boolean enabled) {
-        userRepository.findById(username).ifPresent(user -> {
+        userRepository.findByEmail(username).ifPresent(user -> {
             user.setEnabled(enabled);
             userRepository.save(user);
         });

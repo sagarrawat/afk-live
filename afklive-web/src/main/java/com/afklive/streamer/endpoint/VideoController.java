@@ -83,7 +83,7 @@ public class VideoController {
                 Optional<ScheduledVideo> libVideoOpt = repository.findById(libraryVideoId);
                 if (libVideoOpt.isEmpty()) return ResponseEntity.badRequest().body("Library video not found");
                 ScheduledVideo libVideo = libVideoOpt.get();
-                if (!libVideo.getUsername().equals(username)) return ResponseEntity.status(403).body("Forbidden");
+                if (!libVideo.getUser().getEmail().equals(username)) return ResponseEntity.status(403).body("Forbidden");
 
                 // Check quota for the COPY
                 // If we copy, we use more storage.
@@ -155,7 +155,7 @@ public class VideoController {
 
             // Save Metadata
             ScheduledVideo video = new ScheduledVideo();
-            video.setUsername(username);
+            video.setUser(userService.getOrCreateUser(username));
             video.setTitle(title);
             video.setDescription(description);
             video.setTags(tags);
@@ -187,7 +187,7 @@ public class VideoController {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = SecurityUtils.getEmail(principal);
 
-        List<ScheduledVideo> videos = repository.findByUsername(username);
+        List<ScheduledVideo> videos = repository.findByUserEmail(username);
         return ResponseEntity.ok(videos);
     }
 
@@ -208,7 +208,7 @@ public class VideoController {
         if (videoOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         ScheduledVideo video = videoOpt.get();
-        if (!video.getUsername().equals(username)) return ResponseEntity.status(403).build();
+        if (!video.getUser().getEmail().equals(username)) return ResponseEntity.status(403).build();
 
         if (video.getThumbnailS3Key() == null) return ResponseEntity.notFound().build();
 

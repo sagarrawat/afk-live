@@ -26,8 +26,8 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EngagementService {
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EngagementService.class);
 
     private final UserRepository userRepository;
     private final ProcessedCommentRepository processedRepository;
@@ -36,6 +36,7 @@ public class EngagementService {
     private final AiService aiService;
     private final StreamJobRepository streamJobRepo;
     private final AppSettingRepository appSettingRepository;
+    private final UserService userService;
 
     // Run via JobRunr (30s)
     public void processLiveEngagement() {
@@ -45,15 +46,18 @@ public class EngagementService {
         Set<String> processedUsers = new java.util.HashSet<>();
 
         for (StreamJob job : jobs) {
-            if (processedUsers.contains(job.getUsername())) continue;
-            processedUsers.add(job.getUsername());
+            String email = job.getUser().getEmail();
+            if (processedUsers.contains(email)) continue;
+            processedUsers.add(email);
             processLiveChatForUser(job);
         }
     }
 
     private void processLiveChatForUser(StreamJob job) {
         try {
-            String username = job.getUsername();
+            User user = job.getUser();
+            String username = user.getEmail();
+
             if (!youTubeService.isConnected(username)) return;
 
             String liveChatId = job.getLiveChatId();
@@ -88,7 +92,7 @@ public class EngagementService {
                         youTubeService.replyToLiveChat(username, liveChatId, reply);
 
                         // Log
-                        logActivity(username, "LIVE_REPLY", msg.getId(), liveChatId, reply, null);
+                        logActivity(user, "LIVE_REPLY", msg.getId(), liveChatId, reply, null);
                     } else {
                         log.warn("AI failed to generate reply for msg: {}", msg.getId());
                     }
@@ -98,7 +102,7 @@ public class EngagementService {
                 streamJobRepo.save(job);
             }
         } catch (Exception e) {
-            log.error("Live engagement error for user {}", job.getUsername(), e);
+            log.error("Live engagement error for user {}", job.getUser().getEmail(), e);
         }
     }
 
@@ -111,7 +115,7 @@ public class EngagementService {
         Slice<User> userSlice;
 
         do {
-            userSlice = userRepository.findByAutoReplyEnabledTrue(PageRequest.of(page, size, Sort.by("username")));
+            userSlice = userRepository.findByAutoReplyEnabledTrue(PageRequest.of(page, size, Sort.by("email")));
             for (User user : userSlice) {
                 processUserComments(user);
             }
@@ -127,9 +131,10 @@ public class EngagementService {
 
     public void processUserComments(User user) {
         try {
-            if (!youTubeService.isConnected(user.getUsername())) return;
+            String username = user.getEmail();
+            if (!youTubeService.isConnected(username)) return;
 
-            CommentThreadListResponse response = youTubeService.getCommentThreads(user.getUsername());
+            CommentThreadListResponse response = youTubeService.getCommentThreads(username);
 
             // Handle 304 Not Modified or empty response
             if (response == null || response.getItems() == null || response.getItems().isEmpty()) return;
@@ -152,20 +157,23 @@ public class EngagementService {
                 String action = "IGNORED";
 
                 String replyText = null;
+                String newId = null;
 
                 if (sentiment.contains("NEGATIVE")) {
                     if (user.isDeleteNegativeComments()) {
-                        youTubeService.deleteComment(user.getUsername(), commentId);
+                        youTubeService.deleteComment(username, commentId);
                         action = "DELETED";
-                        logActivity(user.getUsername(), "DELETE", commentId, videoId, text, null);
+                        logActivity(user, "DELETE", commentId, videoId, text, null);
                     }
                 } else if (sentiment.contains("POSITIVE") || user.isAutoReplyEnabled()) {
                     // Reply logic...
                     if (sentiment.contains("POSITIVE")) {
                         replyText = aiService.generateSingleReply(text);
-                        String newId = youTubeService.replyToComment(user.getUsername(), commentId, replyText);
-                        action = "REPLIED";
-                        logActivity(user.getUsername(), "REPLY", commentId, videoId, replyText, newId);
+                        if (replyText != null) {
+                             newId = youTubeService.replyToComment(username, commentId, replyText);
+                             action = "REPLIED";
+                             logActivity(user, "REPLY", commentId, videoId, replyText, newId);
+                        }
                     }
                 }
 
@@ -173,20 +181,20 @@ public class EngagementService {
                 ProcessedComment pc = new ProcessedComment();
                 pc.setCommentId(commentId);
                 pc.setVideoId(videoId);
-                pc.setUsername(user.getUsername());
+                pc.setUser(user);
                 pc.setSentiment(sentiment);
                 pc.setActionTaken(action);
                 pc.setProcessedAt(java.time.LocalDateTime.now());
                 processedRepository.save(pc);
             }
         } catch (Exception e) {
-            log.error("Engagement error for user {}", user.getUsername(), e);
+            log.error("Engagement error for user {}", user.getEmail(), e);
         }
     }
 
-    private void logActivity(String username, String type, String commentId, String videoId, String content, String createdId) {
+    private void logActivity(User user, String type, String commentId, String videoId, String content, String createdId) {
         EngagementActivity activity = new EngagementActivity();
-        activity.setUsername(username);
+        activity.setUser(user);
         activity.setActionType(type);
         activity.setCommentId(commentId);
         activity.setVideoId(videoId);
