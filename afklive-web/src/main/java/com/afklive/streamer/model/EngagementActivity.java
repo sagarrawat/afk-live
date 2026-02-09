@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "engagement_activity", indexes = {
-    @Index(name = "idx_engagement_user_time", columnList = "username, timestamp DESC")
+    @Index(name = "idx_engagement_user_time", columnList = "user_id, timestamp DESC")
 })
 public class EngagementActivity {
     @Id
