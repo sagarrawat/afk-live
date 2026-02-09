@@ -41,6 +41,9 @@ public class VideoController {
     private final UserService userService;
     private final AudioService audioService;
     private final VideoConversionService videoConversionService;
+    private final com.afklive.streamer.repository.SocialChannelRepository channelRepository;
+    private final com.afklive.streamer.service.TagService tagService;
+    private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
 
     @GetMapping("/youtube/categories")
     public ResponseEntity<?> getVideoCategories(Principal principal) {
@@ -62,6 +65,7 @@ public class VideoController {
             @RequestParam("tags") String tags,
             @RequestParam("privacyStatus") String privacyStatus,
             @RequestParam(value = "categoryId", required = false) String categoryId,
+            @RequestParam(value = "socialChannelId", required = false) Long socialChannelId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
             @RequestParam(value = "firstComment", required = false) String firstComment,
             @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
@@ -83,7 +87,7 @@ public class VideoController {
                 Optional<ScheduledVideo> libVideoOpt = repository.findById(libraryVideoId);
                 if (libVideoOpt.isEmpty()) return ResponseEntity.badRequest().body("Library video not found");
                 ScheduledVideo libVideo = libVideoOpt.get();
-                if (!libVideo.getUsername().equals(username)) return ResponseEntity.status(403).body("Forbidden");
+                if (!libVideo.getUser().getEmail().equals(username)) return ResponseEntity.status(403).body("Forbidden");
 
                 // Check quota for the COPY
                 // If we copy, we use more storage.
@@ -155,20 +159,46 @@ public class VideoController {
 
             // Save Metadata
             ScheduledVideo video = new ScheduledVideo();
-            video.setUsername(username);
+            com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+            video.setUser(user);
             video.setTitle(title);
             video.setDescription(description);
-            video.setTags(tags);
+            video.setTags(tags); // Transient
+            video.setTagEntities(tagService.parseAndSaveTags(tags)); // Persisted
             video.setCategoryId(categoryId);
             video.setPrivacyStatus(privacyStatus);
-            video.setCategoryId(categoryId);
             video.setScheduledTime(scheduledTime);
-            video.setS3Key(s3Key);
-            video.setThumbnailS3Key(thumbnailKey);
+
+            // Link Media Asset
+            if (s3Key != null) {
+                com.afklive.streamer.model.MediaAsset videoAsset = new com.afklive.streamer.model.MediaAsset(
+                    user, title, s3Key, finalSize, com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+                );
+                video.setMediaAsset(mediaAssetRepository.save(videoAsset));
+            }
+
+            // Link Thumbnail Asset
+            if (thumbnailKey != null) {
+                com.afklive.streamer.model.MediaAsset thumbAsset = new com.afklive.streamer.model.MediaAsset(
+                    user, "thumbnail_" + title, thumbnailKey, thumbnail.getSize(), com.afklive.streamer.model.MediaAsset.ContentType.IMAGE
+                );
+                video.setThumbnailAsset(mediaAssetRepository.save(thumbAsset));
+            }
+
             if (firstComment != null && !firstComment.trim().isEmpty()) {
                 video.setFirstComment(firstComment);
             }
             video.setStatus(ScheduledVideo.VideoStatus.PENDING);
+
+            // Handle Social Channel Linking
+            if (socialChannelId != null) {
+                com.afklive.streamer.model.SocialChannel channel = channelRepository.findById(socialChannelId).orElse(null);
+                if (channel != null && channel.getUser().getId().equals(user.getId())) {
+                    video.setSocialChannel(channel);
+                } else {
+                    log.warn("Invalid social channel ID {} for user {}", socialChannelId, username);
+                }
+            }
 
             repository.save(video);
 
@@ -187,7 +217,7 @@ public class VideoController {
         if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
         String username = SecurityUtils.getEmail(principal);
 
-        List<ScheduledVideo> videos = repository.findByUsername(username);
+        List<ScheduledVideo> videos = repository.findByUserEmail(username);
         return ResponseEntity.ok(videos);
     }
 
@@ -208,7 +238,7 @@ public class VideoController {
         if (videoOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         ScheduledVideo video = videoOpt.get();
-        if (!video.getUsername().equals(username)) return ResponseEntity.status(403).build();
+        if (!video.getUser().getEmail().equals(username)) return ResponseEntity.status(403).build();
 
         if (video.getThumbnailS3Key() == null) return ResponseEntity.notFound().build();
 

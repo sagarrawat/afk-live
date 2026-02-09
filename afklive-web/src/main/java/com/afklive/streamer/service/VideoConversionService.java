@@ -1,6 +1,7 @@
 package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.ScheduledVideo;
+import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
 import com.afklive.streamer.util.AppConstants;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -40,6 +41,7 @@ public class VideoConversionService {
     private final FileStorageService storageService;
     private final UserService userService;
     private final ScheduledVideoRepository repository;
+    private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
     private final Cache<String, Integer> conversionProgress = Caffeine.newBuilder()
             .expireAfterWrite(30, TimeUnit.MINUTES)
             .build();
@@ -53,6 +55,7 @@ public class VideoConversionService {
             FileStorageService storageService,
             UserService userService,
             ScheduledVideoRepository repository,
+            com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository,
             @Value("${app.aws.access-key:}") String awsAccessKey,
             @Value("${app.aws.secret-key:}") String awsSecretKey,
             @Value("${app.aws.region:us-east-1}") String awsRegion,
@@ -60,6 +63,7 @@ public class VideoConversionService {
         this.storageService = storageService;
         this.userService = userService;
         this.repository = repository;
+        this.mediaAssetRepository = mediaAssetRepository;
         this.lambdaFunctionName = lambdaFunctionName;
 
         if (awsAccessKey != null && !awsAccessKey.isEmpty() && awsSecretKey != null && !awsSecretKey.isEmpty()) {
@@ -99,7 +103,7 @@ public class VideoConversionService {
             return;
         }
 
-        ScheduledVideo scheduledVideo = repository.findByUsernameAndTitle(username, fileName)
+        ScheduledVideo scheduledVideo = repository.findByUserEmailAndTitle(username, fileName)
                 .orElse(null);
 
         if (scheduledVideo == null) {
@@ -152,12 +156,22 @@ public class VideoConversionService {
                     userService.checkStorageQuota(username, fileSize);
                     userService.updateStorageUsage(username, fileSize);
 
+                    // Create Media Asset
+                    com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+                    com.afklive.streamer.model.MediaAsset asset = new com.afklive.streamer.model.MediaAsset(
+                        user,
+                        targetTitle,
+                        optimizedKey,
+                        fileSize,
+                        com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+                    );
+                    asset = mediaAssetRepository.save(asset);
+
                     // Create NEW DB Entry
                     ScheduledVideo newVideo = new ScheduledVideo();
-                    newVideo.setUsername(username);
+                    newVideo.setUser(user);
                     newVideo.setTitle(targetTitle);
-                    newVideo.setS3Key(optimizedKey);
-                    newVideo.setFileSize(fileSize);
+                    newVideo.setMediaAsset(asset);
                     newVideo.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
                     newVideo.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
                     newVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.COMPLETED);
@@ -216,16 +230,25 @@ public class VideoConversionService {
 
                 userService.updateStorageUsage(username, newSize);
 
+                // Create Media Asset
+                com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+                com.afklive.streamer.model.MediaAsset asset = new com.afklive.streamer.model.MediaAsset(
+                    user,
+                    targetTitle,
+                    newKey,
+                    newSize,
+                    com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+                );
+                asset = mediaAssetRepository.save(asset);
+
                 // Create NEW DB Entry
                 ScheduledVideo newVideo = new ScheduledVideo();
-                newVideo.setUsername(username);
+                newVideo.setUser(user);
                 newVideo.setTitle(targetTitle);
-                newVideo.setS3Key(newKey);
-                newVideo.setFileSize(newSize);
+                newVideo.setMediaAsset(asset);
                 newVideo.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
                 newVideo.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
                 newVideo.setOptimizationStatus(ScheduledVideo.OptimizationStatus.COMPLETED);
-                // Inherit category/tags? Maybe
                 newVideo.setCategoryId(scheduledVideo.getCategoryId());
                 newVideo.setTags(scheduledVideo.getTags());
 
@@ -352,14 +375,24 @@ public class VideoConversionService {
             String s3Key = storageService.uploadFile(Files.newInputStream(output), outputName, size);
             userService.updateStorageUsage(username, size);
 
+            // Create Media Asset
+            com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+            com.afklive.streamer.model.MediaAsset asset = new com.afklive.streamer.model.MediaAsset(
+                user,
+                outputName,
+                s3Key,
+                size,
+                com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+            );
+            asset = mediaAssetRepository.save(asset);
+
             // DB
             ScheduledVideo video = new ScheduledVideo();
-            video.setUsername(username);
+            video.setUser(user);
             video.setTitle(outputName);
-            video.setS3Key(s3Key);
+            video.setMediaAsset(asset);
             video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
             video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
-            video.setFileSize(size);
             repository.save(video);
 
             log.info("Merge completed: {}", outputName);

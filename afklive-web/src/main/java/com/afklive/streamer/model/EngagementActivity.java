@@ -5,14 +5,18 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "engagement_activity", indexes = {
-    @Index(name = "idx_engagement_user_time", columnList = "username, timestamp DESC")
+    @Index(name = "idx_engagement_user_time", columnList = "user_id, timestamp DESC")
 })
 public class EngagementActivity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String username;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
+
     private String actionType; // REPLY, DELETE, LIKE
     private String commentId; // The ID of the comment being acted upon
     private String videoId;
@@ -27,8 +31,13 @@ public class EngagementActivity {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
+    public String getUsername() { return user != null ? user.getUsername() : null; }
+
+    public void setUsername(String username) { /* use setUser */ }
 
     public String getActionType() { return actionType; }
     public void setActionType(String actionType) { this.actionType = actionType; }

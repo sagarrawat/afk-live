@@ -47,6 +47,10 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.jobrunr</groupId>
             <artifactId>jobrunr-spring-boot-3-starter</artifactId>
             <version>7.3.1</version>

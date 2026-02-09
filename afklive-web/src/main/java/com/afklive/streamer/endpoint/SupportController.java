@@ -4,6 +4,7 @@ import com.afklive.streamer.model.SupportTicket;
 import com.afklive.streamer.repository.SupportTicketRepository;
 import com.afklive.streamer.service.EmailService;
 import com.afklive.streamer.service.FileStorageService;
+import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ public class SupportController {
     private final EmailService emailService;
     private final SupportTicketRepository supportTicketRepository;
     private final FileStorageService storageService;
+    private final UserService userService;
 
     @PostMapping("/ticket")
     public ResponseEntity<?> submitTicket(
@@ -58,7 +60,7 @@ public class SupportController {
         }
 
         SupportTicket ticket = SupportTicket.builder()
-                .userEmail(email)
+                .user(userService.getOrCreateUser(email))
                 .category(category)
                 .message(message)
                 .attachmentKey(attachmentKey)

@@ -3,7 +3,6 @@ package com.afklive.streamer.service;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
-import com.afklive.streamer.repository.SocialChannelRepository;
 import com.afklive.streamer.util.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +19,6 @@ public class VideoSchedulerService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VideoSchedulerService.class);
 
     private final ScheduledVideoRepository repository;
-    private final SocialChannelRepository channelRepository;
     private final FileStorageService storageService;
     private final YouTubeService youTubeService;
     private final InstagramService instagramService;
@@ -44,18 +42,16 @@ public class VideoSchedulerService {
         repository.save(video);
 
         try {
-            InputStream fileStream = storageService.downloadFile(video.getS3Key());
+            InputStream fileStream = storageService.downloadFile(video.getMediaAsset().getS3Key());
             String videoId = null;
             String platform = AppConstants.PLATFORM_YOUTUBE;
-            String credentialId = video.getUsername(); // Default to owner
+            String credentialId = video.getUsername(); // Default to owner email
 
-            if (video.getSocialChannelId() != null) {
-                SocialChannel channel = channelRepository.findById(video.getSocialChannelId()).orElse(null);
-                if (channel != null) {
-                    platform = channel.getPlatform();
-                    if (channel.getCredentialId() != null) {
-                        credentialId = channel.getCredentialId();
-                    }
+            SocialChannel channel = video.getSocialChannel();
+            if (channel != null) {
+                platform = channel.getPlatform();
+                if (channel.getCredentialId() != null) {
+                    credentialId = channel.getCredentialId();
                 }
             }
 
@@ -85,8 +81,8 @@ public class VideoSchedulerService {
                         video.getCategoryId()
                 );
 
-                if (video.getThumbnailS3Key() != null) {
-                    try (InputStream thumbStream = storageService.downloadFile(video.getThumbnailS3Key())) {
+                if (video.getThumbnailAsset() != null) {
+                    try (InputStream thumbStream = storageService.downloadFile(video.getThumbnailAsset().getS3Key())) {
                         youTubeService.uploadThumbnail(credentialId, videoId, thumbStream);
                     } catch (Exception e) {
                         log.error("Failed to upload thumbnail for video {}", video.getId(), e);

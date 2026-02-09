@@ -1,0 +1,48 @@
+package com.afklive.streamer.model;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "media_assets", indexes = {
+    @Index(name = "idx_media_assets_user", columnList = "user_id"),
+    @Index(name = "idx_media_assets_s3key", columnList = "s3_key")
+})
+@Data
+@NoArgsConstructor
+public class MediaAsset {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    private String title; // Filename
+
+    @Column(name = "s3_key", nullable = false)
+    private String s3Key;
+
+    private Long fileSize = 0L;
+
+    @Enumerated(EnumType.STRING)
+    private ContentType contentType = ContentType.VIDEO;
+
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    public enum ContentType {
+        VIDEO, IMAGE, AUDIO
+    }
+
+    public MediaAsset(User user, String title, String s3Key, Long fileSize, ContentType contentType) {
+        this.user = user;
+        this.title = title;
+        this.s3Key = s3Key;
+        this.fileSize = fileSize;
+        this.contentType = contentType;
+        this.createdAt = LocalDateTime.now();
+    }
+}
