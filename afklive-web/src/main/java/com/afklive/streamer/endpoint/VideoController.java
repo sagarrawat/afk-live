@@ -41,6 +41,7 @@ public class VideoController {
     private final UserService userService;
     private final AudioService audioService;
     private final VideoConversionService videoConversionService;
+    private final com.afklive.streamer.repository.SocialChannelRepository channelRepository;
 
     @GetMapping("/youtube/categories")
     public ResponseEntity<?> getVideoCategories(Principal principal) {
@@ -62,6 +63,7 @@ public class VideoController {
             @RequestParam("tags") String tags,
             @RequestParam("privacyStatus") String privacyStatus,
             @RequestParam(value = "categoryId", required = false) String categoryId,
+            @RequestParam(value = "socialChannelId", required = false) Long socialChannelId,
             @RequestParam("scheduledTime") String scheduledTimeStr,
             @RequestParam(value = "firstComment", required = false) String firstComment,
             @RequestParam(value = "audioFile", required = false) MultipartFile audioFile,
@@ -155,7 +157,8 @@ public class VideoController {
 
             // Save Metadata
             ScheduledVideo video = new ScheduledVideo();
-            video.setUser(userService.getOrCreateUser(username));
+            com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+            video.setUser(user);
             video.setTitle(title);
             video.setDescription(description);
             video.setTags(tags);
@@ -169,6 +172,16 @@ public class VideoController {
                 video.setFirstComment(firstComment);
             }
             video.setStatus(ScheduledVideo.VideoStatus.PENDING);
+
+            // Handle Social Channel Linking
+            if (socialChannelId != null) {
+                com.afklive.streamer.model.SocialChannel channel = channelRepository.findById(socialChannelId).orElse(null);
+                if (channel != null && channel.getUser().getId().equals(user.getId())) {
+                    video.setSocialChannel(channel);
+                } else {
+                    log.warn("Invalid social channel ID {} for user {}", socialChannelId, username);
+                }
+            }
 
             repository.save(video);
 

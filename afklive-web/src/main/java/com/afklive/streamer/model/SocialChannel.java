@@ -17,8 +17,8 @@ public class SocialChannel {
     private String profileUrl;
     private String credentialId;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
     @JsonIgnore
     private User user;
 

@@ -16,6 +16,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByVerificationToken(String token);
     Optional<User> findByResetToken(String token);
 
+    // Used in EngagementService for cron, might need channels?
+    // EngagementService calls youTubeService which needs channels.
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.channels WHERE u.autoReplyEnabled = true")
     Slice<User> findByAutoReplyEnabledTrue(Pageable pageable);
 
     Page<User> findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(String email, String fullName, Pageable pageable);
