@@ -42,7 +42,7 @@ public class VideoSchedulerService {
         repository.save(video);
 
         try {
-            InputStream fileStream = storageService.downloadFile(video.getS3Key());
+            InputStream fileStream = storageService.downloadFile(video.getMediaAsset().getS3Key());
             String videoId = null;
             String platform = AppConstants.PLATFORM_YOUTUBE;
             String credentialId = video.getUsername(); // Default to owner email
@@ -81,8 +81,8 @@ public class VideoSchedulerService {
                         video.getCategoryId()
                 );
 
-                if (video.getThumbnailS3Key() != null) {
-                    try (InputStream thumbStream = storageService.downloadFile(video.getThumbnailS3Key())) {
+                if (video.getThumbnailAsset() != null) {
+                    try (InputStream thumbStream = storageService.downloadFile(video.getThumbnailAsset().getS3Key())) {
                         youTubeService.uploadThumbnail(credentialId, videoId, thumbStream);
                     } catch (Exception e) {
                         log.error("Failed to upload thumbnail for video {}", video.getId(), e);

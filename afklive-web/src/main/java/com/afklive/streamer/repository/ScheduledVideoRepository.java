@@ -14,20 +14,22 @@ import java.util.Optional;
 @Repository
 public interface ScheduledVideoRepository extends JpaRepository<ScheduledVideo, Long> {
 
-    @Query("SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user WHERE v.user.email = :email")
+    @Query("SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user LEFT JOIN FETCH v.mediaAsset LEFT JOIN FETCH v.tagEntities WHERE v.user.email = :email")
     List<ScheduledVideo> findByUserEmail(String email);
 
-    @Query(value = "SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user WHERE v.user.email = :email",
+    @Query(value = "SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user LEFT JOIN FETCH v.mediaAsset LEFT JOIN FETCH v.tagEntities WHERE v.user.email = :email",
            countQuery = "SELECT COUNT(v) FROM ScheduledVideo v WHERE v.user.email = :email")
     Page<ScheduledVideo> findByUserEmail(String email, Pageable pageable);
 
-    @Query(value = "SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user WHERE v.user.email = :email AND v.status = :status",
+    @Query(value = "SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user LEFT JOIN FETCH v.mediaAsset LEFT JOIN FETCH v.tagEntities WHERE v.user.email = :email AND v.status = :status",
            countQuery = "SELECT COUNT(v) FROM ScheduledVideo v WHERE v.user.email = :email AND v.status = :status")
     Page<ScheduledVideo> findByUserEmailAndStatus(String email, ScheduledVideo.VideoStatus status, Pageable pageable);
 
-    @Query("SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user WHERE v.status = :status AND v.scheduledTime <= :time")
+    @Query("SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user LEFT JOIN FETCH v.mediaAsset LEFT JOIN FETCH v.tagEntities WHERE v.status = :status AND v.scheduledTime <= :time")
     List<ScheduledVideo> findByStatusAndScheduledTimeLessThanEqual(ScheduledVideo.VideoStatus status, ZonedDateTime time);
 
     Optional<ScheduledVideo> findByUserEmailAndTitle(String email, String filename);
+
+    @Query("SELECT v FROM ScheduledVideo v JOIN v.mediaAsset ma WHERE v.user.email = :email AND ma.s3Key = :s3Key")
     Optional<ScheduledVideo> findFirstByUserEmailAndS3Key(String email, String s3Key);
 }

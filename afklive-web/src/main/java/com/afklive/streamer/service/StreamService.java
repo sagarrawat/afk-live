@@ -206,8 +206,8 @@ public class StreamService {
                 // Resolve user audio file from DB/S3
                 String audioKey = musicName;
                 Optional<ScheduledVideo> audioFileOpt = scheduledVideoRepository.findByUserEmailAndTitle(username, musicName);
-                if (audioFileOpt.isPresent()) {
-                    audioKey = audioFileOpt.get().getS3Key();
+                if (audioFileOpt.isPresent() && audioFileOpt.get().getMediaAsset() != null) {
+                    audioKey = audioFileOpt.get().getMediaAsset().getS3Key();
                 }
 
                 Path localAudioPath = userDir.resolve("audio_" + audioKey).toAbsolutePath();

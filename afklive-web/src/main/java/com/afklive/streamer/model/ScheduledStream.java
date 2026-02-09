@@ -24,13 +24,21 @@ public class ScheduledStream {
     @com.fasterxml.jackson.annotation.JsonIgnore
     private User user;
 
-    private String videoKey; // S3 Key or Filename
+    @ManyToOne
+    @JoinColumn(name = "media_asset_id")
+    private MediaAsset mediaAsset;
 
-    @ElementCollection
-    @CollectionTable(name = "scheduled_stream_stream_keys", joinColumns = @JoinColumn(name = "scheduled_stream_id"))
-    @Column(name = "stream_keys")
+    @ManyToMany
+    @JoinTable(
+        name = "scheduled_stream_destinations",
+        joinColumns = @JoinColumn(name = "scheduled_stream_id"),
+        inverseJoinColumns = @JoinColumn(name = "stream_destination_id")
+    )
+    private java.util.List<StreamDestination> destinations;
+
+    @Transient
     @NotEmpty(message = "At least one destination required")
-    private List<String> streamKeys;
+    private List<String> streamKeys; // Backward compat for DTO
 
     @jakarta.validation.constraints.NotNull(message = "Scheduled time is required")
     @Future(message = "Scheduled time must be in the future")
@@ -51,6 +59,16 @@ public class ScheduledStream {
 
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
+
+    // Legacy Getter
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public String getVideoKey() {
+        return mediaAsset != null ? mediaAsset.getS3Key() : null;
+    }
+
+    public void setVideoKey(String videoKey) {
+        // No-op or handle in service to lookup asset
+    }
 
     @com.fasterxml.jackson.annotation.JsonProperty("username")
     public String getUsername() {

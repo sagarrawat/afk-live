@@ -18,6 +18,7 @@ public class FileUploadService {
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
     private final UserService userService;
+    private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
 
     public String handleFileUpload(MultipartFile file, String username) throws IOException {
         String originalName = file.getOriginalFilename();
@@ -44,14 +45,24 @@ public class FileUploadService {
         String s3Key = storageService.uploadFile(file.getInputStream(), fileName, size);
         userService.updateStorageUsage(username, size);
 
+        // Create Media Asset
+        com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+        com.afklive.streamer.model.MediaAsset asset = new com.afklive.streamer.model.MediaAsset(
+            user,
+            fileName,
+            s3Key,
+            size,
+            com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+        );
+        asset = mediaAssetRepository.save(asset);
+
         // Create DB Entry so it can be converted/listed
         ScheduledVideo video = new ScheduledVideo();
-        video.setUser(userService.getOrCreateUser(username));
+        video.setUser(user);
         video.setTitle(fileName);
-        video.setS3Key(s3Key);
+        video.setMediaAsset(asset);
         video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
         video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
-        video.setFileSize(size);
         repository.save(video);
 
         return originalName;

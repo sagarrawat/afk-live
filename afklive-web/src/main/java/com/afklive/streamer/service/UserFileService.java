@@ -22,11 +22,13 @@ public class UserFileService {
     private final Path baseUploadDir = Paths.get("uploads");
     private final VideoConversionService videoConversionService;
     private final ScheduledVideoRepository scheduledVideoRepository;
+    private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
 
     @Autowired
-    public UserFileService(@Lazy VideoConversionService videoConversionService, ScheduledVideoRepository scheduledVideoRepository) throws IOException {
+    public UserFileService(@Lazy VideoConversionService videoConversionService, ScheduledVideoRepository scheduledVideoRepository, com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository) throws IOException {
         this.videoConversionService = videoConversionService;
         this.scheduledVideoRepository = scheduledVideoRepository;
+        this.mediaAssetRepository = mediaAssetRepository;
         if (!Files.exists(baseUploadDir)) {
             log.info("Creating base upload directory: {}", baseUploadDir);
             Files.createDirectories(baseUploadDir);
@@ -43,12 +45,12 @@ public class UserFileService {
     }
 
     public List<String> listConvertedVideos(String username) throws IOException {
-        // Query database instead of file system to support S3 and Local storage uniformly
-        List<ScheduledVideo> videos = scheduledVideoRepository.findByUserEmail(username);
+        // Query Media Assets instead of ScheduledVideos
+        List<com.afklive.streamer.model.MediaAsset> assets = mediaAssetRepository.findByUserEmail(username);
 
-        return videos.stream()
-                .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
-                .map(ScheduledVideo::getTitle)
+        return assets.stream()
+                .filter(a -> a.getContentType() == com.afklive.streamer.model.MediaAsset.ContentType.VIDEO)
+                .map(com.afklive.streamer.model.MediaAsset::getTitle)
                 .filter(title -> title != null && !title.isEmpty())
                 .filter(title -> !title.contains("_raw"))
                 .filter(this::isVideoFile)
@@ -64,14 +66,10 @@ public class UserFileService {
         return filename.toLowerCase().endsWith(".mp4");
     }
 
-    public List<ScheduledVideo> listAudioFiles(String username) {
-        List<ScheduledVideo> videos = scheduledVideoRepository.findByUserEmail(username);
-        return videos.stream()
-                .filter(v -> {
-                    if (v.getTitle() == null) return false;
-                    String lower = v.getTitle().toLowerCase();
-                    return lower.endsWith(".mp3") || lower.endsWith(".wav");
-                })
+    public List<com.afklive.streamer.model.MediaAsset> listAudioFiles(String username) {
+        List<com.afklive.streamer.model.MediaAsset> assets = mediaAssetRepository.findByUserEmail(username);
+        return assets.stream()
+                .filter(a -> a.getContentType() == com.afklive.streamer.model.MediaAsset.ContentType.AUDIO)
                 .collect(Collectors.toList());
     }
 }

@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 @Table(name = "users", indexes = {
     @Index(name = "idx_user_verif_token", columnList = "verification_token"),
     @Index(name = "idx_user_reset_token", columnList = "reset_token"),
-    @Index(name = "idx_user_autoreply", columnList = "auto_reply_enabled"),
     @Index(name = "idx_user_fullname", columnList = "full_name"),
     @Index(name = "idx_user_email", columnList = "email")
 })
@@ -42,12 +41,8 @@ public class User {
     private double unpaidBalance = 0.0;
     private double creditLimit = 50.0;
 
-    private boolean autoReplyEnabled = false;
-    private boolean deleteNegativeComments = false;
-    private boolean autoReplyUnrepliedEnabled = false;
-
-    @Column(columnDefinition = "TEXT")
-    private String autoReplyUnrepliedMessage;
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private UserSettings settings;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<SocialChannel> channels = new java.util.ArrayList<>();
@@ -192,36 +187,56 @@ public class User {
         this.creditLimit = creditLimit;
     }
 
+    public UserSettings getSettings() {
+        return settings;
+    }
+
+    public void setSettings(UserSettings settings) {
+        this.settings = settings;
+        if (settings != null) {
+            settings.setUser(this);
+        }
+    }
+
+    // Delegate methods for backward compatibility
+    @JsonIgnore
     public boolean isAutoReplyEnabled() {
-        return autoReplyEnabled;
+        return settings != null && settings.isAutoReplyEnabled();
     }
 
     public void setAutoReplyEnabled(boolean autoReplyEnabled) {
-        this.autoReplyEnabled = autoReplyEnabled;
+        if (settings == null) settings = new UserSettings(this);
+        settings.setAutoReplyEnabled(autoReplyEnabled);
     }
 
+    @JsonIgnore
     public boolean isDeleteNegativeComments() {
-        return deleteNegativeComments;
+        return settings != null && settings.isDeleteNegativeComments();
     }
 
     public void setDeleteNegativeComments(boolean deleteNegativeComments) {
-        this.deleteNegativeComments = deleteNegativeComments;
+        if (settings == null) settings = new UserSettings(this);
+        settings.setDeleteNegativeComments(deleteNegativeComments);
     }
 
+    @JsonIgnore
     public boolean isAutoReplyUnrepliedEnabled() {
-        return autoReplyUnrepliedEnabled;
+        return settings != null && settings.isAutoReplyUnrepliedEnabled();
     }
 
     public void setAutoReplyUnrepliedEnabled(boolean autoReplyUnrepliedEnabled) {
-        this.autoReplyUnrepliedEnabled = autoReplyUnrepliedEnabled;
+        if (settings == null) settings = new UserSettings(this);
+        settings.setAutoReplyUnrepliedEnabled(autoReplyUnrepliedEnabled);
     }
 
+    @JsonIgnore
     public String getAutoReplyUnrepliedMessage() {
-        return autoReplyUnrepliedMessage;
+        return settings != null ? settings.getAutoReplyUnrepliedMessage() : null;
     }
 
     public void setAutoReplyUnrepliedMessage(String autoReplyUnrepliedMessage) {
-        this.autoReplyUnrepliedMessage = autoReplyUnrepliedMessage;
+        if (settings == null) settings = new UserSettings(this);
+        settings.setAutoReplyUnrepliedMessage(autoReplyUnrepliedMessage);
     }
 
     public java.util.List<SocialChannel> getChannels() {

@@ -42,6 +42,8 @@ public class VideoController {
     private final AudioService audioService;
     private final VideoConversionService videoConversionService;
     private final com.afklive.streamer.repository.SocialChannelRepository channelRepository;
+    private final com.afklive.streamer.service.TagService tagService;
+    private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
 
     @GetMapping("/youtube/categories")
     public ResponseEntity<?> getVideoCategories(Principal principal) {
@@ -161,13 +163,28 @@ public class VideoController {
             video.setUser(user);
             video.setTitle(title);
             video.setDescription(description);
-            video.setTags(tags);
+            video.setTags(tags); // Transient
+            video.setTagEntities(tagService.parseAndSaveTags(tags)); // Persisted
             video.setCategoryId(categoryId);
             video.setPrivacyStatus(privacyStatus);
-            video.setCategoryId(categoryId);
             video.setScheduledTime(scheduledTime);
-            video.setS3Key(s3Key);
-            video.setThumbnailS3Key(thumbnailKey);
+
+            // Link Media Asset
+            if (s3Key != null) {
+                com.afklive.streamer.model.MediaAsset videoAsset = new com.afklive.streamer.model.MediaAsset(
+                    user, title, s3Key, finalSize, com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+                );
+                video.setMediaAsset(mediaAssetRepository.save(videoAsset));
+            }
+
+            // Link Thumbnail Asset
+            if (thumbnailKey != null) {
+                com.afklive.streamer.model.MediaAsset thumbAsset = new com.afklive.streamer.model.MediaAsset(
+                    user, "thumbnail_" + title, thumbnailKey, thumbnail.getSize(), com.afklive.streamer.model.MediaAsset.ContentType.IMAGE
+                );
+                video.setThumbnailAsset(mediaAssetRepository.save(thumbAsset));
+            }
+
             if (firstComment != null && !firstComment.trim().isEmpty()) {
                 video.setFirstComment(firstComment);
             }
