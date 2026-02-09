@@ -7,6 +7,7 @@ import com.phonepe.sdk.pg.payments.v2.models.request.StandardCheckoutPayRequest;
 import com.phonepe.sdk.pg.payments.v2.models.response.StandardCheckoutPayResponse;
 import com.afklive.streamer.model.PaymentAudit;
 import com.afklive.streamer.model.PlanType;
+import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.PaymentAuditRepository;
 import com.afklive.streamer.service.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -94,6 +95,10 @@ public class PaymentController {
             // Audit
             PaymentAudit audit = new PaymentAudit(merchantTransactionId, userId, amount, "INITIATED");
             audit.setPlanId(planId);
+            if (principal != null) {
+                User user = userService.getOrCreateUser(principal.getName());
+                audit.setUser(user);
+            }
             paymentAuditRepository.save(audit);
 
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()

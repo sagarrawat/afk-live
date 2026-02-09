@@ -9,10 +9,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(indexes = {
-    @Index(name = "idx_streamjob_user_live", columnList = "username, is_live"),
+@Table(name = "stream_jobs", indexes = {
+    @Index(name = "idx_streamjob_user_live", columnList = "user_id, is_live"),
     @Index(name = "idx_streamjob_live", columnList = "is_live"),
-    @Index(name = "idx_streamjob_user_time", columnList = "username, start_time DESC"),
+    @Index(name = "idx_streamjob_user_time", columnList = "user_id, start_time DESC"),
     @Index(name = "idx_streamjob_live_reply", columnList = "is_live, auto_reply_enabled")
 })
 public class StreamJob {
@@ -20,7 +20,11 @@ public class StreamJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String username;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
+
     private String streamKey;
     private String fileName;
     private boolean isLive;
@@ -51,8 +55,17 @@ public class StreamJob {
     private String lastPageToken;
     private String liveChatId;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
+    public String getUsername() {
+        return user != null ? user.getUsername() : null;
+    }
+
+    public void setUsername(String username) {
+        // use setUser
+    }
+
     public StreamJob(
-            String username,
+            User user,
             String streamKey,
             String fileName,
             String musicName,
@@ -66,7 +79,7 @@ public class StreamJob {
             String destinationName,
             boolean autoReplyEnabled
     ) {
-        this.username = username;
+        this.user = user;
         this.streamKey = streamKey;
         this.fileName = fileName;
         this.musicName = musicName;

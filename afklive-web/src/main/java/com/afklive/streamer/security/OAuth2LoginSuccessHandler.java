@@ -76,7 +76,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                 } catch (Exception e) {
                     log.error("Failed to restore session for {}: {}", linkingUser, e.getMessage());
                     // Fallback to manual token if service fails, though unlikely
-                     Optional<User> originalUserOpt = userRepository.findById(linkingUser);
+                     Optional<User> originalUserOpt = userRepository.findByEmail(linkingUser);
                      if (originalUserOpt.isPresent()) {
                          User original = originalUserOpt.get();
                          UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
@@ -106,7 +106,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
         }
 
         // Standard Login
-        Optional<User> userOpt = userRepository.findById(email);
+        Optional<User> userOpt = userRepository.findByEmail(email);
         User user;
         if (userOpt.isPresent()) {
             user = userOpt.get();

@@ -113,7 +113,7 @@ public class EngagementController {
     @GetMapping("/activity")
     public ResponseEntity<?> getActivityLog(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(activityRepository.findByUsernameOrderByTimestampDesc(SecurityUtils.getEmail(principal)));
+        return ResponseEntity.ok(activityRepository.findByUserEmailOrderByTimestampDesc(SecurityUtils.getEmail(principal)));
     }
 
     @PostMapping("/revert/{activityId}")
@@ -122,7 +122,7 @@ public class EngagementController {
         String email = SecurityUtils.getEmail(principal);
 
         EngagementActivity activity = activityRepository.findById(activityId).orElse(null);
-        if (activity == null || !activity.getUsername().equals(email)) {
+        if (activity == null || !activity.getUser().getEmail().equals(email)) {
             return ResponseEntity.notFound().build();
         }
 

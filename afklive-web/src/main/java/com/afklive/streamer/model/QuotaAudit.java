@@ -20,14 +20,24 @@ public class QuotaAudit {
     private String apiName;
     private int cost;
     private LocalDateTime timestamp;
-    private String username;
+
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
+
     private String status;
 
-    public QuotaAudit(String apiName, int cost, String username, String status) {
+    public QuotaAudit(String apiName, int cost, User user, String status) {
         this.apiName = apiName;
         this.cost = cost;
-        this.username = username;
+        this.user = user;
         this.status = status;
         this.timestamp = LocalDateTime.now();
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
+    public String getUsername() {
+        return user != null ? user.getUsername() : null;
     }
 }

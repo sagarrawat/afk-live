@@ -21,20 +21,23 @@ public class UserService {
     private final EmailService emailService;
     private final PlanService planService;
 
-    public User getOrCreateUser(String username) {
-        return userRepository.findById(username)
+    public User getOrCreateUser(String email) {
+        return userRepository.findByEmail(email)
                 .orElseGet(() -> {
-                    User newUser = new User(username);
+                    User newUser = new User(email);
                     // OAuth users are pre-verified usually, or handle accordingly.
-                    // Assuming Google OAuth users are verified.
                     // Send welcome email for new OAuth users
-                    emailService.sendWelcomeEmail(username);
+                    try {
+                        emailService.sendWelcomeEmail(email);
+                    } catch (Exception e) {
+                        log.warn("Failed to send welcome email to {}", email);
+                    }
                     return userRepository.save(newUser);
                 });
     }
 
-    public void checkStorageQuota(String username, long fileSize) {
-        User user = getOrCreateUser(username);
+    public void checkStorageQuota(String email, long fileSize) {
+        User user = getOrCreateUser(email);
         long limit = planService.getPlanConfig(user.getPlanType()).getMaxStorageBytes();
         if (user.getUsedStorageBytes() + fileSize > limit) {
             throw new IllegalStateException("Storage quota exceeded. Limit: " + (limit / 1024 / 1024) + "MB.");
@@ -42,15 +45,15 @@ public class UserService {
     }
 
     @Transactional
-    public void updateStorageUsage(String username, long delta) {
-        User user = getOrCreateUser(username);
+    public void updateStorageUsage(String email, long delta) {
+        User user = getOrCreateUser(email);
         long newUsage = user.getUsedStorageBytes() + delta;
         user.setUsedStorageBytes(Math.max(0, newUsage)); // Prevent negative
         userRepository.save(user);
     }
 
-    public void checkStreamQuota(String username, int currentActiveCount) {
-        User user = getOrCreateUser(username);
+    public void checkStreamQuota(String email, int currentActiveCount) {
+        User user = getOrCreateUser(email);
         int limit = planService.getPlanConfig(user.getPlanType()).getMaxActiveStreams();
         if (currentActiveCount >= limit) {
              throw new IllegalStateException("Active stream limit reached (" + limit + ") for plan " + planService.getPlanConfig(user.getPlanType()).getDisplayName());
@@ -58,7 +61,7 @@ public class UserService {
     }
 
     public void registerUser(String email, String password, String name, String baseUrl) {
-        if (userRepository.existsById(email)) {
+        if (userRepository.findByEmail(email).isPresent()) {
             throw new IllegalArgumentException("User already exists");
         }
         User user = new User(email);
@@ -75,7 +78,7 @@ public class UserService {
     }
 
     public void resendVerification(String email, String baseUrl) {
-        User user = userRepository.findById(email)
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         if (user.isEnabled()) {
@@ -105,7 +108,7 @@ public class UserService {
             userRepository.save(user);
 
             if (!wasEnabled) {
-                emailService.sendWelcomeEmail(user.getUsername());
+                emailService.sendWelcomeEmail(user.getEmail());
             }
             return true;
         }
@@ -113,7 +116,7 @@ public class UserService {
     }
 
     public void requestPasswordReset(String email, String baseUrl) {
-        userRepository.findById(email).ifPresent(user -> {
+        userRepository.findByEmail(email).ifPresent(user -> {
             user.setResetToken(UUID.randomUUID().toString());
             userRepository.save(user);
             String link = baseUrl + "/reset-password?token=" + user.getResetToken();
@@ -134,9 +137,9 @@ public class UserService {
     }
 
     @Transactional
-    public void updatePlan(String username, PlanType newPlan) {
-        log.info("Updating plan for user {} to {}", username, newPlan);
-        User user = getOrCreateUser(username);
+    public void updatePlan(String email, PlanType newPlan) {
+        log.info("Updating plan for user {} to {}", email, newPlan);
+        User user = getOrCreateUser(email);
         user.setPlanType(newPlan);
 
         if (newPlan == PlanType.ESSENTIALS) {
@@ -146,7 +149,7 @@ public class UserService {
         }
 
         userRepository.save(user);
-        log.info("Plan updated saved to DB for {}", username);
+        log.info("Plan updated saved to DB for {}", email);
     }
 
     public void saveUser(User user) {
@@ -154,25 +157,25 @@ public class UserService {
     }
 
     @Transactional
-    public void addUnpaidBalance(String username, double amount) {
+    public void addUnpaidBalance(String email, double amount) {
         // Ensure user exists first (optional but safe)
-        if (!userRepository.existsById(username)) {
-            getOrCreateUser(username);
+        if (userRepository.findByEmail(email).isEmpty()) {
+            getOrCreateUser(email);
         }
-        userRepository.addUnpaidBalance(username, amount);
+        userRepository.addUnpaidBalance(email, amount);
     }
 
     @Transactional
-    public void clearUnpaidBalance(String username, double amount) {
+    public void clearUnpaidBalance(String email, double amount) {
         // Ensure user exists
-        if (!userRepository.existsById(username)) {
-            getOrCreateUser(username);
+        if (userRepository.findByEmail(email).isEmpty()) {
+            getOrCreateUser(email);
         }
-        userRepository.deductUnpaidBalance(username, amount);
+        userRepository.deductUnpaidBalance(email, amount);
     }
 
-    public boolean checkCreditLimit(String username) {
-        User user = getOrCreateUser(username);
+    public boolean checkCreditLimit(String email) {
+        User user = getOrCreateUser(email);
         // If unpaid balance is greater than or equal to credit limit, return false.
         // E.g. limit 50, unpaid 50 -> false (blocked).
         return user.getUnpaidBalance() < user.getCreditLimit();

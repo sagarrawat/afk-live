@@ -203,7 +203,7 @@ public class StreamController {
         }
 
         try {
-            ScheduledVideo video = scheduledVideoRepository.findByUsernameAndTitle(username, fileName)
+            ScheduledVideo video = scheduledVideoRepository.findByUserEmailAndTitle(username, fileName)
                     .orElse(null);
 
             if (video != null) {
@@ -252,7 +252,7 @@ public class StreamController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
 
-        stream.setUsername(email);
+        stream.setUser(userService.getOrCreateUser(email));
         stream.setStatus(com.afklive.streamer.model.ScheduledStream.StreamStatus.PENDING);
 
         scheduledStreamRepo.save(stream);
@@ -263,7 +263,7 @@ public class StreamController {
     public ResponseEntity<?> getScheduledStreams(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
-        return ResponseEntity.ok(ApiResponse.success("Success", scheduledStreamRepo.findByUsername(email)));
+        return ResponseEntity.ok(ApiResponse.success("Success", scheduledStreamRepo.findByUserEmail(email)));
     }
 
     @GetMapping("/youtube/key")
@@ -369,6 +369,6 @@ public class StreamController {
     public ResponseEntity<?> getStreamHistory(Principal principal, @PageableDefault(size = 20) Pageable pageable) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
-        return ResponseEntity.ok(ApiResponse.success("Success", streamJobRepository.findByUsernameOrderByStartTimeDesc(email, pageable)));
+        return ResponseEntity.ok(ApiResponse.success("Success", streamJobRepository.findByUserEmailOrderByStartTimeDesc(email, pageable)));
     }
 }

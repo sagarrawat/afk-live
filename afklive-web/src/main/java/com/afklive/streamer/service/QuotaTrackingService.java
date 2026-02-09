@@ -1,6 +1,7 @@
 package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.QuotaAudit;
+import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.QuotaAuditRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,10 +18,12 @@ import java.util.Map;
 public class QuotaTrackingService {
 
     private final QuotaAuditRepository quotaAuditRepository;
+    private final UserService userService;
 
     @Transactional
     public void logApiCall(String username, String apiName, int cost, String status) {
-        QuotaAudit audit = new QuotaAudit(apiName, cost, username, status);
+        User user = userService.getOrCreateUser(username);
+        QuotaAudit audit = new QuotaAudit(apiName, cost, user, status);
         quotaAuditRepository.save(audit);
     }
 

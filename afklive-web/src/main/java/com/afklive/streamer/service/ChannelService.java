@@ -90,8 +90,11 @@ public class ChannelService {
 
     @Transactional(readOnly = true)
     public List<SocialChannel> getChannels(String username) {
+        // Since we are in a transaction and fetching lazy collection,
+        // accessing it here will initialize it.
+        // We can also use a repository method with JOIN FETCH if performance becomes an issue.
         User user = userService.getOrCreateUser(username);
-        Hibernate.initialize(user.getChannels());
+        user.getChannels().size(); // Trigger initialization
         return user.getChannels();
     }
 

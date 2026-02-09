@@ -20,8 +20,10 @@ public class SupportTicket {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private String userEmail;
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
 
     @Column(nullable = false)
     private String category;
@@ -38,6 +40,11 @@ public class SupportTicket {
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("userEmail")
+    public String getUserEmail() {
+        return user != null ? user.getEmail() : null;
+    }
 
     @PrePersist
     protected void onCreate() {

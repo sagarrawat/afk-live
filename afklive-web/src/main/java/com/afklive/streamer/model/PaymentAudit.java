@@ -21,6 +21,11 @@ public class PaymentAudit {
     @Column(nullable = false, unique = true)
     private String transactionId;
 
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
+
     private String merchantUserId;
 
     private Long amount;

@@ -5,16 +5,19 @@ import java.time.ZonedDateTime;
 
 @Entity
 @Table(name = "scheduled_videos", indexes = {
-    @Index(name = "idx_schedvideo_user_status", columnList = "username, status"),
+    @Index(name = "idx_schedvideo_user_status", columnList = "user_id, status"),
     @Index(name = "idx_schedvideo_status_time", columnList = "status, scheduled_time"),
-    @Index(name = "idx_schedvideo_user_title", columnList = "username, title")
+    @Index(name = "idx_schedvideo_user_title", columnList = "user_id, title")
 })
 public class ScheduledVideo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String username;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User user;
 
     @Column(length = 255) // Still VARCHAR(255) for DB, validation handles 100
     private String title;
@@ -22,22 +25,41 @@ public class ScheduledVideo {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(columnDefinition = "TEXT")
-    private String tags;
+    @ManyToMany
+    @JoinTable(
+        name = "video_tags",
+        joinColumns = @JoinColumn(name = "video_id"),
+        inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
+    private java.util.Set<Tag> tagEntities = new java.util.HashSet<>();
+
+    @Transient
+    private String tags; // For backward compatibility in JSON/DTO
+
     private String privacyStatus;
     private String categoryId;
     private ZonedDateTime scheduledTime;
 
-    private String s3Key;
-    private String thumbnailS3Key;
+    @ManyToOne
+    @JoinColumn(name = "media_asset_id")
+    private MediaAsset mediaAsset;
+
+    @ManyToOne
+    @JoinColumn(name = "thumbnail_asset_id")
+    private MediaAsset thumbnailAsset;
+
     private String youtubeVideoId;
 
     @Column(columnDefinition = "TEXT")
     private String firstComment;
 
-    private Long fileSize; // in bytes
+    @ManyToOne
+    @JoinColumn(name = "social_channel_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private SocialChannel socialChannel;
 
-    private Long socialChannelId; // Link to specific channel
+    @Transient
+    private Long transientSocialChannelId;
 
     @Enumerated(EnumType.STRING)
     private VideoStatus status = VideoStatus.PENDING;
@@ -66,12 +88,21 @@ public class ScheduledVideo {
         this.id = id;
     }
 
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("username")
     public String getUsername() {
-        return username;
+        return user != null ? user.getUsername() : null;
     }
 
     public void setUsername(String username) {
-        this.username = username;
+        // use setUser
     }
 
     public String getTitle() {
@@ -91,11 +122,23 @@ public class ScheduledVideo {
     }
 
     public String getTags() {
+        if (tagEntities != null && !tagEntities.isEmpty()) {
+            return tagEntities.stream().map(Tag::getName).collect(java.util.stream.Collectors.joining(","));
+        }
         return tags;
     }
 
     public void setTags(String tags) {
         this.tags = tags;
+        // Logic to update tagEntities should be handled in service to look up/create tags
+    }
+
+    public java.util.Set<Tag> getTagEntities() {
+        return tagEntities;
+    }
+
+    public void setTagEntities(java.util.Set<Tag> tagEntities) {
+        this.tagEntities = tagEntities;
     }
 
     public String getPrivacyStatus() {
@@ -122,20 +165,39 @@ public class ScheduledVideo {
         this.scheduledTime = scheduledTime;
     }
 
+    public MediaAsset getMediaAsset() {
+        return mediaAsset;
+    }
+
+    public void setMediaAsset(MediaAsset mediaAsset) {
+        this.mediaAsset = mediaAsset;
+    }
+
+    public MediaAsset getThumbnailAsset() {
+        return thumbnailAsset;
+    }
+
+    public void setThumbnailAsset(MediaAsset thumbnailAsset) {
+        this.thumbnailAsset = thumbnailAsset;
+    }
+
+    // Backward compatibility getters
+    @com.fasterxml.jackson.annotation.JsonIgnore
     public String getS3Key() {
-        return s3Key;
+        return mediaAsset != null ? mediaAsset.getS3Key() : null;
     }
 
     public void setS3Key(String s3Key) {
-        this.s3Key = s3Key;
+        // Handled via MediaAsset now
     }
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     public String getThumbnailS3Key() {
-        return thumbnailS3Key;
+        return thumbnailAsset != null ? thumbnailAsset.getS3Key() : null;
     }
 
     public void setThumbnailS3Key(String thumbnailS3Key) {
-        this.thumbnailS3Key = thumbnailS3Key;
+        // Handled via MediaAsset now
     }
 
     public VideoStatus getStatus() {
@@ -171,19 +233,28 @@ public class ScheduledVideo {
     }
 
     public Long getFileSize() {
-        return fileSize;
+        return mediaAsset != null ? mediaAsset.getFileSize() : 0L;
     }
 
     public void setFileSize(Long fileSize) {
-        this.fileSize = fileSize;
+        // Handled via MediaAsset
     }
 
+    public SocialChannel getSocialChannel() {
+        return socialChannel;
+    }
+
+    public void setSocialChannel(SocialChannel socialChannel) {
+        this.socialChannel = socialChannel;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("socialChannelId")
     public Long getSocialChannelId() {
-        return socialChannelId;
+        return socialChannel != null ? socialChannel.getId() : transientSocialChannelId;
     }
 
     public void setSocialChannelId(Long socialChannelId) {
-        this.socialChannelId = socialChannelId;
+        this.transientSocialChannelId = socialChannelId;
     }
 
     public OptimizationStatus getOptimizationStatus() {

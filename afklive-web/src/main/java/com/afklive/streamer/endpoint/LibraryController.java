@@ -48,6 +48,8 @@ public class LibraryController {
     private final AiService aiService;
     private final com.afklive.streamer.service.ImportService importService;
     private final com.afklive.streamer.service.VideoConversionService conversionService;
+    private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
+    private final com.afklive.streamer.service.TagService tagService;
 
     @PostMapping("/import-youtube")
     public ResponseEntity<?> importFromYouTube(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.ImportRequest request, java.security.Principal principal) {
@@ -74,7 +76,7 @@ public class LibraryController {
         List<String> files = request.getFiles();
 
         // Verify ownership
-        List<ScheduledVideo> userVideos = repository.findByUsername(username);
+        List<ScheduledVideo> userVideos = repository.findByUserEmail(username);
         List<String> safeFiles = files.stream()
                 .filter(f -> userVideos.stream().anyMatch(v -> v.getTitle().equals(f) && v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY))
                 .collect(Collectors.toList());
@@ -152,18 +154,25 @@ public class LibraryController {
     }
 
     private void createLibraryEntry(String username, String filename, String key, long size) {
+        com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
+
+        // Create Media Asset
+        com.afklive.streamer.model.MediaAsset asset = new com.afklive.streamer.model.MediaAsset(
+            user,
+            filename,
+            key,
+            size,
+            com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+        );
+        asset = mediaAssetRepository.save(asset);
+
+        // Create Scheduled Video
         ScheduledVideo video = new ScheduledVideo();
-        video.setUsername(username);
+        video.setUser(user);
         video.setTitle(filename);
-        video.setS3Key(key);
+        video.setMediaAsset(asset);
         video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
         video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
-        // We need a size field in ScheduledVideo.
-        // Since I cannot change the Entity easily without restart/schema issues in this mock env,
-        // I will overload the 'description' or add a transient field?
-        // Actually the prompt says "In library can we also show the size".
-        // I'll add `fileSize` to ScheduledVideo entity.
-        video.setFileSize(size);
         repository.save(video);
     }
 
@@ -176,7 +185,7 @@ public class LibraryController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
 
-        Page<ScheduledVideo> videoPage = repository.findByUsernameAndStatus(
+        Page<ScheduledVideo> videoPage = repository.findByUserEmailAndStatus(
                 username,
                 ScheduledVideo.VideoStatus.LIBRARY,
                 PageRequest.of(page, size, Sort.by("id").descending())
@@ -191,12 +200,15 @@ public class LibraryController {
         String username = SecurityUtils.getEmail(principal);
 
         ScheduledVideo video = repository.findById(id).orElse(null);
-        if (video == null || !video.getUsername().equals(username)) {
+        if (video == null || !video.getUser().getEmail().equals(username)) {
             return ResponseEntity.notFound().build();
         }
 
         // Try Presigned URL first (Optimization for S3)
-        Optional<String> presignedUrl = storageService.generatePresignedUrl(video.getS3Key());
+        String key = video.getMediaAsset() != null ? video.getMediaAsset().getS3Key() : null;
+        if (key == null) return ResponseEntity.notFound().build();
+
+        Optional<String> presignedUrl = storageService.generatePresignedUrl(key);
         if (presignedUrl.isPresent()) {
             return ResponseEntity.status(HttpStatus.FOUND)
                     .header(HttpHeaders.LOCATION, presignedUrl.get())
@@ -205,7 +217,7 @@ public class LibraryController {
 
         // Fallback to streaming through backend (e.g. Local Storage)
         try {
-            Resource resource = storageService.loadFileAsResource(video.getS3Key());
+            Resource resource = storageService.loadFileAsResource(key);
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(AppConstants.MIME_VIDEO_MP4))
                     .body(resource);
@@ -225,24 +237,29 @@ public class LibraryController {
         if (video == null) {
             return ResponseEntity.notFound().build();
         }
-        if (!video.getUsername().equals(username)) {
+        if (!video.getUser().getEmail().equals(username)) {
             return ResponseEntity.status(403).body(ApiResponse.error("Forbidden"));
         }
 
         try {
             // Delete from S3/Storage
-            storageService.deleteFile(video.getS3Key());
+            if (video.getMediaAsset() != null) {
+                storageService.deleteFile(video.getMediaAsset().getS3Key());
+                mediaAssetRepository.delete(video.getMediaAsset());
+            }
 
             // Delete Thumbnail if exists
-            if (video.getThumbnailS3Key() != null) {
-                storageService.deleteFile(video.getThumbnailS3Key());
+            if (video.getThumbnailAsset() != null) {
+                storageService.deleteFile(video.getThumbnailAsset().getS3Key());
+                mediaAssetRepository.delete(video.getThumbnailAsset());
             }
 
             // Delete from DB
             repository.delete(video);
 
-            if (video.getFileSize() != null) {
-                userService.updateStorageUsage(username, -video.getFileSize());
+            // Re-calc quota from User's total used bytes, or decrement
+            if (video.getMediaAsset() != null) {
+                userService.updateStorageUsage(username, -video.getMediaAsset().getFileSize());
             }
 
             return ResponseEntity.ok(ApiResponse.success("Video deleted", null));
@@ -271,7 +288,7 @@ public class LibraryController {
             String topic = request.getTopic();
 
             // Get all LIBRARY videos for user
-            List<ScheduledVideo> libraryVideos = repository.findByUsername(username).stream()
+            List<ScheduledVideo> libraryVideos = repository.findByUserEmail(username).stream()
                     .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
                     .collect(Collectors.toList());
 
@@ -292,7 +309,9 @@ public class LibraryController {
                         String context = (topic != null && !topic.isEmpty()) ? topic : video.getTitle();
                         video.setTitle(aiService.generateTitle(context));
                         video.setDescription(aiService.generateDescription(video.getTitle()));
-                        video.setTags(aiService.generateTags(context));
+                        String generatedTags = aiService.generateTags(context);
+                        video.setTags(generatedTags);
+                        video.setTagEntities(tagService.parseAndSaveTags(generatedTags));
                     }
 
                     video.setScheduledTime(schedule);
