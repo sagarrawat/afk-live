@@ -25,6 +25,9 @@ public interface ScheduledVideoRepository extends JpaRepository<ScheduledVideo, 
            countQuery = "SELECT COUNT(v) FROM ScheduledVideo v WHERE v.user.email = :email AND v.status = :status")
     Page<ScheduledVideo> findByUserEmailAndStatus(String email, ScheduledVideo.VideoStatus status, Pageable pageable);
 
+    @Query("SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user LEFT JOIN FETCH v.mediaAsset LEFT JOIN FETCH v.tagEntities WHERE v.user.email = :email AND v.status = :status")
+    List<ScheduledVideo> findByUserEmailAndStatus(String email, ScheduledVideo.VideoStatus status);
+
     @Query("SELECT v FROM ScheduledVideo v LEFT JOIN FETCH v.socialChannel LEFT JOIN FETCH v.user LEFT JOIN FETCH v.mediaAsset LEFT JOIN FETCH v.tagEntities WHERE v.status = :status AND v.scheduledTime <= :time")
     List<ScheduledVideo> findByStatusAndScheduledTimeLessThanEqual(ScheduledVideo.VideoStatus status, ZonedDateTime time);
 
