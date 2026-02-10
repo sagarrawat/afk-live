@@ -62,8 +62,7 @@ class EngagementServiceTest {
 
     @BeforeEach
     void setUp() {
-        testUser = new User();
-        testUser.setUsername("testuser");
+        testUser = new User("testuser"); // Set email
         testUser.setAutoReplyEnabled(true);
         testUser.setDeleteNegativeComments(false);
     }
@@ -143,8 +142,9 @@ class EngagementServiceTest {
     @Test
     void processLiveEngagement_shouldSkipReply_WhenAiReturnsNull() throws Exception {
         // Arrange
+        User user = new User("testuser");
         StreamJob job = new StreamJob();
-        job.setUsername("testuser");
+        job.setUser(user); // Set User entity
         job.setLiveChatId("chat123");
         job.setAutoReplyEnabled(true);
         job.setLive(true);

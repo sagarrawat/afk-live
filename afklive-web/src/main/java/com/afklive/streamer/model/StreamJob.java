@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(indexes = {
+@Table(name = "stream_jobs", indexes = {
     @Index(name = "idx_streamjob_user_live", columnList = "user_id, is_live"),
     @Index(name = "idx_streamjob_live", columnList = "is_live"),
     @Index(name = "idx_streamjob_user_time", columnList = "user_id, start_time DESC"),

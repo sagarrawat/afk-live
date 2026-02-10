@@ -61,7 +61,7 @@ class PayAsYouGoTest {
         User user = new User("test@logic.com");
         user.setCreditLimit(50.0);
 
-        when(userRepository.findById("test@logic.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("test@logic.com")).thenReturn(Optional.of(user));
 
         user.setUnpaidBalance(40.0);
         assertTrue(realUserService.checkCreditLimit("test@logic.com"));
@@ -75,7 +75,7 @@ class PayAsYouGoTest {
 
     @Test
     void testBalanceUpdates() {
-        when(userRepository.existsById("test@balance.com")).thenReturn(true);
+        when(userRepository.findByEmail("test@balance.com")).thenReturn(Optional.of(new User("test@balance.com")));
 
         // Logic moved to UserRepository, but we can verify calls
         realUserService.addUnpaidBalance("test@balance.com", 5.5);
@@ -111,18 +111,18 @@ class PayAsYouGoTest {
         String username = "test@cost.com";
         long jobId = 1L;
 
+        User user = new User(username);
+        user.setPlanType(PlanType.FREE);
+
         StreamJob job = new StreamJob();
         job.setId(jobId);
-        job.setUsername(username);
+        job.setUser(user);
         job.setLive(true);
         job.setPid(999999L); // Invalid PID likely
         // Start time 2 hours ago
         job.setStartTime(ZonedDateTime.now().minusHours(2));
 
         when(streamJobRepository.findById(jobId)).thenReturn(Optional.of(job));
-
-        User user = new User(username);
-        user.setPlanType(PlanType.FREE);
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
 
         // Execute - calling finalizeJob directly as we are testing billing logic
@@ -143,9 +143,12 @@ class PayAsYouGoTest {
         String username = "test@fractional.com";
         long jobId = 2L;
 
+        User user = new User(username);
+        user.setPlanType(PlanType.FREE);
+
         StreamJob job = new StreamJob();
         job.setId(jobId);
-        job.setUsername(username);
+        job.setUser(user);
         job.setLive(true);
         job.setPid(12345L);
         // Start time 15 minutes ago
@@ -153,9 +156,6 @@ class PayAsYouGoTest {
         job.setLastBillingTime(job.getStartTime());
 
         when(streamJobRepository.findById(jobId)).thenReturn(Optional.of(job));
-
-        User user = new User(username);
-        user.setPlanType(PlanType.FREE);
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
 
         // Execute
