@@ -288,9 +288,7 @@ public class LibraryController {
             String topic = request.getTopic();
 
             // Get all LIBRARY videos for user
-            List<ScheduledVideo> libraryVideos = repository.findByUserEmail(username).stream()
-                    .filter(v -> v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY)
-                    .collect(Collectors.toList());
+            List<ScheduledVideo> libraryVideos = repository.findByUserEmailAndStatus(username, ScheduledVideo.VideoStatus.LIBRARY);
 
             int videoIndex = 0;
             while (videoIndex < libraryVideos.size()) {
