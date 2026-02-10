@@ -1,7 +1,9 @@
 package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.ScheduledVideo;
+import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
+import com.afklive.streamer.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Disabled;
@@ -58,7 +60,10 @@ public class StreamServiceBenchmarkTest {
     @Autowired
     private ScheduledVideoRepository scheduledVideoRepository;
 
-    private final String USERNAME = "benchmarkUser";
+    @Autowired
+    private UserRepository userRepository;
+
+    private final String USERNAME = "benchmarkUser@test.com";
 
     @TestConfiguration
     static class MockConfig {
@@ -92,25 +97,46 @@ public class StreamServiceBenchmarkTest {
 
     @BeforeEach
     public void setup() {
+        User user = new User(USERNAME);
+        userRepository.save(user);
+
         List<ScheduledVideo> videos = new ArrayList<>();
         for (int i = 0; i < RECORD_COUNT; i++) {
             ScheduledVideo v = new ScheduledVideo();
-            v.setUsername(USERNAME);
+            v.setUser(user);
             v.setTitle("Video " + i);
-            v.setS3Key(i == 5000 ? TARGET_KEY : UUID.randomUUID().toString());
+            // Mock S3 key retrieval for test via transient getters or assume mock MediaAsset if strictly needed
+            // For now, setting S3Key directly via legacy setter might fail if it's no-op.
+            // But ScheduledVideo logic for getS3Key() depends on MediaAsset.
+            // Creating 10,000 MediaAssets is expensive for a benchmark unless we mock it or simplify.
+            // Let's create a MediaAsset for the target one at least.
+
+            String key = i == 5000 ? TARGET_KEY : UUID.randomUUID().toString();
+
+            // To simplify, we rely on the fact that if getS3Key() returns null, filter might fail.
+            // We need to set MediaAsset.
+            com.afklive.streamer.model.MediaAsset asset = new com.afklive.streamer.model.MediaAsset(
+                user, "Video " + i, key, 1024L, com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
+            );
+            v.setMediaAsset(asset); // Cascade? No, need to save asset first or use CascadeType.ALL
+
             v.setScheduledTime(ZonedDateTime.now());
             v.setStatus(ScheduledVideo.VideoStatus.PENDING);
+            mediaAssetRepository.save(asset); // Save asset first
             videos.add(v);
         }
         scheduledVideoRepository.saveAll(videos);
         scheduledVideoRepository.flush();
     }
 
+    @Autowired
+    private com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
+
     @Test
     public void benchmarkLegacyFiltering() {
         long start = System.nanoTime();
 
-        Optional<ScheduledVideo> result = scheduledVideoRepository.findByUsername(USERNAME).stream()
+        Optional<ScheduledVideo> result = scheduledVideoRepository.findByUserEmail(USERNAME).stream()
                 .filter(v -> v.getS3Key() != null && v.getS3Key().equals(TARGET_KEY))
                 .findFirst();
 
@@ -126,7 +152,7 @@ public class StreamServiceBenchmarkTest {
     public void benchmarkOptimizedFiltering() {
         long start = System.nanoTime();
 
-        Optional<ScheduledVideo> result = scheduledVideoRepository.findFirstByUsernameAndS3Key(USERNAME, TARGET_KEY);
+        Optional<ScheduledVideo> result = scheduledVideoRepository.findFirstByUserEmailAndS3Key(USERNAME, TARGET_KEY);
 
         long end = System.nanoTime();
         double ms = (end - start) / 1_000_000.0;
