@@ -1,9 +1,5 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('contentStudio', () => ({
-        // Queue State
-        queue: [],
-        isLoadingQueue: false,
-
         // Library State
         libraryVideos: [],
         selectedVideos: new Set(),
@@ -13,45 +9,11 @@ document.addEventListener('alpine:init', () => {
         libTotal: 0,
         libTotalPages: 0,
 
-        // Calendar State
-        calendarLoaded: false,
-
         init() {
-            this.loadQueue();
             // Listen for global refreshes if needed
             window.addEventListener('refresh-content', () => {
-                this.loadQueue();
                 this.loadLibrary();
             });
-        },
-
-        // --- QUEUE LOGIC ---
-        async loadQueue() {
-            this.isLoadingQueue = true;
-            try {
-                const res = await apiFetch('/api/videos');
-                this.queue = await res.json();
-            } catch (e) {
-                console.error("Queue load failed", e);
-            } finally {
-                this.isLoadingQueue = false;
-            }
-        },
-
-        formatDate(dateStr) {
-            return new Date(dateStr).toLocaleString(undefined, {
-                month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'
-            });
-        },
-
-        getStatusColor(status) {
-            const map = {
-                'UPLOADED': 'bg-green-100 text-green-700',
-                'FAILED': 'bg-red-100 text-red-700',
-                'PENDING': 'bg-yellow-100 text-yellow-700',
-                'PROCESSING': 'bg-blue-100 text-blue-700'
-            };
-            return map[status] || 'bg-gray-100 text-gray-600';
         },
 
         // --- LIBRARY LOGIC ---
@@ -178,17 +140,6 @@ document.addEventListener('alpine:init', () => {
             // Use existing global modal logic or reimplement
             // Reusing global function from app.js for now to save time, or we can make a local modal
             if(window.openPreviewModal) window.openPreviewModal(video.id);
-        },
-
-        initCalendar() {
-            if(this.calendarLoaded) return;
-            // Delay slightly to ensure DOM is ready
-            setTimeout(() => {
-                if(window.initCalendar) {
-                    window.initCalendar();
-                    this.calendarLoaded = true;
-                }
-            }, 100);
         }
     }));
 });
