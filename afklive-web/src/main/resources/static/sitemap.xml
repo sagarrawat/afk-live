@@ -35,4 +35,14 @@
       <changefreq>yearly</changefreq>
       <priority>0.5</priority>
    </url>
+   <url>
+      <loc>https://afk.live/refund-policy</loc>
+      <changefreq>yearly</changefreq>
+      <priority>0.5</priority>
+   </url>
+   <url>
+      <loc>https://afk.live/disclaimer</loc>
+      <changefreq>yearly</changefreq>
+      <priority>0.5</priority>
+   </url>
 </urlset>

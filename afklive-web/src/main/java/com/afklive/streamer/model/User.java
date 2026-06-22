@@ -38,8 +38,12 @@ public class User {
 
     private String role = "ROLE_USER";
 
-    private double unpaidBalance = 0.0;
-    private double creditLimit = 50.0;
+    @Column(name = "currency")
+    private String currency = "INR"; // Default to INR
+
+    // prepaid model: start with -50 unpaidBalance (meaning 50 INR free credit) and 0 credit limit.
+    private java.math.BigDecimal unpaidBalance = new java.math.BigDecimal("-50.00");
+    private java.math.BigDecimal creditLimit = java.math.BigDecimal.ZERO;
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UserSettings settings;
@@ -171,19 +175,27 @@ public class User {
         this.role = role;
     }
 
-    public double getUnpaidBalance() {
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public java.math.BigDecimal getUnpaidBalance() {
         return unpaidBalance;
     }
 
-    public void setUnpaidBalance(double unpaidBalance) {
+    public void setUnpaidBalance(java.math.BigDecimal unpaidBalance) {
         this.unpaidBalance = unpaidBalance;
     }
 
-    public double getCreditLimit() {
+    public java.math.BigDecimal getCreditLimit() {
         return creditLimit;
     }
 
-    public void setCreditLimit(double creditLimit) {
+    public void setCreditLimit(java.math.BigDecimal creditLimit) {
         this.creditLimit = creditLimit;
     }
 

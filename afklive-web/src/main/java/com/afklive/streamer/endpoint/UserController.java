@@ -56,6 +56,9 @@ public class UserController {
                 "email", username,
                 "picture", picture,
                 "enabled", user.isEnabled(),
+                "currency", user.getCurrency() != null ? user.getCurrency() : "INR",
+                "unpaidBalance", user.getUnpaidBalance(),
+                "creditLimit", user.getCreditLimit(),
                 "plan", Map.of(
                     "id", user.getPlanType().name(),
                     "name", planConfig.getDisplayName(),
@@ -107,6 +110,7 @@ public class UserController {
                 "email", email,
                 "picture", picture,
                 "enabled", user.isEnabled(),
+                "currency", user.getCurrency() != null ? user.getCurrency() : "INR",
                 "plan", Map.of(
                         "id", user.getPlanType().name(),
                         "name", planConfig.getDisplayName(),

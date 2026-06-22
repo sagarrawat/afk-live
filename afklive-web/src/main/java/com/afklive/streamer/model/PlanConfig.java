@@ -23,4 +23,7 @@ public class PlanConfig {
     private int maxActiveStreams;
     private int maxChannels;
     private int maxResolution;
+    
+    @Column(name = "discount_percentage", nullable = false, columnDefinition = "int default 0")
+    private Integer discountPercentage = 0;
 }

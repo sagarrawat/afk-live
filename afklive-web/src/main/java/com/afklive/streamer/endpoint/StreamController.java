@@ -3,7 +3,9 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.model.StreamJob;
+import com.afklive.streamer.model.StreamDestination;
 import com.afklive.streamer.repository.ScheduledVideoRepository;
+import com.afklive.streamer.repository.StreamDestinationRepository;
 import com.afklive.streamer.service.*;
 import com.afklive.streamer.model.SocialChannel;
 import com.afklive.streamer.util.SecurityUtils;
@@ -34,11 +36,7 @@ public class StreamController {
     @Autowired
     private FileUploadService fileUploadService;
     @Autowired
-    private VideoConversionService videoConversionService;
-    @Autowired
     private UserFileService userFileService;
-    @Autowired
-    private StreamManagerService streamManager;
     @Autowired
     private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepo;
     @Autowired
@@ -52,6 +50,8 @@ public class StreamController {
     private YouTubeService youTubeService;
     @Autowired
     private ChannelService channelService;
+    @Autowired
+    private StreamDestinationRepository destinationRepo;
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file, Principal principal) throws IOException {
@@ -84,10 +84,26 @@ public class StreamController {
                 return ResponseEntity.badRequest().body(ApiResponse.error("streamKey is required"));
             }
 
-            String videoKey = request.getParameter("videoKey");
-            if (videoKey == null || videoKey.trim().isEmpty()) {
+            String[] videoKeysArr = request.getParameterValues("videoKey");
+            if (videoKeysArr == null || videoKeysArr.length == 0) {
                 return ResponseEntity.badRequest().body(ApiResponse.error("videoKey is required"));
             }
+            
+            List<String> s3Keys = new java.util.ArrayList<>();
+            for (String vk : videoKeysArr) {
+                 try {
+                     Long id = Long.parseLong(vk);
+                     var opt = scheduledVideoRepository.findById(id);
+                     if (opt.isPresent() && opt.get().getMediaAsset() != null) {
+                         s3Keys.add(opt.get().getMediaAsset().getS3Key());
+                     } else {
+                         s3Keys.add(vk);
+                     }
+                 } catch (NumberFormatException e) {
+                     s3Keys.add(vk);
+                 }
+            }
+            String videoKey = String.join(",", s3Keys);
 
             String musicName = request.getParameter("musicName");
             MultipartFile musicFile = request.getFile("musicFile");
@@ -131,9 +147,23 @@ public class StreamController {
             boolean overlayEnabled = (overlayStr != null && !overlayStr.trim().isEmpty()) ? Boolean.parseBoolean(overlayStr) : false;
 
             String overlayTemplate = request.getParameter("overlayTemplate");
+            String overlayImageBase64 = request.getParameter("overlayImage");
+            if (overlayEnabled && overlayImageBase64 != null && overlayImageBase64.startsWith("data:image/png;base64,")) {
+                String base64Data = overlayImageBase64.substring("data:image/png;base64,".length());
+                byte[] decodedBytes = java.util.Base64.getDecoder().decode(base64Data);
+                java.io.File overlayDir = new java.io.File("data/overlays");
+                if (!overlayDir.exists()) overlayDir.mkdirs();
+                String filename = "overlay_" + System.currentTimeMillis() + ".png";
+                java.io.File destFile = new java.io.File(overlayDir, filename);
+                java.nio.file.Files.write(destFile.toPath(), decodedBytes);
+                overlayTemplate = destFile.getAbsolutePath(); // Pass the path via overlayTemplate
+            }
 
             String autoReplyStr = request.getParameter("autoReplyEnabled");
             boolean autoReplyEnabled = (autoReplyStr != null && !autoReplyStr.trim().isEmpty()) ? Boolean.parseBoolean(autoReplyStr) : false;
+
+            String poweredByStr = request.getParameter("poweredBy");
+            boolean poweredBy = (poweredByStr != null && !poweredByStr.trim().isEmpty()) ? Boolean.parseBoolean(poweredByStr) : false;
 
             if (musicFile != null && !musicFile.isEmpty()) {
                 // If a music file is uploaded directly, save it to the user's directory and use its name
@@ -143,7 +173,7 @@ public class StreamController {
 
             List<String> streamKeysList = java.util.Arrays.asList(streamKeysArr);
 
-            return ResponseEntity.ok(streamService.startStream(email, streamKeysList, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled));
+            return ResponseEntity.ok(streamService.startStream(email, streamKeysList, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled, poweredBy));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }
@@ -156,36 +186,14 @@ public class StreamController {
 
         if (streamId != null) {
             // Stop specific stream
-            // We don't release the global lock (streamManager.endStream) unless it was the last one?
-            // Actually streamManager lock is per-user boolean. With multiple streams, we should probably refactor StreamManager
-            // or just rely on quota. For now, we'll let StreamService handle the logic.
             return ResponseEntity.ok(streamService.stopStream(streamId, email));
         } else {
             // Stop all
-            streamManager.endStream(email);
             return ResponseEntity.ok(streamService.stopAllStreams(email));
         }
     }
 
-    @PostMapping("/convert")
-    public ResponseEntity<?> startConversion(@RequestParam String fileName, Principal principal) throws IOException {
-        if (principal == null) return ResponseEntity.status(401).body("Unauthorized");
-        String email = SecurityUtils.getEmail(principal);
-        // userDir is still passed but now ignored by convertVideo in favor of temp/s3
-        videoConversionService.convertVideo(userFileService.getUserUploadDir(email), email, fileName);
-        return ResponseEntity.ok("Conversion Started");
-    }
-
-//    @GetMapping("/convert/status")
-//    public ResponseEntity<?> getConversionStatus(@RequestParam String fileName, Principal principal) {
-//        if (principal == null) return ResponseEntity.status(401).body(0);
-//        return ResponseEntity.ok(videoConversionService.getProgress(SecurityUtils.getEmail(principal), fileName).orElse(0));
-//    }
-
-    // Removed conflicting mappings handled by ConvertController:
-    // /convert/status
-    // /convert/shorts
-    // /convert/optimize
+    // Dead code removed
 
     @GetMapping("/stream-library")
     public ResponseEntity<?> getLibrary(Principal principal) throws IOException {
@@ -193,58 +201,24 @@ public class StreamController {
         return ResponseEntity.ok(userFileService.listConvertedVideos(SecurityUtils.getEmail(principal)));
     }
 
-    @DeleteMapping("/delete")
-    public ResponseEntity<?> deleteFile(@RequestParam String fileName, Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).build();
-        String username = SecurityUtils.getEmail(principal);
+    // Dead code removed
 
-        if (fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
-            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Invalid filename"));
-        }
+    @Autowired
+    private StreamEventPublisher streamEventPublisher;
 
+    @GetMapping(value = "/stream/{jobId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamEvents(@PathVariable Long jobId, Principal principal) {
+        if (principal == null) throw new SecurityException("Unauthorized");
+        
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter = new org.springframework.web.servlet.mvc.method.annotation.SseEmitter(300000L); // 5 mins
+        streamEventPublisher.addEmitter(jobId, emitter);
+        
         try {
-            ScheduledVideo video = scheduledVideoRepository.findByUserEmailAndTitle(username, fileName)
-                    .orElse(null);
-
-            if (video != null) {
-                // Delete from storage (S3 or Local)
-                if (video.getS3Key() != null) {
-                    storageService.deleteFile(video.getS3Key());
-                }
-
-                // Release quota
-                if (video.getFileSize() != null) {
-                    userService.updateStorageUsage(username, -video.getFileSize());
-                }
-
-                // Remove from DB
-                scheduledVideoRepository.delete(video);
-
-                return ResponseEntity.ok(Map.of("success", true, "message", "File deleted"));
-            } else {
-                 // Fallback for files not in DB (e.g. raw uploads from FileUploadService)
-                 // This assumes local storage for raw uploads as per FileUploadService implementation
-                 // But this contradicts the "update everywhere" rule.
-                 // However, FileUploadService is still local-only.
-                 Path filePath = userFileService.getUserUploadDir(username).resolve(fileName);
-                 if (java.nio.file.Files.exists(filePath)) {
-                     long size = java.nio.file.Files.size(filePath);
-                     java.nio.file.Files.delete(filePath);
-                     // Quota? Raw uploads probably didn't count towards quota in current impl?
-                     // Actually FileUploadService checks quota? No.
-                     return ResponseEntity.ok(Map.of("success", true, "message", "File deleted locally"));
-                 }
-                 return ResponseEntity.status(404).body(Map.of("success", false, "message", "File not found"));
-            }
-
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("success", false, "message", "Could not delete file: " + e.getMessage()));
+            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event().name("message").data(Map.of("status", "CONNECTED", "jobId", jobId)));
+        } catch (IOException e) {
+            emitter.completeWithError(e);
         }
-    }
-
-    @GetMapping("/logs")
-    public ResponseEntity<List<String>> getFfmpegLogs() {
-        return ResponseEntity.ok(streamService.getLogs());
+        return emitter;
     }
 
     @PostMapping("/stream/schedule")
@@ -254,6 +228,27 @@ public class StreamController {
 
         stream.setUser(userService.getOrCreateUser(email));
         stream.setStatus(com.afklive.streamer.model.ScheduledStream.StreamStatus.PENDING);
+
+        List<StreamDestination> userDestinations = destinationRepo.findByUser(stream.getUser());
+        List<StreamDestination> selectedDests = new java.util.ArrayList<>();
+        
+        if (stream.getStreamKeys() != null && !stream.getStreamKeys().isEmpty()) {
+            for (String key : stream.getStreamKeys()) {
+                userDestinations.stream()
+                        .filter(d -> key.equals(d.getStreamKey()))
+                        .findFirst()
+                        .ifPresent(selectedDests::add);
+            }
+        } else {
+            selectedDests = userDestinations.stream()
+                    .filter(StreamDestination::isSelected)
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        
+        if (selectedDests.isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("At least one destination is required. Please select a destination in Settings."));
+        }
+        stream.setDestinations(selectedDests);
 
         scheduledStreamRepo.save(stream);
         return ResponseEntity.ok(ApiResponse.success("Stream Scheduled", stream));

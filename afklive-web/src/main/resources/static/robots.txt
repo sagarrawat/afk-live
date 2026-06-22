@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /studio
-Disallow: /app
+Disallow: /settings
+Disallow: /api/
+
+Sitemap: https://afk.live/sitemap.xml

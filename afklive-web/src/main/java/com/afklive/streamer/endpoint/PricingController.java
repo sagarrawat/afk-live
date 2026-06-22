@@ -24,9 +24,10 @@ public class PricingController {
     private final UserService userService;
     private final EmailService emailService;
     private final PlanService planService;
+    private final com.afklive.streamer.service.AppConfigService appConfigService;
 
     @GetMapping("/pricing")
-    public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "IN") String country) {
+    public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "IN") String country, Principal principal) {
         List<Map<String, Object>> planList = new java.util.ArrayList<>();
         List<PlanConfig> configs = planService.getAllPlans();
 
@@ -69,6 +70,7 @@ public class PricingController {
                     "title", p.getDisplayName(),
                     "price", price,
                     "period", cycle,
+                    "discountPercentage", p.getDiscountPercentage() != null ? p.getDiscountPercentage() : 0,
                     "features", features
             ));
         }
@@ -80,8 +82,27 @@ public class PricingController {
             return 0;
         });
 
+        // Calculate hourly rate based on Principal (if logged in)
+        java.math.BigDecimal hourlyRate = java.math.BigDecimal.ZERO;
+        Integer userDiscount = 0;
+        String currency = "INR";
+        if (principal != null) {
+            String email = SecurityUtils.getEmail(principal);
+            User user = userService.getOrCreateUser(email);
+            currency = user.getCurrency() != null ? user.getCurrency() : "INR";
+            hourlyRate = appConfigService.getCurrentHourlyRate(currency);
+            userDiscount = planService.getPlanConfig(user.getPlanType()).getDiscountPercentage();
+            if (userDiscount != null && userDiscount > 0) {
+                java.math.BigDecimal multiplier = new java.math.BigDecimal(100 - userDiscount).divide(new java.math.BigDecimal("100"));
+                hourlyRate = hourlyRate.multiply(multiplier).setScale(4, java.math.RoundingMode.HALF_UP);
+            }
+        }
+
         return ResponseEntity.ok(Map.of(
-                "currency", "INR",
+                "currency", currency,
+                "hourlyRate", hourlyRate,
+                "baseRate", appConfigService.getCurrentHourlyRate(currency),
+                "discountPercentage", userDiscount != null ? userDiscount : 0,
                 "plans", planList
         ));
     }
@@ -92,6 +113,35 @@ public class PricingController {
         }
         return (bytes / (1024 * 1024)) + " MB";
     }
+
+    @GetMapping("/pricing/calculate")
+    public ResponseEntity<?> calculatePricing(
+            @RequestParam(defaultValue = "720") int quality,
+            @RequestParam(defaultValue = "1") int destCount,
+            @RequestParam(defaultValue = "false") boolean poweredBy,
+            Principal principal) {
+        
+        String currency = "INR";
+        PlanType planType = PlanType.FREE;
+        if (principal != null) {
+            User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
+            currency = user.getCurrency() != null ? user.getCurrency() : "INR";
+            planType = user.getPlanType();
+        }
+
+        Integer planDiscount = planService.getPlanConfig(planType).getDiscountPercentage();
+        int discountPercent = planDiscount != null ? planDiscount : 0;
+        
+        java.math.BigDecimal finalRate = appConfigService.calculateFinalRate(currency, quality, destCount, discountPercent, poweredBy);
+        java.math.BigDecimal baseRate = appConfigService.calculateFinalRate(currency, quality, destCount, 0, false);
+        
+        return ResponseEntity.ok(Map.of(
+            "hourlyRate", finalRate,
+            "baseRate", baseRate
+        ));
+    }
+
+    
 
     @PostMapping("/pricing/upgrade")
     public ResponseEntity<?> upgradePlan(@RequestBody Map<String, String> body, Principal principal) {

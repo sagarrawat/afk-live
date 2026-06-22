@@ -2,64 +2,67 @@ package com.afklive.streamer.service;
 
 import com.afklive.streamer.dto.ApiResponse;
 import com.afklive.streamer.dto.StreamResponse;
-import com.afklive.streamer.model.ScheduledVideo;
 import com.afklive.streamer.model.StreamJob;
-import com.afklive.streamer.repository.ScheduledVideoRepository;
+import com.afklive.streamer.model.StreamJobQueue;
+import com.afklive.streamer.repository.StreamJobQueueRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
-import jakarta.annotation.PreDestroy;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class StreamService {
+
     @Autowired
     private StreamJobRepository streamJobRepo;
+    
     @Autowired
-    private AppConfigService appConfigService;
-
-    private final List<String> logBuffer =
-            Collections.synchronizedList(new ArrayList<>());
-
-    // Store active streams: Job ID -> Process
-    private final ConcurrentHashMap<Long, Process> activeStreams = new ConcurrentHashMap<>();
-    @Autowired
-    private UserFileService userFileService;
-    @Autowired
-    private FileStorageService storageService;
+    private StreamJobQueueRepository streamJobQueueRepo;
+    
     @Autowired
     private UserService userService;
+    
     @Autowired
-    private AudioService audioService;
-    @Autowired
-    private ScheduledVideoRepository scheduledVideoRepository;
-    @Autowired
-    private YouTubeService youTubeService;
-    @Autowired
-    private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepo;
+    private AppConfigService appConfigService;
+    
     @Autowired
     private PlanService planService;
+    
+    @Autowired
+    private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepo;
+    
+    @Autowired
+    private YouTubeService youTubeService;
+    
+    @Autowired
+    private EmailService emailService;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
 
-    private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
-    private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
-    private java.util.concurrent.ScheduledFuture<?> billingTask;
+    @Autowired
+    private com.afklive.streamer.repository.UserRepository userRepository;
 
-    // We need to pass 'username' (email) now
+    /** Domain exception for stream enqueue failures — preserves original cause for callers. */
+    public static class StreamEnqueueException extends RuntimeException {
+        public StreamEnqueueException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    @Transactional
     public ApiResponse<StreamResponse> startStream(
             String username,
             List<String> streamKeys,
@@ -67,7 +70,7 @@ public class StreamService {
             String musicName,
             String musicVolume,
             int loopCount,
-            MultipartFile watermarkFile,
+            MultipartFile watermarkFile, // currently ignored since we push this to worker
             boolean muteVideoAudio,
             String streamMode,
             int streamQuality,
@@ -76,19 +79,19 @@ public class StreamService {
             String privacy,
             boolean overlayEnabled,
             String overlayTemplate,
-            boolean autoReplyEnabled
+            boolean autoReplyEnabled,
+            boolean poweredBy
     ) throws IOException {
         
-        log.info("username [{}]", username);
+        log.info("Starting stream request for username [{}]", username);
 
         if (streamKeys == null) {
              throw new IllegalArgumentException("At least one destination is required.");
         }
 
-        // Flatten and Filter out empty keys
         List<String> validKeys = streamKeys.stream()
                 .filter(k -> k != null && !k.trim().isEmpty())
-                .flatMap(k -> java.util.Arrays.stream(k.split(","))) // Split comma-separated keys
+                .flatMap(k -> java.util.Arrays.stream(k.split(",")))
                 .map(String::trim)
                 .filter(k -> !k.isEmpty())
                 .collect(Collectors.toList());
@@ -97,234 +100,60 @@ public class StreamService {
              throw new IllegalArgumentException("At least one valid destination stream key is required.");
         }
 
-        // Validate Keys (SSRF Protection)
-        for (String key : validKeys) {
-             if (key.startsWith("rtmp://") || key.startsWith("rtmps://")) {
-                  try {
-                      java.net.URI uri = new java.net.URI(key);
-                      String host = uri.getHost();
-                      if (host == null) throw new IllegalArgumentException("Invalid Stream URL");
+        com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
 
-                      // Remove brackets from IPv6 if present
-                      if (host.startsWith("[") && host.endsWith("]")) {
-                          host = host.substring(1, host.length() - 1);
-                      }
+        // LOCK the user row to prevent race conditions when checking quotas
+        userRepository.findByEmailForUpdate(username);
 
-                      if (host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("::1") || host.startsWith("192.168.") || host.startsWith("10.")) {
-                           throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
-                      }
-
-                      if (host.startsWith("172.")) {
-                          String[] parts = host.split("\\.");
-                          if (parts.length >= 2) {
-                              try {
-                                  int second = Integer.parseInt(parts[1]);
-                                  if (second >= 16 && second <= 31) {
-                                      throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
-                                  }
-                              } catch (NumberFormatException ignored) {}
-                          }
-                      }
-                  } catch (java.net.URISyntaxException e) {
-                      throw new IllegalArgumentException("Invalid Stream URL syntax");
-                  }
-             }
-        }
-
-        // 1. SAFETY CHECK: Check DB to see if this user is already live
-        // Also check quota limits
-        int activeCount = (int) streamJobRepo.countByUserEmailAndIsLiveTrue(username);
+        // 1. Check quotas and limits AFTER securing the lock
+        int activeCount = (int) streamJobRepo.countByUserEmailAndStatusLive(username);
         userService.checkStreamQuota(username, activeCount);
 
-        com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
         if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
-            // Check Global Rate Limit
             int globalMaxStreams = appConfigService.getGlobalStreamLimit();
-
-            long currentActive = streamJobRepo.countByIsLiveTrue();
+            long currentActive = streamJobRepo.countByStatusLive();
             if (currentActive >= globalMaxStreams) {
-                throw new IllegalStateException("Platform capacity reached for Pay As You Go users. Please try again later or upgrade to Essentials.");
+                throw new IllegalStateException("Platform capacity reached. Please upgrade to Essentials.");
             }
-
             if (!userService.checkCreditLimit(username)) {
-                throw new IllegalStateException("Credit limit exceeded. Please clear your pending balance.");
+                throw new IllegalStateException("Credit limit exceeded.");
             }
         }
 
-        // Validation
-        if (title != null && title.length() > 100) {
-            throw new IllegalArgumentException("Title must be 100 characters or less.");
-        }
-        if (description != null && description.length() > 5000) {
-            throw new IllegalArgumentException("Description must be 5000 characters or less.");
-        }
-
-        // 0. UPDATE METADATA (Optional)
-        // If title/desc provided, try to update YouTube broadcast
-        if (title != null || description != null || privacy != null) {
+        // Update YouTube metadata if needed
+        if (title != null || description != null || privacy != null || poweredBy) {
             try {
-                youTubeService.updateActiveBroadcast(username, title, description, privacy);
+                String finalTitle = title;
+                String finalDesc = description;
+                
+                if (poweredBy) {
+                    if (finalTitle != null && !finalTitle.contains("Powered by afklive.in")) {
+                        finalTitle = finalTitle + " | Powered by afklive.in";
+                    } else if (finalTitle == null) {
+                        finalTitle = "Live Stream | Powered by afklive.in";
+                    }
+                    
+                    if (finalDesc != null && !finalDesc.contains("afklive.in")) {
+                        finalDesc = finalDesc + "\n\nStreamed effortlessly using https://afklive.in";
+                    } else if (finalDesc == null) {
+                        finalDesc = "Streamed effortlessly using https://afklive.in";
+                    }
+                }
+                
+                youTubeService.updateActiveBroadcast(username, finalTitle, finalDesc, privacy);
+                // Ensure the database job also records the updated title
+                title = finalTitle;
             } catch (Exception e) {
                 log.error("Failed to update broadcast metadata", e);
-                // Continue streaming anyway, non-fatal
-            }
-        }
-
-        // 2. Resolve Paths & Download from S3
-        Path userDir = userFileService.getUserUploadDir(username);
-        // We use the key as filename prefix to avoid collisions
-        Path videoPath = userDir.resolve("stream_" + videoKey).toAbsolutePath();
-
-        if (!java.nio.file.Files.exists(videoPath)) {
-            log.info("Downloading video from Storage: {}", videoKey);
-            try {
-                storageService.downloadFileToPath(videoKey, videoPath);
-            } catch (Exception e) {
-                log.error("Failed to download video from Storage", e);
-                // Fallback: Check if it's a local file (legacy support)
-                videoPath = userDir.resolve(videoKey).toAbsolutePath();
-                if (!java.nio.file.Files.exists(videoPath)) {
-                    throw new IOException("Video not found in Storage or local storage: " + videoKey);
-                }
-            }
-        }
-        
-        log.info("userDir [{}]", userDir);
-        log.info("videoPath [{}]", videoPath);
-
-        // 3. Build the FFmpeg Command
-        Path musicPath = null;
-        if (musicName != null && !musicName.isEmpty()) {
-            if (musicName.contains("..") || musicName.contains("/") || musicName.contains("\\")) {
-                throw new IllegalArgumentException("Invalid music filename");
-            }
-
-            if (musicName.startsWith("stock:")) {
-                String trackId = musicName.substring(6); // remove "stock:"
-                musicPath = audioService.getAudioPath(trackId);
-            } else {
-                // Resolve user audio file from DB/S3
-                String audioKey = musicName;
-                Optional<ScheduledVideo> audioFileOpt = scheduledVideoRepository.findByUserEmailAndTitle(username, musicName);
-                if (audioFileOpt.isPresent() && audioFileOpt.get().getMediaAsset() != null) {
-                    audioKey = audioFileOpt.get().getMediaAsset().getS3Key();
-                }
-
-                Path localAudioPath = userDir.resolve("audio_" + audioKey).toAbsolutePath();
-                if (!Files.exists(localAudioPath)) {
-                    log.info("Downloading audio from Storage: {}", audioKey);
-                    try {
-                        storageService.downloadFileToPath(audioKey, localAudioPath);
-                    } catch (Exception e) {
-                        log.error("Failed to download audio from Storage", e);
-                        // Fallback: check if it exists with original name
-                        localAudioPath = userDir.resolve(musicName).toAbsolutePath();
-                    }
-                }
-
-                if (Files.exists(localAudioPath)) {
-                    musicPath = localAudioPath;
-                } else {
-                    // Final fallback
-                    musicPath = userDir.resolve(musicName).toAbsolutePath();
-                }
-            }
-        }
-
-        Path watermarkPath = null;
-        if (watermarkFile != null && !watermarkFile.isEmpty()) {
-             // Create temp file for watermark
-             watermarkPath = Files.createTempFile("watermark_", ".png");
-             watermarkFile.transferTo(watermarkPath);
-        }
-
-        Path overlayTextPath = null;
-        if (overlayEnabled) {
-            overlayTextPath = userDir.resolve("subs_" + System.currentTimeMillis() + ".txt");
-            Files.writeString(overlayTextPath, "Subs: Loading...");
-        }
-
-        log.info("musicPath [{}]", musicPath);
-
-        // Get User Plan Limits
-        int planMax = planService.getPlanConfig(user.getPlanType()).getMaxResolution();
-        int maxHeight = (streamQuality > 0 && streamQuality < planMax) ? streamQuality : planMax;
-
-        // CHECK FOR OPTIMIZED VERSION
-        boolean isOptimized = false;
-        if (streamMode.equals("original") && watermarkPath == null && musicPath == null) {
-            // Check if current file is already optimized (DB check)
-            boolean isCurrentOptimized = false;
-            try {
-                // Efficient: find by S3 key directly
-                Optional<ScheduledVideo> currentVideoOpt = scheduledVideoRepository.findFirstByUserEmailAndS3Key(username, videoKey);
-
-                if (currentVideoOpt.isPresent()) {
-                    ScheduledVideo v = currentVideoOpt.get();
-                    if (v.getOptimizationStatus() == ScheduledVideo.OptimizationStatus.COMPLETED) {
-                         isCurrentOptimized = true;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to check optimization status from DB", e);
-            }
-
-            // Fallback: Check filename pattern if DB check failed or not found
-            if (!isCurrentOptimized) {
-                String fName = videoPath.getFileName().toString();
-                if (fName.contains("_portrait_") || fName.contains("_landscape_") || fName.contains("_optimized")) {
-                    isCurrentOptimized = true;
-                }
-            }
-
-            if (isCurrentOptimized) {
-                 log.info("Video detected as pre-optimized. Enabling Stream Copy mode.");
-                 isOptimized = true;
-            } else {
-                // Try to find a sibling optimized file (Legacy behavior)
-                String originalFileName = videoPath.getFileName().toString();
-                String baseName = originalFileName.toLowerCase().endsWith(".mp4") ? originalFileName.substring(0, originalFileName.length() - 4) : originalFileName;
-                Path optimizedPath = videoPath.resolveSibling(baseName + "_optimized.mp4");
-
-                if (Files.exists(optimizedPath)) {
-                    log.info("Found sibling optimized video version: {}", optimizedPath);
-                    videoPath = optimizedPath;
-                    isOptimized = true;
-                }
             }
         }
 
         List<Long> startedJobIds = new ArrayList<>();
-        clearLogs();
 
-        // Loop through keys to start individual processes
+        List<String> destNames = new ArrayList<>();
         for (String key : validKeys) {
-            List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, overlayTextPath);
-
-            log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
-
-            // 4. Start the Process
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-
-            Thread.ofVirtual().start(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while (process.isAlive() && (line = reader.readLine()) != null) {
-                        addLog("[" + process.pid() + "] " + line);
-                    }
-                } catch (IOException e) {
-                    addLog("Log Capture Error: " + e.getMessage());
-                    log.error("Error", e);
-                }
-            });
-
-            // Resolve Destination Name
             String destName = "Unknown Destination";
             try {
-                // Assuming streamDestinationRepo.findByStreamKeyAndUser expects User entity, which we have
                 List<com.afklive.streamer.model.StreamDestination> dests = streamDestinationRepo.findByStreamKeyAndUser(key, user);
                 if (!dests.isEmpty()) {
                     destName = dests.get(0).getName();
@@ -332,65 +161,110 @@ public class StreamService {
             } catch (Exception e) {
                 log.warn("Failed to resolve destination name for key: {}", key);
             }
-
-            // 5. SAVE STATE TO DATABASE
-            StreamJob job = new StreamJob(
-                    user,
-                    key,
-                    videoKey,
-                    musicName,
-                    musicVolume,
-                    true,
-                    process.pid(),
-                    title,
-                    description,
-                    privacy,
-                    java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")),
-                    destName,
-                    autoReplyEnabled
-            );
-            job.setLastBillingTime(job.getStartTime());
-            job = streamJobRepo.save(job);
-            final Long jobId = job.getId();
-            startedJobIds.add(jobId);
-
-            activeStreams.put(jobId, process);
-
-            // Start Overlay Updater if enabled
-            if (overlayEnabled && overlayTextPath != null) {
-                final Path textPath = overlayTextPath;
-                java.util.concurrent.ScheduledFuture<?> task = scheduledExecutorService.scheduleAtFixedRate(() -> {
-                    try {
-                        String subs = youTubeService.getSubscriberCount(username);
-                        String content = "Subscribers: " + subs;
-                        if ("GOAL".equalsIgnoreCase(overlayTemplate)) {
-                            content = "Goal: " + subs + "/10K";
-                        }
-                        Files.writeString(textPath, content);
-                    } catch (Exception e) {
-                        log.error("Failed to update overlay text", e);
-                    }
-                }, 0, 30, java.util.concurrent.TimeUnit.SECONDS);
-                jobTasks.put(jobId, task);
-            }
-
-            // 6. EXIT HANDLER (Auto-Update DB)
-            process.onExit().thenRun(() -> {
-                log.warn("Stream Process Exited for job {}", jobId);
-                finalizeJob(jobId);
-            });
+            destNames.add(destName);
         }
 
-        return ApiResponse.success("Stream started", new StreamResponse(
+        String combinedKeys = String.join(",", validKeys);
+        if (combinedKeys.length() > 255) combinedKeys = combinedKeys.substring(0, 250) + "...";
+        
+        String combinedDestName = String.join(" + ", destNames);
+        if (combinedDestName.length() > 255) combinedDestName = combinedDestName.substring(0, 250) + "...";
+
+        // Create a single StreamJob for all destinations (Simulcast)
+        StreamJob job = new StreamJob(
+                user,
+                combinedKeys,
+                videoKey,
+                musicName,
+                musicVolume,
+                title,
+                description,
+                privacy,
+                java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")),
+                combinedDestName,
+                autoReplyEnabled
+        );
+        
+        // Calculate final locked hourly rate using central billing logic
+        Integer planDiscount = planService.getPlanConfig(user.getPlanType()).getDiscountPercentage();
+        int discountPercent = planDiscount != null ? planDiscount : 0;
+        
+        java.math.BigDecimal finalRate = appConfigService.calculateFinalRate(
+            user.getCurrency(),
+            streamQuality,
+            validKeys.size(),
+            discountPercent,
+            poweredBy
+        );
+        
+        job.setLockedHourlyRate(finalRate);
+
+        // Idempotency key: prevents duplicate jobs if user double-clicks "Go Live".
+        String minuteBucket = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"))
+                .truncatedTo(java.time.temporal.ChronoUnit.MINUTES).toString();
+        // hash all valid keys to keep idempotency key short
+        job.setIdempotencyKey(username + ":" + validKeys.hashCode() + ":" + minuteBucket);
+        job.setStatus(StreamJob.StreamStatus.PREPARING);
+        try {
+            job = streamJobRepo.save(job);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("Duplicate stream request detected for user {}", username);
+            return (ApiResponse<StreamResponse>) (ApiResponse<?>) ApiResponse.error("A stream is already starting for these destinations. Please wait a moment.");
+        }
+        final Long jobId = job.getId();
+        startedJobIds.add(jobId);
+
+        // Assemble StreamSpec JSON
+        Map<String, Object> specMap = new HashMap<>();
+        specMap.put("source_s3_key", videoKey);
+        specMap.put("destinations", validKeys); // ALL keys passed to worker
+        specMap.put("stream_mode", streamMode);
+        specMap.put("stream_quality", streamQuality);
+        specMap.put("loop_count", loopCount);
+        specMap.put("music_name", musicName);
+        specMap.put("music_volume", musicVolume);
+        specMap.put("mute_video_audio", muteVideoAudio);
+        specMap.put("overlay_enabled", overlayEnabled);
+        specMap.put("overlay_template", overlayTemplate);
+        
+        try {
+            String specJson = objectMapper.writeValueAsString(specMap);
+            
+            // Save spec on job for watchdog recovery
+            job.setStreamSpecJson(specJson);
+            streamJobRepo.save(job);
+            
+            // Save to Queue
+            StreamJobQueue queueJob = new StreamJobQueue();
+            queueJob.setStreamJob(job);
+            queueJob.setStreamSpec(specJson);
+            queueJob.setStatus(StreamJobQueue.QueueStatus.PENDING);
+            
+            streamJobQueueRepo.save(queueJob);
+        } catch (Exception e) {
+            log.error("Failed to enqueue job for jobId={}", job.getId(), e);
+            job.setStatus(StreamJob.StreamStatus.FAILED);
+            streamJobRepo.save(job);
+            throw new StreamEnqueueException("Failed to enqueue stream job " + job.getId(), e);
+        }
+
+        emailService.sendStreamStatusEmail(user.getEmail(), title != null ? title : videoKey, "QUEUED for Processing", "Stream will begin momentarily.");
+
+        return ApiResponse.success("Stream queued successfully", new StreamResponse(
                 startedJobIds.toString(),
                 streamKeys.toString(),
-                "RUNNING",
-                "Started " + startedJobIds.size() + " separate stream processes."
+                "QUEUED",
+                "Queued " + startedJobIds.size() + " stream jobs."
         ));
     }
 
     public ApiResponse<?> stopAllStreams(String username) {
-        List<StreamJob> jobs = streamJobRepo.findAllByUserEmailAndIsLiveTrue(username);
+        List<StreamJob> jobs = streamJobRepo.findAllByUserEmailAndStatusLive(username);
+
+        // Indexed query — no more findAll() table scan
+        List<StreamJob> preparingJobs = streamJobRepo
+                .findAllByUserEmailAndStatus(username, StreamJob.StreamStatus.PREPARING);
+        jobs.addAll(preparingJobs);
 
         if (jobs.isEmpty()) {
             return ApiResponse.success("No active streams found", null);
@@ -398,12 +272,16 @@ public class StreamService {
 
         int stopped = 0;
         for (StreamJob job : jobs) {
-            ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-            // finalizeJob is called by process.onExit()
+            job.setStatus(StreamJob.StreamStatus.STOP_REQUESTED);
+            streamJobRepo.save(job);
             stopped++;
         }
 
-        return ApiResponse.success(stopped + " streams stopped", null);
+        log.info("Stop requested for {} stream(s) for user {}", stopped, username);
+        if (stopped > 0) {
+            emailService.sendStreamStatusEmail(username, "Multiple Streams", "STOPPED", "All active streams have been stopped by request.");
+        }
+        return ApiResponse.success(stopped + " streams requested to stop", null);
     }
 
     public ApiResponse<?> stopStream(Long jobId, String username) {
@@ -415,140 +293,22 @@ public class StreamService {
                 return ApiResponse.error("Unauthorized");
             }
 
-            if (job.isLive()) {
-                ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-                // finalizeJob is called by process.onExit()
-                return ApiResponse.success("Stream stopped", null);
+            if (job.getStatus() == StreamJob.StreamStatus.LIVE || job.getStatus() == StreamJob.StreamStatus.PREPARING) {
+                job.setStatus(StreamJob.StreamStatus.STOP_REQUESTED);
+                streamJobRepo.save(job);
+                emailService.sendStreamStatusEmail(username, job.getTitle(), "STOPPED", "Stream stop requested.");
+                return ApiResponse.success("Stream stop requested", null);
             }
         }
         return ApiResponse.error("Stream not found or not active");
     }
 
-    // Package-private for testing
-    void finalizeJob(Long jobId) {
-        Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
-        if (jobOpt.isPresent()) {
-            StreamJob job = jobOpt.get();
-            // Use computeIfPresent-like logic or simply check live status.
-            if (job.isLive()) {
-                job.setLive(false);
-                job.setEndTime(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
-
-                // Calculate Final Cost Increment for Pay As You Go
-                // Get email via getter or direct user access
-                String email = job.getUser().getEmail();
-                com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
-
-                if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
-                    java.time.ZonedDateTime startCalc = job.getLastBillingTime();
-                    if (startCalc == null) startCalc = job.getStartTime();
-
-                    long durationSeconds = java.time.Duration.between(startCalc, job.getEndTime()).getSeconds();
-                    if (durationSeconds > 0) {
-                        double hours = durationSeconds / 3600.0;
-                        double incrementalCost = hours * 1.25;
-
-                        incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
-
-                        job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
-                        userService.addUnpaidBalance(email, incrementalCost);
-                    }
-                    job.setCost(job.getAccumulatedCost());
-                }
-
-                streamJobRepo.save(job);
-
-                // Cleanup tasks
-                activeStreams.remove(jobId);
-                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
-                if (task != null) task.cancel(true);
-            }
-        }
-    }
-
-    // Called on startup to init scheduled billing
-    @jakarta.annotation.PostConstruct
-    public void initBillingTask() {
-        billingTask = scheduledExecutorService.scheduleAtFixedRate(this::processPeriodicBilling, 1, 1, java.util.concurrent.TimeUnit.MINUTES);
-    }
-
-    private void processPeriodicBilling() {
-        // Find all active streams
-        // Ideally we filter by Pay As You Go users, but for now we iterate active streams and check user plan
-        // Optimization: findAllByIsLiveTrue() then filter in memory or join in DB.
-        // Assuming StreamJobRepository has findAllByIsLiveTrue()
-        List<StreamJob> activeJobs = streamJobRepo.findAllByIsLiveTrue(); // We might need to add this method to repo if not exists, or filter from getAll
-        // Actually we have getActiveStreams(username). We need global active streams.
-        // Let's use the activeStreams map which contains IDs of locally running processes
-
-        activeStreams.forEach((jobId, process) -> {
-            try {
-                Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
-                if (jobOpt.isPresent()) {
-                    StreamJob job = jobOpt.get();
-                    String email = job.getUser().getEmail();
-                    com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
-
-                    if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
-                        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"));
-                        java.time.ZonedDateTime lastCalc = job.getLastBillingTime();
-                        if (lastCalc == null) lastCalc = job.getStartTime();
-
-                        long durationSeconds = java.time.Duration.between(lastCalc, now).getSeconds();
-                        if (durationSeconds > 0) {
-                            double hours = durationSeconds / 3600.0;
-                            double incrementalCost = hours * 1.25;
-                            incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
-
-                            job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
-                            job.setLastBillingTime(now);
-
-                            // Atomic update to user balance
-                            userService.addUnpaidBalance(email, incrementalCost);
-                            streamJobRepo.save(job);
-                        }
-
-                        // Check Credit Limit
-                        if (!userService.checkCreditLimit(email)) {
-                            log.warn("User {} exceeded credit limit. Stopping stream {}.", email, jobId);
-                            stopStream(jobId, email);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.error("Error in billing task for job " + jobId, e);
-            }
-        });
-    }
-
     public List<StreamJob> getActiveStreams(String username) {
-        return streamJobRepo.findAllByUserEmailAndIsLiveTrue(username);
-    }
-
-    // SAFETY NET: Kill all streams if the Java Server shuts down
-    @PreDestroy
-    public void onShutdown() {
-        log.info("Application shutdown - Terminating {} active streams", activeStreams.size());
-        activeStreams.values().forEach(Process::destroyForcibly);
-    }
-
-    public void addLog(String line) {
-        if (line != null) {
-            // Redact RTMP keys/URLs
-            line = line.replaceAll("rtmp://[^\\s]+", "rtmp://[REDACTED]");
-        }
-
-        if (logBuffer.size() > 50) {
-            logBuffer.removeFirst();
-        }
-        logBuffer.add(line);
-    }
-
-    public List<String> getLogs() {
-        return new ArrayList<>(logBuffer);
-    }
-
-    public void clearLogs() {
-        logBuffer.clear();
+        List<StreamJob> active = streamJobRepo.findAllByUserEmailAndStatusLive(username);
+        // Indexed query — no more findAll() table scan
+        List<StreamJob> preparing = streamJobRepo
+                .findAllByUserEmailAndStatus(username, StreamJob.StreamStatus.PREPARING);
+        active.addAll(preparing);
+        return active;
     }
 }

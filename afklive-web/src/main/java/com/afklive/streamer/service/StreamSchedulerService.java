@@ -8,6 +8,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import org.springframework.context.ApplicationContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
@@ -17,37 +21,38 @@ public class StreamSchedulerService {
 
     private final ScheduledStreamRepository repository;
     private final StreamService streamService;
-    private final StreamManagerService streamManager;
 
-    // Run via JobRunr
+    @Autowired
+    private ApplicationContext applicationContext;
+
     public void processScheduledStreams() {
         log.info("Checking for scheduled live streams...");
         List<ScheduledStream> dueStreams = repository.findByStatusAndScheduledTimeLessThanEqual(
                 ScheduledStream.StreamStatus.PENDING, ZonedDateTime.now(ZoneId.of("UTC")));
 
+        StreamSchedulerService selfProxy = applicationContext.getBean(StreamSchedulerService.class);
+
         for (ScheduledStream stream : dueStreams) {
-            startScheduledStream(stream);
+            try {
+                selfProxy.startScheduledStreamInTransaction(stream.getId());
+            } catch (Exception e) {
+                log.error("Failed to start scheduled stream {}", stream.getId(), e);
+            }
         }
     }
 
-    private void startScheduledStream(ScheduledStream stream) {
-        log.info("Starting scheduled stream ID: {} for user: {}", stream.getId(), stream.getUsername());
-
-        // 1. Check concurrent limits
-        if (!streamManager.tryStartStream(stream.getUsername())) {
-            log.warn("User {} reached max concurrent streams. Marking failed.", stream.getUsername());
-            stream.setStatus(ScheduledStream.StreamStatus.FAILED);
-            stream.setErrorMessage("Max concurrent streams reached");
-            repository.save(stream);
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void startScheduledStreamInTransaction(Long id) {
+        ScheduledStream stream = repository.findByIdForUpdate(id).orElse(null);
+        if (stream == null || stream.getStatus() != ScheduledStream.StreamStatus.PENDING) {
+            log.info("Scheduled stream {} already processed or not found.", id);
             return;
         }
 
-        // 2. Start Stream
-        try {
-            // We pass watermarkFile as null for now (not supported in scheduling yet unless we store path)
-            // If watermark was needed, we'd need to store the path in DB or S3 key.
-            // Assuming simplified scheduling for now.
+        log.info("Starting scheduled stream ID: {} for user: {}", stream.getId(), stream.getUsername());
 
+        // 1. Start Stream
+        try {
             streamService.startStream(
                     stream.getUsername(),
                     stream.getStreamKeys(),
@@ -55,16 +60,17 @@ public class StreamSchedulerService {
                     stream.getMusicName(),
                     stream.getMusicVolume(),
                     stream.getLoopCount(),
-                    null, // Watermark file (Multipart) not available here.
+                    null, // Watermark file
                     stream.isMuteVideoAudio(),
                     stream.getStreamMode(),
-                    0,    // streamQuality (default)
-                    null, // Title
+                    stream.getStreamQuality(),
+                    "Scheduled Stream: " + stream.getMediaAsset().getTitle(),
                     null, // Description
                     null, // Privacy
                     false, // Overlay enabled
                     null,   // Overlay template
-                    false // Auto Reply
+                    false, // Auto Reply
+                    false // Powered by
             );
 
             stream.setStatus(ScheduledStream.StreamStatus.COMPLETED); // Marked as "Started" basically
@@ -74,8 +80,6 @@ public class StreamSchedulerService {
             log.error("Failed to start scheduled stream {}", stream.getId(), e);
             stream.setStatus(ScheduledStream.StreamStatus.FAILED);
             stream.setErrorMessage(e.getMessage());
-            // Release lock if failed immediately
-            streamManager.endStream(stream.getUsername());
         } finally {
             repository.save(stream);
         }

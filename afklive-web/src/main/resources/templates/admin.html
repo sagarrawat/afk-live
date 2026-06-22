@@ -3,7 +3,7 @@
 <head>
     <title>Admin Dashboard - AFK Live</title>
     <meta charset="UTF-8">
-    <meta name="color-scheme" content="light only">
+    <meta name="color-scheme" content="light dark">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -11,7 +11,22 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <script>
+        // Init dark mode
+        if (localStorage.getItem('afk-theme') === 'dark' || (!('afk-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+        function toggleTheme() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('afk-theme', 'light');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('afk-theme', 'dark');
+            }
+        }
+
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
@@ -23,10 +38,26 @@
             }
         }
     </script>
+    <style>
+        /* Global Dark Mode Overrides */
+        .dark body { background-color: #09090b; color: #f4f4f5; }
+        .dark .bg-white { background-color: #18181b !important; }
+        .dark .bg-gray-50 { background-color: #09090b !important; }
+        .dark .bg-gray-100, .dark .bg-gray-200 { background-color: #27272a !important; }
+        .dark .bg-blue-50 { background-color: rgba(37, 99, 235, 0.15) !important; }
+        .dark .text-gray-900, .dark .text-gray-800, .dark .text-gray-700 { color: #f4f4f5 !important; }
+        .dark .text-gray-600, .dark .text-gray-500, .dark .text-gray-400 { color: #a1a1aa !important; }
+        .dark .border-gray-200, .dark .border-gray-100 { border-color: #27272a !important; }
+        .dark .border-gray-300 { border-color: #3f3f46 !important; }
+        .dark .afk-text { color: #f4f4f5 !important; }
+        .dark table th { background-color: #18181b !important; color: #a1a1aa !important; border-bottom-color: #27272a !important; }
+        .dark table td { border-bottom-color: #27272a !important; }
+        .dark tr.hover\:bg-gray-50:hover { background-color: #27272a !important; }
+    </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans" th:attr="x-data='{ activeTab: \'' + ${activeTab} + '\', showTicketModal: false, selectedTicket: null, mobileMenuOpen: false, showLimitModal: false, selectedUser: null, showPlanModal: false, selectedPlan: null }'">
 
-    <div class="min-h-screen flex flex-col">
+    <div class="h-screen flex flex-col overflow-hidden">
         <!-- Header -->
         <header class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-8 z-10 sticky top-0">
             <div class="flex items-center gap-6">
@@ -40,18 +71,22 @@
                 <h1 class="font-bold text-xl tracking-tight text-gray-700 border-l pl-4 md:pl-6 border-gray-300 hidden md:block">Admin Console</h1>
             </div>
             <div class="flex items-center gap-4">
+                <button onclick="toggleTheme()" class="text-gray-500 hover:text-brand-blue transition mr-2" aria-label="Toggle Dark Mode">
+                    <i class="fa-solid fa-moon dark:hidden"></i>
+                    <i class="fa-solid fa-sun hidden dark:inline"></i>
+                </button>
                 <form th:action="@{/logout}" method="post">
                     <button type="submit" class="text-sm font-medium text-red-600 hover:text-red-700">Logout</button>
                 </form>
             </div>
         </header>
 
-        <div class="flex flex-1">
+        <div class="flex flex-1 overflow-hidden">
             <!-- Sidebar -->
             <!-- Mobile Backdrop -->
             <div x-show="mobileMenuOpen" class="fixed inset-0 z-40 bg-gray-900/50 backdrop-blur-sm md:hidden" @click="mobileMenuOpen = false" x-transition.opacity style="display:none;"></div>
 
-            <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 p-6 flex flex-col gap-1 transition-transform duration-300 md:static md:translate-x-0 transform"
+            <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 p-6 flex flex-col gap-1 transition-transform duration-300 md:static md:translate-x-0 transform overflow-y-auto"
                    :class="mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'">
                 <button @click="activeTab = 'overview'; mobileMenuOpen = false"
                     class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition"
@@ -86,7 +121,7 @@
             </aside>
 
             <!-- Content -->
-            <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+            <main class="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto relative">
 
                 <!-- OVERVIEW -->
                 <div x-show="activeTab === 'overview'" class="space-y-8 animate-fade-in">
@@ -107,6 +142,20 @@
                         </div>
 
                         <!-- Card 2 -->
+                        <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-500 uppercase">Total Revenue</p>
+                                    <h3 class="text-3xl font-bold text-gray-900 mt-1" th:text="'$' + ${totalRevenue}">$0.00</h3>
+                                </div>
+                                <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600">
+                                    <i class="fa-solid fa-dollar-sign text-xl"></i>
+                                </div>
+                            </div>
+                            <p class="text-sm text-green-600 font-medium">All Time Deposits</p>
+                        </div>
+
+                        <!-- Card 3 -->
                         <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                             <div class="flex justify-between items-start mb-4">
                                 <div>
@@ -203,6 +252,7 @@
                                                 th:data-channels="${plan.maxChannels}"
                                                 th:data-posts="${plan.maxScheduledPosts}"
                                                 th:data-res="${plan.maxResolution}"
+                                                th:data-discount="${plan.discountPercentage}"
                                                 @click="selectedPlan = {
                                                     type: $el.getAttribute('data-type'),
                                                     name: $el.getAttribute('data-name'),
@@ -212,7 +262,8 @@
                                                     streams: $el.getAttribute('data-streams'),
                                                     channels: $el.getAttribute('data-channels'),
                                                     posts: $el.getAttribute('data-posts'),
-                                                    res: $el.getAttribute('data-res')
+                                                    res: $el.getAttribute('data-res'),
+                                                    discountPercentage: $el.getAttribute('data-discount')
                                                 }; showPlanModal = true"
                                                 class="text-blue-600 hover:text-blue-800 font-medium text-xs border border-blue-200 bg-blue-50 px-3 py-1 rounded">
                                                 Edit
@@ -643,6 +694,10 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Max Channels</label>
                             <input type="number" name="maxChannels" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedPlan.channels">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Discount (%)</label>
+                            <input type="number" name="discountPercentage" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" x-model="selectedPlan.discountPercentage">
                         </div>
                          <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Max Scheduled Posts</label>

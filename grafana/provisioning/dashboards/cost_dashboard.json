@@ -1,0 +1,25 @@
+{
+  "title": "AFK Live - Cost Tracker",
+  "uid": "cost-dashboard",
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Daily Platform Spend (USD)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{"expr": "platform_daily_spend_usd", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Spend Rate Over Time",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{"expr": "rate(platform_daily_spend_usd[15m])", "refId": "A"}]
+    }
+  ]
+}

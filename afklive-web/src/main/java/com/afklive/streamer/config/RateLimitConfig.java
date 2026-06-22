@@ -12,13 +12,13 @@ import java.time.Duration;
 @Configuration
 public class RateLimitConfig {
 
-    @Value("${rate-limiter.capacity:5}")
+    @Value("${rate-limiter.capacity:100}")
     private long capacity;
 
     @Bean(name = "streamRateLimiter")
     public Bucket bucket() {
         return Bucket.builder()
-                .addLimit(Bandwidth.simple(capacity, Duration.ofDays(365)))
+                .addLimit(Bandwidth.simple(capacity, Duration.ofMinutes(1)))
                 .build();
     }
 }

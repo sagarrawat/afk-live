@@ -54,21 +54,21 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/api/payment/callback", "/api/payment/initiate")
+                        .ignoringRequestMatchers("/api/**")
                 )
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.FORWARD, jakarta.servlet.DispatcherType.ERROR).permitAll()
                         // 1. PUBLIC: Landing page, assets
-                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
+                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/refund.html", "/refund-policy", "/disclaimer.html", "/disclaimer", "/pricing", "/features", "/library", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error", "/robots.txt", "/sitemap.xml").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
                         .requestMatchers("/api/payment/callback", "/api/payment/initiate").permitAll()
 
                         // 2. ADMIN
-                        .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/admin/**", "/api/admin/**", "/actuator/**").hasRole("ADMIN")
 
                         // 3. PROTECTED: The Studio URL and internal index file
-                        .requestMatchers("/studio", "/app.html", "/app").hasRole("USER")
+                        .requestMatchers("/studio", "/studio/**", "/settings").hasRole("USER")
 
                         // 4. CATCH-ALL
                         .anyRequest().authenticated()
@@ -97,7 +97,13 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .exceptionHandling(e -> e
-                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            if (request.getRequestURI().startsWith("/api/")) {
+                                response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
+                            } else {
+                                response.sendRedirect("/login");
+                            }
+                        })
                 );
 
         return http.build();
@@ -106,7 +112,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5174", "http://localhost:8080")); // Allow React Frontend & Self
+        configuration.setAllowedOriginPatterns(Arrays.asList("*")); // Allow all via pattern
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

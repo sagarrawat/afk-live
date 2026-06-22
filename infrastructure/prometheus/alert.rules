@@ -1,0 +1,29 @@
+groups:
+- name: AFKLiveAlerts
+  rules:
+  - alert: DailyBudgetExceeded
+    expr: afklive_daily_spend_dollars > 45
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Daily budget cap approach or exceeded"
+      description: "Platform daily spend is at ${{ $value }}, approaching the $50 cap."
+
+  - alert: WorkerQueueBackup
+    expr: stream_job_queue_depth > 50
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High queue depth detected"
+      description: "Queue depth has been above 50 for 5 minutes. Autoscaler may be failing."
+
+  - alert: WorkerCrashSpike
+    expr: rate(stream_job_failures_total[5m]) > 0.5
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "High stream failure rate"
+      description: "Worker processes are crashing at a rate of >0.5 per second over the last 5m."

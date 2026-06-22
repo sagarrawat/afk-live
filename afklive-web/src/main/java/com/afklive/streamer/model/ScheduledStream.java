@@ -37,7 +37,6 @@ public class ScheduledStream {
     private java.util.List<StreamDestination> destinations;
 
     @Transient
-    @NotEmpty(message = "At least one destination required")
     private List<String> streamKeys; // Backward compat for DTO
 
     @jakarta.validation.constraints.NotNull(message = "Scheduled time is required")
@@ -52,6 +51,7 @@ public class ScheduledStream {
     private String musicVolume; // "1.0"
     private int loopCount = -1;
     private String streamMode = "original";
+    private int streamQuality = 0;
     private boolean muteVideoAudio = true;
 
     // To track active PID if needed, though StreamService manages active ones.

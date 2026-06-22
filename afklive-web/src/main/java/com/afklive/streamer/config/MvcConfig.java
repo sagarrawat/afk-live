@@ -10,10 +10,15 @@ public class MvcConfig implements WebMvcConfigurer {
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
         // Removed root mapping as it is handled by HomeController
-        registry.addViewController("/studio").setViewName("forward:/app.html");
-        registry.addViewController("/app").setViewName("forward:/app.html");
-        registry.addViewController("/pricing").setViewName("forward:/pricing.html");
-        registry.addViewController("/features").setViewName("forward:/features.html");
+        registry.addViewController("/studio").setViewName("forward:/index.html");
+        registry.addViewController("/studio/**").setViewName("forward:/index.html");
+        registry.addViewController("/library").setViewName("forward:/index.html");
+        registry.addViewController("/settings").setViewName("forward:/index.html");
+        registry.addViewController("/forgot-password").setViewName("forward:/index.html");
+        registry.addViewController("/terms").setViewName("forward:/index.html");
+        registry.addViewController("/privacy").setViewName("forward:/index.html");
+        registry.addViewController("/refund-policy").setViewName("forward:/index.html");
+        registry.addViewController("/disclaimer").setViewName("forward:/index.html");
         registry.addViewController("/login").setViewName("login");
         registry.addViewController("/register").setViewName("register");
     }

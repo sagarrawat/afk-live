@@ -1,0 +1,20 @@
+{
+  "title": "AFK Live - Stream Operations",
+  "uid": "operations-dashboard",
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Active Streams",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{"expr": "afk_active_streams", "refId": "A"}]
+    },
+    {
+      "type": "stat",
+      "title": "Dropped Frames",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{"expr": "rate(stream_dropped_frames_total[5m])", "refId": "A"}]
+    }
+  ]
+}

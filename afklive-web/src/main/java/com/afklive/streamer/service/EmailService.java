@@ -109,6 +109,17 @@ public class EmailService {
         sendEmail(to, "AFK Live: Video " + status, html);
     }
 
+    public void sendStreamStatusEmail(String to, String streamTitle, String status, String reason) {
+        String content = "<p>Your stream <strong>" + (streamTitle != null ? streamTitle : "Unnamed Stream") + "</strong> is now:</p>" +
+                         "<p style='font-size: 18px; font-weight: bold; color: #2c68f6;'>" + status + "</p>";
+        if (reason != null && !reason.isEmpty()) {
+            content += "<p>Reason/Details: " + reason + "</p>";
+        }
+        content += "<p>View your stream history in the Analytics dashboard.</p>";
+        String html = createBaseHtml("Stream Status Update", content);
+        sendEmail(to, "AFK Live: Stream " + status, html);
+    }
+
     public void sendVerificationEmail(String to, String link) {
         String content = "<p>Please verify your email address to get full access to AFK Live features.</p>" +
                          "<p style='margin: 30px 0; text-align: center;'>" +
@@ -199,5 +210,16 @@ public class EmailService {
         } catch (Exception e) {
             log.warn("Failed to send email to {}: {}", to, e.getMessage());
         }
+    }
+
+    @Async
+    public void sendLowBalanceWarning(String to, java.math.BigDecimal balance) {
+        String content = "<p>Your AFK Live account balance is running low (" + balance.toString() + ").</p>" +
+                "<p>Please top up your balance soon to avoid interruption of your active streams.</p>" +
+                "<div style=\"text-align: center; margin: 30px 0;\">" +
+                "  <a href=\"" + baseUrl + "/settings\" style=\"background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;\">Top Up Now</a>" +
+                "</div>";
+        String html = createBaseHtml("Low Balance Warning ⚠️", content);
+        sendEmail(to, "Low Balance Warning: Action Required", html);
     }
 }

@@ -9,31 +9,47 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
+
 public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT j FROM StreamJob j WHERE j.id = :id")
+    Optional<StreamJob> findByIdForUpdate(Long id);
+
     // Find the active job for a specific user
-    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.user.email = :email AND j.isLive = true")
-    Optional<StreamJob> findByUserEmailAndIsLiveTrue(String email);
+    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.user.email = :email AND j.status = 'LIVE'")
+    Optional<StreamJob> findByUserEmailAndStatusLive(String email);
 
-    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.user.email = :email AND j.isLive = true")
-    List<StreamJob> findAllByUserEmailAndIsLiveTrue(String email);
+    // Find jobs by user and a specific status (used to fix the findAll() table-scan bug)
+    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.user.email = :email AND j.status = :status")
+    List<StreamJob> findAllByUserEmailAndStatus(String email, StreamJob.StreamStatus status);
 
-    @Query("SELECT count(j) FROM StreamJob j WHERE j.user.email = :email AND j.isLive = true")
-    long countByUserEmailAndIsLiveTrue(String email);
+    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.user.email = :email AND j.status = 'LIVE'")
+    List<StreamJob> findAllByUserEmailAndStatusLive(String email);
+
+    @Query("SELECT count(j) FROM StreamJob j WHERE j.user.email = :email AND j.status = 'LIVE'")
+    long countByUserEmailAndStatusLive(String email);
 
     // Admin: Find ALL live jobs
-    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true")
-    List<StreamJob> findAllByIsLiveTrue();
+    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.status = 'LIVE'")
+    List<StreamJob> findAllByStatusLive();
 
-    @Query(value = "SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true",
-           countQuery = "SELECT count(j) FROM StreamJob j WHERE j.isLive = true")
-    Page<StreamJob> findAllByIsLiveTrue(Pageable pageable);
+    @Query(value = "SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.status = 'LIVE'",
+           countQuery = "SELECT count(j) FROM StreamJob j WHERE j.status = 'LIVE'")
+    Page<StreamJob> findAllByStatusLive(Pageable pageable);
 
-    long countByIsLiveTrue();
+    @Query("SELECT count(j) FROM StreamJob j WHERE j.status = 'LIVE'")
+    long countByStatusLive();
 
     // Auto-Reply
-    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true AND j.autoReplyEnabled = true")
-    List<StreamJob> findByIsLiveTrueAndAutoReplyEnabledTrue();
+    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.status = 'LIVE' AND j.autoReplyEnabled = true")
+    List<StreamJob> findByStatusLiveAndAutoReplyEnabledTrue();
 
     // History
     Page<StreamJob> findByUserEmailOrderByStartTimeDesc(String email, Pageable pageable);
+
+    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.status IN ('COMPLETED', 'FAILED', 'STOPPED') AND j.ledgerRecorded = false AND j.accumulatedCost > 0")
+    List<StreamJob> findUnrecordedFinishedJobs();
 }

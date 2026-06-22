@@ -13,6 +13,11 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.email = :email")
+    Optional<User> findByEmailForUpdate(@Param("email") String email);
+
     Optional<User> findByVerificationToken(String token);
     Optional<User> findByResetToken(String token);
 
@@ -25,14 +30,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Modifying
     @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance + :amount WHERE u.email = :email")
-    void addUnpaidBalance(@Param("email") String email, @Param("amount") double amount);
+    void addUnpaidBalance(@Param("email") String email, @Param("amount") java.math.BigDecimal amount);
 
     @Modifying
     @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance - :amount WHERE u.email = :email")
-    void deductUnpaidBalance(@Param("email") String email, @Param("amount") double amount);
+    void deductUnpaidBalance(@Param("email") String email, @Param("amount") java.math.BigDecimal amount);
 
     @Query("SELECT COALESCE(SUM(u.unpaidBalance), 0) FROM User u")
-    Double sumUnpaidBalance();
+    java.math.BigDecimal sumUnpaidBalance();
 
     @Query("SELECT COALESCE(SUM(u.usedStorageBytes), 0) FROM User u")
     Long sumUsedStorageBytes();

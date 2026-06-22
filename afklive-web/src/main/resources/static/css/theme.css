@@ -75,6 +75,7 @@ body {
 /* CONTENT AREA */
 .content-area {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -86,7 +87,7 @@ body {
 .hamburger { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-main); }
 .mobile-title { font-weight: 700; font-size: 1.1rem; }
 
-.view-section { flex: 1; overflow-y: auto; padding: 30px 40px; }
+.view-section { flex: 1; min-height: 0; overflow-y: auto; padding: 30px 40px; }
 .hidden { display: none; }
 
 .page-header {

@@ -25,6 +25,9 @@ DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS app_settings CASCADE;
 DROP TABLE IF EXISTS plan_configs CASCADE;
 DROP TABLE IF EXISTS etag_store CASCADE;
+DROP TABLE IF EXISTS stream_worker CASCADE;
+DROP TABLE IF EXISTS stream_job_queue CASCADE;
+DROP TABLE IF EXISTS optimization_job CASCADE;
 
 -- Create OAuth2 Client Table (Standard Spring Security)
 CREATE TABLE oauth2_authorized_client (
@@ -50,6 +53,7 @@ CREATE TABLE users (
     picture_url TEXT,
     role VARCHAR(50) DEFAULT 'ROLE_USER',
     enabled BOOLEAN DEFAULT TRUE,
+    currency VARCHAR(10) DEFAULT 'INR',
 
     -- Plan & Billing
     plan_type VARCHAR(50) DEFAULT 'FREE',
@@ -90,7 +94,20 @@ CREATE TABLE media_assets (
     s3_key VARCHAR(255) NOT NULL,
     file_size BIGINT DEFAULT 0,
     content_type VARCHAR(50), -- VIDEO, IMAGE, AUDIO
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- New fields for eager optimization
+    optimized_s3_key VARCHAR(512),
+    stream_readiness VARCHAR(50) NOT NULL DEFAULT 'PENDING_ANALYSIS',
+    video_codec VARCHAR(50),
+    audio_codec VARCHAR(50),
+    resolution VARCHAR(20),
+    duration_seconds INT,
+    bitrate_kbps INT,
+    frame_rate DECIMAL(5,2),
+    stream_profile VARCHAR(50),
+    probe_data TEXT,
+    optimization_retry_count INT DEFAULT 0
 );
 
 CREATE INDEX idx_media_assets_user ON media_assets(user_id);
@@ -200,8 +217,21 @@ CREATE TABLE stream_jobs (
 
     stream_key VARCHAR(1024),
     file_name VARCHAR(255),
-    is_live BOOLEAN DEFAULT FALSE,
-    pid BIGINT,
+    
+    worker_id VARCHAR(100),
+    status VARCHAR(50) NOT NULL DEFAULT 'QUEUED',
+    last_heartbeat TIMESTAMP WITH TIME ZONE,
+    retry_count INT DEFAULT 0,
+    max_retries INT DEFAULT 3,
+    stream_spec_json JSONB,
+    failure_reason TEXT,
+    resume_from_seconds INT,
+    idempotency_key VARCHAR(100) UNIQUE,
+    current_fps DECIMAL(6,2),
+    current_bitrate_kbps DECIMAL(10,2),
+    dropped_frames BIGINT DEFAULT 0,
+    bytes_streamed BIGINT DEFAULT 0,
+
     music_name VARCHAR(255),
     music_volume VARCHAR(50),
     destination_name VARCHAR(255),
@@ -216,6 +246,7 @@ CREATE TABLE stream_jobs (
     cost DOUBLE PRECISION,
     accumulated_cost DOUBLE PRECISION DEFAULT 0.0,
     last_billing_time TIMESTAMP WITH TIME ZONE,
+    locked_hourly_rate DECIMAL(10,4) DEFAULT 0.0,
 
     auto_reply_enabled BOOLEAN DEFAULT FALSE,
     last_page_token TEXT,
@@ -223,7 +254,7 @@ CREATE TABLE stream_jobs (
 );
 
 CREATE INDEX idx_stream_jobs_user_id ON stream_jobs(user_id);
-CREATE INDEX idx_stream_jobs_is_live ON stream_jobs(is_live);
+CREATE INDEX idx_stream_jobs_status ON stream_jobs(status);
 CREATE INDEX idx_stream_jobs_user_time ON stream_jobs(user_id, start_time DESC);
 
 
@@ -306,7 +337,7 @@ CREATE INDEX idx_support_tickets_user_id ON support_tickets(user_id);
 -- App Settings (Key-Value)
 CREATE TABLE app_settings (
     setting_key VARCHAR(255) PRIMARY KEY,
-    setting_value VARCHAR(255)
+    setting_value TEXT
 );
 
 -- Plan Configs
@@ -319,7 +350,8 @@ CREATE TABLE plan_configs (
     max_scheduled_posts INTEGER,
     max_active_streams INTEGER,
     max_channels INTEGER,
-    max_resolution INTEGER
+    max_resolution INTEGER,
+    discount_percentage INTEGER DEFAULT 0 NOT NULL
 );
 
 -- ETag Store
@@ -327,4 +359,50 @@ CREATE TABLE etag_store (
     id VARCHAR(255) PRIMARY KEY,
     etag VARCHAR(255),
     last_updated TIMESTAMP
+);
+
+-- Stream Worker Registration Table
+CREATE TABLE stream_worker (
+    worker_id VARCHAR(100) PRIMARY KEY,
+    hostname VARCHAR(255),
+    type VARCHAR(50) NOT NULL, -- 'LIGHTWEIGHT', 'COMPUTE', 'OPTIMIZATION'
+    status VARCHAR(50) NOT NULL, -- 'IDLE', 'BUSY', 'DRAINING', 'OFFLINE'
+    active_streams INT DEFAULT 0,
+    max_streams INT NOT NULL,
+    last_heartbeat TIMESTAMP WITH TIME ZONE NOT NULL,
+    access_token_expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- Stream Job Queue Table (Worker processing queue)
+CREATE TABLE stream_job_queue (
+    id BIGSERIAL PRIMARY KEY,
+    stream_job_id BIGINT NOT NULL UNIQUE REFERENCES stream_jobs(id) ON DELETE CASCADE,
+    stream_spec JSONB NOT NULL,
+    priority INT DEFAULT 0,
+    worker_type VARCHAR(50) NOT NULL, -- 'LIGHTWEIGHT' or 'COMPUTE'
+    status VARCHAR(50) DEFAULT 'PENDING',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    acquired_at TIMESTAMP WITH TIME ZONE,
+    acquired_by VARCHAR(100)
+);
+
+CREATE INDEX idx_stream_job_queue_fetch ON stream_job_queue(worker_type, status, priority DESC, created_at ASC);
+
+-- Optimization Job Table
+CREATE TABLE optimization_job (
+    id BIGSERIAL PRIMARY KEY,
+    media_asset_id BIGINT NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+    input_s3_key VARCHAR(512) NOT NULL,
+    output_s3_key VARCHAR(512),
+    status VARCHAR(50) NOT NULL DEFAULT 'QUEUED',
+    target_profile VARCHAR(50) NOT NULL,
+    priority VARCHAR(50) DEFAULT 'NORMAL',
+    retry_count INT DEFAULT 0,
+    failure_reason TEXT,
+    worker_id VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE
 );

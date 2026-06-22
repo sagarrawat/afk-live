@@ -25,7 +25,6 @@ public class VideoSchedulerService {
     private final SnapchatService snapchatService;
     private final EmailService emailService;
 
-    // Run via JobRunr
     public void processScheduledVideos() {
         log.info("Checking for scheduled videos...");
         List<ScheduledVideo> videosToUpload = repository.findByStatusAndScheduledTimeLessThanEqual(

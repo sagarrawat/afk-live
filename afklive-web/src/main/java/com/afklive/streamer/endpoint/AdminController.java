@@ -9,6 +9,7 @@ import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.SupportTicketRepository;
 import com.afklive.streamer.repository.PaymentAuditRepository;
+import com.afklive.streamer.repository.TransactionLedgerRepository;
 import com.afklive.streamer.service.StreamService;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.QuotaTrackingService;
@@ -47,6 +48,7 @@ public class AdminController {
     private final FileStorageService storageService;
     private final QuotaTrackingService quotaTrackingService;
     private final PaymentAuditRepository paymentAuditRepository;
+    private final TransactionLedgerRepository ledgerRepository;
     private final PlanService planService;
     private final AppConfigService appConfigService;
 
@@ -77,7 +79,7 @@ public class AdminController {
         }
 
         // Active Streams
-        Page<StreamJob> streamsPage = streamJobRepo.findAllByIsLiveTrue(PageRequest.of(streamPage, streamSize));
+        Page<StreamJob> streamsPage = streamJobRepo.findAllByStatusLive(PageRequest.of(streamPage, streamSize));
 
         // Tickets
         Page<SupportTicket> ticketsPage = supportTicketRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(ticketPage, ticketSize));
@@ -90,7 +92,7 @@ public class AdminController {
         int quotaUsedToday = quotaTrackingService.getDailyUsage();
         Map<String, Long> quotaBreakdown = quotaTrackingService.getDailyBreakdown();
 
-        Double totalUnpaid = userRepository.sumUnpaidBalance();
+        java.math.BigDecimal totalUnpaid = userRepository.sumUnpaidBalance();
         Long completedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("COMPLETED");
         Long initiatedPaymentsPaise = paymentAuditRepository.sumAmountByStatus("INITIATED");
 
@@ -99,6 +101,11 @@ public class AdminController {
 
         // Global Stream Limit
         model.addAttribute("globalStreamLimit", appConfigService.getGlobalStreamLimit());
+
+        model.addAttribute("totalUsers", usersPage.getTotalElements());
+        model.addAttribute("activeStreams", streamsPage.getTotalElements());
+        model.addAttribute("totalTickets", ticketsPage.getTotalElements());
+        model.addAttribute("totalRevenue", ledgerRepository.getTotalRevenue());
 
         model.addAttribute("users", usersPage); // Now a Page object
         model.addAttribute("activeStreamList", streamsPage); // Now a Page object
@@ -110,11 +117,11 @@ public class AdminController {
 
         model.addAttribute("stats", Map.of(
             "totalUsers", userRepository.count(),
-            "activeStreams", streamJobRepo.countByIsLiveTrue(),
+            "activeStreams", streamJobRepo.countByStatusLive(),
             "formattedStorage", formattedStorage,
             "quotaUsedToday", quotaUsedToday,
             "openTickets", supportTicketRepository.countByStatus("OPEN"),
-            "totalUnpaid", String.format("%.2f INR", totalUnpaid != null ? totalUnpaid : 0.0),
+            "totalUnpaid", String.format("%.2f INR", totalUnpaid != null ? totalUnpaid.doubleValue() : 0.0),
             "completedPayments", String.format("%.2f INR", completedPayments),
             "pendingPayments", String.format("%.2f INR", pendingPayments)
         ));
@@ -122,10 +129,16 @@ public class AdminController {
         return "admin";
     }
 
-    @PostMapping("/settings/stream-limit")
-    public String updateStreamLimit(@RequestParam int limit) {
+    @PostMapping("/config/global-limit")
+    public String updateGlobalLimit(@RequestParam int limit) {
         appConfigService.setGlobalStreamLimit(limit);
-        return "redirect:/admin?tab=overview";
+        return "redirect:/admin?tab=platform";
+    }
+
+    @PostMapping("/config/tax")
+    public String updateTaxRate(@RequestParam String region, @RequestParam java.math.BigDecimal rate) {
+        appConfigService.setTaxRate(region, rate);
+        return "redirect:/admin?tab=platform";
     }
 
     @PostMapping("/streams/{id}/stop")
@@ -138,7 +151,7 @@ public class AdminController {
     }
 
     @PostMapping("/users/{username}/limit")
-    public String updateUserLimit(@PathVariable String username, @RequestParam double limit) {
+    public String updateUserLimit(@PathVariable String username, @RequestParam java.math.BigDecimal limit) {
         userRepository.findByEmail(username).ifPresent(user -> {
             user.setCreditLimit(limit);
             userRepository.save(user);
@@ -173,9 +186,10 @@ public class AdminController {
                              @RequestParam int maxScheduledPosts,
                              @RequestParam int maxActiveStreams,
                              @RequestParam int maxChannels,
-                             @RequestParam int maxResolution) {
+                             @RequestParam int maxResolution,
+                             @RequestParam(defaultValue = "0") int discountPercentage) {
         long maxStorageBytes = (long) (maxStorageGB * 1024 * 1024 * 1024);
-        PlanConfig config = new PlanConfig(planType, displayName, price, billingCycle, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution);
+        PlanConfig config = new PlanConfig(planType, displayName, price, billingCycle, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution, discountPercentage);
         planService.updatePlan(config);
         return "redirect:/admin?tab=plans";
     }

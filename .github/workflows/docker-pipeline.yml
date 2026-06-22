@@ -1,0 +1,77 @@
+name: Build and Deploy (Docker)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  WEB_IMAGE_NAME: ${{ github.repository_owner }}/afklive-web
+  WORKER_IMAGE_NAME: ${{ github.repository_owner }}/afklive-worker
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Web Image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: afklive-web/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}:latest
+
+      - name: Build and push Worker Image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: afklive-worker/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.WORKER_IMAGE_NAME }}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Copy docker-compose.prod.yml to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "docker-compose.prod.yml"
+          target: "/opt/afklive/"
+
+      - name: Deploy to DigitalOcean
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            cd /opt/afklive
+            # Login to GHCR on the server
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Set the repository owner variable for docker-compose
+            export GITHUB_REPOSITORY_OWNER=${{ github.repository_owner }}
+            # Pull latest images and restart containers
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d

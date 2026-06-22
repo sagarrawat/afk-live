@@ -46,61 +46,11 @@ public class LibraryController {
     private final ScheduledVideoRepository repository;
     private final UserService userService;
     private final AiService aiService;
-    private final com.afklive.streamer.service.ImportService importService;
-    private final com.afklive.streamer.service.VideoConversionService conversionService;
     private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
     private final com.afklive.streamer.service.TagService tagService;
+    private final com.afklive.streamer.service.VideoAnalysisService videoAnalysisService;
 
-    @PostMapping("/import-youtube")
-    public ResponseEntity<?> importFromYouTube(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.ImportRequest request, java.security.Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        String username = SecurityUtils.getEmail(principal);
-
-        importService.downloadFromYouTube(request.getUrl(), username);
-        return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
-    }
-
-    @PostMapping("/import-drive")
-    public ResponseEntity<?> importFromGoogleDrive(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.ImportRequest request, java.security.Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        String username = SecurityUtils.getEmail(principal);
-
-        importService.downloadFromGoogleDrive(request.getUrl(), username);
-        return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
-    }
-
-    @PostMapping("/merge")
-    public ResponseEntity<?> mergeVideos(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.MergeRequest request, java.security.Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
-        String username = SecurityUtils.getEmail(principal);
-        List<String> files = request.getFiles();
-
-        // Verify ownership
-        List<ScheduledVideo> userVideos = repository.findByUserEmail(username);
-        List<String> safeFiles = files.stream()
-                .filter(f -> userVideos.stream().anyMatch(v -> v.getTitle().equals(f) && v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY))
-                .collect(Collectors.toList());
-
-        if (safeFiles.size() != files.size()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("Invalid file selection"));
-        }
-
-        String outputName = "merged_" + System.currentTimeMillis() + ".mp4";
-
-        try {
-            List<ScheduledVideo> selectedVideos = safeFiles.stream()
-                    .map(f -> userVideos.stream().filter(uv -> uv.getTitle().equals(f)).findFirst().orElseThrow())
-                    .collect(Collectors.toList());
-
-            // Trigger async merge
-            conversionService.mergeVideosAsync(selectedVideos, username, outputName);
-
-            return ResponseEntity.ok(ApiResponse.success("Merge started. Check library shortly.", null));
-        } catch (Exception e) {
-            log.error("Merge init failed", e);
-            return ResponseEntity.internalServerError().body(ApiResponse.error("Merge failed: " + e.getMessage()));
-        }
-    }
+    // dead endpoint removed
 
     @PostMapping("/upload")
     public ResponseEntity<?> bulkUpload(
@@ -166,6 +116,9 @@ public class LibraryController {
         );
         asset = mediaAssetRepository.save(asset);
 
+        final Long assetId = asset.getId();
+        java.util.concurrent.CompletableFuture.runAsync(() -> videoAnalysisService.analyzeVideo(assetId));
+
         // Create Scheduled Video
         ScheduledVideo video = new ScheduledVideo();
         video.setUser(user);
@@ -225,6 +178,29 @@ public class LibraryController {
             log.error("Failed to stream video", e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    @PutMapping("/{id}/title")
+    public ResponseEntity<?> updateTitle(@PathVariable Long id, @RequestBody java.util.Map<String, String> body, java.security.Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        String username = SecurityUtils.getEmail(principal);
+
+        ScheduledVideo video = repository.findById(id).orElse(null);
+        if (video == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!video.getUser().getEmail().equals(username)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Forbidden"));
+        }
+
+        String newTitle = body.get("title");
+        if (newTitle == null || newTitle.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Title cannot be empty"));
+        }
+
+        video.setTitle(newTitle);
+        repository.save(video);
+        return ResponseEntity.ok(ApiResponse.success("Title updated", null));
     }
 
 

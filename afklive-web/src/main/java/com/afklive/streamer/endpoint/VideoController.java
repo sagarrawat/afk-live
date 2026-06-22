@@ -6,7 +6,6 @@ import com.afklive.streamer.service.AudioService;
 import com.afklive.streamer.service.FFmpegCommandBuilder;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.UserService;
-import com.afklive.streamer.service.VideoConversionService;
 import com.afklive.streamer.service.YouTubeService;
 import com.afklive.streamer.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -40,10 +39,10 @@ public class VideoController {
     private final YouTubeService youTubeService;
     private final UserService userService;
     private final AudioService audioService;
-    private final VideoConversionService videoConversionService;
     private final com.afklive.streamer.repository.SocialChannelRepository channelRepository;
     private final com.afklive.streamer.service.TagService tagService;
     private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
+    private final com.afklive.streamer.service.VideoAnalysisService videoAnalysisService;
 
     @GetMapping("/youtube/categories")
     public ResponseEntity<?> getVideoCategories(Principal principal) {
@@ -174,7 +173,11 @@ public class VideoController {
                 com.afklive.streamer.model.MediaAsset videoAsset = new com.afklive.streamer.model.MediaAsset(
                     user, title, s3Key, finalSize, com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
                 );
-                video.setMediaAsset(mediaAssetRepository.save(videoAsset));
+                videoAsset = mediaAssetRepository.save(videoAsset);
+                video.setMediaAsset(videoAsset);
+                
+                final Long assetId = videoAsset.getId();
+                java.util.concurrent.CompletableFuture.runAsync(() -> videoAnalysisService.analyzeVideo(assetId));
             }
 
             // Link Thumbnail Asset
@@ -201,9 +204,6 @@ public class VideoController {
             }
 
             repository.save(video);
-
-            // Trigger async check for optimization status
-            videoConversionService.checkOptimizationRequirement(video.getId());
 
             return ResponseEntity.ok(Map.of("success", true, "message", "Video scheduled successfully", "id", video.getId()));
         } catch (Exception e) {

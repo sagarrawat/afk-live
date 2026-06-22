@@ -17,18 +17,8 @@ public class HomeController {
             if (roles.contains("ROLE_ADMIN")) {
                 return "redirect:/admin";
             }
-            return "redirect:/studio";
+            return "redirect:/studio/";
         }
         return "forward:/home.html";
-    }
-
-    @GetMapping("/terms")
-    public String terms() {
-        return "forward:/terms.html";
-    }
-
-    @GetMapping("/privacy")
-    public String privacy() {
-        return "forward:/privacy.html";
     }
 }

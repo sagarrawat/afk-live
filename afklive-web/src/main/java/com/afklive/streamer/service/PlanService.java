@@ -43,7 +43,8 @@ public class PlanService {
                         type.getMaxScheduledPosts(),
                         type.getMaxActiveStreams(),
                         type.getMaxChannels(),
-                        type.getMaxResolution()
+                        type.getMaxResolution(),
+                        0
                 );
                 planConfigRepository.save(config);
             }

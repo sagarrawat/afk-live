@@ -19,6 +19,7 @@ public class FileUploadService {
     private final ScheduledVideoRepository repository;
     private final UserService userService;
     private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
+    private final VideoAnalysisService videoAnalysisService;
 
     public String handleFileUpload(MultipartFile file, String username) throws IOException {
         String originalName = file.getOriginalFilename();
@@ -64,6 +65,9 @@ public class FileUploadService {
         video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
         video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
         repository.save(video);
+
+        final Long assetId = asset.getId();
+        java.util.concurrent.CompletableFuture.runAsync(() -> videoAnalysisService.analyzeVideo(assetId));
 
         return originalName;
     }

@@ -38,9 +38,9 @@ public class UserService {
 
     public void checkStorageQuota(String email, long fileSize) {
         User user = getOrCreateUser(email);
-        long limit = planService.getPlanConfig(user.getPlanType()).getMaxStorageBytes();
+        long limit = 50L * 1024 * 1024 * 1024; // 50 GB for all users
         if (user.getUsedStorageBytes() + fileSize > limit) {
-            throw new IllegalStateException("Storage quota exceeded. Limit: " + (limit / 1024 / 1024) + "MB.");
+            throw new IllegalStateException("Storage quota exceeded. Limit: 50GB.");
         }
     }
 
@@ -157,7 +157,7 @@ public class UserService {
     }
 
     @Transactional
-    public void addUnpaidBalance(String email, double amount) {
+    public void addUnpaidBalance(String email, java.math.BigDecimal amount) {
         // Ensure user exists first (optional but safe)
         if (userRepository.findByEmail(email).isEmpty()) {
             getOrCreateUser(email);
@@ -166,7 +166,7 @@ public class UserService {
     }
 
     @Transactional
-    public void clearUnpaidBalance(String email, double amount) {
+    public void clearUnpaidBalance(String email, java.math.BigDecimal amount) {
         // Ensure user exists
         if (userRepository.findByEmail(email).isEmpty()) {
             getOrCreateUser(email);
@@ -176,8 +176,6 @@ public class UserService {
 
     public boolean checkCreditLimit(String email) {
         User user = getOrCreateUser(email);
-        // If unpaid balance is greater than or equal to credit limit, return false.
-        // E.g. limit 50, unpaid 50 -> false (blocked).
-        return user.getUnpaidBalance() < user.getCreditLimit();
+        return user.getUnpaidBalance().compareTo(user.getCreditLimit()) < 0;
     }
 }

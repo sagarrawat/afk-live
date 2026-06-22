@@ -33,7 +33,7 @@ spring:
               - https://www.googleapis.com/auth/youtube.force-ssl
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:afkdb}?reWriteBatchedInserts=true
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:afkdb}?reWriteBatchedInserts=true
     driver-class-name: org.postgresql.Driver
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD:password}
@@ -52,7 +52,7 @@ spring:
     defer-datasource-initialization: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     properties:
       hibernate:
         jdbc:
@@ -83,9 +83,11 @@ logging:
   level:
     com.zaxxer.hikari: WARN
     org.hibernate.engine.jdbc: WARN
+    org.springframework.web.cors: TRACE
+    org.springframework.security: TRACE
     
 rate-limiter:
-  capacity: 10
+  capacity: 100
   refill-tokens: 1
 
 app:
@@ -106,24 +108,28 @@ app:
     access-key: ${DO_SPACES_KEY}
     secret-key: ${DO_SPACES_SECRET}
   aws:
-    access-key: ${AWS_ACCESS_KEY_ID}
-    secret-key: ${AWS_SECRET_ACCESS_KEY}
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
     region: eu-north-1
     function-name: afklive-optimizer-lambda
   phonepe:
-    merchant-id: ${PHONEPE_MERCHANT_ID:}
-    salt-key: ${PHONEPE_SALT_KEY:}
+    merchant-id: ${PHONEPE_MERCHANT_ID:PGTESTPAYUAT}
+    salt-key: ${PHONEPE_SALT_KEY:099eb0cd-02cf-4e2a-8aca-3e6c6aff0399}
     salt-index: ${PHONEPE_SALT_INDEX:1}
-    salt-env: ${PHONEPE_ENV:https://api-preprod.phonepe.com/apis/pg-sandbox}
+    env: ${PHONEPE_ENV:SANDBOX}
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:sk_test_dummy}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_dummy}
 server:
+  max-http-header-size: 65536
   forward-headers-strategy: native
   error:
     include-binding-errors: always
     include-message: always
   tomcat:
     max-part-count: 200
-    max-swallow-size: 100MB
-    max-http-form-post-size: 100MB
+    max-swallow-size: 2000MB
+    max-http-form-post-size: 2000MB
     max-parameter-count: 50000
 
 org:
@@ -132,3 +138,12 @@ org:
       enabled: true
     dashboard:
       enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -21,6 +21,9 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afklive.streamer.service.LedgerService;
+import com.afklive.streamer.model.TransactionLedger;
+
 @RestController
 @RequestMapping("/api/payment")
 @Slf4j
@@ -30,6 +33,7 @@ public class PaymentController {
     private final StandardCheckoutClient phonePeClient;
     private final PaymentAuditRepository paymentAuditRepository;
     private final UserService userService;
+    private final LedgerService ledgerService;
     private final String baseUrl;
     private final String saltKey;
     private final Integer saltIndex;
@@ -37,6 +41,7 @@ public class PaymentController {
     public PaymentController(
             PaymentAuditRepository paymentAuditRepository,
             UserService userService,
+            LedgerService ledgerService,
             @Value("${app.phonepe.merchant-id}") String merchantId,
             @Value("${app.phonepe.salt-key}") String saltKey,
             @Value("${app.phonepe.salt-index}") Integer saltIndex,
@@ -45,6 +50,7 @@ public class PaymentController {
         this.objectMapper = new ObjectMapper();
         this.paymentAuditRepository = paymentAuditRepository;
         this.userService = userService;
+        this.ledgerService = ledgerService;
         this.baseUrl = baseUrl;
         this.saltKey = saltKey;
         this.saltIndex = saltIndex;
@@ -66,9 +72,13 @@ public class PaymentController {
             if (planId != null) {
                 if ("BALANCE_CLEAR".equals(planId)) {
                     if (body != null && body.containsKey("amount")) {
-                        amount = Long.parseLong(body.get("amount").toString());
+                        double amountDouble = Double.parseDouble(body.get("amount").toString());
+                        amount = (long) (amountDouble * 100);
                         if (amount <= 0) {
                             return ResponseEntity.badRequest().body(Map.of("message", "Amount must be positive"));
+                        }
+                        if (amount < 100) {
+                            amount = 100; // PhonePe requires minimum 1 INR (100 paise)
                         }
                     } else {
                         return ResponseEntity.badRequest().body(Map.of("message", "Amount required for balance clear"));
@@ -84,11 +94,15 @@ public class PaymentController {
                     }
                 }
             } else if (body != null && body.containsKey("amount")) {
-                amount = Long.parseLong(body.get("amount").toString());
+                double amountDouble = Double.parseDouble(body.get("amount").toString());
+                amount = (long) (amountDouble * 100);
             }
 
             String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
-            String userId = (principal != null) ? principal.getName() : "test-user-" + UUID.randomUUID().toString().substring(0, 8);
+            String userId = (principal != null) ? principal.getName().replaceAll("[^a-zA-Z0-9-]", "-") : "test-user-" + UUID.randomUUID().toString().substring(0, 8);
+            if (userId.length() > 35) {
+                userId = userId.substring(0, 35);
+            }
 
             log.info("Initiating payment via SDK V2: TxnId={}, User={}, Plan={}", merchantTransactionId, userId, planId);
 
@@ -168,8 +182,13 @@ public class PaymentController {
 
                              if ("COMPLETED".equals(state) && audit.getPlanId() != null) {
                                  if ("BALANCE_CLEAR".equals(audit.getPlanId())) {
-                                     double rupees = audit.getAmount() / 100.0;
+                                     java.math.BigDecimal rupees = new java.math.BigDecimal(audit.getAmount()).divide(new java.math.BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
                                      userService.clearUnpaidBalance(audit.getMerchantUserId(), rupees);
+                                     
+                                     // Create ledger entry
+                                     User user = userService.getOrCreateUser(audit.getMerchantUserId());
+                                     ledgerService.recordTransaction(user, rupees, TransactionLedger.TransactionType.DEPOSIT, audit.getTransactionId(), "Added via PhonePe");
+                                     
                                      log.info("Cleared balance: {} INR for {}", rupees, audit.getMerchantUserId());
                                  } else {
                                      try {

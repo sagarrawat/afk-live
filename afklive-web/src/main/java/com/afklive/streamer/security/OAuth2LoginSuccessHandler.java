@@ -86,7 +86,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                      }
                 }
 
-                getRedirectStrategy().sendRedirect(request, response, "/studio?connected=true");
+                getRedirectStrategy().sendRedirect(request, response, "/studio/?connected=true");
                 return;
             } catch (Exception e) {
                 log.error("Failed to link channel", e);
@@ -100,7 +100,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                 } catch (Exception ex) {
                     log.error("Failed to restore session after error", ex);
                 }
-                getRedirectStrategy().sendRedirect(request, response, "/studio?error=channel_sync_failed");
+                getRedirectStrategy().sendRedirect(request, response, "/studio/?error=channel_sync_failed");
                 return;
             }
         }
@@ -153,7 +153,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
         if ("ROLE_ADMIN".equals(user.getRole())) {
             getRedirectStrategy().sendRedirect(request, response, "/admin");
         } else {
-            getRedirectStrategy().sendRedirect(request, response, "/studio");
+            getRedirectStrategy().sendRedirect(request, response, "/studio/");
         }
     }
 }

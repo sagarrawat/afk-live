@@ -23,7 +23,7 @@ public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         } else {
             // For normal users, we can fall back to default behavior (handling saved requests)
             // But we need to set the default target url first just in case
-            setDefaultTargetUrl("/studio");
+            setDefaultTargetUrl("/studio/");
             super.onAuthenticationSuccess(request, response, authentication);
         }
     }

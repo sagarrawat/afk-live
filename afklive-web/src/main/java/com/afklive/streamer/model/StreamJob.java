@@ -10,10 +10,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Entity
 @Table(name = "stream_jobs", indexes = {
-    @Index(name = "idx_streamjob_user_live", columnList = "user_id, is_live"),
-    @Index(name = "idx_streamjob_live", columnList = "is_live"),
-    @Index(name = "idx_streamjob_user_time", columnList = "user_id, start_time DESC"),
-    @Index(name = "idx_streamjob_live_reply", columnList = "is_live, auto_reply_enabled")
+    @Index(name = "idx_streamjob_status", columnList = "status"),
+    @Index(name = "idx_streamjob_user_time", columnList = "user_id, start_time DESC")
 })
 public class StreamJob {
     @Id
@@ -27,8 +25,67 @@ public class StreamJob {
 
     private String streamKey;
     private String fileName;
-    private boolean isLive;
-    private long pid;
+    
+    @Column(name = "worker_id")
+    private String workerId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private StreamStatus status = StreamStatus.QUEUED;
+
+    @Column(name = "last_heartbeat")
+    private java.time.ZonedDateTime lastHeartbeat;
+
+    @Column(name = "ledger_recorded", nullable = false)
+    private boolean ledgerRecorded = false;
+
+    @Column(name = "retry_count")
+    private Integer retryCount = 0;
+
+    @Column(name = "max_retries")
+    private Integer maxRetries = 3;
+
+    @Column(name = "stream_spec_json", columnDefinition = "jsonb")
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    private String streamSpecJson;
+
+    @Column(name = "failure_reason", columnDefinition = "TEXT")
+    private String failureReason;
+
+    @Column(name = "resume_from_seconds")
+    private Integer resumeFromSeconds = 0;
+
+    @Column(name = "idempotency_key", unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "current_fps")
+    private Double currentFps;
+
+    @Column(name = "current_bitrate_kbps")
+    private Double currentBitrateKbps;
+
+    @Column(name = "dropped_frames")
+    private Long droppedFrames = 0L;
+
+    @Column(name = "bytes_streamed")
+    private Long bytesStreamed = 0L;
+
+    /**
+     * The hourly rate that was active when this stream session started.
+     */
+    @Column(name = "locked_hourly_rate", nullable = false, precision = 19, scale = 4)
+    private java.math.BigDecimal lockedHourlyRate = java.math.BigDecimal.ZERO;
+
+    public enum StreamStatus {
+        QUEUED,
+        PREPARING,
+        LIVE,
+        RECONNECTING,
+        RECOVERY_PENDING,
+        STOP_REQUESTED,
+        COMPLETED,
+        FAILED
+    }
     private String musicName;
     private String musicVolume;
 
@@ -44,10 +101,14 @@ public class StreamJob {
     private String privacy;
     private java.time.ZonedDateTime startTime;
     private java.time.ZonedDateTime endTime;
-    private Double cost;
+    
+    @Column(precision = 19, scale = 4)
+    private java.math.BigDecimal cost;
 
     private java.time.ZonedDateTime lastBillingTime;
-    private double accumulatedCost = 0.0;
+    
+    @Column(precision = 19, scale = 4)
+    private java.math.BigDecimal accumulatedCost = java.math.BigDecimal.ZERO;
 
     private boolean autoReplyEnabled;
 
@@ -70,8 +131,6 @@ public class StreamJob {
             String fileName,
             String musicName,
             String musicVolume,
-            boolean live,
-            long pid,
             String title,
             String description,
             String privacy,
@@ -84,14 +143,13 @@ public class StreamJob {
         this.fileName = fileName;
         this.musicName = musicName;
         this.musicVolume = musicVolume;
-        this.isLive = live;
-        this.pid = pid;
         this.title = title;
         this.description = description;
         this.privacy = privacy;
         this.startTime = startTime;
         this.destinationName = destinationName;
         this.autoReplyEnabled = autoReplyEnabled;
+        this.status = StreamStatus.QUEUED;
     }
 
 }

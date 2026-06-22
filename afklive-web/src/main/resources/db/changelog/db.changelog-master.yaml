@@ -1,3 +1,11 @@
 databaseChangeLog:
   - include:
-      file: db/changelog/changes/001-initial-schema.sql
+      file: db/changelog/001-initial-schema.sql
+  - include:
+      file: db/changelog/002-social-channels.sql
+  - include:
+      file: db/changelog/003-scheduled-streams.sql
+  - include:
+      file: db/changelog/004-transaction-ledger.sql
+  - include:
+      file: db/changelog/005-notifications.sql

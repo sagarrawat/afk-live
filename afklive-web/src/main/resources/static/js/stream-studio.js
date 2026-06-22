@@ -96,9 +96,10 @@ document.addEventListener('alpine:init', () => {
         },
 
         selectVideo(video) {
-            if(video.optimizationStatus !== 'COMPLETED') {
-                showToast("Video needs optimization first", "warning");
-                // Trigger optimization modal from app.js if needed or handle here
+            const readiness = video.streamReadiness || video.mediaAsset?.streamReadiness || 'UNKNOWN';
+            
+            if(readiness === 'REQUIRES_OPTIMIZATION' || readiness === 'OPTIMIZATION_FAILED' || (readiness === 'UNKNOWN' && video.optimizationStatus !== 'COMPLETED')) {
+                showToast("Video needs optimization first. It will process in the background.", "warning");
                 if(window.openOptimizeModal) window.openOptimizeModal(video);
                 return;
             }
@@ -315,7 +316,7 @@ document.addEventListener('alpine:init', () => {
 
                 const data = await res.json();
                 if(data.success) {
-                    showToast("Stream Started! 🚀", "success");
+                    showToast("Stream Queued for Processing! 🚀", "success");
                     this.switchTab('streams');
                     this.checkStatus();
                 } else {
@@ -402,7 +403,7 @@ document.addEventListener('alpine:init', () => {
                 const data = await res.json();
                 if(data.success) {
                     this.activeStreams = data.data.activeStreams || [];
-                    this.isLive = this.activeStreams.some(s => s.live);
+                    this.isLive = this.activeStreams.some(s => s.status === 'LIVE' || s.status === 'PREPARING' || s.status === 'QUEUED');
                 }
             } catch(e) {}
         }

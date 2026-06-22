@@ -35,19 +35,28 @@ public class DestinationController {
         User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
 
         String name = (String) body.get("name");
-        String key = (String) body.get("key");
+        String streamKey = (String) body.get("streamKey");
+        if (streamKey == null) streamKey = (String) body.get("key"); // backwards compatibility
+        String rtmpUrl = (String) body.get("rtmpUrl");
         String type = (String) body.getOrDefault("type", "RTMP");
         Boolean selected = (Boolean) body.getOrDefault("selected", true);
 
-        if (name == null || key == null) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("Name and Key are required"));
+        if (name == null || streamKey == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Name and Stream Key are required"));
+        }
+        
+        // If RTMP URL is provided, combine it to form the full destination URL.
+        // Otherwise assume the worker or client will handle it, or it's a direct platform API key.
+        String finalKey = streamKey;
+        if (rtmpUrl != null && !rtmpUrl.trim().isEmpty()) {
+            finalKey = rtmpUrl.endsWith("/") ? rtmpUrl + streamKey : rtmpUrl + "/" + streamKey;
         }
 
-        if (!destinationRepository.findByStreamKeyAndUser(key, user).isEmpty()) {
+        if (!destinationRepository.findByStreamKeyAndUser(finalKey, user).isEmpty()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Stream key already exists"));
         }
 
-        StreamDestination dest = new StreamDestination(name, key, type, user);
+        StreamDestination dest = new StreamDestination(name, finalKey, type, user);
         dest.setSelected(selected);
         StreamDestination saved = destinationRepository.save(dest);
 

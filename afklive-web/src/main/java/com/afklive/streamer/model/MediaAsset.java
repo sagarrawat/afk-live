@@ -19,6 +19,7 @@ public class MediaAsset {
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "user_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private User user;
 
     private String title; // Filename
@@ -33,8 +34,48 @@ public class MediaAsset {
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name = "optimized_s3_key")
+    private String optimizedS3Key;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stream_readiness", nullable = false)
+    private StreamReadiness streamReadiness = StreamReadiness.PENDING_ANALYSIS;
+
+    @Column(name = "video_codec")
+    private String videoCodec;
+
+    @Column(name = "audio_codec")
+    private String audioCodec;
+
+    private String resolution;
+
+    @Column(name = "duration_seconds")
+    private Integer durationSeconds;
+
+    @Column(name = "bitrate_kbps")
+    private Integer bitrateKbps;
+
+    @Column(name = "frame_rate")
+    private Double frameRate;
+
+    @Column(name = "stream_profile")
+    private String streamProfile;
+
+    @Column(name = "probe_data", columnDefinition = "TEXT")
+    private String probeData;
+
+    @Column(name = "optimization_retry_count")
+    private Integer optimizationRetryCount = 0;
+
     public enum ContentType {
         VIDEO, IMAGE, AUDIO
+    }
+
+    public enum StreamReadiness {
+        PENDING_ANALYSIS,
+        STREAM_READY,
+        REQUIRES_OPTIMIZATION,
+        OPTIMIZATION_FAILED
     }
 
     public MediaAsset(User user, String title, String s3Key, Long fileSize, ContentType contentType) {
@@ -44,5 +85,6 @@ public class MediaAsset {
         this.fileSize = fileSize;
         this.contentType = contentType;
         this.createdAt = LocalDateTime.now();
+        this.streamReadiness = StreamReadiness.PENDING_ANALYSIS;
     }
 }

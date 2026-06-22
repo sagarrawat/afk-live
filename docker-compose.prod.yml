@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  web:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/afklive-web:latest
+    container_name: afklive-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      # Add necessary production environment variables here
+      # These should be defined in a .env file on the DO server
+    env_file:
+      - .env
+
+  worker:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/afklive-worker:latest
+    container_name: afklive-worker
+    restart: unless-stopped
+    environment:
+      # The worker will pick up DB and AWS credentials from .env
+    env_file:
+      - .env
