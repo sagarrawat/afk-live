@@ -1,0 +1,16 @@
+# Local development profile: run with SPRING_PROFILES_ACTIVE=dev
+# Needs only a local PostgreSQL (see docker-compose.dev.yml at the repo root) and ffmpeg on PATH.
+# No Google, payment, AI or cloud-storage secrets are required.
+spring:
+  liquibase:
+    contexts: dev
+  thymeleaf:
+    cache: false
+
+app:
+  storage:
+    type: local
+
+logging:
+  level:
+    com.afklive: DEBUG

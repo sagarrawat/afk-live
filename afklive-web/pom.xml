@@ -47,8 +47,9 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.liquibase</groupId>
-            <artifactId>liquibase-core</artifactId>
+            <!-- Spring Boot 4 needs the starter: liquibase-core alone no longer runs migrations -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-liquibase</artifactId>
         </dependency>
         <dependency>
             <groupId>org.jobrunr</groupId>
@@ -137,6 +138,13 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Real PostgreSQL for integration tests, no Docker needed (binaries come from Maven Central) -->
+        <dependency>
+            <groupId>io.zonky.test</groupId>
+            <artifactId>embedded-postgres</artifactId>
+            <version>2.2.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
