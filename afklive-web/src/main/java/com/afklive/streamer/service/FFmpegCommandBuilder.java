@@ -419,11 +419,13 @@ public class FFmpegCommandBuilder {
         command.add("-shortest");
 
         // --- Output ---
-        String key = streamKeys.get(0);
-        String url = key.startsWith("rtmp") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
+        String key = streamKeys.get(0).trim();
+        // Only a full URL is used as-is; anything else is a bare key for YouTube's ingest.
+        // (Checking for "://" matters: a bare key like "rtmp_x.flv" must never become a local output file.)
+        String url = key.contains("://") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
 
         command.add("-f");
-        command.add("flv");
+        command.add(url.regionMatches(true, 0, "srt://", 0, 6) ? "mpegts" : "flv");
         command.add(url);
 
         return command;

@@ -1,60 +1,26 @@
 package com.afklive.streamer.endpoint;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.phonepe.sdk.pg.Env;
-import com.phonepe.sdk.pg.payments.v2.StandardCheckoutClient;
-import com.phonepe.sdk.pg.payments.v2.models.request.StandardCheckoutPayRequest;
-import com.phonepe.sdk.pg.payments.v2.models.response.StandardCheckoutPayResponse;
-import com.afklive.streamer.model.PaymentAudit;
-import com.afklive.streamer.model.PlanType;
-import com.afklive.streamer.model.User;
-import com.afklive.streamer.repository.PaymentAuditRepository;
-import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.payment.PaymentGateway;
+import com.afklive.streamer.payment.PaymentService;
 import com.afklive.streamer.util.SecurityUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.charset.StandardCharsets;
 import java.security.Principal;
-import java.util.Base64;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/payment")
+@RequiredArgsConstructor
 @Slf4j
 public class PaymentController {
 
-    private final ObjectMapper objectMapper;
-    private final StandardCheckoutClient phonePeClient;
-    private final PaymentAuditRepository paymentAuditRepository;
-    private final UserService userService;
-    private final String baseUrl;
-    private final String saltKey;
-    private final Integer saltIndex;
+    private final PaymentService paymentService;
+    private final PaymentGateway paymentGateway;
 
-    public PaymentController(
-            PaymentAuditRepository paymentAuditRepository,
-            UserService userService,
-            @Value("${app.phonepe.merchant-id}") String merchantId,
-            @Value("${app.phonepe.salt-key}") String saltKey,
-            @Value("${app.phonepe.salt-index}") Integer saltIndex,
-            @Value("${app.phonepe.env:SANDBOX}") String envStr,
-            @Value("${app.base-url}") String baseUrl) {
-        this.objectMapper = new ObjectMapper();
-        this.paymentAuditRepository = paymentAuditRepository;
-        this.userService = userService;
-        this.baseUrl = baseUrl;
-        this.saltKey = saltKey;
-        this.saltIndex = saltIndex;
-
-        Env env = Env.valueOf(envStr.toUpperCase());
-        this.phonePeClient = StandardCheckoutClient.getInstance(merchantId, saltKey, saltIndex, env);
-        log.info("Initialized PhonePe Client: Merchant={}, Env={}", merchantId, env);
-    }
-
+    /** Starts a checkout for a plan or for the user's outstanding balance. The amount is set server-side. */
     @PostMapping("/initiate")
     public ResponseEntity<?> initiatePayment(@RequestBody(required = false) Map<String, Object> body, Principal principal) {
         if (principal == null) {
@@ -65,123 +31,46 @@ public class PaymentController {
             return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
         }
         try {
-            String email = SecurityUtils.getEmail(principal);
-            User user = userService.getOrCreateUser(email);
-
-            // The amount is always decided here, never taken from the request.
-            long amount;
-            if ("BALANCE_CLEAR".equals(planId)) {
-                amount = Math.round(user.getUnpaidBalance() * 100);
-                if (amount <= 0) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "You have no outstanding balance."));
-                }
-            } else {
-                PlanType plan;
-                try {
-                    plan = PlanType.valueOf(planId);
-                } catch (IllegalArgumentException e) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
-                }
-                if (plan != PlanType.ESSENTIALS) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "This plan can't be purchased."));
-                }
-                amount = 19900; // 199 INR; pricing moves to plan config with the billing rework
-            }
-
-            String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
-            log.info("Initiating payment via SDK V2: TxnId={}, User={}, Plan={}", merchantTransactionId, email, planId);
-
-            PaymentAudit audit = new PaymentAudit(merchantTransactionId, email, amount, "INITIATED");
-            audit.setPlanId(planId);
-            audit.setUser(user);
-            paymentAuditRepository.save(audit);
-
-            StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
-                    .merchantOrderId(merchantTransactionId)
-                    .amount(amount)
-                    .redirectUrl(this.baseUrl + "/studio?view=settings&payment_status=pending")
-                    .build();
-
-            StandardCheckoutPayResponse response = phonePeClient.pay(payRequest);
-            return ResponseEntity.ok(Map.of("redirectUrl", response.getRedirectUrl()));
-
+            String redirectUrl = paymentService.startCheckout(SecurityUtils.getEmail(principal), planId);
+            return ResponseEntity.ok(Map.of("redirectUrl", redirectUrl));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            log.error("Error initiating payment via SDK", e);
+            log.error("Error starting checkout", e);
             return ResponseEntity.internalServerError().body(Map.of("message", "Could not start the payment. Please try again."));
         }
     }
 
-    @PostMapping("/callback")
-    public ResponseEntity<?> handleCallback(@RequestBody String body, @RequestHeader(value = "X-VERIFY", required = false) String xVerify) {
-        log.info("Payment Callback Received: length={}", body.length());
-
-        try {
-             Map<String, Object> callbackData = objectMapper.readValue(body, Map.class);
-             String encodedResponse = (String) callbackData.get("response");
-
-             if(encodedResponse != null && xVerify != null) {
-                 // Checksum verification
-                 // SHA256(base64Body + salt) + ### + saltIndex
-                 String toHash = encodedResponse + saltKey;
-                 java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-                 byte[] hash = digest.digest(toHash.getBytes(StandardCharsets.UTF_8));
-                 StringBuilder hexString = new StringBuilder();
-                 for (byte b : hash) {
-                     String hex = Integer.toHexString(0xff & b);
-                     if (hex.length() == 1) hexString.append('0');
-                     hexString.append(hex);
-                 }
-                 String calculatedChecksum = hexString.toString() + "###" + saltIndex;
-
-                 if (!calculatedChecksum.equals(xVerify)) {
-                     log.error("Checksum verification failed. Received: {}, Calculated: {}", xVerify, calculatedChecksum);
-                     return ResponseEntity.badRequest().body("Invalid Checksum");
-                 }
-
-                 byte[] decodedBytes = Base64.getDecoder().decode(encodedResponse);
-                 String decodedJson = new String(decodedBytes, StandardCharsets.UTF_8);
-
-                 // Removed PII logging
-                 // log.info("Decoded Callback JSON: {}", decodedJson);
-
-                 Map<String, Object> responseMap = objectMapper.readValue(decodedJson, Map.class);
-                 Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
-                 if (data != null) {
-                     String merchantTransactionId = (String) data.get("merchantTransactionId");
-                     String state = (String) data.get("state"); // e.g. COMPLETED, FAILED
-                     String providerReferenceId = (String) data.get("transactionId"); // PhonePe ID
-
-                     if (merchantTransactionId != null) {
-                         paymentAuditRepository.findByTransactionId(merchantTransactionId).ifPresent(audit -> {
-                             audit.setStatus(state);
-                             audit.setProviderReferenceId(providerReferenceId);
-                             audit.setRawResponse(decodedJson);
-                             paymentAuditRepository.save(audit);
-                             log.info("Updated PaymentAudit for TxnId={}: Status={}", merchantTransactionId, state);
-
-                             if ("COMPLETED".equals(state) && audit.getPlanId() != null) {
-                                 if ("BALANCE_CLEAR".equals(audit.getPlanId())) {
-                                     double rupees = audit.getAmount() / 100.0;
-                                     userService.clearUnpaidBalance(audit.getMerchantUserId(), rupees);
-                                     log.info("Cleared balance: {} INR for {}", rupees, audit.getMerchantUserId());
-                                 } else {
-                                     try {
-                                         PlanType plan = PlanType.valueOf(audit.getPlanId());
-                                         userService.updatePlan(audit.getMerchantUserId(), plan);
-                                         log.info("Successfully upgraded user {} to plan {}", audit.getMerchantUserId(), plan);
-                                     } catch (Exception e) {
-                                         log.error("Failed to upgrade user plan after successful payment", e);
-                                     }
-                                 }
-                             }
-                         });
-                     }
-                 }
-             }
-        } catch (Exception e) {
-            log.error("Error parsing callback", e);
+    /**
+     * Called by the app when the user returns from checkout. Checks the order with the provider,
+     * so upgrades work even if the provider's callback is delayed or not configured.
+     */
+    @GetMapping("/status")
+    public ResponseEntity<?> paymentStatus(@RequestParam("orderId") String orderId, Principal principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
         }
+        String status = paymentService.confirmForUser(orderId, SecurityUtils.getEmail(principal));
+        return ResponseEntity.ok(Map.of("status", status));
+    }
 
+    /** Server-to-server notification from the payment provider; authenticated by the provider's signature. */
+    @PostMapping("/callback")
+    public ResponseEntity<?> handleCallback(@RequestBody String body,
+                                            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String orderId;
+        try {
+            orderId = paymentGateway.verifyCallback(authorization, body);
+        } catch (SecurityException e) {
+            log.warn("Rejected payment callback: {}", e.getMessage());
+            return ResponseEntity.status(401).body("Unauthorized");
+        }
+        try {
+            String status = paymentService.confirm(orderId);
+            log.info("Payment callback for {} -> {}", orderId, status);
+        } catch (IllegalArgumentException e) {
+            log.warn("Payment callback for unknown order {}", orderId);
+        }
         return ResponseEntity.ok("Received");
     }
 }

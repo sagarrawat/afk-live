@@ -92,4 +92,19 @@ class FFmpegCommandBuilderTest {
 
         assertThat(command).contains("-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", input.toString());
     }
+
+    @Test
+    void bareKeyThatLooksLikeAFileGoesToYouTubeNotDisk() {
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(java.nio.file.Paths.get("v.mp4"), List.of("rtmp_x.flv"),
+                null, null, -1, null, false, "original", 1080);
+        assertThat(command.get(command.size() - 1)).isEqualTo("rtmp://a.rtmp.youtube.com:1935/live2/rtmp_x.flv");
+    }
+
+    @Test
+    void srtDestinationsUseMpegTs() {
+        List<String> command = FFmpegCommandBuilder.buildStreamCommand(java.nio.file.Paths.get("v.mp4"), List.of("srt://8.8.8.8:9000?streamid=abc"),
+                null, null, -1, null, false, "original", 1080);
+        assertThat(command.get(command.size() - 1)).isEqualTo("srt://8.8.8.8:9000?streamid=abc");
+        assertThat(command.get(command.size() - 2)).isEqualTo("mpegts");
+    }
 }

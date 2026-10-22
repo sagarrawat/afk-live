@@ -13,28 +13,38 @@ document.addEventListener('alpine:init', () => {
         async init() {
             // Check for payment redirect params
             const urlParams = new URLSearchParams(window.location.search);
-            const paymentStatus = urlParams.get('payment_status');
+            const paymentOrder = urlParams.get('payment_order');
 
-            if (paymentStatus === 'pending') {
-                // Ideally poll backend for status update, or wait a bit then refresh user
-                // For MVP, we reload user and check if plan changed
+            if (paymentOrder) {
+                // Back from checkout: ask the server to confirm the order with the payment provider.
                 showToast("Verifying payment...", "info");
-                setTimeout(async () => {
-                    await this.loadUser();
-                    if (this.user && this.user.plan && this.user.plan.name === 'Essentials') {
-                        showToast("Payment Successful! Plan Upgraded.", "success");
-                    } else {
-                        showToast("Payment processing or failed. Please check back later.", "warning");
-                    }
-                    // Clean URL
-                    window.history.replaceState({}, document.title, window.location.pathname + "?view=settings");
-                }, 2000);
+                window.history.replaceState({}, document.title, window.location.pathname + "?view=settings");
+                await this.checkPayment(paymentOrder, 0);
             }
 
             await this.loadUser();
             await this.loadChannels();
             // Listen for channel changes from global events if any
             window.addEventListener('destination-added', () => this.loadChannels());
+        },
+
+        async checkPayment(orderId, attempt) {
+            try {
+                const res = await apiFetch('/api/payment/status?orderId=' + encodeURIComponent(orderId));
+                const data = await res.json();
+                if (data.status === 'COMPLETED') {
+                    showToast("Payment successful.", "success");
+                    await this.loadUser();
+                } else if (data.status === 'FAILED') {
+                    showToast("The payment didn't go through. You haven't been charged for an upgrade.", "error");
+                } else if (attempt < 5) {
+                    setTimeout(() => this.checkPayment(orderId, attempt + 1), 3000);
+                } else {
+                    showToast("Your payment is still processing. We'll update your plan as soon as it completes.", "info");
+                }
+            } catch (e) {
+                // apiFetch already showed an error
+            }
         },
 
         async loadUser() {

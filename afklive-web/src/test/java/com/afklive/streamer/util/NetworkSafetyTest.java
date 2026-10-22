@@ -47,7 +47,16 @@ class NetworkSafetyTest {
             "rtmp://0.0.0.0/live",             // any-local
             "rtmp://[::1]/live",               // IPv6 loopback
             "rtmp://[fd00::1]/live",           // IPv6 unique local
-            "rtmp://[::ffff:127.0.0.1]/live"   // IPv4-mapped loopback
+            "rtmp://[::ffff:127.0.0.1]/live",  // IPv4-mapped loopback
+            "rtmp://[::127.0.0.1]/live",       // IPv4-compatible loopback
+            "rtmp://[64:ff9b::a9fe:a9fe]/live",// NAT64 to cloud metadata
+            "rtmp://[2002:7f00:1::]/live",     // 6to4 embedding 127.0.0.1
+            "rtmp://[2001::1]/live",           // Teredo
+            "rtmp://[2001:db8::1]/live",       // documentation
+            "rtmp://[100::1]/live",            // discard-only
+            "rtmp://192.0.2.10/live",          // documentation
+            "rtmp://198.51.100.10/live",       // documentation
+            "rtmp://203.0.113.10/live"         // documentation
     })
     void rejectsPrivateAndLocalAddresses(String url) {
         assertThatThrownBy(() -> NetworkSafety.requireSafeStreamDestination(url))
@@ -83,6 +92,18 @@ class NetworkSafetyTest {
         NetworkSafety.setResolverForTests(host -> new InetAddress[]{InetAddress.getByName("142.250.0.1")});
         assertThatCode(() -> NetworkSafety.requireSafeWebUrl("https://www.youtube.com/watch?v=abc"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void acceptsGlobalIpv6() {
+        assertThatCode(() -> NetworkSafety.requireSafeStreamDestination("rtmp://[2607:f8b0:4005:80a::200e]/live"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void srtMustBeCallerMode() {
+        assertThatThrownBy(() -> NetworkSafety.requireSafeStreamDestination("srt://8.8.8.8:9000?mode=listener"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

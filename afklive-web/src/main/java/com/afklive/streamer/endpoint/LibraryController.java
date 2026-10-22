@@ -50,6 +50,7 @@ public class LibraryController {
     private final com.afklive.streamer.service.VideoConversionService conversionService;
     private final com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
     private final com.afklive.streamer.service.TagService tagService;
+    private final com.afklive.streamer.service.MediaLibraryService mediaLibraryService;
 
     @PostMapping("/import-youtube")
     public ResponseEntity<?> importFromYouTube(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.ImportRequest request, java.security.Principal principal) {
@@ -156,9 +157,12 @@ public class LibraryController {
                 }
             }
             return ResponseEntity.ok(ApiResponse.success("Uploaded " + successCount + " videos to library", null));
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            // Quota and validation problems: tell the user what to fix.
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
             log.error("Bulk upload failed", e);
-            return ResponseEntity.internalServerError().body(ApiResponse.error("Bulk upload failed: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Upload failed. Please try again."));
         }
     }
 
@@ -178,26 +182,7 @@ public class LibraryController {
     }
 
     private void createLibraryEntry(String username, String filename, String key, long size) {
-        com.afklive.streamer.model.User user = userService.getOrCreateUser(username);
-
-        // Create Media Asset
-        com.afklive.streamer.model.MediaAsset asset = new com.afklive.streamer.model.MediaAsset(
-            user,
-            filename,
-            key,
-            size,
-            com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
-        );
-        asset = mediaAssetRepository.save(asset);
-
-        // Create Scheduled Video
-        ScheduledVideo video = new ScheduledVideo();
-        video.setUser(user);
-        video.setTitle(filename);
-        video.setMediaAsset(asset);
-        video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
-        video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
-        repository.save(video);
+        mediaLibraryService.addVideo(username, filename, key, size);
     }
 
     @GetMapping

@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * End-to-end checks of the security fixes through the real filter chain and database.
  */
 @SpringBootTest
-@TestPropertySource(properties = "rate-limiter.expensive-per-minute=3")
+@TestPropertySource(properties = {"rate-limiter.expensive-per-minute=3", "rate-limiter.account-per-minute=3"})
 class SecurityEndpointsTest extends PostgresIntegrationTest {
 
     private static final String EMAIL = "security-test@example.com";
@@ -37,12 +37,15 @@ class SecurityEndpointsTest extends PostgresIntegrationTest {
     private UserRepository userRepository;
     @Autowired
     private com.afklive.streamer.filter.RateLimitFilter rateLimitFilter;
+    @Autowired
+    private com.afklive.streamer.filter.AccountRateLimitFilter accountRateLimitFilter;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).addFilters(rateLimitFilter).build();
+        // Same order as production: account limits before Spring Security, API limits after it.
+        mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(accountRateLimitFilter).apply(springSecurity()).addFilters(rateLimitFilter).build();
         if (userRepository.findByEmail(EMAIL).isEmpty()) {
             User u = new User(EMAIL);
             u.setPlanType(PlanType.FREE);
@@ -107,5 +110,25 @@ class SecurityEndpointsTest extends PostgresIntegrationTest {
         mvc.perform(post("/api/library/import-drive").with(user("someone-else@example.com").roles("USER")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void loginAttemptsAreRateLimitedPerIp() throws Exception {
+        int last = 0;
+        for (int i = 0; i < 4; i++) {
+            last = mvc.perform(post("/login").with(csrf()).with(r -> { r.setRemoteAddr("203.0.113.77"); return r; })
+                            .param("username", "victim@example.com").param("password", "guess" + i))
+                    .andReturn().getResponse().getStatus();
+        }
+        assertThat(last).isEqualTo(429);
+    }
+
+    @Test
+    void conversionStatusPollingIsNotTreatedAsExpensive() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            int code = mvc.perform(get("/api/convert/status").with(user("poller@example.com").roles("USER")))
+                    .andReturn().getResponse().getStatus();
+            assertThat(code).isNotEqualTo(429);
+        }
     }
 }

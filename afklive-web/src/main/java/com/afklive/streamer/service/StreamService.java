@@ -176,31 +176,23 @@ public class StreamService {
                 String trackId = musicName.substring(6); // remove "stock:"
                 musicPath = audioService.getAudioPath(trackId);
             } else {
-                // Resolve user audio file from DB/S3
-                String audioKey = musicName;
+                // The music must be a file in this user's own library.
                 Optional<ScheduledVideo> audioFileOpt = scheduledVideoRepository.findByUserEmailAndTitle(username, musicName);
-                if (audioFileOpt.isPresent() && audioFileOpt.get().getMediaAsset() != null) {
-                    audioKey = audioFileOpt.get().getMediaAsset().getS3Key();
+                if (audioFileOpt.isEmpty() || audioFileOpt.get().getMediaAsset() == null) {
+                    throw new IllegalArgumentException("Music file not found in your library.");
                 }
-
-                Path localAudioPath = userDir.resolve("audio_" + audioKey).toAbsolutePath();
+                String audioKey = audioFileOpt.get().getMediaAsset().getS3Key();
+                Path localAudioPath = com.afklive.streamer.util.SafePaths.resolveInside(userDir, "audio_" + audioKey);
                 if (!Files.exists(localAudioPath)) {
                     log.info("Downloading audio from Storage: {}", audioKey);
                     try {
                         storageService.downloadFileToPath(audioKey, localAudioPath);
                     } catch (Exception e) {
                         log.error("Failed to download audio from Storage", e);
-                        // Fallback: check if it exists with original name
-                        localAudioPath = userDir.resolve(musicName).toAbsolutePath();
+                        throw new IOException("Music file could not be loaded from storage.");
                     }
                 }
-
-                if (Files.exists(localAudioPath)) {
-                    musicPath = localAudioPath;
-                } else {
-                    // Final fallback
-                    musicPath = userDir.resolve(musicName).toAbsolutePath();
-                }
+                musicPath = localAudioPath;
             }
         }
 

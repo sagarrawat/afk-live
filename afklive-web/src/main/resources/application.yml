@@ -85,6 +85,7 @@ logging:
 rate-limiter:
   general-per-minute: ${RATE_LIMIT_GENERAL_PER_MINUTE:300}
   expensive-per-minute: ${RATE_LIMIT_EXPENSIVE_PER_MINUTE:20}
+  account-per-minute: ${RATE_LIMIT_ACCOUNT_PER_MINUTE:10}
 
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
@@ -119,10 +120,14 @@ app:
     region: eu-north-1
     function-name: afklive-optimizer-lambda
   phonepe:
-    merchant-id: ${PHONEPE_MERCHANT_ID:}
-    salt-key: ${PHONEPE_SALT_KEY:}
-    salt-index: ${PHONEPE_SALT_INDEX:1}
-    salt-env: ${PHONEPE_ENV:https://api-preprod.phonepe.com/apis/pg-sandbox}
+    # PhonePe Standard Checkout v2 credentials (PhonePe dashboard > Developer settings)
+    client-id: ${PHONEPE_CLIENT_ID:}
+    client-secret: ${PHONEPE_CLIENT_SECRET:}
+    client-version: ${PHONEPE_CLIENT_VERSION:1}
+    env: ${PHONEPE_ENV:SANDBOX}   # SANDBOX or PRODUCTION
+    # Username/password set for the webhook in the PhonePe dashboard (verifies callbacks)
+    callback-username: ${PHONEPE_CALLBACK_USERNAME:}
+    callback-password: ${PHONEPE_CALLBACK_PASSWORD:}
 server:
   forward-headers-strategy: native
   error:

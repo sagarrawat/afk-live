@@ -31,8 +31,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> EXPENSIVE_PREFIXES = Set.of(
             "/api/start", "/api/stream/schedule", "/api/library/upload", "/api/upload",
-            "/api/library/import", "/api/ai/", "/api/convert", "/api/library/merge", "/api/payment/initiate",
-            "/api/auth/");
+            "/api/library/import", "/api/ai/", "/api/convert/optimize", "/api/convert/shorts",
+            "/api/library/merge", "/api/payment/initiate", "/api/auth/");
+
+    /** Expensive endpoints matched exactly (their prefixes also cover cheap polling endpoints). */
+    private static final Set<String> EXPENSIVE_EXACT = Set.of("/api/convert");
 
     private final long generalPerMinute;
     private final long expensivePerMinute;
@@ -64,7 +67,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (!tryConsume(general, response)) {
             return;
         }
-        if (EXPENSIVE_PREFIXES.stream().anyMatch(uri::startsWith)) {
+        if (EXPENSIVE_EXACT.contains(uri) || EXPENSIVE_PREFIXES.stream().anyMatch(uri::startsWith)) {
             Bucket expensive = expensiveBuckets.get(client, k -> perMinute(expensivePerMinute));
             if (!tryConsume(expensive, response)) {
                 return;
@@ -73,7 +76,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private static boolean tryConsume(Bucket bucket, HttpServletResponse response) throws IOException {
+    static boolean tryConsume(Bucket bucket, HttpServletResponse response) throws IOException {
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         if (probe.isConsumed()) {
             return true;
@@ -86,7 +89,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return false;
     }
 
-    private static Bucket perMinute(long tokens) {
+    static Bucket perMinute(long tokens) {
         return Bucket.builder()
                 .addLimit(Bandwidth.classic(tokens, Refill.greedy(tokens, Duration.ofMinutes(1))))
                 .build();

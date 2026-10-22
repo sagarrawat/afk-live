@@ -53,6 +53,11 @@ public final class NetworkSafety {
             return;
         }
         requireSafeUrl(value, STREAM_SCHEMES, "Stream URL must start with rtmp://, rtmps:// or srt://");
+        String lower = value.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("srt://") && (lower.contains("mode=listener") || lower.contains("mode=rendezvous"))) {
+            // Listener mode would make the server open a port instead of sending to the destination.
+            throw new IllegalArgumentException("SRT destinations must use caller mode.");
+        }
     }
 
     /**
@@ -107,28 +112,48 @@ public final class NetworkSafety {
         }
         byte[] b = address.getAddress();
         if (address instanceof Inet4Address) {
-            int first = b[0] & 0xff;
-            int second = b[1] & 0xff;
-            if (first == 0) return false;                                   // 0.0.0.0/8
-            if (first == 100 && second >= 64 && second <= 127) return false; // 100.64.0.0/10 carrier-grade NAT
-            if (first == 192 && second == 0 && (b[2] & 0xff) == 0) return false; // 192.0.0.0/24
-            if (first == 198 && (second == 18 || second == 19)) return false; // 198.18.0.0/15 benchmarking
-            if (first >= 240) return false;                                  // reserved + broadcast
-            return true;
+            return isPublicIpv4(b);
         }
         if (address instanceof Inet6Address) {
-            int first = b[0] & 0xff;
-            if ((first & 0xfe) == 0xfc) return false;                        // fc00::/7 unique local
-            if (isIpv4Mapped(b)) {
-                try {
-                    return isPublic(InetAddress.getByAddress(new byte[]{b[12], b[13], b[14], b[15]}));
-                } catch (UnknownHostException e) {
-                    return false;
-                }
+            if (isIpv4Mapped(b) || isIpv4Compatible(b)) {
+                return isPublicIpv4(new byte[]{b[12], b[13], b[14], b[15]});
             }
+            int first = b[0] & 0xff;
+            // Only global unicast (2000::/3) is reachable on the internet.
+            if ((first & 0xe0) != 0x20) return false;
+            int w0 = ((b[0] & 0xff) << 8) | (b[1] & 0xff);
+            int w1 = ((b[2] & 0xff) << 8) | (b[3] & 0xff);
+            if (w0 == 0x2002) return false;                  // 6to4 (embeds an IPv4 address)
+            if (w0 == 0x2001 && w1 == 0x0000) return false;  // Teredo
+            if (w0 == 0x2001 && w1 == 0x0db8) return false;  // documentation
             return true;
         }
         return false;
+    }
+
+    private static boolean isPublicIpv4(byte[] b) {
+        int first = b[0] & 0xff;
+        int second = b[1] & 0xff;
+        int third = b[2] & 0xff;
+        if (first == 0 || first == 10 || first == 127) return false;              // this-network, private, loopback
+        if (first == 169 && second == 254) return false;                         // link-local, cloud metadata
+        if (first == 172 && second >= 16 && second <= 31) return false;          // private
+        if (first == 192 && second == 168) return false;                         // private
+        if (first == 100 && second >= 64 && second <= 127) return false;         // carrier-grade NAT
+        if (first == 192 && second == 0 && third == 0) return false;             // IETF protocol assignments
+        if (first == 192 && second == 0 && third == 2) return false;             // documentation
+        if (first == 192 && second == 88 && third == 99) return false;           // 6to4 relay anycast
+        if (first == 198 && (second == 18 || second == 19)) return false;        // benchmarking
+        if (first == 198 && second == 51 && third == 100) return false;          // documentation
+        if (first == 203 && second == 0 && third == 113) return false;           // documentation
+        return first < 224;                                                       // not multicast/reserved/broadcast
+    }
+
+    private static boolean isIpv4Compatible(byte[] b) {
+        for (int i = 0; i < 12; i++) {
+            if (b[i] != 0) return false;
+        }
+        return true; // ::a.b.c.d (deprecated, but routes to an IPv4 address)
     }
 
     private static boolean isIpv4Mapped(byte[] b) {
