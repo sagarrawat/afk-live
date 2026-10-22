@@ -86,6 +86,9 @@ public class StreamService {
     ) throws IOException {
         
         log.info("username [{}]", username);
+        if (streamMode == null || streamMode.isBlank()) {
+            streamMode = "original";
+        }
 
         if (streamKeys == null) {
              throw new IllegalArgumentException("At least one destination is required.");
@@ -238,14 +241,16 @@ public class StreamService {
                 isOptimized = true;
             }
         }
-        boolean sourceHasAudio = info.hasAudio();
+        Boolean sourceHasAudio = info.hasAudio(); // null if the file couldn't be probed
+        // Encode at the size actually sent: a 480p source on a 1080p plan doesn't need a 1080p bitrate.
+        int outputHeight = ("original".equals(streamMode) && info.height() > 0) ? Math.min(info.height(), maxHeight) : maxHeight;
 
         List<Long> startedJobIds = new ArrayList<>();
         clearLogs();
 
         // Loop through keys to start individual processes
         for (String key : validKeys) {
-            List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, overlayTextPath, sourceHasAudio);
+            List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, outputHeight, isOptimized, overlayTextPath, sourceHasAudio);
 
             log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
 
@@ -253,7 +258,16 @@ public class StreamService {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
 
-            Process process = pb.start();
+            Process process;
+            try {
+                process = pb.start();
+            } catch (IOException e) {
+                // Don't leave earlier destinations streaming when the request as a whole fails.
+                for (Long started : startedJobIds) {
+                    streamJobRepo.findById(started).ifPresent(j -> stopJob(j, "Start failed for another destination"));
+                }
+                throw e;
+            }
 
             Thread.ofVirtual().start(() -> {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -381,6 +395,11 @@ public class StreamService {
             return;
         }
         stopReasons.put(job.getId(), reason);
+        if (!process.isAlive()) {
+            // Exited between the check and recording the reason: finalize here with the right reason.
+            finalizeJob(job.getId(), reason);
+            return;
+        }
         process.destroy(); // SIGTERM: lets FFmpeg close the connection cleanly
         scheduledExecutorService.schedule(() -> {
             if (process.isAlive()) {
@@ -421,8 +440,11 @@ public class StreamService {
      */
     @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
     public void reconcileStaleJobs() {
+        java.time.Instant bootTime = java.time.Instant.ofEpochMilli(
+                java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime());
         for (StreamJob job : streamJobRepo.findAllByIsLiveTrue()) {
-            if (activeStreams.containsKey(job.getId())) {
+            boolean startedByThisRun = job.getStartTime() != null && !job.getStartTime().toInstant().isBefore(bootTime);
+            if (activeStreams.containsKey(job.getId()) || startedByThisRun) {
                 continue;
             }
             job.setLive(false);
@@ -443,38 +465,27 @@ public class StreamService {
     }
 
     void finalizeJob(Long jobId, String reason) {
-        Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
-        if (jobOpt.isPresent()) {
-            StreamJob job = jobOpt.get();
-            if (job.isLive()) {
-                job.setLive(false);
-                job.setEndTime(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
-                job.setEndReason(reason);
-
-                // Final pay-as-you-go charge since the last billing tick
+        java.time.ZonedDateTime end = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"))
+                .truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        // Only the caller that flips the job from live to ended does the final charge.
+        if (streamJobRepo.markEnded(jobId, end, reason) == 1) {
+            streamJobRepo.findById(jobId).ifPresent(job -> {
                 String email = job.getUser().getEmail();
                 com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
-
                 if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
-                    java.time.ZonedDateTime startCalc = job.getLastBillingTime();
-                    if (startCalc == null) startCalc = job.getStartTime();
-
-                    long durationSeconds = java.time.Duration.between(startCalc, job.getEndTime()).getSeconds();
-                    if (durationSeconds > 0) {
-                        double hours = durationSeconds / 3600.0;
-                        double incrementalCost = hours * 1.25;
-                        incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
-                        job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
-                        userService.addUnpaidBalance(email, incrementalCost);
-                    }
+                    java.time.ZonedDateTime from = job.getLastBillingTime() != null ? job.getLastBillingTime() : job.getStartTime();
+                    double increment = from == null ? 0 : charge(from, end);
+                    job.setAccumulatedCost(job.getAccumulatedCost() + increment);
                     job.setCost(job.getAccumulatedCost());
+                    streamJobRepo.save(job);
+                    if (increment > 0) {
+                        userService.addUnpaidBalance(email, increment);
+                    }
                 }
-
-                streamJobRepo.save(job);
-            }
+            });
         }
-        // Cleanup tasks
         activeStreams.remove(jobId);
+        stopReasons.remove(jobId);
         java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
         if (task != null) task.cancel(true);
     }
@@ -492,52 +503,45 @@ public class StreamService {
         }, 15, 15, java.util.concurrent.TimeUnit.SECONDS);
     }
 
-    private void processPeriodicBilling() {
-        // Find all active streams
-        // Ideally we filter by Pay As You Go users, but for now we iterate active streams and check user plan
-        // Optimization: findAllByIsLiveTrue() then filter in memory or join in DB.
-        // Assuming StreamJobRepository has findAllByIsLiveTrue()
-        // Actually we have getActiveStreams(username). We need global active streams.
-        // Let's use the activeStreams map which contains IDs of locally running processes
+    /** Pay-as-you-go: hourly rate in rupees. */
+    static final double HOURLY_RATE = 1.25;
 
-        activeStreams.forEach((jobId, process) -> {
+    static double charge(java.time.ZonedDateTime from, java.time.ZonedDateTime to) {
+        long seconds = java.time.Duration.between(from, to).getSeconds();
+        if (seconds <= 0) {
+            return 0;
+        }
+        return Math.round(seconds / 3600.0 * HOURLY_RATE * 10000.0) / 10000.0;
+    }
+
+    void processPeriodicBilling() {
+        for (Long jobId : List.copyOf(activeStreams.keySet())) {
             try {
                 Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
-                if (jobOpt.isPresent()) {
-                    StreamJob job = jobOpt.get();
-                    String email = job.getUser().getEmail();
-                    com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
-
-                    if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
-                        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"));
-                        java.time.ZonedDateTime lastCalc = job.getLastBillingTime();
-                        if (lastCalc == null) lastCalc = job.getStartTime();
-
-                        long durationSeconds = java.time.Duration.between(lastCalc, now).getSeconds();
-                        if (durationSeconds > 0) {
-                            double hours = durationSeconds / 3600.0;
-                            double incrementalCost = hours * 1.25;
-                            incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
-
-                            job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
-                            job.setLastBillingTime(now);
-
-                            // Atomic update to user balance
-                            userService.addUnpaidBalance(email, incrementalCost);
-                            streamJobRepo.save(job);
-                        }
-
-                        // Check Credit Limit
-                        if (!userService.checkCreditLimit(email)) {
-                            log.warn("User {} exceeded credit limit. Stopping stream {}.", email, jobId);
-                            stopStream(jobId, email, "Credit limit reached");
-                        }
-                    }
+                if (jobOpt.isEmpty() || !jobOpt.get().isLive()) {
+                    continue;
+                }
+                StreamJob job = jobOpt.get();
+                String email = job.getUser().getEmail();
+                com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
+                if (user.getPlanType() != com.afklive.streamer.model.PlanType.FREE || job.getLastBillingTime() == null) {
+                    continue;
+                }
+                java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"))
+                        .truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+                double increment = charge(job.getLastBillingTime(), now);
+                // Conditional update: skipped if the job ended or was billed meanwhile, so nothing is charged twice.
+                if (increment > 0 && streamJobRepo.addBilling(jobId, increment, now, job.getLastBillingTime()) == 1) {
+                    userService.addUnpaidBalance(email, increment);
+                }
+                if (!userService.checkCreditLimit(email)) {
+                    log.warn("User {} exceeded credit limit. Stopping stream {}.", email, jobId);
+                    stopStream(jobId, email, "Credit limit reached");
                 }
             } catch (Exception e) {
                 log.error("Error in billing task for job " + jobId, e);
             }
-        });
+        }
     }
 
     public List<StreamJob> getActiveStreams(String username) {

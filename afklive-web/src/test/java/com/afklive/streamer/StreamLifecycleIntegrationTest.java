@@ -82,7 +82,7 @@ class StreamLifecycleIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void stoppingAJobThisServerDidNotStartNeverSignalsItsPid() {
+    void stoppingAJobWithNoProcessHereClosesItInTheDatabase() {
         User owner = account("pid@example.com");
         StreamJob stale = liveJob(owner); // pid 999999 is not ours
 
@@ -151,5 +151,57 @@ class StreamLifecycleIntegrationTest extends PostgresIntegrationTest {
 
         assertThat(scheduled.claim(s.getId())).isEqualTo(1);
         assertThat(scheduled.claim(s.getId())).isZero();
+    }
+
+    @Test
+    void endingTwiceChargesOnce() {
+        User owner = account("twice@example.com");
+        StreamJob job = liveJob(owner);
+
+        streamService.stopStream(job.getId(), "twice@example.com");
+        streamService.stopStream(job.getId(), "twice@example.com");
+
+        double balance = users.findByEmail("twice@example.com").orElseThrow().getUnpaidBalance();
+        // 30 minutes since the last billing tick at 1.25/hour
+        assertThat(balance).isBetween(0.62, 0.64);
+    }
+
+    @Test
+    void billingCannotReviveOrChargeAnEndedJob() {
+        User owner = account("revive@example.com");
+        StreamJob job = liveJob(owner);
+        ZonedDateTime previous = jobs.findById(job.getId()).orElseThrow().getLastBillingTime();
+
+        assertThat(jobs.markEnded(job.getId(), ZonedDateTime.now(), "test")).isEqualTo(1);
+        assertThat(jobs.addBilling(job.getId(), 1.0, ZonedDateTime.now(), previous)).isZero();
+        assertThat(jobs.findById(job.getId()).orElseThrow().isLive()).isFalse();
+    }
+
+    @Test
+    void billingWithAStaleTimestampIsSkipped() {
+        User owner = account("stale@example.com");
+        StreamJob job = liveJob(owner);
+        ZonedDateTime previous = jobs.findById(job.getId()).orElseThrow().getLastBillingTime();
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+
+        assertThat(jobs.addBilling(job.getId(), 0.5, now, previous)).isEqualTo(1);
+        assertThat(jobs.addBilling(job.getId(), 0.5, now, previous)).isZero(); // second biller lost the race
+        assertThat(jobs.findById(job.getId()).orElseThrow().getAccumulatedCost()).isEqualTo(0.5);
+    }
+
+    @Test
+    void streamsPastTheirStopTimeAreStopped() throws Exception {
+        User owner = account("due@example.com");
+        StreamJob job = liveJob(owner);
+        job.setStopAt(ZonedDateTime.now().minusSeconds(5));
+        jobs.save(job);
+
+        java.lang.reflect.Method m = StreamService.class.getDeclaredMethod("stopDueStreams");
+        m.setAccessible(true);
+        m.invoke(streamService);
+
+        StreamJob after = jobs.findById(job.getId()).orElseThrow();
+        assertThat(after.isLive()).isFalse();
+        assertThat(after.getEndReason()).isEqualTo("Scheduled stop");
     }
 }

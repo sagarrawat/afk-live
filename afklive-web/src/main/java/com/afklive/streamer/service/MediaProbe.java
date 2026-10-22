@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -21,34 +20,48 @@ public class MediaProbe {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    /** What we need to know about a file. {@code height}/{@code fps} are 0 when unknown. */
-    public record MediaInfo(String videoCodec, int width, int height, double fps, boolean hasAudio) {
-        public static final MediaInfo UNKNOWN = new MediaInfo(null, 0, 0, 0, true);
+    /**
+     * What we need to know about a file. {@code height}/{@code fps} are 0 when unknown;
+     * {@code hasAudio} is null when the file couldn't be probed.
+     */
+    public record MediaInfo(String videoCodec, int width, int height, double fps, Boolean hasAudio) {
+        public static final MediaInfo UNKNOWN = new MediaInfo(null, 0, 0, 0, null);
     }
 
     public MediaInfo probe(Path file) {
         List<String> command = List.of(ffprobe(), "-v", "error", "-print_format", "json", "-show_streams", file.toString());
+        Path out = null;
         try {
-            Process process = new ProcessBuilder(command).redirectErrorStream(false).start();
-            byte[] out;
-            try (InputStream in = process.getInputStream()) {
-                out = in.readAllBytes();
-            }
+            // Output goes to a file so a hung ffprobe can't block us before the timeout applies.
+            out = java.nio.file.Files.createTempFile("probe-", ".json");
+            Process process = new ProcessBuilder(command)
+                    .redirectOutput(out.toFile())
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
             if (!process.waitFor(30, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
+                log.warn("ffprobe timed out for {}", file);
                 return MediaInfo.UNKNOWN;
             }
             if (process.exitValue() != 0) {
                 log.warn("ffprobe failed for {} (exit {})", file, process.exitValue());
                 return MediaInfo.UNKNOWN;
             }
-            return parse(out);
+            return parse(java.nio.file.Files.readAllBytes(out));
         } catch (IOException e) {
             log.warn("ffprobe could not run for {}", file, e);
             return MediaInfo.UNKNOWN;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return MediaInfo.UNKNOWN;
+        } finally {
+            if (out != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(out);
+                } catch (IOException ignored) {
+                    // temp file
+                }
+            }
         }
     }
 
@@ -88,7 +101,12 @@ public class MediaProbe {
     }
 
     private static String ffprobe() {
-        java.io.File local = new java.io.File("bin/ffprobe");
-        return local.exists() ? local.getAbsolutePath() : "ffprobe";
+        for (String candidate : List.of("/opt/bin/ffprobe", "bin/ffprobe")) {
+            java.io.File f = new java.io.File(candidate);
+            if (f.exists()) {
+                return f.getAbsolutePath();
+            }
+        }
+        return "ffprobe";
     }
 }

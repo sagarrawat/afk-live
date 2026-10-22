@@ -54,6 +54,8 @@ class PayAsYouGoTest {
         // Use a "real" UserService (partially mocked) for logic tests
         // But for StreamService injection we use userServiceMock
         realUserService = new UserService(userRepository, null, emailService, planService);
+        // The job is live, so this caller wins the atomic "end" update.
+        when(streamJobRepository.markEnded(any(), any(), any())).thenReturn(1);
     }
 
     @Test
@@ -132,10 +134,10 @@ class PayAsYouGoTest {
         // Allow small delta for execution time
         verify(userServiceMock).addUnpaidBalance(eq(username), doubleThat(cost -> Math.abs(cost - 2.50) < 0.1));
 
-        assertNotNull(job.getEndTime());
+        // Ending is an atomic database update now (see StreamJobRepository.markEnded).
+        verify(streamJobRepository).markEnded(eq(jobId), any(), eq("Ended"));
         assertNotNull(job.getCost());
         assertEquals(2.50, job.getCost(), 0.1);
-        assertFalse(job.isLive());
     }
 
     @Test

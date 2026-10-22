@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/changes/002-dev-seed.sql
   - include:
       file: db/changelog/changes/003-stream-job-stop-and-reason.sql
+  - include:
+      file: db/changelog/changes/004-scheduled-stream-asset-on-delete.sql

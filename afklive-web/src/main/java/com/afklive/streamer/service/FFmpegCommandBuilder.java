@@ -267,7 +267,25 @@ public class FFmpegCommandBuilder {
             Path textOverlayPath
     ) {
         return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath,
-                muteVideoAudio, streamMode, maxHeight, isOptimized, textOverlayPath, true);
+                muteVideoAudio, streamMode, maxHeight, isOptimized, textOverlayPath, null);
+    }
+
+    /**
+     * Music volume goes into an FFmpeg filter graph, so it must be a plain number: anything else
+     * could inject filters (e.g. ones that read other files). Clamped to 0..2; default 1.
+     */
+    static String safeVolume(String volume) {
+        double v = 1.0;
+        if (volume != null) {
+            try {
+                v = Double.parseDouble(volume.trim());
+            } catch (NumberFormatException ignored) {
+                v = 1.0;
+            }
+        }
+        if (Double.isNaN(v) || v < 0) v = 0;
+        if (v > 2) v = 2;
+        return String.format(java.util.Locale.ROOT, "%.2f", v);
     }
 
     /** Output frame rate. Fixed so the 2-second keyframe interval YouTube requires is exact. */
@@ -289,8 +307,9 @@ public class FFmpegCommandBuilder {
     /**
      * Builds the FFmpeg command for one destination.
      *
-     * @param sourceHasAudio false when the video has no audio track; a silent track is then added,
-     *                       because YouTube keeps a stream in "preparing" without audio
+     * @param sourceHasAudio false when the video has no audio track (a silent track is then added,
+     *                       because YouTube keeps a stream in "preparing" without audio); null when unknown,
+     *                       in which case the source audio is mapped if present
      */
     public static List<String> buildStreamCommand(
             Path videoPath,
@@ -304,8 +323,11 @@ public class FFmpegCommandBuilder {
             int maxHeight,
             boolean isOptimized,
             Path textOverlayPath,
-            boolean sourceHasAudio
+            Boolean sourceHasAudioOrNull
     ) {
+        boolean audioUnknown = sourceHasAudioOrNull == null;
+        boolean sourceHasAudio = audioUnknown || sourceHasAudioOrNull;
+        String volume = safeVolume(musicVolume);
         String ffmpeg = "ffmpeg";
         java.io.File local = new java.io.File("bin/ffmpeg");
         if (local.exists()) ffmpeg = local.getAbsolutePath();
@@ -338,7 +360,7 @@ public class FFmpegCommandBuilder {
                 command.add("-map"); command.add("1:a:0");
             } else {
                 command.add("-map"); command.add("0:v:0");
-                command.add("-map"); command.add("0:a:0");
+                command.add("-map"); command.add(audioUnknown ? "0:a?" : "0:a:0");
             }
             command.add("-c:v"); command.add("copy");
             // Audio is re-encoded (cheap) so the sample rate always matches what YouTube expects.
@@ -409,10 +431,10 @@ public class FFmpegCommandBuilder {
             // Audio
             if (hasMusic) {
                 if (muteVideoAudio || !sourceHasAudio) {
-                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100[aout]", musicVolume));
+                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100[aout]", volume));
                 } else {
                     filterChains.add("[0:a]aresample=44100,asetpts=PTS-STARTPTS[a0]");
-                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100,asetpts=PTS-STARTPTS[a1]", musicVolume));
+                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100,asetpts=PTS-STARTPTS[a1]", volume));
                     filterChains.add("[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]");
                 }
                 aLabel = "[aout]";
@@ -436,7 +458,7 @@ public class FFmpegCommandBuilder {
             command.add("-keyint_min"); command.add(String.valueOf(GOP));
             command.add("-sc_threshold"); command.add("0");
 
-            command.add("-map"); command.add(aLabel.equals("0:a") ? "0:a:0" : aLabel);
+            command.add("-map"); command.add(aLabel.equals("0:a") ? (audioUnknown ? "0:a?" : "0:a:0") : aLabel);
             command.add("-c:a"); command.add("aac");
             command.add("-b:a"); command.add("128k");
             command.add("-ar"); command.add("44100");
