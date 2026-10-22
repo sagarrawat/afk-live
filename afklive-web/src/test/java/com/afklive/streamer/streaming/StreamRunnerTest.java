@@ -27,7 +27,7 @@ class StreamRunnerTest {
     static Path source;
 
     static final StreamRunner.Settings FAST = new StreamRunner.Settings(
-            Duration.ofMillis(100), Duration.ofMillis(400), Duration.ofSeconds(60), 3, Duration.ofMinutes(1), 256);
+            Duration.ofMillis(100), Duration.ofMillis(400), Duration.ofSeconds(60), 3, Duration.ofMinutes(1), 4L * 1024 * 1024);
 
     @BeforeAll
     static void makeSource() throws Exception {

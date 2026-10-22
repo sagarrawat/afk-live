@@ -4,10 +4,13 @@ import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.model.StreamJobDestination;
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.repository.StreamJobDestinationRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.StreamService;
+import com.afklive.streamer.service.YouTubeService;
+import com.afklive.streamer.streaming.StreamPreparer;
 import com.afklive.streamer.streaming.StreamSpec;
 import com.afklive.streamer.streaming.StreamStates;
 import com.afklive.streamer.streaming.StreamWorker;
@@ -35,7 +38,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * End to end through the real worker: database coordination, file preparation, FFmpeg encoder and relay.
  * The destination is a local file instead of a platform.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.streaming.work-dir=${java.io.tmpdir}/afklive-test-worker")
 class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
 
     @TempDir
@@ -47,6 +50,42 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
     @Autowired StreamJobRepository jobs;
     @Autowired UserRepository users;
     @Autowired FileStorageService storage;
+    @Autowired StreamJobDestinationRepository destinations;
+    @Autowired StreamPreparer preparer;
+    @Autowired YouTubeService youTubeService;
+
+    /** A separate worker process, as far as coordination goes (own id, own first pass). */
+    private StreamWorker newWorker(String id) {
+        return new StreamWorker(jobs, destinations, streamService, preparer, storage, youTubeService, id, 5, 500, false);
+    }
+
+    private String uploadSource() throws Exception {
+        try (InputStream in = Files.newInputStream(source)) {
+            return storage.uploadFile(in, "src.mp4", Files.size(source));
+        }
+    }
+
+    private StreamSpec fileSpec(User owner, String videoKey, Path out) {
+        return new StreamSpec(owner.getEmail(), videoKey, null, "1.0", -1, null, false, "original", 360,
+                false, null, null, List.of(new StreamSpec.Destination("File", "file://" + out)));
+    }
+
+    private static void tickUntil(StreamWorker w, BooleanSupplier condition, Duration timeout) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            w.tick();
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            Thread.sleep(500);
+        }
+        throw new AssertionError("Condition not met within " + timeout);
+    }
+
+    private boolean onAir(long id) {
+        StreamJob j = jobs.findById(id).orElseThrow();
+        return StreamStates.LIVE.equals(j.getStatus()) && j.getBitrateKbps() != null && j.getBitrateKbps() > 0;
+    }
 
     @BeforeAll
     static void makeSource() throws Exception {
@@ -82,41 +121,27 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
     }
 
     private void tickUntil(BooleanSupplier condition, Duration timeout) throws InterruptedException {
-        long deadline = System.nanoTime() + timeout.toNanos();
-        while (System.nanoTime() < deadline) {
-            worker.tick();
-            if (condition.getAsBoolean()) {
-                return;
-            }
-            Thread.sleep(500);
-        }
-        throw new AssertionError("Condition not met within " + timeout);
+        tickUntil(worker, condition, timeout);
     }
 
     @Test
     void anOrphanedStreamIsTakenOverAndRunsUntilStopped() throws Exception {
         User owner = account("worker-e2e@example.com");
-        String videoKey;
-        try (InputStream in = Files.newInputStream(source)) {
-            videoKey = storage.uploadFile(in, "src.mp4", Files.size(source));
-        }
+        String videoKey = uploadSource();
         Path out = dir.resolve("e2e.flv");
-        StreamSpec spec = new StreamSpec(owner.getEmail(), videoKey, null, "1.0", -1, null, false, "original", 360,
-                false, null, null, List.of(new StreamSpec.Destination("File", "file://" + out)));
+        StreamSpec spec = fileSpec(owner, videoKey, out);
         // Owned by a worker that stopped reporting two minutes ago.
         StreamJob job = job(owner, spec.toJson(), "dead-worker", ZonedDateTime.now(ZoneId.of("UTC")).minusMinutes(2));
         long id = job.getId();
 
-        tickUntil(() -> {
-            StreamJob j = jobs.findById(id).orElseThrow();
-            return StreamStates.LIVE.equals(j.getStatus()) && j.getBitrateKbps() != null && j.getBitrateKbps() > 0;
-        }, Duration.ofSeconds(40));
+        tickUntil(() -> onAir(id), Duration.ofSeconds(40));
 
         StreamJob live = jobs.findById(id).orElseThrow();
         assertThat(live.getWorkerId()).isEqualTo(worker.workerId());
         assertThat(live.getRestarts()).isEqualTo(1); // counted as a takeover
         assertThat(live.getFps()).isPositive();
-        assertThat(Files.size(out)).isPositive();
+        // The relay writes once it has probed the stream (a few seconds after the encoder starts).
+        tickUntil(() -> Files.exists(out) && out.toFile().length() > 0, Duration.ofSeconds(20));
         tickUntil(() -> "LIVE".equals(jobs.findById(id).orElseThrow().getDestinations().get(0).getStatus()), Duration.ofSeconds(15));
 
         // The web app asks to stop; the worker (alive, so not ended directly) carries it out.
@@ -151,5 +176,79 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
         assertThat(jobs.findById(job.getId()).orElseThrow().getWorkerId()).isEqualTo("other-worker");
         // tidy up
         streamService.finalizeJob(job.getId(), "test");
+    }
+
+    @Test
+    void aRestartedWorkerResumesItsOwnStreamOnceAndOnlyOnStartup() throws Exception {
+        User owner = account("worker-resume@example.com");
+        Path out = dir.resolve("resume.flv");
+        // Assigned to "w-resume" which just restarted (its heartbeat is recent, so nobody else takes it).
+        StreamJob job = job(owner, fileSpec(owner, uploadSource(), out).toJson(), "w-resume", ZonedDateTime.now(ZoneId.of("UTC")));
+        long id = job.getId();
+        StreamWorker restarted = newWorker("w-resume");
+        try {
+            tickUntil(restarted, () -> onAir(id), Duration.ofSeconds(40));
+            assertThat(restarted.runningCount()).isEqualTo(1);
+            // Further passes keep the one copy running (no second start).
+            for (int i = 0; i < 3; i++) {
+                restarted.tick();
+            }
+            assertThat(restarted.runningCount()).isEqualTo(1);
+            assertThat(jobs.findById(id).orElseThrow().getRestarts()).isZero();
+
+            streamService.stopStream(id, owner.getEmail());
+            tickUntil(restarted, () -> !jobs.findById(id).orElseThrow().isLive(), Duration.ofSeconds(30));
+            assertThat(restarted.runningCount()).isZero();
+        } finally {
+            restarted.shutdown();
+            streamService.finalizeJob(id, "test");
+        }
+    }
+
+    @Test
+    void twoProcessesWithTheSameIdNeverBothKeepAStream() throws Exception {
+        User owner = account("worker-dup@example.com");
+        StreamJob job = job(owner, fileSpec(owner, uploadSource(), dir.resolve("dup.flv")).toJson(), null, null);
+        long id = job.getId();
+        StreamWorker first = newWorker("w-dup");
+        StreamWorker second = newWorker("w-dup");
+        try {
+            tickUntil(first, () -> onAir(id), Duration.ofSeconds(40));
+            // The second process starts up, sees a job under its id and resumes it; the first one's
+            // next heartbeat no longer matches, so it lets go.
+            second.tick();
+            first.tick();
+            assertThat(first.runningCount()).isZero();
+            assertThat(second.runningCount()).isEqualTo(1);
+            tickUntil(second, () -> onAir(id), Duration.ofSeconds(40));
+            first.tick();
+            assertThat(first.runningCount()).isZero();
+        } finally {
+            first.shutdown();
+            second.shutdown();
+            streamService.finalizeJob(id, "test");
+        }
+    }
+
+    @Test
+    void aStopWhoseWorkerDiedIsCompletedByTheWebApp() {
+        User owner = account("worker-abandoned@example.com");
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        StreamJob job = job(owner, "{}", "busy-worker", now);
+        long id = job.getId();
+
+        // Worker alive: the stop is left for it to carry out.
+        streamService.stopStream(id, owner.getEmail());
+        assertThat(jobs.findById(id).orElseThrow().isLive()).isTrue();
+
+        // It dies before doing so.
+        StreamJob j = jobs.findById(id).orElseThrow();
+        j.setHeartbeatAt(now.minusMinutes(2));
+        jobs.save(j);
+        streamService.stopDueStreams();
+
+        StreamJob ended = jobs.findById(id).orElseThrow();
+        assertThat(ended.isLive()).isFalse();
+        assertThat(ended.getEndReason()).isEqualTo("Stopped by user");
     }
 }

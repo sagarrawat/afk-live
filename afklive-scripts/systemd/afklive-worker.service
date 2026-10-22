@@ -12,9 +12,9 @@ Wants=network-online.target
 User=afklive-worker
 WorkingDirectory=/opt/afklive/worker
 EnvironmentFile=/opt/afklive/afklive.env
-Environment=SPRING_PROFILES_ACTIVE=worker,loki
-Environment=STREAMING_WORKER_ID=%H
-ExecStart=/usr/bin/java -Xmx512m -jar /opt/afklive/worker/app.jar
+# Role, profiles and worker id are -D properties: they win over anything in afklive.env (EnvironmentFile overrides Environment=).
+# The id is the host name, so a restarted worker resumes its own streams. Run one worker per host.
+ExecStart=/usr/bin/java -Xmx512m -Dspring.profiles.active=worker,loki -Dapp.streaming.role=worker -Dapp.streaming.worker-id=%H -jar /opt/afklive/worker/app.jar
 # Give running streams time to close cleanly on stop.
 TimeoutStopSec=20
 Restart=always

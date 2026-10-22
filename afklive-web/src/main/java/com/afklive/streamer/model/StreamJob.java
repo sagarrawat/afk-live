@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "stream_jobs", indexes = {
     @Index(name = "idx_streamjob_user_live", columnList = "user_id, is_live"),
     @Index(name = "idx_streamjob_live", columnList = "is_live"),

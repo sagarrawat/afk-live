@@ -13,10 +13,11 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /**
@@ -26,9 +27,11 @@ import java.util.function.Supplier;
  *   <li>A destination that drops is restarted on its own with backoff; the others never notice.</li>
  *   <li>If the encoder crashes it is restarted with backoff (relays restart with it, since the new
  *       encoder starts a fresh timeline). Repeated crashes in a short window end the stream as failed.</li>
- *   <li>A slow destination never slows the encoder: its queue overflows and that relay alone restarts.</li>
+ *   <li>A slow destination never slows the encoder: once its buffer (a few seconds of video) is
+ *       full, that relay alone restarts.</li>
+ *   <li>Every FFmpeg process is waited for and force-killed if it doesn't exit within 5 s of a stop.</li>
  * </ul>
- * All process I/O runs on virtual threads; callbacks go to {@link Listener}.
+ * Process I/O runs on platform threads: blocking pipe reads/writes would pin virtual-thread carriers.
  */
 @Slf4j
 public final class StreamRunner {
@@ -54,16 +57,21 @@ public final class StreamRunner {
     public record Progress(double fps, double bitrateKbps, double speed, long droppedFrames) {
     }
 
-    /** Timing and limits; defaults suit production, tests shorten them. */
+    /**
+     * Timing and limits; defaults suit production, tests shorten them.
+     *
+     * @param relayBufferBytes per-destination buffer; about 5 s at 6 Mbps by default
+     */
     public record Settings(Duration initialBackoff, Duration maxBackoff, Duration stableAfter,
-                           int maxEncoderFailures, Duration failureWindow, int queueChunks) {
+                           int maxEncoderFailures, Duration failureWindow, long relayBufferBytes) {
         public static Settings defaults() {
             return new Settings(Duration.ofSeconds(1), Duration.ofSeconds(30), Duration.ofSeconds(60),
-                    10, Duration.ofMinutes(10), 1024);
+                    10, Duration.ofMinutes(10), 4L * 1024 * 1024);
         }
     }
 
     private static final int CHUNK = 64 * 1024;
+    private static final Duration KILL_AFTER = Duration.ofSeconds(5);
 
     private final long jobId;
     private final Supplier<List<String>> encoderCommand;
@@ -72,6 +80,8 @@ public final class StreamRunner {
     private final Settings settings;
     private final AtomicBoolean stopping = new AtomicBoolean();
     private final AtomicBoolean finished = new AtomicBoolean();
+    /** Wakes the supervisor from a backoff pause when a stop arrives. */
+    private final CountDownLatch stopSignal = new CountDownLatch(1);
     private volatile String stopReason;
     private volatile Process encoder;
     private volatile List<Relay> relays = List.of();
@@ -90,7 +100,7 @@ public final class StreamRunner {
         if (supervisor != null) {
             return;
         }
-        supervisor = Thread.ofVirtual().name("stream-" + jobId).start(this::superviseEncoder);
+        supervisor = platformThread("stream-" + jobId, this::superviseEncoder);
     }
 
     /** Stops the stream; the listener then gets onFinished(reason, false). Safe to call repeatedly. */
@@ -99,21 +109,16 @@ public final class StreamRunner {
             return;
         }
         stopReason = reason;
-        Process p = encoder;
-        if (p != null) {
-            p.destroy();
-        }
+        stopSignal.countDown();
+        terminate(encoder);
         relays.forEach(Relay::shutdown);
-        if (supervisor != null) {
-            supervisor.interrupt();
-        }
     }
 
     public boolean isRunning() {
         return supervisor != null && !finished.get();
     }
 
-    /** Waits for the runner to finish (tests and shutdown). */
+    /** Waits until the runner has finished, including every relay. */
     public boolean awaitFinished(Duration timeout) throws InterruptedException {
         Thread t = supervisor;
         return t == null || t.join(timeout);
@@ -153,7 +158,9 @@ public final class StreamRunner {
                     backoff = settings.initialBackoff(); // it ran fine for a while: retry quickly
                 }
                 log.warn("Encoder for job {} exited with {}; restart {} in {} ms", jobId, result.exitCode, restarts, backoff.toMillis());
-                sleep(backoff);
+                if (stopSignal.await(backoff.toMillis(), TimeUnit.MILLISECONDS)) {
+                    break;
+                }
                 backoff = min(backoff.multipliedBy(2), settings.maxBackoff());
             }
         } catch (InterruptedException e) {
@@ -169,48 +176,58 @@ public final class StreamRunner {
     private record RunResult(int exitCode, String error) {
     }
 
-    private RunResult runEncoderOnce(int restarts) throws IOException, InterruptedException {
+    private RunResult runEncoderOnce(int restarts) throws IOException {
         Process p = new ProcessBuilder(encoderCommand.get()).start();
         encoder = p;
         if (stopping.get()) {
-            p.destroy();
+            terminate(p);
         }
         Deque<String> errorLines = new ArrayDeque<>();
-        Thread stderr = Thread.ofVirtual().start(() -> readEncoderStderr(p.getErrorStream(), errorLines));
+        Thread stderr = platformThread("encoder-err-" + jobId, () -> readEncoderStderr(p.getErrorStream(), errorLines));
 
         List<Relay> generation = new ArrayList<>();
         for (int i = 0; i < relayCommands.size(); i++) {
             generation.add(new Relay(i, relayCommands.get(i)));
         }
         relays = generation;
+        if (stopping.get()) {
+            generation.forEach(Relay::shutdown);
+        }
         generation.forEach(Relay::start);
         listener.onEncoderStarted(restarts);
 
-        // Pump encoder output to every relay without ever blocking on a slow one.
-        try (InputStream out = p.getInputStream()) {
-            byte[] buf = new byte[CHUNK];
-            int n;
-            while ((n = out.read(buf)) > 0) {
-                byte[] chunk = java.util.Arrays.copyOf(buf, n);
-                for (Relay r : generation) {
-                    r.offer(chunk);
+        int code = -1;
+        try {
+            // Pump encoder output to every relay without ever blocking on a slow one.
+            try (InputStream out = p.getInputStream()) {
+                byte[] buf = new byte[CHUNK];
+                int n;
+                while ((n = out.read(buf)) > 0) {
+                    byte[] chunk = java.util.Arrays.copyOf(buf, n);
+                    for (Relay r : generation) {
+                        r.offer(chunk);
+                    }
+                }
+            } catch (IOException e) {
+                if (!stopping.get()) {
+                    log.warn("Reading encoder output for job {} failed: {}", jobId, e.getMessage());
                 }
             }
-        } catch (IOException e) {
-            if (!stopping.get()) {
-                log.warn("Reading encoder output for job {} failed: {}", jobId, e.getMessage());
+            code = waitOrKill(p);
+        } finally {
+            // Always: let relays finish (drain on a normal end), then make sure no process outlives this run.
+            if (code == 0 && !stopping.get()) {
+                generation.forEach(Relay::drainAndClose);
+            } else {
+                generation.forEach(Relay::shutdown);
             }
-        }
-        int code = p.waitFor();
-        stderr.join(Duration.ofSeconds(2));
-        if (code == 0 && !stopping.get()) {
-            // Normal end of the playlist: let every relay send what's queued, then close cleanly.
-            generation.forEach(Relay::drainAndClose);
-        } else {
-            generation.forEach(Relay::shutdown);
-        }
-        for (Relay r : generation) {
-            r.join(Duration.ofSeconds(15));
+            for (Relay r : generation) {
+                r.awaitDone(Duration.ofSeconds(15));
+            }
+            if (p.isAlive()) {
+                p.destroyForcibly();
+            }
+            joinQuietly(stderr, Duration.ofSeconds(2));
         }
         String error;
         synchronized (errorLines) {
@@ -272,6 +289,9 @@ public final class StreamRunner {
     private void finish(String reason, boolean failed) {
         if (finished.compareAndSet(false, true)) {
             relays.forEach(Relay::shutdown);
+            for (Relay r : relays) {
+                r.awaitDone(Duration.ofSeconds(15));
+            }
             try {
                 listener.onFinished(reason, failed);
             } catch (Exception e) {
@@ -282,17 +302,19 @@ public final class StreamRunner {
 
     // ---------------------------------------------------------------- relays
 
-    /** One destination: a copy-only FFmpeg fed from a bounded queue, restarted on its own when it drops. */
+    /** One destination: a copy-only FFmpeg fed from a byte-bounded queue, restarted on its own when it drops. */
     private final class Relay {
         private final int position;
         private final List<String> command;
-        private final BlockingQueue<byte[]> queue = new ArrayBlockingQueue<>(settings.queueChunks());
+        private final LinkedBlockingQueue<byte[]> queue = new LinkedBlockingQueue<>();
+        private final AtomicLong queuedBytes = new AtomicLong();
         private final AtomicBoolean down = new AtomicBoolean();
+        private final CountDownLatch downSignal = new CountDownLatch(1);
+        private final CountDownLatch done = new CountDownLatch(1);
         /** Set when the input has ended: write what's queued, then send EOF and don't restart. */
         private volatile boolean draining;
         private volatile Process process;
         private volatile boolean restartRequested;
-        private Thread loop;
 
         Relay(int position, List<String> command) {
             this.position = position;
@@ -300,19 +322,24 @@ public final class StreamRunner {
         }
 
         void start() {
-            loop = Thread.ofVirtual().name("relay-" + jobId + "-" + position).start(this::supervise);
+            platformThread("relay-" + jobId + "-" + position, this::supervise);
         }
 
         void offer(byte[] chunk) {
-            if (!queue.offer(chunk)) {
-                // This destination can't keep up: restart it rather than slow everyone down.
+            if (queuedBytes.get() + chunk.length > settings.relayBufferBytes()) {
+                // This destination can't keep up: restart it rather than slow everyone down or run out of memory.
                 restartRequested = true;
-                queue.clear();
-                Process p = process;
-                if (p != null) {
-                    p.destroyForcibly();
-                }
+                clearQueue();
+                terminate(process);
+                return;
             }
+            queuedBytes.addAndGet(chunk.length);
+            queue.offer(chunk);
+        }
+
+        private void clearQueue() {
+            queue.clear();
+            queuedBytes.set(0);
         }
 
         void drainAndClose() {
@@ -321,88 +348,98 @@ public final class StreamRunner {
 
         void shutdown() {
             if (down.compareAndSet(false, true)) {
+                downSignal.countDown();
                 Process p = process;
                 if (p != null) {
                     try {
-                        p.getOutputStream().close(); // EOF lets FFmpeg finish the FLV cleanly
+                        p.getOutputStream().close(); // EOF lets FFmpeg finish cleanly
                     } catch (IOException ignored) {
                         // already closed
                     }
-                    p.destroy();
-                }
-                if (loop != null) {
-                    loop.interrupt();
+                    terminate(p);
                 }
             }
         }
 
-        void join(Duration timeout) throws InterruptedException {
-            if (loop != null && !loop.join(timeout)) {
-                Process p = process;
-                if (p != null) {
-                    p.destroyForcibly();
+        void awaitDone(Duration timeout) {
+            try {
+                if (!done.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+                    Process p = process;
+                    if (p != null) {
+                        p.destroyForcibly();
+                    }
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
 
         private void supervise() {
             Duration backoff = settings.initialBackoff();
             int restarts = 0;
-            while (!down.get()) {
-                long startedAt = System.nanoTime();
-                String error = null;
-                try {
-                    Process p = new ProcessBuilder(command).start();
-                    process = p;
-                    listener.onDestination(position, restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, null);
-                    Deque<String> errLines = new ArrayDeque<>();
-                    Thread errReader = Thread.ofVirtual().start(() -> readLines(p.getErrorStream(), errLines));
-                    Thread writer = Thread.ofVirtual().start(() -> write(p));
-                    boolean reportedLive = false;
-                    while (!p.waitFor(200, TimeUnit.MILLISECONDS)) {
-                        if (!reportedLive && Duration.ofNanos(System.nanoTime() - startedAt).toSeconds() >= 3) {
-                            listener.onDestination(position, "LIVE", restarts, null);
-                            reportedLive = true;
-                        }
+            try {
+                while (!down.get()) {
+                    long startedAt = System.nanoTime();
+                    String error = null;
+                    try {
+                        Process p = new ProcessBuilder(command).start();
+                        process = p;
                         if (down.get()) {
-                            p.destroy();
+                            terminate(p);
                         }
-                    }
-                    writer.interrupt();
-                    errReader.join(Duration.ofSeconds(1));
-                    synchronized (errLines) {
-                        error = errLines.isEmpty() ? "exit code " + p.exitValue() : String.join(" | ", errLines);
-                    }
-                } catch (IOException e) {
-                    error = e.getMessage();
-                } catch (InterruptedException e) {
-                    if (down.get()) {
+                        listener.onDestination(position, restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, null);
+                        Deque<String> errLines = new ArrayDeque<>();
+                        Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readLines(p.getErrorStream(), errLines));
+                        Thread writer = platformThread("relay-in-" + jobId + "-" + position, () -> write(p));
+                        boolean reportedLive = false;
+                        while (!p.waitFor(200, TimeUnit.MILLISECONDS)) {
+                            if (!reportedLive && Duration.ofNanos(System.nanoTime() - startedAt).toSeconds() >= 3) {
+                                listener.onDestination(position, "LIVE", restarts, null);
+                                reportedLive = true;
+                            }
+                        }
+                        joinQuietly(writer, Duration.ofSeconds(1));
+                        joinQuietly(errReader, Duration.ofSeconds(1));
+                        synchronized (errLines) {
+                            error = errLines.isEmpty() ? "exit code " + p.exitValue() : String.join(" | ", errLines);
+                        }
+                    } catch (IOException e) {
+                        error = e.getMessage();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
                         break;
                     }
-                }
-                if (down.get() || draining) {
-                    break;
-                }
-                if (restartRequested) {
-                    restartRequested = false;
-                    error = "Destination couldn't keep up; reconnecting";
-                }
-                restarts++;
-                listener.onDestination(position, "RECONNECTING", restarts, error);
-                if (Duration.ofNanos(System.nanoTime() - startedAt).compareTo(settings.stableAfter()) >= 0) {
-                    backoff = settings.initialBackoff();
-                }
-                queue.clear(); // stale video is useless after a reconnect
-                try {
-                    sleep(backoff);
-                } catch (InterruptedException e) {
-                    if (down.get()) {
+                    if (down.get() || draining) {
                         break;
                     }
+                    if (restartRequested) {
+                        restartRequested = false;
+                        error = "Destination couldn't keep up; reconnecting";
+                    }
+                    restarts++;
+                    listener.onDestination(position, "RECONNECTING", restarts, error);
+                    if (Duration.ofNanos(System.nanoTime() - startedAt).compareTo(settings.stableAfter()) >= 0) {
+                        backoff = settings.initialBackoff();
+                    }
+                    clearQueue(); // stale video is useless after a reconnect
+                    try {
+                        if (downSignal.await(backoff.toMillis(), TimeUnit.MILLISECONDS)) {
+                            break;
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    backoff = min(backoff.multipliedBy(2), settings.maxBackoff());
                 }
-                backoff = min(backoff.multipliedBy(2), settings.maxBackoff());
+            } finally {
+                Process p = process;
+                if (p != null && p.isAlive()) {
+                    waitOrKill(p);
+                }
+                listener.onDestination(position, "STOPPED", restarts, null);
+                done.countDown();
             }
-            listener.onDestination(position, "STOPPED", restarts, null);
         }
 
         private void write(Process p) {
@@ -410,6 +447,7 @@ public final class StreamRunner {
                 while (p.isAlive() && !down.get()) {
                     byte[] chunk = queue.poll(200, TimeUnit.MILLISECONDS);
                     if (chunk != null) {
+                        queuedBytes.addAndGet(-chunk.length);
                         in.write(chunk);
                     } else if (draining) {
                         break; // input ended and everything queued has been written: EOF
@@ -418,6 +456,50 @@ public final class StreamRunner {
             } catch (IOException | InterruptedException ignored) {
                 // relay process ended or we're shutting down
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    /** SIGTERM now; SIGKILL if still alive after {@link #KILL_AFTER}. */
+    private static void terminate(Process p) {
+        if (p == null || !p.isAlive()) {
+            return;
+        }
+        p.destroy();
+        p.onExit().orTimeout(KILL_AFTER.toMillis(), TimeUnit.MILLISECONDS).exceptionally(t -> {
+            p.destroyForcibly();
+            return p;
+        });
+    }
+
+    /** Waits for exit; a process that won't exit is killed. Never throws. */
+    private static int waitOrKill(Process p) {
+        try {
+            if (p.waitFor(KILL_AFTER.toMillis() * 6, TimeUnit.MILLISECONDS)) {
+                return p.exitValue();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        p.destroyForcibly();
+        try {
+            p.waitFor(KILL_AFTER.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return p.isAlive() ? -1 : p.exitValue();
+    }
+
+    private static Thread platformThread(String name, Runnable r) {
+        return Thread.ofPlatform().name(name).daemon(true).start(r);
+    }
+
+    private static void joinQuietly(Thread t, Duration timeout) {
+        try {
+            t.join(timeout);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -437,10 +519,6 @@ public final class StreamRunner {
         } catch (IOException ignored) {
             // process ended
         }
-    }
-
-    private static void sleep(Duration d) throws InterruptedException {
-        Thread.sleep(d.toMillis());
     }
 
     private static Duration min(Duration a, Duration b) {

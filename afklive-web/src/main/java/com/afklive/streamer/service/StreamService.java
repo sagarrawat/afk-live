@@ -61,13 +61,19 @@ public class StreamService {
     private PlanService planService;
     @Autowired
     private com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
+    @Autowired
+    private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepository;
 
     /** "all" (default: web and worker in one process), "web" or "worker". */
     @Value("${app.streaming.role:all}")
     private String role = "all";
 
     private final List<String> logBuffer = Collections.synchronizedList(new ArrayList<>());
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
+        Thread t = new Thread(r, "stream-timers");
+        t.setDaemon(true);
+        return t;
+    });
 
     public ApiResponse<StreamResponse> startStream(
             String username,
@@ -289,19 +295,28 @@ public class StreamService {
         if (stopAt != null && !stopAt.isAfter(ZonedDateTime.now())) {
             throw new IllegalArgumentException("Stop time must be in the future.");
         }
-        job.setStopAt(stopAt);
-        streamJobRepo.save(job);
+        // Targeted update: saving the whole entity could overwrite a stop or heartbeat written meanwhile.
+        if (streamJobRepo.updateStopAt(jobId, stopAt) != 1) {
+            throw new IllegalStateException("This stream isn't live.");
+        }
         return stopAt;
     }
 
     /** Stops streams whose scheduled stop time has passed. */
-    void stopDueStreams() {
+    public void stopDueStreams() {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
         for (StreamJob job : streamJobRepo.findAllByIsLiveTrueAndStopAtLessThanEqual(now)) {
             if (!StreamStates.STOP.equals(job.getDesiredState())) {
                 log.info("Scheduled stop reached for job {}", job.getId());
                 requestStop(job, "Scheduled stop");
             }
+        }
+        // Stops asked for while the job's worker was alive, whose worker then died before carrying them out.
+        for (Long id : streamJobRepo.findAbandonedStopIds(now.minus(HEARTBEAT_TIMEOUT))) {
+            streamJobRepo.findById(id).ifPresent(job -> {
+                log.warn("Ending job {}: stop requested but its worker is gone", id);
+                finalizeJob(id, job.getEndReason() != null ? job.getEndReason() : "Stopped");
+            });
         }
     }
 
@@ -321,23 +336,50 @@ public class StreamService {
      */
     public void finalizeJob(Long jobId, String reason, boolean failed) {
         ZonedDateTime end = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
+        Optional<StreamJob> before = streamJobRepo.findById(jobId);
+        if (before.isEmpty() || !before.get().isLive()) {
+            return;
+        }
+        // Only time actually on air is billed: a stream that never got past STARTING costs nothing.
+        String statusBefore = before.get().getStatus();
+        boolean wasOnAir = StreamStates.LIVE.equals(statusBefore) || StreamStates.RECONNECTING.equals(statusBefore);
         if (streamJobRepo.markEnded(jobId, end, reason, failed ? StreamStates.FAILED : StreamStates.ENDED) != 1) {
             return;
         }
-        streamJobRepo.findById(jobId).ifPresent(job -> {
+        StreamJob job = streamJobRepo.findById(jobId).orElseThrow();
+        if (wasOnAir) {
             String email = job.getUser().getEmail();
             com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
-            if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE) {
-                ZonedDateTime from = job.getLastBillingTime() != null ? job.getLastBillingTime() : job.getStartTime();
-                double increment = from == null ? 0 : charge(from, end);
-                job.setAccumulatedCost(job.getAccumulatedCost() + increment);
-                job.setCost(job.getAccumulatedCost());
-                streamJobRepo.save(job);
-                if (increment > 0) {
+            if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE && job.getLastBillingTime() != null) {
+                double increment = charge(job.getLastBillingTime(), end);
+                if (increment > 0 && streamJobRepo.addFinalBilling(jobId, increment, end, job.getLastBillingTime()) == 1) {
                     userService.addUnpaidBalance(email, increment);
                 }
             }
-        });
+        }
+        updateScheduledStream(job, reason, failed);
+    }
+
+    private void updateScheduledStream(StreamJob job, String reason, boolean failed) {
+        try {
+            if (job.getSpec() == null) {
+                return;
+            }
+            Long scheduledId = StreamSpec.fromJson(job.getSpec()).scheduledStreamId();
+            if (scheduledId == null) {
+                return;
+            }
+            scheduledStreamRepository.findById(scheduledId).ifPresent(s -> {
+                s.setStatus(failed ? com.afklive.streamer.model.ScheduledStream.StreamStatus.FAILED
+                        : com.afklive.streamer.model.ScheduledStream.StreamStatus.COMPLETED);
+                if (failed) {
+                    s.setErrorMessage(reason);
+                }
+                scheduledStreamRepository.save(s);
+            });
+        } catch (Exception e) {
+            log.warn("Could not update the schedule for job {}", job.getId(), e);
+        }
     }
 
     /** Pay-as-you-go: hourly rate in rupees. */
@@ -353,7 +395,7 @@ public class StreamService {
 
     /** Charges live pay-as-you-go streams every minute; conditional updates make it safe on any number of instances. */
     void processPeriodicBilling() {
-        for (StreamJob job : streamJobRepo.findAllByIsLiveTrue()) {
+        for (StreamJob job : streamJobRepo.findAllOnAir()) {
             try {
                 String email = job.getUser().getEmail();
                 com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
@@ -409,9 +451,7 @@ public class StreamService {
     // ------------------------------------------------------------------ admin log view
 
     public void addLog(String line) {
-        if (line != null) {
-            line = line.replaceAll("(rtmps?|srt)://[^\\s]+", "$1://[REDACTED]");
-        }
+        line = com.afklive.streamer.util.Redact.streamKeys(line);
         synchronized (logBuffer) {
             if (logBuffer.size() > 200) {
                 logBuffer.removeFirst();

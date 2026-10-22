@@ -42,32 +42,25 @@ public class StreamPreparer {
     }
 
     public Prepared prepare(long jobId, StreamSpec spec) throws IOException {
-        Path workDir = SafePaths.resolveInside(Paths.get(workDirRoot), "job-" + jobId);
+        // A folder per run, so cleaning up one run can never remove files another run is using.
+        Path workDir = SafePaths.resolveInside(Paths.get(workDirRoot),
+                "job-" + jobId + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
         Files.createDirectories(workDir);
 
-        Path video = workDir.resolve("video");
-        if (!Files.exists(video)) {
-            storageService.downloadFileToPath(spec.videoKey(), video);
-        }
+        Path video = download(spec.videoKey(), workDir.resolve("video"));
 
         Path music = null;
         if (spec.musicKey() != null) {
             if (spec.musicKey().startsWith("stock:")) {
                 music = audioService.getAudioPath(spec.musicKey().substring(6));
             } else {
-                music = workDir.resolve("music");
-                if (!Files.exists(music)) {
-                    storageService.downloadFileToPath(spec.musicKey(), music);
-                }
+                music = download(spec.musicKey(), workDir.resolve("music"));
             }
         }
 
         Path watermark = null;
         if (spec.watermarkKey() != null) {
-            watermark = workDir.resolve("watermark.png");
-            if (!Files.exists(watermark)) {
-                storageService.downloadFileToPath(spec.watermarkKey(), watermark);
-            }
+            watermark = download(spec.watermarkKey(), workDir.resolve("watermark.png"));
         }
 
         Path overlay = null;
@@ -96,6 +89,14 @@ public class StreamPreparer {
                 .toList();
         log.info("Prepared job {}: {} destinations, copy={}, height={}", jobId, relays.size(), copy, outputHeight);
         return new Prepared(workDir, encoder, relays, overlay);
+    }
+
+    /** Downloads to a temporary name and renames, so a half-finished download is never used. */
+    private Path download(String key, Path target) throws IOException {
+        Path partial = target.resolveSibling(target.getFileName() + ".part");
+        storageService.downloadFileToPath(key, partial);
+        Files.move(partial, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        return target;
     }
 
     /** Removes the job's downloaded files. */

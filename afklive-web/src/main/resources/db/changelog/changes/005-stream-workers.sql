@@ -17,9 +17,9 @@ ALTER TABLE stream_jobs ADD COLUMN last_error TEXT;
 
 -- Existing rows predate workers: anything still live is stale.
 UPDATE stream_jobs SET status = 'ENDED', desired_state = 'STOP',
-       is_live = FALSE, end_reason = COALESCE(end_reason, 'Migrated') WHERE status IS NULL;
+       is_live = FALSE, end_reason = COALESCE(end_reason, 'Migrated'),
+       end_time = COALESCE(end_time, last_billing_time, start_time) WHERE status IS NULL;
 
-CREATE INDEX idx_stream_jobs_status ON stream_jobs(status);
 CREATE INDEX idx_stream_jobs_worker ON stream_jobs(worker_id) WHERE is_live = TRUE;
 
 CREATE TABLE stream_job_destinations (

@@ -9,9 +9,8 @@ Wants=network-online.target
 User=afklive
 WorkingDirectory=/opt/afklive
 EnvironmentFile=/opt/afklive/afklive.env
-Environment=STREAMING_ROLE=web
-Environment=SPRING_PROFILES_ACTIVE=loki
-ExecStart=/usr/bin/java -Xmx1g -jar /opt/afklive/app.jar
+# Role and profiles are -D properties: they win over anything in afklive.env (EnvironmentFile overrides Environment=).
+ExecStart=/usr/bin/java -Xmx1g -Dapp.streaming.role=web -Dspring.profiles.active=loki -jar /opt/afklive/app.jar
 Restart=always
 RestartSec=5
 

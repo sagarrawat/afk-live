@@ -366,9 +366,9 @@ public class FFmpegCommandBuilder {
     public static List<String> buildRelayCommand(String destination) {
         String url = destinationUrl(destination);
         List<String> command = new ArrayList<>(List.of(ffmpegBinary(), "-hide_banner", "-loglevel", "warning", "-nostats",
-                // Our encoder's stream is known (H.264 + AAC, headers repeated), so 1 s of analysis is plenty;
-                // FFmpeg's default 5 s would delay every (re)connect.
-                "-analyzeduration", "1000000", "-probesize", "1000000",
+                // Enough analysis to cover a full 2 s GOP at high bitrates, so a relay that joins mid-stream
+                // always sees a keyframe with its SPS/PPS; less than FFmpeg's 5 s default to speed reconnects.
+                "-analyzeduration", "3000000", "-probesize", "8000000",
                 "-fflags", "+genpts", "-f", "mpegts", "-i", "pipe:0", "-map", "0", "-c", "copy"));
         String format = formatFor(url);
         if ("flv".equals(format)) {

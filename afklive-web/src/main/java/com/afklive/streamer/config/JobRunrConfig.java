@@ -41,7 +41,9 @@ public class JobRunrConfig {
         return applicationContext::getBean;
     }
 
-    @Bean
+    /** Background jobs (uploads, scheduled posts, scheduled streams) run on the web side, never on stream workers. */
+    @Bean(destroyMethod = "stop")
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("'${app.streaming.role:all}' != 'worker'")
     public BackgroundJobServer backgroundJobServer(StorageProvider storageProvider, JobActivator jobActivator) {
         BackgroundJobServer backgroundJobServer = new BackgroundJobServer(storageProvider, new JacksonJsonMapper(), jobActivator);
         backgroundJobServer.start();

@@ -62,6 +62,7 @@ class StreamLifecycleIntegrationTest extends PostgresIntegrationTest {
         StreamJob job = new StreamJob(owner, "key", "video.mp4", null, null, true, 999_999,
                 "t", "d", "private", ZonedDateTime.now(ZoneId.of("UTC")).minusHours(2), "YouTube", false);
         job.setLastBillingTime(ZonedDateTime.now(ZoneId.of("UTC")).minusMinutes(30));
+        job.setStatus("LIVE"); // on air, so billable
         return jobs.save(job);
     }
 

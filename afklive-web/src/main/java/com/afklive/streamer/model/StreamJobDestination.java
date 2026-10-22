@@ -11,6 +11,7 @@ import java.time.ZonedDateTime;
 
 /** One platform a stream is sent to, with its own state (each reconnects independently). */
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "stream_job_destinations")
 @Data
 @NoArgsConstructor
