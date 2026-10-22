@@ -36,4 +36,6 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     // History
     Page<StreamJob> findByUserEmailOrderByStartTimeDesc(String email, Pageable pageable);
+
+    List<StreamJob> findAllByIsLiveTrueAndStopAtLessThanEqual(java.time.ZonedDateTime time);
 }

@@ -31,7 +31,7 @@ class FFmpegCommandBuilderTest {
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command.toString()).contains("rtmp://a.rtmp.youtube.com:1935/live2/" + streamKey);
-        assertThat(command).contains("-map", "0:a?");
+        assertThat(command).contains("-map", "0:a:0");
         // Scaling dynamic
         assertThat(command.toString()).contains("scale=-2:min(ih\\,1080)");
     }

@@ -28,7 +28,7 @@ public class ScheduledStream {
     @JoinColumn(name = "media_asset_id")
     private MediaAsset mediaAsset;
 
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "scheduled_stream_destinations",
         joinColumns = @JoinColumn(name = "scheduled_stream_id"),
@@ -36,12 +36,6 @@ public class ScheduledStream {
     )
     private java.util.List<StreamDestination> destinations;
 
-    @Transient
-    @NotEmpty(message = "At least one destination required")
-    private List<String> streamKeys; // Backward compat for DTO
-
-    @jakarta.validation.constraints.NotNull(message = "Scheduled time is required")
-    @Future(message = "Scheduled time must be in the future")
     private ZonedDateTime scheduledTime;
 
     @Enumerated(EnumType.STRING)
@@ -66,23 +60,15 @@ public class ScheduledStream {
         return mediaAsset != null ? mediaAsset.getS3Key() : null;
     }
 
-    public void setVideoKey(String videoKey) {
-        // No-op or handle in service to lookup asset
-    }
-
     @com.fasterxml.jackson.annotation.JsonProperty("username")
     public String getUsername() {
         return user != null ? user.getUsername() : null;
     }
 
-    public void setUsername(String username) {
-        // no-op, use setUser
-    }
-
     public enum StreamStatus {
         PENDING,
-        RUNNING, // Currently active (might not need to track here if StreamJob does)
-        COMPLETED, // Successfully started
+        RUNNING, // Started successfully; the live stream itself is tracked as a StreamJob
+        COMPLETED,
         FAILED,
         CANCELLED
     }

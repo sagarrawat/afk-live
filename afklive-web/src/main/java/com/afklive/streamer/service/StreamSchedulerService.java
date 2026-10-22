@@ -1,6 +1,7 @@
 package com.afklive.streamer.service;
 
 import com.afklive.streamer.model.ScheduledStream;
+import com.afklive.streamer.model.StreamDestination;
 import com.afklive.streamer.repository.ScheduledStreamRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
 
+/** Starts scheduled streams when their time comes (run every minute by JobRunr). */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -18,48 +20,43 @@ public class StreamSchedulerService {
     private final ScheduledStreamRepository repository;
     private final StreamService streamService;
 
-    // Run via JobRunr
     public void processScheduledStreams() {
-        log.info("Checking for scheduled live streams...");
-        List<ScheduledStream> dueStreams = repository.findByStatusAndScheduledTimeLessThanEqual(
+        List<ScheduledStream> due = repository.findByStatusAndScheduledTimeLessThanEqual(
                 ScheduledStream.StreamStatus.PENDING, ZonedDateTime.now(ZoneId.of("UTC")));
-
-        for (ScheduledStream stream : dueStreams) {
-            startScheduledStream(stream);
+        for (ScheduledStream stream : due) {
+            if (repository.claim(stream.getId()) == 1) {
+                startScheduledStream(stream);
+            }
         }
     }
 
-    private void startScheduledStream(ScheduledStream stream) {
-        log.info("Starting scheduled stream ID: {} for user: {}", stream.getId(), stream.getUsername());
-
-        // Plan limits (concurrent streams, quality) are enforced inside startStream.
+    void startScheduledStream(ScheduledStream stream) {
+        log.info("Starting scheduled stream {} for {}", stream.getId(), stream.getUsername());
         try {
-            // We pass watermarkFile as null for now (not supported in scheduling yet unless we store path)
-            // If watermark was needed, we'd need to store the path in DB or S3 key.
-            // Assuming simplified scheduling for now.
-
+            List<String> keys = stream.getDestinations() == null ? List.of()
+                    : stream.getDestinations().stream().map(StreamDestination::getStreamKey).toList();
+            if (keys.isEmpty()) {
+                throw new IllegalStateException("No destinations left for this scheduled stream.");
+            }
+            if (stream.getVideoKey() == null) {
+                throw new IllegalStateException("The video for this scheduled stream was deleted.");
+            }
+            // Plan limits (concurrent streams, quality, credit) are enforced inside startStream.
             streamService.startStream(
                     stream.getUsername(),
-                    stream.getStreamKeys(),
+                    keys,
                     stream.getVideoKey(),
                     stream.getMusicName(),
                     stream.getMusicVolume(),
                     stream.getLoopCount(),
-                    null, // Watermark file (Multipart) not available here.
+                    null,  // watermark upload isn't stored for scheduled streams yet
                     stream.isMuteVideoAudio(),
                     stream.getStreamMode(),
-                    0,    // streamQuality (default)
-                    null, // Title
-                    null, // Description
-                    null, // Privacy
-                    false, // Overlay enabled
-                    null,   // Overlay template
-                    false // Auto Reply
-            );
-
-            stream.setStatus(ScheduledStream.StreamStatus.COMPLETED); // Marked as "Started" basically
-            log.info("Scheduled stream started successfully: {}", stream.getId());
-
+                    0,     // plan's maximum quality
+                    null, null, null,
+                    false, null, false);
+            stream.setStatus(ScheduledStream.StreamStatus.RUNNING);
+            stream.setErrorMessage(null);
         } catch (Exception e) {
             log.error("Failed to start scheduled stream {}", stream.getId(), e);
             stream.setStatus(ScheduledStream.StreamStatus.FAILED);

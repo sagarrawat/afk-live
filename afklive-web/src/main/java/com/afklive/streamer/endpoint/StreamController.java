@@ -40,7 +40,12 @@ public class StreamController {
     private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepo;
     @Autowired
     private com.afklive.streamer.repository.StreamJobRepository streamJobRepository;
+    @Autowired
     private FileStorageService storageService;
+    @Autowired
+    private com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
+    @Autowired
+    private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepository;
     @Autowired
     private ScheduledVideoRepository scheduledVideoRepository;
     @Autowired
@@ -239,22 +244,42 @@ public class StreamController {
     }
 
     @PostMapping("/stream/schedule")
-    public ResponseEntity<?> scheduleStream(@jakarta.validation.Valid @RequestBody com.afklive.streamer.model.ScheduledStream stream, Principal principal) {
+    public ResponseEntity<?> scheduleStream(@jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.ScheduleStreamRequest request, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
+        com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
 
-        stream.setUser(userService.getOrCreateUser(email));
+        var asset = mediaAssetRepository.findFirstByUserEmailAndS3Key(email, request.getVideoKey())
+                .orElseThrow(() -> new IllegalArgumentException("Video not found in your library."));
+        var destinations = streamDestinationRepository.findAllById(request.getDestinationIds()).stream()
+                .filter(d -> d.getUser().getId().equals(user.getId()))
+                .toList();
+        if (destinations.size() != new java.util.HashSet<>(request.getDestinationIds()).size()) {
+            throw new IllegalArgumentException("One or more destinations weren't found.");
+        }
+
+        com.afklive.streamer.model.ScheduledStream stream = new com.afklive.streamer.model.ScheduledStream();
+        stream.setUser(user);
+        stream.setMediaAsset(asset);
+        stream.setDestinations(new java.util.ArrayList<>(destinations));
+        stream.setScheduledTime(request.getScheduledTime());
+        stream.setMusicName(request.getMusicName());
+        stream.setMusicVolume(request.getMusicVolume());
+        stream.setLoopCount(request.getLoopCount());
+        stream.setStreamMode(request.getStreamMode());
+        stream.setMuteVideoAudio(request.isMuteVideoAudio());
         stream.setStatus(com.afklive.streamer.model.ScheduledStream.StreamStatus.PENDING);
 
         scheduledStreamRepo.save(stream);
-        return ResponseEntity.ok(ApiResponse.success("Stream Scheduled", stream));
+        return ResponseEntity.ok(ApiResponse.success("Stream scheduled", com.afklive.streamer.dto.ScheduledStreamView.of(stream)));
     }
 
     @GetMapping("/stream/scheduled")
     public ResponseEntity<?> getScheduledStreams(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String email = SecurityUtils.getEmail(principal);
-        return ResponseEntity.ok(ApiResponse.success("Success", scheduledStreamRepo.findByUserEmail(email)));
+        return ResponseEntity.ok(ApiResponse.success("Success", scheduledStreamRepo.findByUserEmail(email).stream()
+                .map(com.afklive.streamer.dto.ScheduledStreamView::of).toList()));
     }
 
     @GetMapping("/youtube/key")
@@ -342,18 +367,31 @@ public class StreamController {
     @PostMapping("/stream/{id}/stop-at")
     public ResponseEntity<?> setStreamEndTime(@PathVariable Long id, @jakarta.validation.Valid @RequestBody com.afklive.streamer.dto.StopStreamRequest request, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        java.time.ZoneId zone;
+        try {
+            zone = request.getTimeZone() == null || request.getTimeZone().isBlank()
+                    ? java.time.ZoneOffset.UTC : java.time.ZoneId.of(request.getTimeZone());
+        } catch (java.time.DateTimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Unknown time zone."));
+        }
+        java.time.ZonedDateTime stopAt = nextOccurrence(java.time.LocalTime.parse(request.getTime()), zone);
+        streamService.setStopAt(id, SecurityUtils.getEmail(principal), stopAt);
+        return ResponseEntity.ok(ApiResponse.success("Stream will stop at " + request.getTime(),
+                Map.of("stopAt", stopAt.toOffsetDateTime().toString())));
+    }
 
-        String timeStr = request.getTime(); // "HH:mm"
+    @DeleteMapping("/stream/{id}/stop-at")
+    public ResponseEntity<?> clearStreamEndTime(@PathVariable Long id, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
+        streamService.setStopAt(id, SecurityUtils.getEmail(principal), null);
+        return ResponseEntity.ok(ApiResponse.success("Scheduled stop cancelled", null));
+    }
 
-        // Here we would implement the actual scheduling logic using a ScheduledExecutorService
-        // that calls streamService.stopStream(id, email) at the calculated delay.
-        // For now, as per user plan, we will just acknowledge the request or mock it.
-        // In a real production scenario, this requires tracking the task handle to allow cancellation.
-
-        System.out.println("Scheduled stop for stream " + id + " at " + timeStr);
-
-        // Mock success
-        return ResponseEntity.ok(ApiResponse.success("Scheduled stop at " + timeStr, null));
+    /** The next time the clock in {@code zone} shows {@code time} (today if still ahead, else tomorrow). */
+    static java.time.ZonedDateTime nextOccurrence(java.time.LocalTime time, java.time.ZoneId zone) {
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(zone);
+        java.time.ZonedDateTime candidate = now.with(time).withSecond(0).withNano(0);
+        return candidate.isAfter(now) ? candidate : candidate.plusDays(1);
     }
 
     @GetMapping("/stream/history")

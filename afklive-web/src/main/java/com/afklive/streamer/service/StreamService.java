@@ -38,6 +38,8 @@ public class StreamService {
 
     // Store active streams: Job ID -> Process
     private final ConcurrentHashMap<Long, Process> activeStreams = new ConcurrentHashMap<>();
+    /** Why we asked a job's process to stop; absent means it exited on its own. */
+    private final ConcurrentHashMap<Long, String> stopReasons = new ConcurrentHashMap<>();
     @Autowired
     private UserFileService userFileService;
     @Autowired
@@ -56,6 +58,8 @@ public class StreamService {
     private PlanService planService;
     @Autowired
     private com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
+    @Autowired
+    private MediaProbe mediaProbe;
 
     private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
     private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
@@ -215,56 +219,33 @@ public class StreamService {
         int planMax = planService.getPlanConfig(user.getPlanType()).getMaxResolution();
         int maxHeight = (streamQuality > 0 && streamQuality < planMax) ? streamQuality : planMax;
 
-        // CHECK FOR OPTIMIZED VERSION
+        // CHECK FOR OPTIMIZED VERSION: a file normalized at upload can be sent without re-encoding
+        // (about 200x less CPU), but only if nothing has to be drawn on it and it fits the plan's cap.
+        MediaProbe.MediaInfo info = mediaProbe.probe(videoPath);
         boolean isOptimized = false;
-        if (streamMode.equals("original") && watermarkPath == null && musicPath == null) {
-            // Check if current file is already optimized (DB check)
-            boolean isCurrentOptimized = false;
+        if (streamMode.equals("original") && watermarkPath == null && musicPath == null && overlayTextPath == null) {
+            boolean markedOptimized = false;
             try {
-                // Efficient: find by S3 key directly
                 Optional<ScheduledVideo> currentVideoOpt = scheduledVideoRepository.findFirstByUserEmailAndS3Key(username, videoKey);
-
-                if (currentVideoOpt.isPresent()) {
-                    ScheduledVideo v = currentVideoOpt.get();
-                    if (v.getOptimizationStatus() == ScheduledVideo.OptimizationStatus.COMPLETED) {
-                         isCurrentOptimized = true;
-                    }
-                }
+                markedOptimized = currentVideoOpt.isPresent()
+                        && currentVideoOpt.get().getOptimizationStatus() == ScheduledVideo.OptimizationStatus.COMPLETED;
             } catch (Exception e) {
                 log.warn("Failed to check optimization status from DB", e);
             }
-
-            // Fallback: Check filename pattern if DB check failed or not found
-            if (!isCurrentOptimized) {
-                String fName = videoPath.getFileName().toString();
-                if (fName.contains("_portrait_") || fName.contains("_landscape_") || fName.contains("_optimized")) {
-                    isCurrentOptimized = true;
-                }
-            }
-
-            if (isCurrentOptimized) {
-                 log.info("Video detected as pre-optimized. Enabling Stream Copy mode.");
-                 isOptimized = true;
-            } else {
-                // Try to find a sibling optimized file (Legacy behavior)
-                String originalFileName = videoPath.getFileName().toString();
-                String baseName = originalFileName.toLowerCase().endsWith(".mp4") ? originalFileName.substring(0, originalFileName.length() - 4) : originalFileName;
-                Path optimizedPath = videoPath.resolveSibling(baseName + "_optimized.mp4");
-
-                if (Files.exists(optimizedPath)) {
-                    log.info("Found sibling optimized video version: {}", optimizedPath);
-                    videoPath = optimizedPath;
-                    isOptimized = true;
-                }
+            boolean fitsPlan = info.height() > 0 && info.height() <= maxHeight;
+            if (markedOptimized && "h264".equals(info.videoCodec()) && fitsPlan) {
+                log.info("Video is pre-optimized and within the plan cap; using stream copy.");
+                isOptimized = true;
             }
         }
+        boolean sourceHasAudio = info.hasAudio();
 
         List<Long> startedJobIds = new ArrayList<>();
         clearLogs();
 
         // Loop through keys to start individual processes
         for (String key : validKeys) {
-            List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, overlayTextPath);
+            List<String> command = FFmpegCommandBuilder.buildStreamCommand(videoPath, List.of(key), musicPath, musicVolume, loopCount, watermarkPath, muteVideoAudio, streamMode, maxHeight, isOptimized, overlayTextPath, sourceHasAudio);
 
             log.info("Starting stream for key [{}]: command [{}]", key, String.join(" ", command));
 
@@ -340,9 +321,13 @@ public class StreamService {
             }
 
             // 6. EXIT HANDLER (Auto-Update DB)
-            process.onExit().thenRun(() -> {
-                log.warn("Stream Process Exited for job {}", jobId);
-                finalizeJob(jobId);
+            process.onExit().thenAccept(exited -> {
+                String reason = stopReasons.remove(jobId);
+                if (reason == null) {
+                    reason = "Stream process exited unexpectedly (code " + exited.exitValue() + ")";
+                    log.warn("Stream process for job {} exited on its own with code {}", jobId, exited.exitValue());
+                }
+                finalizeJob(jobId, reason);
             });
         }
 
@@ -356,51 +341,117 @@ public class StreamService {
 
     public ApiResponse<?> stopAllStreams(String username) {
         List<StreamJob> jobs = streamJobRepo.findAllByUserEmailAndIsLiveTrue(username);
-
         if (jobs.isEmpty()) {
             return ApiResponse.success("No active streams found", null);
         }
-
-        int stopped = 0;
         for (StreamJob job : jobs) {
-            ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-            // finalizeJob is called by process.onExit()
-            stopped++;
+            stopJob(job, "Stopped by user");
         }
-
-        return ApiResponse.success(stopped + " streams stopped", null);
+        return ApiResponse.success(jobs.size() + " streams stopped", null);
     }
 
     public ApiResponse<?> stopStream(Long jobId, String username) {
-        Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
+        return stopStream(jobId, username, "Stopped by user");
+    }
 
+    ApiResponse<?> stopStream(Long jobId, String username, String reason) {
+        Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
         if (jobOpt.isPresent()) {
             StreamJob job = jobOpt.get();
             if (!job.getUser().getEmail().equals(username)) {
                 return ApiResponse.error("Unauthorized");
             }
-
             if (job.isLive()) {
-                ProcessHandle.of(job.getPid()).ifPresent(ProcessHandle::destroyForcibly);
-                // finalizeJob is called by process.onExit()
+                stopJob(job, reason);
                 return ApiResponse.success("Stream stopped", null);
             }
         }
         return ApiResponse.error("Stream not found or not active");
     }
 
+    /**
+     * Stops a job's process. Only processes this server started are signalled (never a bare PID,
+     * which the OS may have reused for something else). A job with no process here is stale and is
+     * closed in the database directly.
+     */
+    private void stopJob(StreamJob job, String reason) {
+        Process process = activeStreams.get(job.getId());
+        if (process == null || !process.isAlive()) {
+            finalizeJob(job.getId(), reason);
+            return;
+        }
+        stopReasons.put(job.getId(), reason);
+        process.destroy(); // SIGTERM: lets FFmpeg close the connection cleanly
+        scheduledExecutorService.schedule(() -> {
+            if (process.isAlive()) {
+                process.destroyForcibly();
+            }
+        }, 5, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /** Sets (or clears, with null) the time a running stream stops automatically. */
+    public java.time.ZonedDateTime setStopAt(Long jobId, String username, java.time.ZonedDateTime stopAt) {
+        StreamJob job = streamJobRepo.findById(jobId)
+                .filter(j -> j.getUser().getEmail().equals(username))
+                .orElseThrow(() -> new IllegalArgumentException("Stream not found."));
+        if (!job.isLive()) {
+            throw new IllegalStateException("This stream isn't live.");
+        }
+        if (stopAt != null && !stopAt.isAfter(java.time.ZonedDateTime.now())) {
+            throw new IllegalArgumentException("Stop time must be in the future.");
+        }
+        job.setStopAt(stopAt);
+        streamJobRepo.save(job);
+        return stopAt;
+    }
+
+    /** Stops streams whose scheduled stop time has passed. */
+    void stopDueStreams() {
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"));
+        for (StreamJob job : streamJobRepo.findAllByIsLiveTrueAndStopAtLessThanEqual(now)) {
+            log.info("Scheduled stop reached for job {}", job.getId());
+            stopJob(job, "Scheduled stop");
+        }
+    }
+
+    /**
+     * On startup, no stream processes exist yet, so any job still marked live was left over from
+     * a previous run (crash or restart). Close those jobs so they stop counting against plan limits,
+     * and don't bill the time the server was down.
+     */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void reconcileStaleJobs() {
+        for (StreamJob job : streamJobRepo.findAllByIsLiveTrue()) {
+            if (activeStreams.containsKey(job.getId())) {
+                continue;
+            }
+            job.setLive(false);
+            java.time.ZonedDateTime lastKnown = job.getLastBillingTime() != null ? job.getLastBillingTime() : job.getStartTime();
+            job.setEndTime(lastKnown != null ? lastKnown : java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
+            job.setEndReason("Server restarted");
+            if (job.getCost() == null) {
+                job.setCost(job.getAccumulatedCost());
+            }
+            streamJobRepo.save(job);
+            log.warn("Closed stale live job {} left from a previous run", job.getId());
+        }
+    }
+
     // Package-private for testing
     void finalizeJob(Long jobId) {
+        finalizeJob(jobId, "Ended");
+    }
+
+    void finalizeJob(Long jobId, String reason) {
         Optional<StreamJob> jobOpt = streamJobRepo.findById(jobId);
         if (jobOpt.isPresent()) {
             StreamJob job = jobOpt.get();
-            // Use computeIfPresent-like logic or simply check live status.
             if (job.isLive()) {
                 job.setLive(false);
                 job.setEndTime(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
+                job.setEndReason(reason);
 
-                // Calculate Final Cost Increment for Pay As You Go
-                // Get email via getter or direct user access
+                // Final pay-as-you-go charge since the last billing tick
                 String email = job.getUser().getEmail();
                 com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
 
@@ -412,9 +463,7 @@ public class StreamService {
                     if (durationSeconds > 0) {
                         double hours = durationSeconds / 3600.0;
                         double incrementalCost = hours * 1.25;
-
                         incrementalCost = Math.round(incrementalCost * 10000.0) / 10000.0;
-
                         job.setAccumulatedCost(job.getAccumulatedCost() + incrementalCost);
                         userService.addUnpaidBalance(email, incrementalCost);
                     }
@@ -422,19 +471,25 @@ public class StreamService {
                 }
 
                 streamJobRepo.save(job);
-
-                // Cleanup tasks
-                activeStreams.remove(jobId);
-                java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
-                if (task != null) task.cancel(true);
             }
         }
+        // Cleanup tasks
+        activeStreams.remove(jobId);
+        java.util.concurrent.ScheduledFuture<?> task = jobTasks.remove(jobId);
+        if (task != null) task.cancel(true);
     }
 
     // Called on startup to init scheduled billing
     @jakarta.annotation.PostConstruct
     public void initBillingTask() {
         billingTask = scheduledExecutorService.scheduleAtFixedRate(this::processPeriodicBilling, 1, 1, java.util.concurrent.TimeUnit.MINUTES);
+        scheduledExecutorService.scheduleAtFixedRate(() -> {
+            try {
+                stopDueStreams();
+            } catch (Exception e) {
+                log.error("Scheduled-stop check failed", e);
+            }
+        }, 15, 15, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     private void processPeriodicBilling() {
@@ -442,7 +497,6 @@ public class StreamService {
         // Ideally we filter by Pay As You Go users, but for now we iterate active streams and check user plan
         // Optimization: findAllByIsLiveTrue() then filter in memory or join in DB.
         // Assuming StreamJobRepository has findAllByIsLiveTrue()
-        List<StreamJob> activeJobs = streamJobRepo.findAllByIsLiveTrue(); // We might need to add this method to repo if not exists, or filter from getAll
         // Actually we have getActiveStreams(username). We need global active streams.
         // Let's use the activeStreams map which contains IDs of locally running processes
 
@@ -476,7 +530,7 @@ public class StreamService {
                         // Check Credit Limit
                         if (!userService.checkCreditLimit(email)) {
                             log.warn("User {} exceeded credit limit. Stopping stream {}.", email, jobId);
-                            stopStream(jobId, email);
+                            stopStream(jobId, email, "Credit limit reached");
                         }
                     }
                 }

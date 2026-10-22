@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/changes/001-initial-schema.sql
   - include:
       file: db/changelog/changes/002-dev-seed.sql
+  - include:
+      file: db/changelog/changes/003-stream-job-stop-and-reason.sql
