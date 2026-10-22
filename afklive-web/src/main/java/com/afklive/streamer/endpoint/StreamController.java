@@ -26,7 +26,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*") // Allow frontend to call backend freely for now
 public class StreamController {
 
     @Autowired
@@ -37,8 +36,6 @@ public class StreamController {
     private VideoConversionService videoConversionService;
     @Autowired
     private UserFileService userFileService;
-    @Autowired
-    private StreamManagerService streamManager;
     @Autowired
     private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepo;
     @Autowired
@@ -155,14 +152,8 @@ public class StreamController {
         String email = SecurityUtils.getEmail(principal);
 
         if (streamId != null) {
-            // Stop specific stream
-            // We don't release the global lock (streamManager.endStream) unless it was the last one?
-            // Actually streamManager lock is per-user boolean. With multiple streams, we should probably refactor StreamManager
-            // or just rely on quota. For now, we'll let StreamService handle the logic.
             return ResponseEntity.ok(streamService.stopStream(streamId, email));
         } else {
-            // Stop all
-            streamManager.endStream(email);
             return ResponseEntity.ok(streamService.stopAllStreams(email));
         }
     }

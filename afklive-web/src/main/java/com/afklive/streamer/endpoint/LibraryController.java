@@ -56,6 +56,7 @@ public class LibraryController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
 
+        requireImportUrl(request.getUrl(), java.util.Set.of("youtube.com", "youtu.be"));
         importService.downloadFromYouTube(request.getUrl(), username);
         return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
     }
@@ -65,6 +66,7 @@ public class LibraryController {
         if (principal == null) return ResponseEntity.status(401).body(ApiResponse.error("Unauthorized"));
         String username = SecurityUtils.getEmail(principal);
 
+        requireImportUrl(request.getUrl(), java.util.Set.of("drive.google.com", "docs.google.com"));
         importService.downloadFromGoogleDrive(request.getUrl(), username);
         return ResponseEntity.ok(ApiResponse.success("Import started. Check library shortly.", null));
     }
@@ -122,13 +124,25 @@ public class LibraryController {
                         while ((entry = zis.getNextEntry()) != null) {
                             if (entry.isDirectory() || !isVideo(entry.getName())) continue;
 
-                            // Approx size check (entry.getSize() is -1 if unknown)
-                            long size = entry.getSize() > 0 ? entry.getSize() : file.getSize(); // Fallback to zip size (imperfect)
-                            userService.checkStorageQuota(username, size);
-
-                            String s3Key = storageService.uploadFile(zis, entry.getName(), size);
+                            // Entry names and sizes come from the uploader and can't be trusted:
+                            // keep only the file name, and stop reading once the user's storage is full.
+                            String entryName = com.afklive.streamer.util.SafePaths.sanitizeFilename(entry.getName());
+                            long remaining = userService.remainingStorageBytes(username);
+                            com.afklive.streamer.util.LimitedInputStream limited =
+                                    new com.afklive.streamer.util.LimitedInputStream(zis, remaining);
+                            String s3Key;
+                            try {
+                                long declared = entry.getSize() > 0 ? entry.getSize() : -1;
+                                s3Key = storageService.uploadFile(limited, entryName, declared);
+                            } catch (RuntimeException ex) {
+                                if (ex.getCause() instanceof com.afklive.streamer.util.LimitedInputStream.LimitExceededException limitEx) {
+                                    throw new IllegalStateException(limitEx.getMessage());
+                                }
+                                throw ex;
+                            }
+                            long size = limited.getCount();
                             userService.updateStorageUsage(username, size);
-                            createLibraryEntry(username, entry.getName(), s3Key, size);
+                            createLibraryEntry(username, entryName, s3Key, size);
                             successCount++;
                         }
                     }
@@ -145,6 +159,16 @@ public class LibraryController {
         } catch (Exception e) {
             log.error("Bulk upload failed", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Bulk upload failed: " + e.getMessage()));
+        }
+    }
+
+    /** Import URLs are fetched by the server, so only public http(s) URLs on the expected sites are allowed. */
+    private static void requireImportUrl(String url, java.util.Set<String> allowedDomains) {
+        com.afklive.streamer.util.NetworkSafety.requireSafeWebUrl(url);
+        String host = java.net.URI.create(url.trim()).getHost().toLowerCase(java.util.Locale.ROOT);
+        boolean allowed = allowedDomains.stream().anyMatch(d -> host.equals(d) || host.endsWith("." + d));
+        if (!allowed) {
+            throw new IllegalArgumentException("Please paste a link from " + String.join(" or ", allowedDomains) + ".");
         }
     }
 

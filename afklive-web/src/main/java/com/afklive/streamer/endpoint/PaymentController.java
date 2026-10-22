@@ -10,6 +10,7 @@ import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.PaymentAuditRepository;
 import com.afklive.streamer.service.UserService;
+import com.afklive.streamer.util.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -56,49 +57,43 @@ public class PaymentController {
 
     @PostMapping("/initiate")
     public ResponseEntity<?> initiatePayment(@RequestBody(required = false) Map<String, Object> body, Principal principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Please sign in to continue."));
+        }
+        String planId = (body != null && body.get("planId") != null) ? body.get("planId").toString() : null;
+        if (planId == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
+        }
         try {
-            String planId = null;
-            if (body != null && body.containsKey("planId")) {
-                planId = body.get("planId").toString();
-            }
+            String email = SecurityUtils.getEmail(principal);
+            User user = userService.getOrCreateUser(email);
 
-            long amount = 100; // Default fallback
-            if (planId != null) {
-                if ("BALANCE_CLEAR".equals(planId)) {
-                    if (body != null && body.containsKey("amount")) {
-                        amount = Long.parseLong(body.get("amount").toString());
-                        if (amount <= 0) {
-                            return ResponseEntity.badRequest().body(Map.of("message", "Amount must be positive"));
-                        }
-                    } else {
-                        return ResponseEntity.badRequest().body(Map.of("message", "Amount required for balance clear"));
-                    }
-                } else {
-                    try {
-                        PlanType plan = PlanType.valueOf(planId);
-                        if (plan == PlanType.ESSENTIALS) {
-                            amount = 19900; // 199 INR
-                        }
-                    } catch (IllegalArgumentException e) {
-                        return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
-                    }
+            // The amount is always decided here, never taken from the request.
+            long amount;
+            if ("BALANCE_CLEAR".equals(planId)) {
+                amount = Math.round(user.getUnpaidBalance() * 100);
+                if (amount <= 0) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "You have no outstanding balance."));
                 }
-            } else if (body != null && body.containsKey("amount")) {
-                amount = Long.parseLong(body.get("amount").toString());
+            } else {
+                PlanType plan;
+                try {
+                    plan = PlanType.valueOf(planId);
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
+                }
+                if (plan != PlanType.ESSENTIALS) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "This plan can't be purchased."));
+                }
+                amount = 19900; // 199 INR; pricing moves to plan config with the billing rework
             }
 
             String merchantTransactionId = "MT" + UUID.randomUUID().toString().substring(0, 30).replace("-", "");
-            String userId = (principal != null) ? principal.getName() : "test-user-" + UUID.randomUUID().toString().substring(0, 8);
+            log.info("Initiating payment via SDK V2: TxnId={}, User={}, Plan={}", merchantTransactionId, email, planId);
 
-            log.info("Initiating payment via SDK V2: TxnId={}, User={}, Plan={}", merchantTransactionId, userId, planId);
-
-            // Audit
-            PaymentAudit audit = new PaymentAudit(merchantTransactionId, userId, amount, "INITIATED");
+            PaymentAudit audit = new PaymentAudit(merchantTransactionId, email, amount, "INITIATED");
             audit.setPlanId(planId);
-            if (principal != null) {
-                User user = userService.getOrCreateUser(principal.getName());
-                audit.setUser(user);
-            }
+            audit.setUser(user);
             paymentAuditRepository.save(audit);
 
             StandardCheckoutPayRequest payRequest = StandardCheckoutPayRequest.builder()
@@ -108,13 +103,11 @@ public class PaymentController {
                     .build();
 
             StandardCheckoutPayResponse response = phonePeClient.pay(payRequest);
-            String url = response.getRedirectUrl();
-
-            return ResponseEntity.ok(Map.of("redirectUrl", url));
+            return ResponseEntity.ok(Map.of("redirectUrl", response.getRedirectUrl()));
 
         } catch (Exception e) {
             log.error("Error initiating payment via SDK", e);
-            return ResponseEntity.internalServerError().body(Map.of("message", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("message", "Could not start the payment. Please try again."));
         }
     }
 

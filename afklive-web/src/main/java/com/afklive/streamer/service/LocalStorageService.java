@@ -14,6 +14,8 @@ import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afklive.streamer.util.SafePaths;
+
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 
@@ -29,12 +31,17 @@ public class LocalStorageService implements FileStorageService {
 
     @Override
     public String uploadFile(InputStream inputStream, String originalFilename, long contentLength) {
-        String key = UUID.randomUUID().toString() + "_" + originalFilename;
+        String key = UUID.randomUUID().toString() + "_" + SafePaths.sanitizeFilename(originalFilename);
+        Path destinationFile = resolveKey(key);
         try {
-            Path destinationFile = this.rootLocation.resolve(key).normalize().toAbsolutePath();
             Files.copy(inputStream, destinationFile, StandardCopyOption.REPLACE_EXISTING);
             return key;
         } catch (IOException e) {
+            try {
+                Files.deleteIfExists(destinationFile); // don't leave a partial file behind
+            } catch (IOException ignored) {
+                // best effort
+            }
             throw new RuntimeException("Failed to store file", e);
         }
     }
@@ -42,7 +49,7 @@ public class LocalStorageService implements FileStorageService {
     @Override
     public InputStream downloadFile(String key) {
         try {
-            Path file = rootLocation.resolve(key);
+            Path file = resolveKey(key);
             if (!Files.exists(file)) {
                  throw new RuntimeException("File not found: " + key);
             }
@@ -55,7 +62,7 @@ public class LocalStorageService implements FileStorageService {
     @Override
     public void downloadFileToPath(String key, Path destination) {
         try {
-            Path source = rootLocation.resolve(key);
+            Path source = resolveKey(key);
             if (!Files.exists(source)) {
                  throw new RuntimeException("File not found: " + key);
             }
@@ -67,7 +74,7 @@ public class LocalStorageService implements FileStorageService {
 
     @Override
     public Resource loadFileAsResource(String key) {
-        Path file = rootLocation.resolve(key);
+        Path file = resolveKey(key);
         if (!Files.exists(file)) {
             throw new RuntimeException("File not found: " + key);
         }
@@ -77,11 +84,16 @@ public class LocalStorageService implements FileStorageService {
     @Override
     public void deleteFile(String key) {
         try {
-            Path file = rootLocation.resolve(key);
+            Path file = resolveKey(key);
             Files.deleteIfExists(file);
         } catch (IOException e) {
             throw new RuntimeException("Failed to delete file", e);
         }
+    }
+
+    /** Resolves a storage key inside the storage root; rejects keys that would escape it. */
+    private Path resolveKey(String key) {
+        return SafePaths.resolveInside(rootLocation, key);
     }
 
     @Override

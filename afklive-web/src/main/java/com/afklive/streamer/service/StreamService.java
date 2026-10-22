@@ -54,6 +54,8 @@ public class StreamService {
     private com.afklive.streamer.repository.StreamDestinationRepository streamDestinationRepo;
     @Autowired
     private PlanService planService;
+    @Autowired
+    private com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
 
     private final java.util.concurrent.ScheduledExecutorService scheduledExecutorService = java.util.concurrent.Executors.newScheduledThreadPool(5);
     private final ConcurrentHashMap<Long, java.util.concurrent.ScheduledFuture<?>> jobTasks = new ConcurrentHashMap<>();
@@ -97,38 +99,9 @@ public class StreamService {
              throw new IllegalArgumentException("At least one valid destination stream key is required.");
         }
 
-        // Validate Keys (SSRF Protection)
+        // Validate destinations: bare keys or public rtmp/rtmps/srt URLs only (SSRF protection)
         for (String key : validKeys) {
-             if (key.startsWith("rtmp://") || key.startsWith("rtmps://")) {
-                  try {
-                      java.net.URI uri = new java.net.URI(key);
-                      String host = uri.getHost();
-                      if (host == null) throw new IllegalArgumentException("Invalid Stream URL");
-
-                      // Remove brackets from IPv6 if present
-                      if (host.startsWith("[") && host.endsWith("]")) {
-                          host = host.substring(1, host.length() - 1);
-                      }
-
-                      if (host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("::1") || host.startsWith("192.168.") || host.startsWith("10.")) {
-                           throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
-                      }
-
-                      if (host.startsWith("172.")) {
-                          String[] parts = host.split("\\.");
-                          if (parts.length >= 2) {
-                              try {
-                                  int second = Integer.parseInt(parts[1]);
-                                  if (second >= 16 && second <= 31) {
-                                      throw new IllegalArgumentException("Streaming to local/private network is not allowed.");
-                                  }
-                              } catch (NumberFormatException ignored) {}
-                          }
-                      }
-                  } catch (java.net.URISyntaxException e) {
-                      throw new IllegalArgumentException("Invalid Stream URL syntax");
-                  }
-             }
+            com.afklive.streamer.util.NetworkSafety.requireSafeStreamDestination(key);
         }
 
         // 1. SAFETY CHECK: Check DB to see if this user is already live
@@ -170,10 +143,14 @@ public class StreamService {
             }
         }
 
-        // 2. Resolve Paths & Download from S3
+        // 2. Resolve Paths & Download from storage. The video must be in this user's own library.
+        if (videoKey == null || videoKey.isBlank()
+                || mediaAssetRepository.findFirstByUserEmailAndS3Key(username, videoKey).isEmpty()) {
+            throw new IllegalArgumentException("Video not found in your library.");
+        }
         Path userDir = userFileService.getUserUploadDir(username);
         // We use the key as filename prefix to avoid collisions
-        Path videoPath = userDir.resolve("stream_" + videoKey).toAbsolutePath();
+        Path videoPath = com.afklive.streamer.util.SafePaths.resolveInside(userDir, "stream_" + videoKey);
 
         if (!java.nio.file.Files.exists(videoPath)) {
             log.info("Downloading video from Storage: {}", videoKey);
@@ -181,11 +158,7 @@ public class StreamService {
                 storageService.downloadFileToPath(videoKey, videoPath);
             } catch (Exception e) {
                 log.error("Failed to download video from Storage", e);
-                // Fallback: Check if it's a local file (legacy support)
-                videoPath = userDir.resolve(videoKey).toAbsolutePath();
-                if (!java.nio.file.Files.exists(videoPath)) {
-                    throw new IOException("Video not found in Storage or local storage: " + videoKey);
-                }
+                throw new IOException("Video could not be loaded from storage: " + videoKey);
             }
         }
         

@@ -44,6 +44,13 @@ public class UserService {
         }
     }
 
+    /** Bytes the user can still store under their plan (never negative). */
+    public long remainingStorageBytes(String email) {
+        User user = getOrCreateUser(email);
+        long limit = planService.getPlanConfig(user.getPlanType()).getMaxStorageBytes();
+        return Math.max(0, limit - user.getUsedStorageBytes());
+    }
+
     @Transactional
     public void updateStorageUsage(String email, long delta) {
         User user = getOrCreateUser(email);

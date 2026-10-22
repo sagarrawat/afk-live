@@ -75,10 +75,6 @@
             <div style="grid-column: 1/-1; text-align: center;">Loading...</div>
         </div>
 
-        <div style="margin-top: 50px; text-align: center;">
-            <p style="color:#666; margin-bottom:10px;">Developer Sandbox</p>
-            <button class="btn btn-outline" id="btnTestPayment" onclick="initiateTestPayment()">Test Payment (₹1.00)</button>
-        </div>
     </div>
 </div>
 
@@ -131,7 +127,7 @@
     </div>
 </footer>
 
-<!-- Mock Payment Modal -->
+<!-- Payment confirmation: continues to the payment provider's checkout -->
 <div id="paymentModal" class="payment-modal">
     <div class="payment-box">
         <h2>Confirm Subscription</h2>
@@ -142,10 +138,10 @@
                 <strong id="paymentAmount">$0.00</strong>
             </div>
             <div style="font-size: 0.9rem; color: #666;">
-                <i class="fa-solid fa-credit-card"></i> **** **** **** 4242
+                You'll be taken to secure checkout to pay.
             </div>
         </div>
-        <button id="btnConfirmPayment" class="btn btn-primary btn-block btn-lg" onclick="processPayment()">Pay & Upgrade</button>
+        <button id="btnConfirmPayment" class="btn btn-primary btn-block btn-lg" onclick="processPayment()">Continue to payment</button>
         <button class="btn btn-text" onclick="closePaymentModal()" style="margin-top: 10px;">Cancel</button>
     </div>
 </div>
@@ -248,29 +244,27 @@
         const btn = document.getElementById('btnConfirmPayment');
         const originalText = btn.innerText;
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
-
-        // Mock delay
-        await new Promise(r => setTimeout(r, 1500));
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Redirecting...';
 
         try {
             const headers = { 'Content-Type': 'application/json' };
             const csrfToken = getCookie('XSRF-TOKEN');
             if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
 
-            const res = await fetch('/api/pricing/upgrade', {
+            const res = await fetch('/api/payment/initiate', {
                 method: 'POST',
                 headers: headers,
                 body: JSON.stringify({ planId: selectedPlanId })
             });
+            if (res.status === 401 || res.redirected) {
+                window.location.href = '/login';
+                return;
+            }
             const data = await res.json();
-
-            if (res.ok) {
-                showToast("Payment Successful! Plan Upgraded.", "success");
-                closePaymentModal();
-                setTimeout(() => window.location.reload(), 1500);
+            if (res.ok && data.redirectUrl) {
+                window.location.href = data.redirectUrl;
             } else {
-                showToast(data.message || "Upgrade failed", "error");
+                showToast(data.message || "Could not start the payment", "error");
                 btn.disabled = false;
                 btn.innerText = originalText;
             }
@@ -289,47 +283,6 @@
     // Init
     loadPricing('US');
 
-    async function initiateTestPayment() {
-        const btn = document.getElementById('btnTestPayment');
-        const originalText = btn.innerText;
-        btn.disabled = true;
-        btn.innerText = 'Processing...';
-
-        try {
-            const headers = { 'Content-Type': 'application/json' };
-            const csrfToken = getCookie('XSRF-TOKEN');
-            if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
-
-            const res = await fetch('/api/payment/initiate', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({ amount: 100 })
-            });
-            const data = await res.json();
-
-            if (res.ok && data.redirectUrl) {
-                window.location.href = data.redirectUrl;
-            } else {
-                // If toast.js is available
-                if (typeof showToast === 'function') {
-                    showToast(data.message || 'Payment initiation failed', 'error');
-                } else {
-                    alert(data.message || 'Payment initiation failed');
-                }
-                btn.disabled = false;
-                btn.innerText = originalText;
-            }
-        } catch (e) {
-            console.error(e);
-            if (typeof showToast === 'function') {
-                showToast('Network error', 'error');
-            } else {
-                alert('Network error');
-            }
-            btn.disabled = false;
-            btn.innerText = originalText;
-        }
-    }
 </script>
 
 </body>

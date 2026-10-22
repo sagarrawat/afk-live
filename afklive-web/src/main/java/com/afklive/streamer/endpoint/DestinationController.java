@@ -42,6 +42,8 @@ public class DestinationController {
         if (name == null || key == null) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Name and Key are required"));
         }
+        key = key.trim();
+        com.afklive.streamer.util.NetworkSafety.requireSafeStreamDestination(key);
 
         if (!destinationRepository.findByStreamKeyAndUser(key, user).isEmpty()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Stream key already exists"));
@@ -82,7 +84,8 @@ public class DestinationController {
                     }
                     if (body.containsKey("name")) dest.setName((String) body.get("name"));
                     if (body.containsKey("key")) {
-                        String newKey = (String) body.get("key");
+                        String newKey = body.get("key") == null ? null : ((String) body.get("key")).trim();
+                        com.afklive.streamer.util.NetworkSafety.requireSafeStreamDestination(newKey);
                         boolean exists = destinationRepository.findByStreamKeyAndUser(newKey, dest.getUser())
                                 .stream()
                                 .anyMatch(d -> !d.getId().equals(dest.getId()));
