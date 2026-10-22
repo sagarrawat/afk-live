@@ -66,22 +66,6 @@ class StreamLifecycleIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void jobsLeftLiveByAPreviousRunAreClosedOnStartupWithoutBillingDowntime() {
-        User owner = account("restart@example.com");
-        StreamJob stale = liveJob(owner);
-        ZonedDateTime lastBilled = stale.getLastBillingTime();
-
-        streamService.reconcileStaleJobs();
-
-        StreamJob after = jobs.findById(stale.getId()).orElseThrow();
-        assertThat(after.isLive()).isFalse();
-        assertThat(after.getEndReason()).isEqualTo("Server restarted");
-        // Ended at the last billed moment, not "now": downtime isn't charged.
-        assertThat(java.time.Duration.between(lastBilled.toInstant(), after.getEndTime().toInstant()).abs().toMillis()).isLessThan(1);
-        assertThat(users.findByEmail("restart@example.com").orElseThrow().getUnpaidBalance()).isZero();
-    }
-
-    @Test
     void stoppingAJobWithNoProcessHereClosesItInTheDatabase() {
         User owner = account("pid@example.com");
         StreamJob stale = liveJob(owner); // pid 999999 is not ours

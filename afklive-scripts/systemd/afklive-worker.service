@@ -1,0 +1,24 @@
+# Stream worker: runs FFmpeg for live streams. Deployed separately and rarely (see docs/operations.md).
+# On restart it resumes its own streams (same STREAMING_WORKER_ID); if it never returns, another
+# worker takes them over within about a minute.
+# Install: sudo cp afklive-worker.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now afklive-worker
+[Unit]
+Description=AFK Live stream worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# A separate user lets the egress firewall (afklive-scripts/worker-egress.nft) apply to FFmpeg only.
+User=afklive-worker
+WorkingDirectory=/opt/afklive/worker
+EnvironmentFile=/opt/afklive/afklive.env
+Environment=SPRING_PROFILES_ACTIVE=worker,loki
+Environment=STREAMING_WORKER_ID=%H
+ExecStart=/usr/bin/java -Xmx512m -jar /opt/afklive/worker/app.jar
+# Give running streams time to close cleanly on stop.
+TimeoutStopSec=20
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

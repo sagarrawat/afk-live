@@ -1,0 +1,22 @@
+# Egress firewall for the stream worker user (nftables).
+#
+# The app checks that stream destinations and imports resolve to public addresses, but FFmpeg
+# resolves the host again when it connects (DNS rebinding could point it inward at that moment).
+# This rule makes that impossible at the network level: processes run as "afklive-worker" can't
+# reach private, link-local (cloud metadata) or loopback addresses, except the database and storage
+# they need, which you list below.
+#
+# Install:  sudo nft -f /opt/afklive/worker-egress.nft   (and add it to /etc/nftables.conf to persist)
+
+table inet afklive_worker_egress {
+    chain output {
+        type filter hook output priority 0; policy accept;
+
+        # Allow what the worker legitimately needs on private addresses (edit to match your setup):
+        meta skuid "afklive-worker" ip daddr 127.0.0.1 tcp dport 5432 accept   # PostgreSQL on this host
+        meta skuid "afklive-worker" ct state established,related accept
+
+        meta skuid "afklive-worker" ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/3 } reject
+        meta skuid "afklive-worker" ip6 daddr { ::1, fc00::/7, fe80::/10, 64:ff9b::/96 } reject
+    }
+}

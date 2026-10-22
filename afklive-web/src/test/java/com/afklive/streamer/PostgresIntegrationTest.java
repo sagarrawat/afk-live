@@ -35,5 +35,7 @@ public abstract class PostgresIntegrationTest {
         registry.add("spring.datasource.url", () -> POSTGRES.getJdbcUrl("postgres", "postgres"));
         registry.add("spring.datasource.username", () -> "postgres");
         registry.add("spring.datasource.password", () -> "postgres");
+        // Tests drive the stream worker explicitly (StreamWorker.tick) instead of a background loop.
+        registry.add("app.streaming.worker.auto-start", () -> "false");
     }
 }

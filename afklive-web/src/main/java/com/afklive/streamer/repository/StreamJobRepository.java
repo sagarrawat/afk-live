@@ -45,10 +45,15 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
      */
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
-    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.isLive = false, j.endTime = :endTime, j.endReason = :reason WHERE j.id = :id AND j.isLive = true")
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.isLive = false, j.endTime = :endTime, j.endReason = :reason, j.status = :status, j.desiredState = 'STOP' WHERE j.id = :id AND j.isLive = true")
     int markEnded(@org.springframework.data.repository.query.Param("id") Long id,
                   @org.springframework.data.repository.query.Param("endTime") java.time.ZonedDateTime endTime,
-                  @org.springframework.data.repository.query.Param("reason") String reason);
+                  @org.springframework.data.repository.query.Param("reason") String reason,
+                  @org.springframework.data.repository.query.Param("status") String status);
+
+    default int markEnded(Long id, java.time.ZonedDateTime endTime, String reason) {
+        return markEnded(id, endTime, reason, com.afklive.streamer.streaming.StreamStates.ENDED);
+    }
 
     /**
      * Adds a billing increment only if the job is still live and nobody billed it since {@code previous}.
@@ -61,4 +66,51 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
                    @org.springframework.data.repository.query.Param("increment") double increment,
                    @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
                    @org.springframework.data.repository.query.Param("previous") java.time.ZonedDateTime previous);
+
+    // ---- worker coordination (all conditional, so concurrent workers never both own a job) ----
+
+    /** Web asks for a stop; the reason is kept so the worker records it. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.desiredState = 'STOP', j.endReason = :reason WHERE j.id = :id AND j.isLive = true")
+    int requestStop(@org.springframework.data.repository.query.Param("id") Long id,
+                    @org.springframework.data.repository.query.Param("reason") String reason);
+
+    @org.springframework.data.jpa.repository.Query("SELECT j.id FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NULL ORDER BY j.startTime")
+    List<Long> findUnclaimedIds();
+
+    /** Jobs whose worker stopped reporting: candidates for takeover. */
+    @org.springframework.data.jpa.repository.Query("SELECT j.id FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NOT NULL AND (j.heartbeatAt IS NULL OR j.heartbeatAt < :cutoff)")
+    List<Long> findOrphanIds(@org.springframework.data.repository.query.Param("cutoff") java.time.ZonedDateTime cutoff);
+
+    List<StreamJob> findAllByWorkerIdAndIsLiveTrue(String workerId);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = :worker, j.heartbeatAt = :now WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NULL")
+    int claim(@org.springframework.data.repository.query.Param("id") Long id,
+              @org.springframework.data.repository.query.Param("worker") String worker,
+              @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = :worker, j.heartbeatAt = :now, j.restarts = j.restarts + 1 WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND (j.heartbeatAt IS NULL OR j.heartbeatAt < :cutoff)")
+    int takeOver(@org.springframework.data.repository.query.Param("id") Long id,
+                 @org.springframework.data.repository.query.Param("worker") String worker,
+                 @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                 @org.springframework.data.repository.query.Param("cutoff") java.time.ZonedDateTime cutoff);
+
+    /** Worker reports health; returns 0 if this worker no longer owns the job (it must stop its copy). */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.heartbeatAt = :now, j.status = :status, j.bitrateKbps = :bitrate, j.fps = :fps, j.speed = :speed, j.droppedFrames = :drops, j.lastError = :error WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true")
+    int heartbeat(@org.springframework.data.repository.query.Param("id") Long id,
+                  @org.springframework.data.repository.query.Param("worker") String worker,
+                  @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                  @org.springframework.data.repository.query.Param("status") String status,
+                  @org.springframework.data.repository.query.Param("bitrate") Double bitrate,
+                  @org.springframework.data.repository.query.Param("fps") Double fps,
+                  @org.springframework.data.repository.query.Param("speed") Double speed,
+                  @org.springframework.data.repository.query.Param("drops") Long drops,
+                  @org.springframework.data.repository.query.Param("error") String error);
 }

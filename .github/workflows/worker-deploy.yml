@@ -1,0 +1,42 @@
+name: Deploy stream worker
+
+# Manual on purpose: restarting a worker briefly interrupts the streams it runs (it resumes them
+# on start). Deploy the worker only when streaming code changed, ideally at a quiet hour.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build and test
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg && mvn -B verify -pl afklive-web -am
+
+      - name: Copy JAR to the worker
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "afklive-web/target/app.jar"
+          target: "/opt/afklive/worker/"
+          strip_components: 2
+
+      - name: Restart worker
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            sudo systemctl restart afklive-worker

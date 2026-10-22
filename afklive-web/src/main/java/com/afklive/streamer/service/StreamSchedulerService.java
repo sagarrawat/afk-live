@@ -54,7 +54,8 @@ public class StreamSchedulerService {
                     stream.getStreamMode(),
                     0,     // plan's maximum quality
                     null, null, null,
-                    false, null, false);
+                    false, null, false,
+                    stream.getId()); // the worker marks the schedule COMPLETED/FAILED when the stream ends
             stream.setStatus(ScheduledStream.StreamStatus.RUNNING);
             stream.setErrorMessage(null);
         } catch (Exception e) {
