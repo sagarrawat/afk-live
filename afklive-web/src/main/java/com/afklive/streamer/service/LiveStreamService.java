@@ -52,6 +52,7 @@ public class LiveStreamService {
     private final StreamService streamService;
     private final UserRepository users;
     private final IngestService ingest;
+    private final NotificationService notifications;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -441,6 +442,11 @@ public class LiveStreamService {
         Preflight pf = preflight(email, id);
         if (!pf.ok()) {
             String first = pf.checks().stream().filter(c -> !c.ok()).map(Check::message).findFirst().orElse("Pre-flight failed.");
+            pf.checks().stream().filter(c -> !c.ok() && Set.of("concurrency", "quality", "balance", "capacity").contains(c.id()))
+                    .findFirst().ifPresent(limit -> notifications.notify(owner, new NotificationService.Alert(
+                            NotificationService.Types.PLAN_LIMIT, Notification.Level.INFO, id, "Plan limit reached",
+                            limit.message() + " Upgrade to remove this limit.", "/pricing", "plan-limit:" + limit.id(),
+                            java.time.Duration.ofDays(1), true)));
             throw new PreflightFailedException(first, pf);
         }
         LiveStream s = get(email, id);

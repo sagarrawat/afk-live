@@ -41,6 +41,10 @@ public class User {
     private double unpaidBalance = 0.0;
     private double creditLimit = 50.0;
 
+    /** NT-1/NT-2: send alerts by email as well as in the app. */
+    @Column(name = "email_alerts", nullable = false)
+    private boolean emailAlerts = true;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UserSettings settings;
 
@@ -245,5 +249,13 @@ public class User {
 
     public void setChannels(java.util.List<SocialChannel> channels) {
         this.channels = channels;
+    }
+
+    public boolean isEmailAlerts() {
+        return emailAlerts;
+    }
+
+    public void setEmailAlerts(boolean emailAlerts) {
+        this.emailAlerts = emailAlerts;
     }
 }

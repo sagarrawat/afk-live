@@ -38,6 +38,9 @@ public class PaymentService {
     @Value("${app.base-url:http://localhost:8080}")
     private String baseUrl;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.afklive.streamer.service.NotificationService notifications;
+
     /** Creates an order for the user and returns the provider checkout URL. */
     public String startCheckout(String email, String planId) {
         User user = userService.getOrCreateUser(email);
@@ -105,6 +108,13 @@ public class PaymentService {
         if (state.failed()) {
             audit.setStatus(FAILED);
             audits.save(audit);
+            if (notifications != null) {
+                notifications.notify(audit.getMerchantUserId(), new com.afklive.streamer.service.NotificationService.Alert(
+                        com.afklive.streamer.service.NotificationService.Types.PAYMENT_FAILED,
+                        com.afklive.streamer.model.Notification.Level.ERROR, null, "Your payment didn't go through",
+                        "No money was taken, or it will be refunded by your bank. Try again from Billing.", "/settings#billing",
+                        "payment:" + orderId, java.time.Duration.ofDays(1), true));
+            }
             return FAILED;
         }
         return INITIATED;

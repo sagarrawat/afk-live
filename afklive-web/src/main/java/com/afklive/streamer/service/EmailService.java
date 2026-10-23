@@ -169,10 +169,33 @@ public class EmailService {
         sendEmail(supportEmail, subject, html);
     }
 
-    private void sendEmail(String to, String subject, String htmlContent) {
+    /**
+     * A stream or account alert. Every text value is escaped (stream names come from users).
+     * Returns whether the email was handed to the mail service.
+     */
+    public boolean sendAlert(String to, String subject, String title, String body, String link) {
+        String content = "<p>" + escape(body) + "</p>"
+                + (link == null ? "" : "<p><a href='" + escape(baseUrl + link) + "' style='display:inline-block;background:#5b8cff;"
+                + "color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600'>Open AFK Live</a></p>")
+                + "<p style='font-size:13px;color:#999'>You can turn alert emails off in Settings.</p>";
+        return sendEmail(to, subject, createBaseHtml(escape(title), content));
+    }
+
+    static String escape(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
+    private boolean sendEmail(String to, String subject, String htmlContent) {
         if (to == null || to.isEmpty()) {
             log.warn("Skipping email notification: No recipient address.");
-            return;
+            return false;
+        }
+        if (zeptoMailUrl == null || zeptoMailUrl.isBlank()) {
+            log.debug("Email is not configured; not sending \"{}\"", subject);
+            return false;
         }
 
         try {
@@ -195,9 +218,10 @@ public class EmailService {
 
             restTemplate.postForObject(zeptoMailUrl, entity, String.class);
             log.info("Email sent to {} via ZeptoMail", to);
-
+            return true;
         } catch (Exception e) {
             log.warn("Failed to send email to {}: {}", to, e.getMessage());
+            return false;
         }
     }
 }
