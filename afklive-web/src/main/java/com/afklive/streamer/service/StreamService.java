@@ -285,7 +285,7 @@ public class StreamService {
      * Asks the worker running the job to stop it. If no live worker owns it (not yet claimed, or
      * its worker is gone), the job is ended here, since nothing else will.
      */
-    void requestStop(StreamJob job, String reason) {
+    public void requestStop(StreamJob job, String reason) {
         streamJobRepo.requestStop(job.getId(), reason);
         ZonedDateTime cutoff = ZonedDateTime.now(ZoneId.of("UTC")).minus(HEARTBEAT_TIMEOUT);
         boolean noLiveWorker = job.getWorkerId() == null || job.getHeartbeatAt() == null || job.getHeartbeatAt().isBefore(cutoff);

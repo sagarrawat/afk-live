@@ -85,8 +85,20 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     int requestStop(@org.springframework.data.repository.query.Param("id") Long id,
                     @org.springframework.data.repository.query.Param("reason") String reason);
 
-    @org.springframework.data.jpa.repository.Query("SELECT j.id FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NULL ORDER BY j.startTime")
-    List<Long> findUnclaimedIds();
+    /** Jobs no worker has; a job just moved off {@code worker} is left to the others for a minute (AD-1). */
+    @org.springframework.data.jpa.repository.Query("SELECT j.id FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NULL "
+            + "AND (j.avoidWorker IS NULL OR j.avoidWorker <> :worker OR j.moveRequestedAt IS NULL OR j.moveRequestedAt < :avoidUntil) ORDER BY j.startTime")
+    List<Long> findUnclaimedIds(@org.springframework.data.repository.query.Param("worker") String worker,
+                                @org.springframework.data.repository.query.Param("avoidUntil") java.time.ZonedDateTime avoidUntil);
+
+    /** AD-1: releases a job from its worker so another one picks it up (a reconnect of a few seconds). */
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = NULL, j.heartbeatAt = NULL, j.avoidWorker = :worker, "
+            + "j.moveRequestedAt = :now WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND j.workerId = :worker")
+    int release(@org.springframework.data.repository.query.Param("id") Long id,
+                @org.springframework.data.repository.query.Param("worker") String worker,
+                @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
 
     /** Other workers' jobs that stopped reporting: candidates for takeover. */
     @org.springframework.data.jpa.repository.Query("SELECT j.id FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NOT NULL AND j.workerId <> :worker AND (j.heartbeatAt IS NULL OR j.heartbeatAt < :cutoff)")
