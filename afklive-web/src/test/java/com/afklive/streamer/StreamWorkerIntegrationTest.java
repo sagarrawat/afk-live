@@ -174,6 +174,30 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
         assertThat(after.getEndReason()).contains("unreadable");
     }
 
+    @Autowired com.afklive.streamer.repository.StreamJobLogStore jobLogs;
+
+    /** AD-1 / AD-3: support reads a run's FFmpeg errors from the console; the destination's key never lands in it. */
+    @Test
+    void aRunsFfmpegErrorsAreSavedForSupportWithoutTheKey() throws Exception {
+        User owner = account("worker-log@example.com");
+        // A destination that can never open: its relay fails and retries, writing errors each time.
+        Path bad = dir.resolve("no-such-dir").resolve("live-SECRETKEY4242.flv");
+        StreamSpec spec = new StreamSpec(owner.getEmail(), uploadSource(), null, "1.0", -1, null, false, "original", 360,
+                false, null, null, List.of(new StreamSpec.Destination("Broken", "file://" + bad)));
+        StreamJob job = job(owner, spec.toJson(), null, null);
+        long id = job.getId();
+
+        tickUntil(() -> jobLogs.find(id).map(e -> e.lines().contains("dest 1:")).orElse(false), Duration.ofSeconds(60));
+        streamService.stopStream(id, owner.getEmail());
+        tickUntil(() -> !jobs.findById(id).orElseThrow().isLive(), Duration.ofSeconds(30));
+
+        String lines = jobLogs.find(id).orElseThrow().lines();
+        assertThat(lines).contains("worker: started on " + worker.workerId()).contains("dest 1:").contains("[REDACTED]")
+                .contains("worker: ended: Stopped by user")
+                .doesNotContain("SECRETKEY4242");
+        assertThat(lines.split("\n").length).isLessThanOrEqualTo(com.afklive.streamer.streaming.JobLog.MAX_LINES);
+    }
+
     @Test
     void aStreamWithAHealthyWorkerIsNotTakenOver() throws Exception {
         User owner = account("worker-busy@example.com");

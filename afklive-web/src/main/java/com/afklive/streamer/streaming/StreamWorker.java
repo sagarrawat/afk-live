@@ -83,6 +83,10 @@ public class StreamWorker {
         t.setDaemon(true);
         return t;
     });
+    /** AD-1 / AD-3: where each run's last FFmpeg lines go (absent in tests that build a bare worker). */
+    private volatile com.afklive.streamer.repository.StreamJobLogStore jobLogs;
+    /** How often a run's log is written while it has new lines. */
+    static final Duration LOG_SAVE_EVERY = Duration.ofSeconds(10);
     private volatile boolean firstPassDone;
     private volatile long lastSuccessfulTickNanos = System.nanoTime();
 
@@ -130,6 +134,44 @@ public class StreamWorker {
 
     public String workerId() {
         return workerId;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setJobLogs(com.afklive.streamer.repository.StreamJobLogStore jobLogs) {
+        this.jobLogs = jobLogs;
+    }
+
+    /** Writes the run's log if it has new lines and it's been a while (or {@code force}). Never throws. */
+    private void saveLog(Running r, boolean force) {
+        com.afklive.streamer.repository.StreamJobLogStore store = jobLogs;
+        if (store == null || !r.jobLog.hasUnsaved()) {
+            return;
+        }
+        long now = System.nanoTime();
+        if (!force && now - r.logSavedNanos < LOG_SAVE_EVERY.toNanos()) {
+            return;
+        }
+        try {
+            long v = r.jobLog.version();
+            store.save(r.id, r.jobLog.text(), ZonedDateTime.now(ZoneId.of("UTC")));
+            r.jobLog.saved(v);
+            r.logSavedNanos = now;
+        } catch (Exception e) {
+            log.debug("Saving the log of stream {} failed: {}", r.id, e.getMessage());
+        }
+    }
+
+    /** A run taken over from another worker (or resumed) keeps the lines written before. */
+    private void loadLog(Running r) {
+        com.afklive.streamer.repository.StreamJobLogStore store = jobLogs;
+        if (store == null) {
+            return;
+        }
+        try {
+            store.find(r.id).ifPresent(e -> r.jobLog.seed(e.lines()));
+        } catch (Exception e) {
+            log.debug("Loading the log of stream {} failed: {}", r.id, e.getMessage());
+        }
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -200,6 +242,7 @@ public class StreamWorker {
                 }
                 if (jobs.heartbeat(id, workerId, r.lastHeartbeat, now, r.status(), r.bitrate, r.fps, r.speed, r.drops, r.lastError) == 1) {
                     r.lastHeartbeat = now;
+                    saveLog(r, false);
                     StudioRuns.Handle h = r.studio;
                     if (h != null) {
                         try {
@@ -259,6 +302,8 @@ public class StreamWorker {
         }
         Running r = new Running(id, spec);
         r.lastHeartbeat = heartbeatWritten;
+        loadLog(r);
+        r.jobLog.add("worker", "started on " + workerId);
         running.put(id, r);
         if (spec.studio() != null) {
             r.commandsAfter = job.getAppliedCommandId();
@@ -395,6 +440,8 @@ public class StreamWorker {
     private void lose(Long id, String why) {
         Running r = running.remove(id);
         if (r != null) {
+            // Not saved here: this also runs when the database is unreachable, and must not wait on it.
+            r.jobLog.add("worker", "stopped on " + workerId + ": " + why);
             synchronized (r) {
                 r.lost = true;
                 if (r.runner != null) {
@@ -487,10 +534,24 @@ public class StreamWorker {
         /** Set when the stream ended but recording that failed; retried on the next pass. */
         volatile String finishPending;
         volatile boolean finishFailed;
+        /** The last FFmpeg lines, keys removed (AD-1 / AD-3). */
+        final JobLog jobLog;
+        volatile long logSavedNanos;
+        volatile boolean endLogged;
 
         Running(long id, StreamSpec spec) {
             this.id = id;
             this.spec = spec;
+            java.util.List<String> secrets = new java.util.ArrayList<>();
+            for (StreamSpec.Destination d : spec.destinations() == null ? java.util.List.<StreamSpec.Destination>of() : spec.destinations()) {
+                secrets.addAll(Redact.secretsOf(d.url()));
+            }
+            this.jobLog = new JobLog(secrets);
+        }
+
+        @Override
+        public void onLogLine(String source, String line) {
+            jobLog.add(source, line);
         }
 
         /** Stop now, or (if still preparing) make sure it never starts. */
@@ -531,6 +592,7 @@ public class StreamWorker {
             }
             if (safeError != null) {
                 streamService.addLog("[job " + id + " dest " + position + "] " + safeError);
+                jobLog.add("worker", "dest " + (position + 1) + " dropped; reconnecting (restart " + restarts + ")");
             }
         }
 
@@ -539,6 +601,7 @@ public class StreamWorker {
             lastError = Redact.streamKeys(error);
             lastProgressNanos = 0;
             streamService.addLog("[job " + id + "] encoder restart " + restarts + ": " + lastError);
+            jobLog.add("worker", "encoder stopped; restart " + restarts);
         }
 
         @Override
@@ -555,6 +618,11 @@ public class StreamWorker {
 
         /** Record the end first; only then forget the stream, so a failed write can't let it restart. */
         void tryFinalize() {
+            if (!endLogged) {
+                endLogged = true;
+                jobLog.add("worker", (finishFailed ? "failed: " : "ended: ") + finishPending);
+            }
+            saveLog(this, true);
             try {
                 streamService.finalizeJob(id, finishPending, finishFailed);
             } catch (Exception e) {

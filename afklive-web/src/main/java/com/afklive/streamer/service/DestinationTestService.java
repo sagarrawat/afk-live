@@ -88,6 +88,49 @@ public class DestinationTestService {
         return tests.save(t);
     }
 
+    /**
+     * AD-3: support sends a test to an address one of a user's streams uses. Same rules as the user's own
+     * test (never while that address is live, one test at a time), but it doesn't use up their hourly tests.
+     */
+    public DestinationTest requestForSupport(User user, String address) {
+        if (address == null || address.isBlank()) {
+            throw new IllegalArgumentException("This destination has no address to test.");
+        }
+        NetworkSafety.requireSafeStreamDestination(address);
+        for (StreamJob j : jobs.findAllByUserEmailAndIsLiveTrue(user.getEmail())) {
+            try {
+                if (j.getSpec() != null && StreamSpec.fromJson(j.getSpec()).destinations().stream()
+                        .anyMatch(x -> !x.off() && address.equals(x.url()))) {
+                    throw new com.afklive.streamer.exception.ConflictException("This destination is live right now. Test it when the stream has stopped.");
+                }
+            } catch (com.afklive.streamer.exception.ConflictException e) {
+                throw e;
+            } catch (Exception ignored) {
+                // a legacy run without a readable spec
+            }
+        }
+        if (tests.existsByUserIdAndStatusIn(user.getId(), List.of(DestinationTest.Status.PENDING, DestinationTest.Status.RUNNING))) {
+            throw new com.afklive.streamer.exception.ConflictException("A test is already running for this account. Wait for it to finish.");
+        }
+        DestinationTest t = new DestinationTest();
+        t.setUserId(user.getId());
+        t.setUrl(address);
+        t.setCreatedAt(ZonedDateTime.now(ZoneId.of("UTC")));
+        return tests.save(t);
+    }
+
+    /** A test by id, any user's (support). */
+    public DestinationTest find(Long testId) {
+        expireStale();
+        return tests.findById(testId).orElseThrow(() -> new com.afklive.streamer.exception.NotFoundException("Test not found."));
+    }
+
+    private void expireStale() {
+        tests.expire("No stream server could run the test right now. Try again in a minute.",
+                ZonedDateTime.now(ZoneId.of("UTC")).minus(EXPIRE_AFTER), ZonedDateTime.now(ZoneId.of("UTC")).minus(EXPIRE_AFTER),
+                ZonedDateTime.now(ZoneId.of("UTC")));
+    }
+
     public DestinationTest result(User user, Long testId) {
         tests.expire("No stream server could run the test right now. Try again in a minute.",
                 ZonedDateTime.now(ZoneId.of("UTC")).minus(EXPIRE_AFTER), ZonedDateTime.now(ZoneId.of("UTC")).minus(EXPIRE_AFTER),

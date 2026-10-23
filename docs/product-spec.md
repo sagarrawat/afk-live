@@ -324,6 +324,8 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | AD-3 | As an admin, I want to look up a user, their plan, payments and streams so that I resolve support tickets fast | User page with plan change, refund and credit actions, all audited | P0 |
 | AD-4 | As an admin, I want feature flags so that I release features to a few users first | Flags per user, plan or percentage | P1 |
 | AD-5 | As an admin, I want no default accounts, secrets or open dashboards in production so that the platform is safe | Seed data only in dev; admin dashboards behind admin login; secrets only from the environment | P0 |
+| OPS-1 | As an admin, I want to know whether email works, and creators not to be stuck when it doesn't, so that sign-ups, resets and alerts never fail silently | Startup warning and a red admin banner when email isn't set up; "Send a test email" (audited); while it's off password sign-ups are verified automatically and "Forgot password" points to support instead of claiming a link was sent; every send recorded (kind, account, sent or why not; never the body) and shown in the user lookup; links in emails use the configured public address | P0 |
+| OPS-2 | As a creator, I want errors that say what happened so that an expired page doesn't look like a broken service | An expired sign-in form opens again with "This page expired. Please try again."; the app refreshes an expired security token and retries once; the error page blames "our side" only for server errors and shows a short code that is in the server logs | P0 |
 
 ### 20. Marketing site and help
 
