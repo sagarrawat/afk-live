@@ -26,8 +26,10 @@ class StreamRunnerTest {
     static Path dir;
     static Path source;
 
+    /** Short backoffs, and a destination counts as LIVE after 2 s of steady sending (production: 10 s). */
     static final StreamRunner.Settings FAST = new StreamRunner.Settings(
-            Duration.ofMillis(100), Duration.ofMillis(400), Duration.ofSeconds(60), 3, Duration.ofMinutes(1), 4L * 1024 * 1024);
+            Duration.ofMillis(100), Duration.ofMillis(400), Duration.ofSeconds(60), 3, Duration.ofMinutes(1), 4L * 1024 * 1024,
+            Duration.ofSeconds(2), StreamRunner.STALL_AFTER);
 
     @BeforeAll
     static void makeSource() throws Exception {
@@ -65,6 +67,10 @@ class StreamRunnerTest {
         final Map<Integer, Integer> restarts = new ConcurrentHashMap<>();
         final CopyOnWriteArrayList<String> errors = new CopyOnWriteArrayList<>();
         final AtomicInteger progress = new AtomicInteger();
+        final Map<Integer, Long> bytes = new ConcurrentHashMap<>();
+        /** Milliseconds after the recorder was made when each position was first reported LIVE. */
+        final Map<Integer, Long> firstLiveAt = new ConcurrentHashMap<>();
+        final long createdAt = System.nanoTime();
         final AtomicInteger encoderFailures = new AtomicInteger();
         volatile String finishedReason;
         volatile boolean failed;
@@ -73,12 +79,16 @@ class StreamRunnerTest {
         @Override public void onProgress(StreamRunner.Progress p) { progress.incrementAndGet(); }
         @Override public void onDestination(int pos, String status, int r, String error) {
             lastStatus.put(pos, status);
+            if ("LIVE".equals(status)) {
+                firstLiveAt.putIfAbsent(pos, (System.nanoTime() - createdAt) / 1_000_000);
+            }
             statuses.add(pos + ":" + status);
             restarts.merge(pos, r, Math::max);
             if (error != null) {
                 errors.add(pos + ":" + error);
             }
         }
+        @Override public void onDestinationBytes(int pos, long total) { bytes.merge(pos, total, Math::max); }
         @Override public void onEncoderFailure(int r, String error) { encoderFailures.incrementAndGet(); }
         @Override public void onFinished(String reason, boolean f) { finishedReason = reason; failed = f; }
     }
@@ -212,9 +222,9 @@ class StreamRunnerTest {
         Recorder rec = new Recorder();
         StreamRunner runner = new StreamRunner(7, () -> realtimeEncoder(-1), List.of(relayTo(out)), rec, FAST);
         runner.start();
-        TimeUnit.SECONDS.sleep(4);
+        TimeUnit.SECONDS.sleep(8); // LIVE: the relay probes ~3 s, then sends steadily for 2 s (FAST)
         runner.reconnectAll();
-        TimeUnit.SECONDS.sleep(7); // a relay reports LIVE after 3 s connected
+        TimeUnit.SECONDS.sleep(9);
         assertThat(rec.lastStatus.get(0)).isEqualTo("LIVE");
         runner.stop("Stopped by user");
         assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
@@ -222,6 +232,89 @@ class StreamRunnerTest {
         assertThat(rec.events).containsExactly("encoder-started-0");
         assertThat(rec.statuses).containsSubsequence("0:LIVE", "0:RECONNECTING", "0:LIVE");
         assertThat(rec.restarts.getOrDefault(0, 0)).as("not counted as a failure").isZero();
+    }
+
+    // ---------------------------------------------------------------- RE-8: live means the platform is receiving
+
+    @Test
+    void aDestinationIsLiveOnlyAfterTenSecondsOfSteadySending() throws Exception {
+        Path out = dir.resolve("confirm.flv");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(10, () -> realtimeEncoder(-1), List.of(relayTo(out)), rec, StreamRunner.Settings.defaults());
+        runner.start();
+        TimeUnit.SECONDS.sleep(9);
+        assertThat(rec.lastStatus.get(0)).as("not LIVE before 10 s of sending").isEqualTo("CONNECTING");
+        assertThat(rec.bytes.getOrDefault(0, 0L)).as("but already sending").isPositive();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (!"LIVE".equals(rec.lastStatus.get(0)) && System.nanoTime() < deadline) {
+            TimeUnit.MILLISECONDS.sleep(200);
+        }
+        long sentAtLive = rec.bytes.getOrDefault(0, 0L);
+        TimeUnit.SECONDS.sleep(2);
+        runner.stop("Stopped by user");
+        assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+
+        assertThat(rec.firstLiveAt.get(0)).as("LIVE once the platform took 10 s of stream").isNotNull().isGreaterThanOrEqualTo(10_000);
+        assertThat(rec.errors).isEmpty();
+        // FO-3: the byte count keeps growing and matches what reached the output.
+        assertThat(rec.bytes.get(0)).isGreaterThan(sentAtLive);
+        assertThat(rec.bytes.get(0)).isLessThanOrEqualTo(Files.size(out));
+    }
+
+    @Test
+    void aRelayThatCannotOpenItsOutputIsNeverLiveAndExplainsWhy() throws Exception {
+        // Production: the server URL pasted as the stream key, so every connect failed with
+        // "Error opening output ... Input/output error" while the app said Live.
+        String pasted = "rtmp://127.0.0.1:1/live2/rtmp://a.rtmp.youtube.com/live2";
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(11, () -> realtimeEncoder(-1),
+                List.of(FFmpegCommandBuilder.buildRelayCommand(pasted)), rec, FAST);
+        runner.start();
+        TimeUnit.SECONDS.sleep(8);
+        runner.stop("Stopped by user");
+        assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+
+        assertThat(rec.statuses).doesNotContain("0:LIVE");
+        assertThat(rec.bytes).doesNotContainKey(0);
+        assertThat(rec.errors).isNotEmpty().allMatch(e -> e.contains("Error opening output"), "FFmpeg's own reason, not a progress line");
+        String reason = rec.errors.getFirst().substring(2);
+        assertThat(com.afklive.streamer.service.PlatformErrors.explain(reason, pasted))
+                .contains("looks like a server address");
+        // Every attempt after the first carries the last reason, so the app never shows a bare "reconnecting".
+        assertThat(rec.statuses).contains("0:RECONNECTING");
+    }
+
+    @Test
+    void aRelayStuckConnectingIsNeverReportedLive() throws Exception {
+        // A server that accepts the connection and never answers: the relay process stays up, which the old
+        // check ("alive for 3 s") took for LIVE. Nothing is written, so it never is.
+        try (java.net.ServerSocket silent = new java.net.ServerSocket(0, 50, java.net.InetAddress.getLoopbackAddress())) {
+            List<java.net.Socket> held = new CopyOnWriteArrayList<>();
+            Thread acceptor = Thread.ofPlatform().daemon(true).start(() -> {
+                try {
+                    while (!silent.isClosed()) {
+                        held.add(silent.accept());
+                    }
+                } catch (java.io.IOException ignored) {
+                    // closed
+                }
+            });
+            Recorder rec = new Recorder();
+            StreamRunner runner = new StreamRunner(12, () -> realtimeEncoder(-1),
+                    List.of(FFmpegCommandBuilder.buildRelayCommand("rtmp://127.0.0.1:" + silent.getLocalPort() + "/live2/abcd-efgh")),
+                    rec, FAST);
+            runner.start();
+            TimeUnit.SECONDS.sleep(9);
+            runner.stop("Stopped by user");
+            assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+            for (java.net.Socket s : held) {
+                s.close();
+            }
+            acceptor.interrupt();
+
+            assertThat(held).as("the relay did connect").isNotEmpty();
+            assertThat(rec.statuses).doesNotContain("0:LIVE");
+        }
     }
 
     private static String probe(Path file) throws Exception {

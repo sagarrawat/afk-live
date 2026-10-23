@@ -3,6 +3,11 @@ package com.afklive.streamer.streaming;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.repository.StreamJobDestinationRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
+import com.afklive.streamer.model.StreamEvent;
+import com.afklive.streamer.model.StreamJobDestination;
+import com.afklive.streamer.repository.StreamEventRepository;
+import com.afklive.streamer.service.DestinationTestService;
+import com.afklive.streamer.service.PlatformErrors;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.StreamService;
 import com.afklive.streamer.service.YouTubeService;
@@ -61,6 +66,8 @@ public class StreamWorker {
     private final YouTubeService youTubeService;
     private final StudioRuns studioRuns;
     private final com.afklive.streamer.repository.StreamCommandRepository commands;
+    private final StreamEventRepository events;
+    private final DestinationTestService destinationTests;
     private final ScheduledExecutorService commandPoller = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "studio-commands");
         t.setDaemon(true);
@@ -94,6 +101,8 @@ public class StreamWorker {
                         YouTubeService youTubeService,
                         StudioRuns studioRuns,
                         com.afklive.streamer.repository.StreamCommandRepository commands,
+                        StreamEventRepository events,
+                        DestinationTestService destinationTests,
                         @Value("${app.streaming.worker-id:}") String workerId,
                         @Value("${app.streaming.worker.max-streams:20}") int maxStreams,
                         @Value("${app.streaming.worker.tick-millis:2000}") long tickMillis,
@@ -106,6 +115,8 @@ public class StreamWorker {
         this.youTubeService = youTubeService;
         this.studioRuns = studioRuns;
         this.commands = commands;
+        this.events = events;
+        this.destinationTests = destinationTests;
         this.workerId = workerId == null || workerId.isBlank() ? defaultWorkerId() : workerId;
         this.maxStreams = maxStreams;
         this.tickMillis = tickMillis;
@@ -200,6 +211,7 @@ public class StreamWorker {
                 }
                 if (jobs.heartbeat(id, workerId, r.lastHeartbeat, now, r.status(), r.bitrate, r.fps, r.speed, r.drops, r.lastError) == 1) {
                     r.lastHeartbeat = now;
+                    r.flushBytes();
                     StudioRuns.Handle h = r.studio;
                     if (h != null) {
                         try {
@@ -259,6 +271,10 @@ public class StreamWorker {
         }
         Running r = new Running(id, spec);
         r.lastHeartbeat = heartbeatWritten;
+        r.userId = job.getUser() == null ? null : job.getUser().getId();
+        for (StreamJobDestination d : job.getDestinations()) {
+            r.bytesFor(d.getPosition()).base = d.getBytesSent(); // a takeover carries on from what was recorded
+        }
         running.put(id, r);
         if (spec.studio() != null) {
             r.commandsAfter = job.getAppliedCommandId();
@@ -274,6 +290,7 @@ public class StreamWorker {
                     r.overlayTask = overlayUpdater.scheduleAtFixedRate(() -> updateOverlay(spec, prepared), 0, 30, TimeUnit.SECONDS);
                 }
                 StreamRunner runner = new StreamRunner(id, prepared::encoderCommand, prepared.relayCommands(), r, settings);
+                r.clearTests();
                 synchronized (r) {
                     if (r.lost) {
                         cleanup(r, false);
@@ -308,6 +325,7 @@ public class StreamWorker {
                 });
                 r.studio = h;
                 StreamRunner runner = new StreamRunner(id, h.studio(), relayCommands(spec.destinations()), r, settings);
+                r.clearTests();
                 synchronized (r) {
                     if (r.lost) {
                         cleanup(r, false);
@@ -487,12 +505,138 @@ public class StreamWorker {
         /** Set when the stream ended but recording that failed; retried on the next pass. */
         volatile String finishPending;
         volatile boolean finishFailed;
+        volatile Long userId;
+        /** RE-1/RE-8: what the timeline last said about each destination. */
+        private final Map<Integer, DestinationTrack> tracks = new ConcurrentHashMap<>();
+        /** FO-3: bytes sent per destination. */
+        private final Map<Integer, Bytes> bytes = new ConcurrentHashMap<>();
 
         Running(long id, StreamSpec spec) {
             this.id = id;
             this.spec = spec;
         }
 
+        /** No destination test may be connected to one of this run's keys when it connects (GL-1). */
+        void clearTests() {
+            if (destinationTests == null) {
+                return;
+            }
+            List<String> keys = spec.destinations().stream().filter(d -> !d.off()).map(StreamSpec.Destination::url).toList();
+            try {
+                if (!destinationTests.clearTestsFor(userId, keys, Duration.ofSeconds(30))) {
+                    log.warn("A destination test for job {} is still running; starting anyway", id);
+                }
+            } catch (Exception e) {
+                log.debug("Destination test check for job {} failed: {}", id, e.getMessage());
+            }
+        }
+
+        Bytes bytesFor(int position) {
+            return bytes.computeIfAbsent(position, p -> new Bytes());
+        }
+
+        /** Written with the heartbeat, only when it changed. */
+        void flushBytes() {
+            for (Map.Entry<Integer, Bytes> e : bytes.entrySet()) {
+                Bytes b = e.getValue();
+                long total = b.total();
+                if (total > b.reported) {
+                    try {
+                        destinations.updateBytesSent(id, e.getKey(), total);
+                        b.reported = total;
+                    } catch (Exception ex) {
+                        log.debug("Byte count update for job {} failed", id, ex);
+                    }
+                }
+            }
+        }
+
+        private String destName(int position) {
+            List<StreamSpec.Destination> ds = spec.destinations();
+            return position < ds.size() && ds.get(position).name() != null ? ds.get(position).name() : "Destination";
+        }
+
+        private String destUrl(int position) {
+            List<StreamSpec.Destination> ds = spec.destinations();
+            return position < ds.size() ? ds.get(position).url() : null;
+        }
+
+        /** "YouTube" for a YouTube destination; the creator's own name for one we don't know. */
+        private String label(int position) {
+            String p = PlatformErrors.platform(destUrl(position));
+            return p != null ? p : destName(position);
+        }
+
+        private Long event(String kind, Integer position, String message) {
+            try {
+                return events.save(new StreamEvent(id, ZonedDateTime.now(ZoneId.of("UTC")), kind, position,
+                        position == null ? null : destName(position), message)).getId();
+            } catch (Exception e) {
+                log.debug("Timeline event for job {} failed", id, e);
+                return null;
+            }
+        }
+
+        /**
+         * RE-1 / RE-8 timeline: reaching a platform, losing it (and why), and coming back. A reconnect loop
+         * with the same reason is one line whose repeat count goes up, not a line per attempt.
+         */
+        void recordDestination(int position, String status, int restarts, String error) {
+            if (events == null) {
+                return;
+            }
+            DestinationTrack t = tracks.computeIfAbsent(position, p -> new DestinationTrack());
+            synchronized (t) {
+                String label = label(position);
+                ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+                if ("LIVE".equals(status)) {
+                    if (!t.on) {
+                        String msg;
+                        if (t.troubled) {
+                            msg = "Reaching " + label + " again" + (t.downSince == null ? "" : " after "
+                                    + humanDuration(Duration.between(t.downSince, now))) + ".";
+                        } else if (t.everOn) {
+                            msg = "Reaching " + label + " again after the reconnect.";
+                        } else {
+                            msg = "Reaching " + label + ": it has been receiving the stream steadily.";
+                        }
+                        event(t.troubled ? StreamEvent.Kinds.DEST_RECOVERED : StreamEvent.Kinds.DEST_ON, position, msg);
+                    }
+                    t.on = true;
+                    t.everOn = true;
+                    t.troubled = false;
+                    t.downSince = null;
+                    t.lastReason = null;
+                    t.lastEventId = null;
+                } else if ("RECONNECTING".equals(status) && error != null && (t.on || restarts > t.lastRestarts)) {
+                    String reason = PlatformErrors.explain(error, destUrl(position));
+                    if (t.on) {
+                        boolean ours = error.contains(StreamRunner.STALLED) || error.contains("couldn't keep up");
+                        t.lastEventId = event(ours ? StreamEvent.Kinds.DEST_GAVE_UP : StreamEvent.Kinds.DEST_LOST, position,
+                                "Lost " + label + ". " + reason + (reason.contains("reconnect") ? "" : " Reconnecting."));
+                        t.downSince = now;
+                    } else if (reason.equals(t.lastReason) && t.lastEventId != null) {
+                        try {
+                            events.bump(t.lastEventId, now);
+                        } catch (Exception e) {
+                            log.debug("Timeline bump for job {} failed", id, e);
+                        }
+                    } else {
+                        t.lastEventId = event(StreamEvent.Kinds.DEST_FAILING, position,
+                                "Not reaching " + label + ". " + reason + " Retrying.");
+                        if (t.downSince == null) {
+                            t.downSince = now;
+                        }
+                    }
+                    t.on = false;
+                    t.troubled = true;
+                    t.lastReason = reason;
+                } else if ("RECONNECTING".equals(status) && error == null) {
+                    t.on = false; // asked for (GL-5): not a failure
+                }
+                t.lastRestarts = Math.max(t.lastRestarts, restarts);
+            }
+        }
         /** Stop now, or (if still preparing) make sure it never starts. */
         synchronized void requestStop(String reason) {
             if (runner != null) {
@@ -522,8 +666,14 @@ public class StreamWorker {
         }
 
         @Override
+        public void onDestinationBytes(int position, long totalBytes) {
+            bytesFor(position).report(totalBytes);
+        }
+
+        @Override
         public void onDestination(int position, String status, int restarts, String error) {
             String safeError = Redact.streamKeys(error);
+            recordDestination(position, status, restarts, safeError);
             try {
                 destinations.updateState(id, position, status, restarts, safeError, ZonedDateTime.now(ZoneId.of("UTC")));
             } catch (Exception e) {
@@ -539,6 +689,15 @@ public class StreamWorker {
             lastError = Redact.streamKeys(error);
             lastProgressNanos = 0;
             streamService.addLog("[job " + id + "] encoder restart " + restarts + ": " + lastError);
+            if (events != null) {
+                event(StreamEvent.Kinds.ENCODER_RESTART, null, "The stream restarted after a problem, and every destination reconnects ("
+                        + (lastError == null ? "no details" : lastError.length() > 200 ? lastError.substring(0, 200) + "…" : lastError) + ").");
+                tracks.values().forEach(t -> {
+                    synchronized (t) {
+                        t.on = false;
+                    }
+                });
+            }
         }
 
         @Override
@@ -550,6 +709,10 @@ public class StreamWorker {
             }
             finishPending = reason;
             finishFailed = failed;
+            if (failed && events != null) {
+                event(StreamEvent.Kinds.GAVE_UP, null, "Stopped: " + Redact.streamKeys(reason));
+            }
+            flushBytes();
             tryFinalize();
         }
 
@@ -564,5 +727,49 @@ public class StreamWorker {
             running.remove(id, this);
             cleanup(this, true);
         }
+    }
+
+    /** What the timeline last said about one destination of a run. */
+    private static final class DestinationTrack {
+        boolean on;
+        boolean everOn;
+        boolean troubled;
+        int lastRestarts;
+        String lastReason;
+        Long lastEventId;
+        ZonedDateTime downSince;
+    }
+
+    /**
+     * FO-3: bytes one destination sent. Each relay process counts from zero (a reconnect, an encoder
+     * restart, or turning it off and on), so a count that goes down starts a new relay on top of the last.
+     */
+    static final class Bytes {
+        volatile long base;
+        private long offset;
+        private long lastRaw;
+        volatile long reported;
+
+        synchronized void report(long raw) {
+            if (raw < lastRaw) {
+                offset += lastRaw;
+            }
+            lastRaw = raw;
+        }
+
+        synchronized long total() {
+            return base + offset + lastRaw;
+        }
+    }
+
+    static String humanDuration(Duration d) {
+        long s = Math.max(0, d.getSeconds());
+        if (s < 60) {
+            return s + " s";
+        }
+        if (s < 3600) {
+            return (s / 60) + " min";
+        }
+        return (s / 3600) + " h " + (s % 3600 / 60) + " min";
     }
 }

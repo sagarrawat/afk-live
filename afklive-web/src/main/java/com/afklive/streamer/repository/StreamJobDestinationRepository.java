@@ -16,4 +16,13 @@ public interface StreamJobDestinationRepository extends JpaRepository<StreamJobD
     @Query("UPDATE StreamJobDestination d SET d.status = :status, d.restarts = :restarts, d.lastError = :error, d.updatedAt = :now WHERE d.job.id = :jobId AND d.position = :position")
     int updateState(@Param("jobId") Long jobId, @Param("position") int position, @Param("status") String status,
                     @Param("restarts") int restarts, @Param("error") String error, @Param("now") ZonedDateTime now);
+
+    /** FO-3: written with the heartbeat; never goes down (a takeover's new worker starts from what was recorded). */
+    @Modifying
+    @Transactional
+    @Query("UPDATE StreamJobDestination d SET d.bytesSent = :bytes WHERE d.job.id = :jobId AND d.position = :position AND d.bytesSent < :bytes")
+    int updateBytesSent(@Param("jobId") Long jobId, @Param("position") int position, @Param("bytes") long bytes);
+
+    @Query("SELECT d.bytesSent FROM StreamJobDestination d WHERE d.job.id = :jobId AND d.position = :position")
+    java.util.Optional<Long> findBytesSent(@Param("jobId") Long jobId, @Param("position") int position);
 }

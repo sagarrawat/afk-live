@@ -47,7 +47,13 @@ public final class StreamDtos {
     public record Metric(String name, String value, String level, String explanation) {
     }
 
-    public record DestinationHealth(String name, String status, String level, String error, int restarts) {
+    /**
+     * One destination while live. {@code reach} (RE-8): ON once the platform has steadily received the
+     * stream, CONNECTING, or DOWN; {@code message} says so in plain words ("On YouTube", "Not reaching
+     * YouTube. …"); {@code error} is the platform's raw answer, for the health detail.
+     */
+    public record DestinationHealth(String name, String status, String level, String error, int restarts,
+                                    String platform, String reach, String message) {
     }
 
     /** RE-3: green / amber / red per metric, each with a plain-language explanation. */
@@ -55,11 +61,17 @@ public final class StreamDtos {
     }
 
     /**
-     * GL-2: DRAFT, STARTING, LIVE, STOPPING, ENDED or ERROR.
+     * GL-2: DRAFT, STARTING, LIVE, STOPPING, ENDED or ERROR. {@code reach} (RE-8), while LIVE: ALL
+     * destinations receiving ("Live"), SOME ("Live with problems"), NONE ("Not reaching anyone"), or
+     * CONNECTING (none confirmed yet and none failed); null otherwise.
      */
     public record LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds,
                             ZonedDateTime stopAt, String scene, Boolean inputLive, Map<String, Object> nowPlaying,
-                            Health health, String endReason) {
+                            Health health, String endReason, String reach) {
+        public LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds, ZonedDateTime stopAt,
+                         String scene, Boolean inputLive, Map<String, Object> nowPlaying, Health health, String endReason) {
+            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null);
+        }
     }
 
     /** {@code playlist}: the slot's own videos (SC-4); empty plays the stream's playlist. */
@@ -125,5 +137,17 @@ public final class StreamDtos {
     }
 
     public record Uptime(List<UptimeWindow> windows, List<Outage> outages) {
+    }
+
+    /**
+     * RE-1 / RE-8: one line on a run's timeline. {@code level}: green (reached), amber (reconnecting),
+     * red (failing or gave up). {@code repeats}: how many times the same failure happened, until {@code lastAt}.
+     */
+    public record TimelineEvent(Long id, Long jobId, ZonedDateTime at, ZonedDateTime lastAt, String kind, String name,
+                                String message, int repeats, String level) {
+    }
+
+    /** GL-1: the destination tests behind Go Live; {@code ready} when every destination passed. */
+    public record DestinationChecks(boolean ready, List<com.afklive.streamer.service.DestinationTestService.Check> checks) {
     }
 }

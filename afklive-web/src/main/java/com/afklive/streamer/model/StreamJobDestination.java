@@ -37,6 +37,9 @@ public class StreamJobDestination {
     @Column(columnDefinition = "TEXT")
     private String lastError;
     private ZonedDateTime updatedAt;
+    /** FO-3: bytes this destination actually sent during the run (every reconnect), from the relay's progress. */
+    @Column(name = "bytes_sent", nullable = false)
+    private long bytesSent;
 
     public StreamJobDestination(StreamJob job, int position, String name) {
         this.job = job;

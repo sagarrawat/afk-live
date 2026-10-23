@@ -17,6 +17,9 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.user.email = :email AND j.isLive = true")
     List<StreamJob> findAllByUserEmailAndIsLiveTrue(String email);
 
+    @Query("SELECT j FROM StreamJob j WHERE j.user.id = :userId AND j.isLive = true")
+    List<StreamJob> findAllLiveByUserId(@org.springframework.data.repository.query.Param("userId") Long userId);
+
     @Query("SELECT count(j) FROM StreamJob j WHERE j.user.email = :email AND j.isLive = true")
     long countByUserEmailAndIsLiveTrue(String email);
 

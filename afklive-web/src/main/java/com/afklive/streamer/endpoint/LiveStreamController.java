@@ -162,6 +162,24 @@ public class LiveStreamController {
         return service.runs(email(principal), id);
     }
 
+    /** RE-1 / RE-8: the recent runs' timeline (destinations reached, lost and why, back again). */
+    @GetMapping("/{id}/timeline")
+    public List<TimelineEvent> timeline(@PathVariable Long id, Principal principal) {
+        return service.timeline(email(principal), id);
+    }
+
+    /** GL-1: starts a test for each destination that hasn't passed one in 24 hours with its current key. */
+    @PostMapping("/{id}/destination-checks")
+    public DestinationChecks startDestinationChecks(@PathVariable Long id, Principal principal) {
+        return service.destinationChecks(email(principal), id, true);
+    }
+
+    /** GL-1: where those tests are (poll until none is TESTING). */
+    @GetMapping("/{id}/destination-checks")
+    public DestinationChecks destinationChecks(@PathVariable Long id, Principal principal) {
+        return service.destinationChecks(email(principal), id, false);
+    }
+
     // ---- live control
 
     @PostMapping("/{id}/scene")

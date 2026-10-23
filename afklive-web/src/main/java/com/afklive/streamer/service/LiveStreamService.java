@@ -55,6 +55,8 @@ public class LiveStreamService {
     private final NotificationService notifications;
     private final com.afklive.streamer.repository.StreamJobDestinationRepository jobDestinations;
     private final com.afklive.streamer.repository.StreamIncidentRepository incidents;
+    private final com.afklive.streamer.repository.StreamEventRepository events;
+    private final DestinationTestService destinationTests;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -761,6 +763,33 @@ public class LiveStreamService {
         command(job, StreamCommand.Type.SKIP, null);
     }
 
+    /**
+     * GL-1: each enabled destination's test state. With {@code start}, those without a pass in the last
+     * 24 hours with their current key get a test; destinations that are fresh cost no wait at all.
+     */
+    public DestinationChecks destinationChecks(String email, Long id, boolean start) {
+        LiveStream s = get(email, id);
+        List<DestinationTestService.Check> checks = destinationTests.goLiveChecks(s.getUser(), enabledDestinations(s), start);
+        return new DestinationChecks(!checks.isEmpty() && checks.stream().allMatch(c -> DestinationTestService.PASSED.equals(c.state())), checks);
+    }
+
+    /** RE-1 / RE-8: what happened to the stream's recent runs and their destinations, newest first. */
+    public List<TimelineEvent> timeline(String email, Long id) {
+        get(email, id);
+        List<Long> runIds = jobs.findTop20ByStreamIdOrderByStartTimeDesc(id).stream().map(StreamJob::getId).toList();
+        if (runIds.isEmpty()) {
+            return List.of();
+        }
+        return events.findRecent(runIds, org.springframework.data.domain.PageRequest.of(0, 100)).stream()
+                .map(e -> new TimelineEvent(e.getId(), e.getJobId(), e.getAt(), e.getLastAt(), e.getKind(), e.getName(),
+                        e.getMessage(), e.getRepeats(), switch (e.getKind()) {
+                            case StreamEvent.Kinds.DEST_ON, StreamEvent.Kinds.DEST_RECOVERED -> StreamHealth.GREEN;
+                            case StreamEvent.Kinds.DEST_LOST, StreamEvent.Kinds.ENCODER_RESTART -> StreamHealth.AMBER;
+                            default -> StreamHealth.RED;
+                        }))
+                .toList();
+    }
+
     public List<RunView> runs(String email, Long id) {
         get(email, id);
         return jobs.findTop20ByStreamIdOrderByStartTimeDesc(id).stream()
@@ -779,7 +808,7 @@ public class LiveStreamService {
         Map<Long, StreamJob> byId = new HashMap<>();
         runs.forEach(j -> byId.put(j.getId(), j));
         List<com.afklive.streamer.model.StreamIncident> downs = byId.isEmpty() ? List.of()
-                : incidents.findAllByJobIdInAndKindOrderByStartedAtDesc(byId.keySet(), "DOWN");
+                : incidents.findAllByJobIdInAndKindInOrderByStartedAtDesc(byId.keySet(), AlertMonitor.OUTAGE_KINDS);
         List<com.afklive.streamer.dto.StreamDtos.UptimeWindow> windows = new ArrayList<>();
         for (Object[] w : new Object[][]{{"24 hours", now.minusHours(24)}, {"7 days", now.minusDays(7)}, {"30 days", now.minusDays(30)}}) {
             ZonedDateTime from = (ZonedDateTime) w[1];
@@ -862,8 +891,9 @@ public class LiveStreamService {
                 // stale or partial
             }
         }
+        String reach = "LIVE".equals(state) ? StreamHealth.reach(j.getDestinations(), ZonedDateTime.now()) : null;
         return new LiveState(state, j.getId(), j.getStartTime(), uptime, j.getStopAt(), j.getScene(), j.getInputLive(), np,
-                StreamHealth.of(j, s.getQualityHeight(), s.getFps()), null);
+                StreamHealth.of(j, s.getQualityHeight(), s.getFps()), null, reach);
     }
 
     private Optional<StreamJob> currentJob(LiveStream s) {

@@ -120,18 +120,25 @@ class AlertsTest extends PostgresIntegrationTest {
 
     @Test
     void oneDestinationDownIsReportedWithoutTheWholeStream() {
+        // RE-3: one platform failing while another receives the stream alerts on its own after 5 minutes.
         ZonedDateTime t = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
         StreamJob job = liveJob(StreamStates.LIVE, t);
         StreamJobDestination d = job.getDestinations().getFirst();
         d.setStatus("RECONNECTING");
         d.setLastError("Connection reset by peer");
-        job.setHeartbeatAt(t.plusSeconds(60));
+        StreamJobDestination twitch = new StreamJobDestination(job, 1, "Twitch");
+        twitch.setStatus("LIVE");
+        job.getDestinations().add(twitch);
+        job.setHeartbeatAt(t.plusSeconds(300));
         jobs.save(job);
         monitor.check(t);
         monitor.check(t.plusSeconds(61));
+        assertThat(types()).as("a minute is a hiccup for one platform out of two").isEmpty();
+        monitor.check(t.plusSeconds(301));
         List<Notification> list = notifications.findTop50ByUserIdOrderByCreatedAtDesc(owner.getId());
         assertThat(list).extracting(Notification::getType).containsExactly(NotificationService.Types.DESTINATION_DOWN);
         assertThat(list.getFirst().getTitle()).isEqualTo("Lofi radio isn't reaching YouTube");
+        assertThat(list.getFirst().getBody()).contains("refused the stream key");
     }
 
     @Test

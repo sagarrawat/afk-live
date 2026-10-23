@@ -34,6 +34,17 @@ public interface DestinationTestRepository extends JpaRepository<DestinationTest
     int finish(@Param("id") Long id, @Param("status") DestinationTest.Status status, @Param("message") String message,
                @Param("now") ZonedDateTime now);
 
+    /** The latest tests of a destination (GL-1 looks for one of its current key). */
+    List<DestinationTest> findTop5ByDestinationIdOrderByIdDesc(Long destinationId);
+
+    List<DestinationTest> findAllByUserIdAndStatusIn(Long userId, java.util.Collection<DestinationTest.Status> statuses);
+
+    /** Fails a test before it runs (its key went live); 1 when it was still pending. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("UPDATE DestinationTest t SET t.status = 'FAILED', t.message = :message, t.finishedAt = :now WHERE t.id = :id AND t.status = 'PENDING'")
+    int cancelPending(@Param("id") Long id, @Param("message") String message, @Param("now") ZonedDateTime now);
+
     /** Tests no worker picked up, or whose worker died: they fail with an explanation. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional

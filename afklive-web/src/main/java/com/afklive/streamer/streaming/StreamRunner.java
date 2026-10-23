@@ -44,7 +44,16 @@ public final class StreamRunner {
         default void onProgress(Progress progress) {
         }
 
+        /**
+         * A destination's state: CONNECTING and RECONNECTING until the platform has steadily taken the
+         * stream for {@link Settings#confirmAfter()} (then LIVE), STOPPED or OFF at the end. While it isn't
+         * LIVE, {@code error} carries the last reason it failed (null when nothing failed yet).
+         */
         default void onDestination(int position, String status, int restarts, String error) {
+        }
+
+        /** FO-3: everything this destination has sent since the run started (all attempts), in bytes. */
+        default void onDestinationBytes(int position, long totalBytes) {
         }
 
         default void onEncoderFailure(int restarts, String error) {
@@ -82,14 +91,30 @@ public final class StreamRunner {
      * Timing and limits; defaults suit production, tests shorten them.
      *
      * @param relayBufferBytes per-destination buffer; about 5 s at 6 Mbps by default
+     * @param confirmAfter     RE-8: how long a destination must keep taking the stream before it counts as LIVE
+     * @param stallAfter       RE-8: a destination that takes nothing for this long is no longer LIVE
      */
     public record Settings(Duration initialBackoff, Duration maxBackoff, Duration stableAfter,
-                           int maxEncoderFailures, Duration failureWindow, long relayBufferBytes) {
+                           int maxEncoderFailures, Duration failureWindow, long relayBufferBytes,
+                           Duration confirmAfter, Duration stallAfter) {
+        public Settings(Duration initialBackoff, Duration maxBackoff, Duration stableAfter,
+                        int maxEncoderFailures, Duration failureWindow, long relayBufferBytes) {
+            this(initialBackoff, maxBackoff, stableAfter, maxEncoderFailures, failureWindow, relayBufferBytes,
+                    CONFIRM_AFTER, STALL_AFTER);
+        }
+
         public static Settings defaults() {
             return new Settings(Duration.ofSeconds(1), Duration.ofSeconds(30), Duration.ofSeconds(60),
                     10, Duration.ofMinutes(10), 4L * 1024 * 1024);
         }
     }
+
+    /** RE-8: "On YouTube" only after the platform has taken the stream steadily for this long. */
+    public static final Duration CONFIRM_AFTER = Duration.ofSeconds(10);
+    /** RE-8: progress comes every second; this long without bytes going out means the platform stopped taking them. */
+    public static final Duration STALL_AFTER = Duration.ofSeconds(5);
+    /** Why a destination that was LIVE stopped counting while its relay still runs. */
+    public static final String STALLED = "The platform stopped taking the stream";
 
     private static final int CHUNK = 64 * 1024;
     private static final Duration KILL_AFTER = Duration.ofSeconds(5);
@@ -408,6 +433,18 @@ public final class StreamRunner {
         private volatile boolean accepting = true; // the first attempt takes the stream from its very start
         /** Turned off while live: report OFF, not STOPPED. */
         volatile boolean removed;
+        /**
+         * RE-8: what the relay has written to the platform, from its own -progress output (total_size).
+         * Bytes leaving the muxer are the honest sign that the platform takes the stream: a relay that
+         * can't connect, or whose connection hangs, writes nothing (the pipe in only shows FFmpeg probing).
+         */
+        private volatile long attemptBytes;
+        private volatile long earlierAttemptsBytes;
+        /** When bytes started flowing in this attempt (0: not flowing), and when they last grew. */
+        private volatile long flowingSince;
+        private volatile long lastGrowth;
+        /** The last reason this destination failed; reported until it is LIVE again. */
+        private volatile String lastFailure;
 
         Relay(int position, List<String> command) {
             this.position = position;
@@ -491,15 +528,31 @@ public final class StreamRunner {
                             terminate(p);
                         }
                         accepting = true;
-                        listener.onDestination(position, restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, null);
+                        earlierAttemptsBytes += attemptBytes;
+                        attemptBytes = 0;
+                        flowingSince = 0;
+                        listener.onDestination(position, restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, lastFailure);
                         Deque<String> errLines = new ArrayDeque<>();
-                        Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readLines(p.getErrorStream(), errLines));
+                        Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readRelayStderr(p.getErrorStream(), errLines));
                         Thread writer = platformThread("relay-in-" + jobId + "-" + position, () -> write(p));
                         boolean reportedLive = false;
+                        long confirm = settings.confirmAfter().toNanos();
+                        long stall = settings.stallAfter().toNanos();
                         while (!p.waitFor(200, TimeUnit.MILLISECONDS)) {
-                            if (!reportedLive && Duration.ofNanos(System.nanoTime() - startedAt).toSeconds() >= 3) {
+                            long now = System.nanoTime();
+                            long since = flowingSince;
+                            boolean flowing = since != 0 && now - lastGrowth <= stall;
+                            if (since != 0 && !flowing) {
+                                flowingSince = 0; // stalled: the next bytes start a new count
+                            }
+                            if (!reportedLive && flowing && now - since >= confirm) {
+                                lastFailure = null;
                                 listener.onDestination(position, "LIVE", restarts, null);
                                 reportedLive = true;
+                            } else if (reportedLive && !flowing) {
+                                lastFailure = STALLED;
+                                listener.onDestination(position, "RECONNECTING", restarts, STALLED);
+                                reportedLive = false;
                             }
                         }
                         accepting = false;
@@ -526,11 +579,12 @@ public final class StreamRunner {
                     if (reconnectRequested) {
                         // Asked for (GL-5): not a failure, so no backoff and no restart counted.
                         reconnectRequested = false;
-                        listener.onDestination(position, "RECONNECTING", restarts, null);
+                        listener.onDestination(position, "RECONNECTING", restarts, lastFailure);
                         clearQueue();
                         continue;
                     }
                     restarts++;
+                    lastFailure = error;
                     listener.onDestination(position, "RECONNECTING", restarts, error);
                     if (Duration.ofNanos(System.nanoTime() - startedAt).compareTo(settings.stableAfter()) >= 0) {
                         backoff = settings.initialBackoff();
@@ -553,6 +607,47 @@ public final class StreamRunner {
                 }
                 listener.onDestination(position, removed ? "OFF" : "STOPPED", restarts, null);
                 done.countDown();
+            }
+        }
+
+        /**
+         * The relay's stderr: -progress key=value blocks (total_size is what reached the output) and,
+         * between them, FFmpeg's own warnings and errors, of which the last few are kept as the reason.
+         */
+        private void readRelayStderr(InputStream err, Deque<String> errorLines) {
+            long pendingTotal = -1;
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(err, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    if (PROGRESS_LINE.matcher(line).matches()) {
+                        if (line.startsWith("total_size=")) {
+                            pendingTotal = (long) parseLeadingNumber(line.substring("total_size=".length()));
+                        } else if (line.startsWith("progress=") && pendingTotal > attemptBytes) {
+                            long now = System.nanoTime();
+                            attemptBytes = pendingTotal;
+                            lastGrowth = now;
+                            if (flowingSince == 0) {
+                                flowingSince = now;
+                            }
+                            try {
+                                listener.onDestinationBytes(position, earlierAttemptsBytes + pendingTotal);
+                            } catch (Exception e) {
+                                log.debug("Byte count for job {} failed", jobId, e);
+                            }
+                        }
+                        continue;
+                    }
+                    if (!line.isBlank()) {
+                        synchronized (errorLines) {
+                            errorLines.addLast(line.length() > 300 ? line.substring(0, 300) : line);
+                            while (errorLines.size() > 3) {
+                                errorLines.removeFirst();
+                            }
+                        }
+                    }
+                }
+            } catch (IOException ignored) {
+                // process ended
             }
         }
 
@@ -605,6 +700,9 @@ public final class StreamRunner {
         return p.isAlive() ? -1 : p.exitValue();
     }
 
+    /** One line of FFmpeg's -progress output ("total_size=123", "progress=continue"). */
+    private static final java.util.regex.Pattern PROGRESS_LINE = java.util.regex.Pattern.compile("[a-z0-9_]+=\\S*");
+
     private static Thread platformThread(String name, Runnable r) {
         return Thread.ofPlatform().name(name).daemon(true).start(r);
     }
@@ -614,24 +712,6 @@ public final class StreamRunner {
             t.join(timeout);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        }
-    }
-
-    private static void readLines(InputStream in, Deque<String> lines) {
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) {
-                if (!line.isBlank()) {
-                    synchronized (lines) {
-                        lines.addLast(line.length() > 300 ? line.substring(0, 300) : line);
-                        while (lines.size() > 3) {
-                            lines.removeFirst();
-                        }
-                    }
-                }
-            }
-        } catch (IOException ignored) {
-            // process ended
         }
     }
 

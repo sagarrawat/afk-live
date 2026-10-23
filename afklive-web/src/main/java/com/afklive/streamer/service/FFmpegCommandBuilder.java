@@ -385,10 +385,13 @@ public class FFmpegCommandBuilder {
     /**
      * A relay for one destination: reads the encoder's MPEG-TS from stdin and copies it to the
      * platform without re-encoding (almost no CPU), so each destination can reconnect on its own.
+     * Progress (total_size: bytes that reached the platform) goes to stderr every second; it is how the
+     * worker knows the platform is really receiving (RE-8) and how much each destination sent (FO-3).
      */
     public static List<String> buildRelayCommand(String destination) {
         String url = destinationUrl(destination);
         List<String> command = new ArrayList<>(List.of(ffmpegBinary(), "-hide_banner", "-loglevel", "warning", "-nostats",
+                "-progress", "pipe:2", "-stats_period", "1",
                 // Enough analysis to cover a full 2 s GOP at high bitrates, so a relay that joins mid-stream
                 // always sees a keyframe with its SPS/PPS; less than FFmpeg's 5 s default to speed reconnects.
                 "-analyzeduration", "3000000", "-probesize", "8000000",
