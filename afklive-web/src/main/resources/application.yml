@@ -114,6 +114,11 @@ app:
   encryption-key: ${APP_ENCRYPTION_KEY:}
   encryption-old-keys: ${APP_ENCRYPTION_OLD_KEYS:}
   # Phone streaming (MS-1): the ingest server (MediaMTX) phones publish to. Empty host: phone streams are off.
+  media:
+    # Probe and thumbnail new library files on web instances (ML-2); off only in tests.
+    auto-process: ${APP_MEDIA_AUTO_PROCESS:true}
+    # Resumable upload part size (S3 minimum is 5 MB).
+    min-part-bytes: ${APP_MEDIA_MIN_PART_BYTES:16777216}
   billing:
     # Shown on GST invoices (BI-3). seller-state is the two-digit GST state code of seller-gstin.
     seller-name: ${APP_BILLING_SELLER_NAME:AFK Live}

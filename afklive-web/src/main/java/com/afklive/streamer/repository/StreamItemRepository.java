@@ -16,4 +16,9 @@ public interface StreamItemRepository extends JpaRepository<StreamItem, Long> {
     /** Streams that use a library file, for "in use" checks before deleting it. */
     @Query("SELECT DISTINCT i.streamId FROM StreamItem i WHERE i.media.id = :mediaId")
     List<Long> findStreamIdsUsingMedia(@Param("mediaId") Long mediaId);
+
+    /** Takes a deleted library file out of every playlist (ML-6). */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM StreamItem i WHERE i.media.id = :mediaId")
+    int deleteByMediaId(@Param("mediaId") Long mediaId);
 }

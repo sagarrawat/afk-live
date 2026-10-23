@@ -767,6 +767,86 @@ public class LiveStreamService {
         return out;
     }
 
+    // ------------------------------------------------------------------ library files in use (ML-6)
+
+    public record MediaUse(Long streamId, String streamName, boolean live) {
+    }
+
+    /** For each of these files, the creator's streams that use it (playlist, music, overlay image, scene background). */
+    public Map<Long, List<MediaUse>> mediaUses(String email, Collection<Long> mediaIds) {
+        Map<Long, List<MediaUse>> out = new HashMap<>();
+        if (mediaIds.isEmpty()) {
+            return out;
+        }
+        Set<Long> wanted = new HashSet<>(mediaIds);
+        for (LiveStream s : streams.findAllByUserEmailOrderByCreatedAtAsc(email)) {
+            Set<Long> used = new HashSet<>();
+            for (StreamItem i : items.findAllByStreamIdOrderByPositionAsc(s.getId())) {
+                used.add(i.getMedia().getId());
+            }
+            for (StudioSpec.OverlaySetting o : overlays(s)) {
+                if (o.imageMediaId() != null) {
+                    used.add(o.imageMediaId());
+                }
+            }
+            if (s.getScenes() != null && !s.getScenes().isBlank()) {
+                for (StudioSpec.SceneSetting sc : scenes(s)) {
+                    if (sc.backgroundMediaId() != null) {
+                        used.add(sc.backgroundMediaId());
+                    }
+                }
+            }
+            used.retainAll(wanted);
+            if (used.isEmpty()) {
+                continue;
+            }
+            MediaUse use = new MediaUse(s.getId(), s.getName(), currentJob(s).isPresent());
+            for (Long id : used) {
+                out.computeIfAbsent(id, k -> new ArrayList<>()).add(use);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Removes a file from the creator's streams that aren't live (playlist entries go with the file via
+     * the database; overlay images and scene backgrounds are cleared here).
+     */
+    @Transactional
+    public void forgetMedia(String email, Long mediaId) {
+        for (LiveStream s : streams.findAllByUserEmailOrderByCreatedAtAsc(email)) {
+            boolean changed = false;
+            List<StudioSpec.OverlaySetting> ov = new ArrayList<>();
+            for (StudioSpec.OverlaySetting o : overlays(s)) {
+                if (mediaId.equals(o.imageMediaId())) {
+                    changed = true;
+                    continue; // an image overlay without its image is removed
+                }
+                ov.add(o);
+            }
+            List<StudioSpec.SceneSetting> sc = new ArrayList<>();
+            boolean hasScenes = s.getScenes() != null && !s.getScenes().isBlank();
+            if (hasScenes) {
+                for (StudioSpec.SceneSetting x : scenes(s)) {
+                    if (mediaId.equals(x.backgroundMediaId())) {
+                        changed = true;
+                        sc.add(new StudioSpec.SceneSetting(x.name(), null, null, null, x.color(), x.music()));
+                    } else {
+                        sc.add(x);
+                    }
+                }
+            }
+            if (changed) {
+                s.setOverlays(StudioSpec.json(ov));
+                if (hasScenes) {
+                    s.setScenes(StudioSpec.json(sc));
+                }
+                s.setUpdatedAt(java.time.ZonedDateTime.now());
+                streams.save(s);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ helpers
 
     List<StudioSpec.OverlaySetting> overlays(LiveStream s) {

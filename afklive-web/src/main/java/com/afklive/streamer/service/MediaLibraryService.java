@@ -22,12 +22,15 @@ public class MediaLibraryService {
     private final UserService userService;
     private final MediaAssetRepository mediaAssetRepository;
     private final ScheduledVideoRepository scheduledVideoRepository;
+    private final MediaProcessor processor;
 
     @Transactional
     public ScheduledVideo addVideo(String email, String title, String storageKey, long sizeBytes) {
         User user = userService.getOrCreateUser(email);
-        MediaAsset asset = mediaAssetRepository.save(
-                new MediaAsset(user, title, storageKey, sizeBytes, MediaAsset.ContentType.VIDEO));
+        MediaAsset fresh = new MediaAsset(user, title, storageKey, sizeBytes, MediaAsset.ContentType.VIDEO);
+        fresh.setStatus(com.afklive.streamer.model.MediaStatus.PROCESSING);
+        MediaAsset asset = mediaAssetRepository.save(fresh);
+        processor.enqueue(asset.getId()); // ML-2: checked before it can stream
 
         ScheduledVideo video = new ScheduledVideo();
         video.setUser(user);
