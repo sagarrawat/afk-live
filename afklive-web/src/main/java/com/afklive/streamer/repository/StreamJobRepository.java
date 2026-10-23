@@ -36,4 +36,29 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     // History
     Page<StreamJob> findByUserEmailOrderByStartTimeDesc(String email, Pageable pageable);
+
+    List<StreamJob> findAllByIsLiveTrueAndStopAtLessThanEqual(java.time.ZonedDateTime time);
+
+    /**
+     * Marks a live job ended. Returns 1 only for the single caller that actually ended it, so the
+     * final charge and cleanup run exactly once even if a stop and a process exit race.
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.isLive = false, j.endTime = :endTime, j.endReason = :reason WHERE j.id = :id AND j.isLive = true")
+    int markEnded(@org.springframework.data.repository.query.Param("id") Long id,
+                  @org.springframework.data.repository.query.Param("endTime") java.time.ZonedDateTime endTime,
+                  @org.springframework.data.repository.query.Param("reason") String reason);
+
+    /**
+     * Adds a billing increment only if the job is still live and nobody billed it since {@code previous}.
+     * Returns 1 when applied; then (and only then) the user's balance should be charged.
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.accumulatedCost = j.accumulatedCost + :increment, j.lastBillingTime = :now WHERE j.id = :id AND j.isLive = true AND j.lastBillingTime = :previous")
+    int addBilling(@org.springframework.data.repository.query.Param("id") Long id,
+                   @org.springframework.data.repository.query.Param("increment") double increment,
+                   @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                   @org.springframework.data.repository.query.Param("previous") java.time.ZonedDateTime previous);
 }

@@ -46,6 +46,11 @@ public class StreamJob {
     private java.time.ZonedDateTime endTime;
     private Double cost;
 
+    /** When set, the stream is stopped automatically at this time. */
+    private java.time.ZonedDateTime stopAt;
+    /** Why the stream ended (user, schedule, credit limit, crash, server restart). */
+    private String endReason;
+
     private java.time.ZonedDateTime lastBillingTime;
     private double accumulatedCost = 0.0;
 

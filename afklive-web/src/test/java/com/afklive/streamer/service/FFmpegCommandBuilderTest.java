@@ -31,7 +31,7 @@ class FFmpegCommandBuilderTest {
 
         assertThat(command).contains("ffmpeg", "-i", videoPath.toString());
         assertThat(command.toString()).contains("rtmp://a.rtmp.youtube.com:1935/live2/" + streamKey);
-        assertThat(command).contains("-map", "0:a?");
+        assertThat(command).contains("-map", "0:a?"); // audio presence unknown: optional map
         // Scaling dynamic
         assertThat(command.toString()).contains("scale=-2:min(ih\\,1080)");
     }
@@ -106,5 +106,14 @@ class FFmpegCommandBuilderTest {
                 null, null, -1, null, false, "original", 1080);
         assertThat(command.get(command.size() - 1)).isEqualTo("srt://8.8.8.8:9000?streamid=abc");
         assertThat(command.get(command.size() - 2)).isEqualTo("mpegts");
+    }
+
+    @Test
+    void musicVolumeCanOnlyBeANumber() {
+        assertThat(FFmpegCommandBuilder.safeVolume("0.5")).isEqualTo("0.50");
+        assertThat(FFmpegCommandBuilder.safeVolume("5")).isEqualTo("2.00");
+        assertThat(FFmpegCommandBuilder.safeVolume("-1")).isEqualTo("0.00");
+        assertThat(FFmpegCommandBuilder.safeVolume("1[x];amovie=/etc/passwd")).isEqualTo("1.00");
+        assertThat(FFmpegCommandBuilder.safeVolume(null)).isEqualTo("1.00");
     }
 }

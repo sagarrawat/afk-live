@@ -358,13 +358,11 @@ document.addEventListener('alpine:init', () => {
                 const res = await apiFetch(`/api/stream/${streamId}/stop-at`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ time: time })
+                    body: JSON.stringify({ time: `${h.trim().padStart(2, '0')}:${m.trim().padStart(2, '0')}`, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
                 });
-                if(res.ok) showToast(`Stream set to end at ${time}`, "success");
-                else showToast("Failed to schedule stop", "error");
+                if(res.ok) showToast(`Stream will stop at ${time}`, "success");
             } catch(e) {
-                // Fallback if backend not ready: Mock it for UI demo
-                showToast(`Stream set to end at ${time} (Mock)`, "success");
+                // apiFetch already showed the error
             }
         },
 
