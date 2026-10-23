@@ -190,6 +190,41 @@ public class LiveStreamService {
         return s;
     }
 
+    /**
+     * ST-4: a copy to start a similar channel from: name, picture settings, playlist, music, audio,
+     * overlays and scenes. Destinations come along switched off (two streams on one key would fight)
+     * and schedules stay behind; a phone stream gets its own new ingest key.
+     */
+    @Transactional
+    public LiveStream duplicate(String email, Long id) {
+        LiveStream src = get(email, id);
+        String base = src.getName().length() > 92 ? src.getName().substring(0, 92) : src.getName();
+        LiveStream copy = create(email, new CreateStream(base + " (copy)", src.getSource().name(), src.getOrientation().name(),
+                src.getQualityHeight(), src.getFps()));
+        copy.setPlaybackOrder(src.getPlaybackOrder());
+        copy.setLoopCount(src.getLoopCount());
+        copy.setMusicOrder(src.getMusicOrder());
+        copy.setAudioMode(src.getAudioMode());
+        copy.setVideoVolume(src.getVideoVolume());
+        copy.setMusicVolume(src.getMusicVolume());
+        copy.setOverlays(src.getOverlays());
+        copy.setScenes(src.getScenes());
+        copy.setTimeZone(src.getTimeZone());
+        copy.setEndOnInputLoss(src.isEndOnInputLoss());
+        copy.setInputGraceSeconds(src.getInputGraceSeconds());
+        copy.setSrtLatencyMs(src.getSrtLatencyMs());
+        copy = streams.save(copy);
+        for (StreamItem.Kind kind : StreamItem.Kind.values()) {
+            for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(src.getId(), kind)) {
+                items.save(new StreamItem(copy.getId(), kind, i.getPosition(), i.getMedia()));
+            }
+        }
+        for (StreamTarget t : targets.findAllByStreamId(src.getId())) {
+            targets.save(new StreamTarget(copy.getId(), t.getDestinationId(), false));
+        }
+        return copy;
+    }
+
     @Transactional
     public void delete(String email, Long id) {
         LiveStream s = get(email, id);

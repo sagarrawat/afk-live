@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isOnAir } from '@/components/status';
 import { Button, Dialog, Field, Input, Panel, Segmented, Select, useAction } from '@/components/ui';
-import { del, patch } from '@/lib/api';
+import { del, patch, post } from '@/lib/api';
 import { keys, useInvalidate, useQualityOptions } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
@@ -76,8 +76,33 @@ export function SettingsTab({ stream: s }: { stream: StreamView }) {
         </div>
       </Panel>
 
+      <DuplicateStream stream={s} />
       <DangerZone stream={s} />
     </div>
+  );
+}
+
+/** ST-4: start a similar channel from this one. */
+function DuplicateStream({ stream: s }: { stream: StreamView }) {
+  const { busy, run } = useAction();
+  const navigate = useNavigate();
+  const invalidate = useInvalidate();
+  return (
+    <Panel title="Duplicate stream">
+      <p className="mb-4 text-muted">Makes a copy with the same playlist, music, overlays and settings. Destinations start switched off and schedules aren't copied.</p>
+      <Button
+        busy={busy}
+        onClick={async () => {
+          let copy: StreamView | undefined;
+          if (await run(async () => { copy = await post<StreamView>(`/api/streams/${s.id}/duplicate`); }, 'Copy made.')) {
+            await invalidate([...keys.streams]);
+            if (copy) navigate(`/studio/streams/${copy.id}`);
+          }
+        }}
+      >
+        Duplicate {s.name}
+      </Button>
+    </Panel>
   );
 }
 

@@ -64,6 +64,13 @@ public class LiveStreamController {
         return service.view(email(principal), id);
     }
 
+    /** ST-4. */
+    @PostMapping("/{id}/duplicate")
+    public ResponseEntity<StreamView> duplicate(@PathVariable Long id, Principal principal) {
+        LiveStream s = service.duplicate(email(principal), id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.view(email(principal), s.getId()));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
         service.delete(email(principal), id);

@@ -273,6 +273,26 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void duplicatingCopiesTheSetupButNotWhereItGoesOrWhen() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        service.update(email, s.getId(), new UpdateStream(null, null, null, null, "SHUFFLE", null, null, null, null, null, null));
+        service.setOverlays(email, s.getId(), List.of(new StudioSpec.OverlaySetting(null, "TEXT", true, 0.05, 0.05, 0, 0.05,
+                "lofi rain", null, null, "#ffffff", "#99000000", 1, null, null, 0, null)));
+
+        LiveStream copy = service.duplicate(email, s.getId());
+        var view = service.view(email, copy.getId());
+        assertThat(view.name()).isEqualTo("Lofi 24/7 (copy)");
+        assertThat(view.playbackOrder()).isEqualTo("SHUFFLE");
+        assertThat(view.playlist()).extracting(m -> m.title()).containsExactly("rain.mp4", "night.mp4");
+        assertThat(view.overlays()).extracting(StudioSpec.OverlaySetting::text).containsExactly("lofi rain");
+        assertThat(view.destinations()).hasSize(1).allMatch(d -> !d.enabled()); // same channel, switched off
+        assertThat(view.schedules()).isEmpty();
+        // The original is untouched.
+        assertThat(service.view(email, s.getId()).destinations()).allMatch(d -> d.enabled());
+    }
+
+    @Test
     void stopAtUsesTheCreatorsTimeZone() {
         String email = newUser(PlanType.ESSENTIALS);
         LiveStream s = ready(email);
