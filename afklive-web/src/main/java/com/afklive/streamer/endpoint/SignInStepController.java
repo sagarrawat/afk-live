@@ -93,7 +93,7 @@ public class SignInStepController {
     }
 
     private static String home(Authentication auth) {
-        return auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority())) ? "/admin" : "/studio";
+        return com.afklive.streamer.security.SignInTargets.home(auth);
     }
 
     private static Object attr(HttpServletRequest request, String name) {

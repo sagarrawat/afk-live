@@ -14,4 +14,5 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, Lo
     Page<SupportTicket> findAllByOrderByCreatedAtDesc(Pageable pageable);
     List<SupportTicket> findByUserEmailOrderByCreatedAtDesc(String userEmail);
     long countByStatus(String status);
+    Page<SupportTicket> findAllByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
 }

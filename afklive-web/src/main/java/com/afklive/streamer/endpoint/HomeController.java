@@ -1,7 +1,7 @@
 package com.afklive.streamer.endpoint;
 
+import com.afklive.streamer.security.SignInTargets;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -13,13 +13,15 @@ public class HomeController {
     @GetMapping("/")
     public String home(Authentication authentication) {
         if (authentication != null && authentication.isAuthenticated()) {
-            Set<String> roles = AuthorityUtils.authorityListToSet(authentication.getAuthorities());
-            if (roles.contains("ROLE_ADMIN")) {
-                return "redirect:/studio/admin";
-            }
-            return "redirect:/studio";
+            return "redirect:" + SignInTargets.home(authentication);
         }
         return "forward:/site/index.html";
+    }
+
+    /** The old server-rendered admin moved into the app; old bookmarks land in the admin console. */
+    @GetMapping({"/admin", "/admin/**"})
+    public String oldAdmin() {
+        return "redirect:" + SignInTargets.ADMIN_HOME;
     }
 
     /** MK-3: the use-case pages (afklive-ui/site/use-cases.py). */

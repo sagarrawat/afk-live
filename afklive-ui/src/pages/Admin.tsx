@@ -1,10 +1,10 @@
 import clsx from 'clsx';
-import { useQuery } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Download, Paperclip, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
 import { HealthDot, LiveBadge } from '@/components/status';
-import { Badge, Button, Dialog, ErrorNote, Field, Input, PageHeader, Panel, Select, Spinner, Textarea, useAction } from '@/components/ui';
+import { Badge, Button, Dialog, ErrorNote, Field, Input, PageHeader, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
 import { get, post } from '@/lib/api';
 import { bytes, date, dateTime, duration, money, timecode } from '@/lib/format';
 import { useMe } from '@/lib/queries';
@@ -107,6 +107,8 @@ export function Admin() {
         {[
           ['live', 'Live streams'],
           ['users', 'Users'],
+          ['support', 'Support'],
+          ['plans', 'Plans'],
           ['platform', 'Platform'],
           ['audit', 'Audit log'],
         ].map(([s, label]) => (
@@ -121,13 +123,34 @@ export function Admin() {
       </nav>
       {section === 'live' && <LiveStreams />}
       {section === 'users' && (id ? <UserPage id={Number(id)} /> : <Users />)}
+      {section === 'support' && (id ? <TicketPage id={Number(id)} /> : <Tickets />)}
+      {section === 'plans' && <Plans />}
       {section === 'platform' && <Platform />}
       {section === 'audit' && <Audit />}
     </>
   );
 }
 
-function ReasonDialog({ title, action, onClose, onSubmit, danger, children }: { title: string; action: string; onClose: () => void; onSubmit: (reason: string) => Promise<unknown>; danger?: boolean; children?: React.ReactNode }) {
+function ReasonDialog({
+  title,
+  action,
+  onClose,
+  onSubmit,
+  danger,
+  blocked,
+  wide,
+  children,
+}: {
+  title: string;
+  action: string;
+  onClose: () => void;
+  onSubmit: (reason: string) => Promise<unknown>;
+  danger?: boolean;
+  /** Keeps the action disabled, e.g. while the form above the reason isn't valid. */
+  blocked?: boolean;
+  wide?: boolean;
+  children?: React.ReactNode;
+}) {
   const [reason, setReason] = useState('');
   const { busy, run } = useAction();
   return (
@@ -135,12 +158,13 @@ function ReasonDialog({ title, action, onClose, onSubmit, danger, children }: { 
       open
       onClose={onClose}
       title={title}
+      wide={wide}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant={danger ? 'danger' : 'primary'} busy={busy} disabled={reason.trim().length < 3} onClick={async () => (await run(() => onSubmit(reason.trim()), 'Done.')) && onClose()}>
+          <Button variant={danger ? 'danger' : 'primary'} busy={busy} disabled={blocked || reason.trim().length < 3} onClick={async () => (await run(() => onSubmit(reason.trim()), 'Done.')) && onClose()}>
             {action}
           </Button>
         </>
@@ -341,6 +365,7 @@ export function CostLine({ cost }: { cost: CostView }) {
 function Platform() {
   return (
     <div className="space-y-6">
+      <OverviewPanel />
       <Quota />
       <Incidents />
     </div>
@@ -496,6 +521,473 @@ function IncidentDialog({ incident, onClose, onDone }: { incident?: StatusIncide
         </Field>
       </div>
     </Dialog>
+  );
+}
+
+export interface AdminOverview {
+  users: number;
+  liveStreams: number;
+  storageBytes: number;
+  openTickets: number;
+  freeStreamLimit: number;
+  revenue: { currency: string; allTime: number; last30Days: number }[];
+}
+
+function Stat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm text-muted">{label}</p>
+      <p className="tnum truncate text-xl font-semibold">{children}</p>
+    </div>
+  );
+}
+
+/** The platform at a glance, and the free-plan capacity setting. */
+function OverviewPanel() {
+  const qc = useQueryClient();
+  const o = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => get<AdminOverview>('/api/admin/overview'), refetchInterval: 30000 });
+  const [editing, setEditing] = useState(false);
+  const [limit, setLimit] = useState('');
+  if (o.isLoading) return <Spinner />;
+  if (!o.data) return <ErrorNote error={o.error} />;
+  const d = o.data;
+  const n = Number(limit);
+  const limitOk = limit.trim() !== '' && Number.isInteger(n) && n >= 0 && n <= 10000;
+  return (
+    <Panel title="Platform at a glance">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Stat label="Accounts">{d.users.toLocaleString()}</Stat>
+        <Stat label="Live now">{d.liveStreams.toLocaleString()}</Stat>
+        <Stat label="Storage used">{bytes(d.storageBytes)}</Stat>
+        <Stat label="Open tickets">
+          <Link to="/studio/admin/support" className="hover:underline">
+            {d.openTickets.toLocaleString()}
+          </Link>
+        </Stat>
+      </div>
+      <div className="mt-5 border-t border-line pt-4 text-sm">
+        <p className="font-medium">Payments received</p>
+        {d.revenue.length === 0 ? (
+          <p className="text-muted">No completed payments yet.</p>
+        ) : (
+          <ul className="mt-1 space-y-1">
+            {d.revenue.map((r) => (
+              <li key={r.currency} className="tnum text-muted">
+                <span className="font-medium text-ink">{money(r.last30Days, r.currency)}</span> in the last 30 days, {money(r.allTime, r.currency)} in all
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-1 text-xs text-muted">Completed payments only; refunded ones aren't counted.</p>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
+        <p className="min-w-0 flex-1">
+          <span className="font-medium">Free plan capacity: </span>
+          <span className="text-muted">
+            free accounts can't go live while <span className="tnum font-medium text-ink">{d.freeStreamLimit.toLocaleString()}</span> or more streams (all plans) are live.
+          </span>
+        </p>
+        <Button size="sm" onClick={() => (setLimit(String(d.freeStreamLimit)), setEditing(true))}>
+          Change
+        </Button>
+      </div>
+      {editing && (
+        <ReasonDialog
+          title="Free plan capacity"
+          action="Save"
+          blocked={!limitOk}
+          onClose={() => setEditing(false)}
+          onSubmit={(reason) => post<AdminOverview>('/api/admin/settings/free-stream-limit', { limit: n, reason }).then((next) => qc.setQueryData(['admin', 'overview'], next))}
+        >
+          <Field label="Live streams before free accounts wait" htmlFor="fl" hint="0 to 10,000. Applies to the next go-live; streams already live keep running." error={limitOk ? null : 'Enter a whole number from 0 to 10,000.'}>
+            <Input id="fl" type="number" min={0} max={10000} value={limit} onChange={(e) => setLimit(e.target.value)} />
+          </Field>
+        </ReasonDialog>
+      )}
+    </Panel>
+  );
+}
+
+// ------------------------------------------------------------------ support tickets
+
+type TicketStatus = 'OPEN' | 'RESOLVED' | 'CLOSED';
+export interface Ticket {
+  id: number;
+  userEmail?: string | null;
+  userId?: number | null;
+  category: string;
+  message: string;
+  status: TicketStatus;
+  createdAt: string;
+  attachmentName?: string | null;
+  hasAttachment: boolean;
+}
+const TICKET_LABEL: Record<TicketStatus, string> = { OPEN: 'Open', RESOLVED: 'Resolved', CLOSED: 'Closed' };
+const TICKET_TONE: Record<TicketStatus, 'warn' | 'ok' | 'neutral'> = { OPEN: 'warn', RESOLVED: 'ok', CLOSED: 'neutral' };
+
+function Tickets() {
+  const [status, setStatus] = useState<TicketStatus | 'ALL'>('OPEN');
+  const [page, setPage] = useState(0);
+  const list = useQuery({
+    queryKey: ['admin', 'tickets', status, page],
+    queryFn: () => get<Page<Ticket>>(`/api/admin/tickets?status=${status === 'ALL' ? '' : status}&page=${page}`),
+  });
+  return (
+    <div className="space-y-4">
+      <Segmented
+        label="Ticket status"
+        value={status}
+        onChange={(v) => (setStatus(v), setPage(0))}
+        options={[
+          { value: 'OPEN', label: 'Open' },
+          { value: 'RESOLVED', label: 'Resolved' },
+          { value: 'CLOSED', label: 'Closed' },
+          { value: 'ALL', label: 'All' },
+        ]}
+      />
+      <ErrorNote error={list.error} />
+      <ul className="divide-y divide-line rounded-md border border-line bg-panel">
+        {(list.data?.content ?? []).map((t) => (
+          <li key={t.id}>
+            <Link to={`/studio/admin/support/${t.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-raised">
+              <span className="min-w-0 flex-1 basis-56">
+                <span className="block truncate font-medium">{t.userEmail ?? 'Unknown account'}</span>
+                <span className="line-clamp-2 break-words text-sm text-muted">{t.message}</span>
+              </span>
+              <Badge>{t.category}</Badge>
+              {t.hasAttachment && <Paperclip className="h-4 w-4 text-muted" aria-label="Has an attachment" />}
+              <Badge tone={TICKET_TONE[t.status] ?? 'neutral'}>{TICKET_LABEL[t.status] ?? t.status}</Badge>
+              <span className="tnum text-sm text-muted">{dateTime(t.createdAt)}</span>
+            </Link>
+          </li>
+        ))}
+        {list.data?.content.length === 0 && <li className="px-4 py-6 text-center text-muted">{status === 'ALL' ? 'No tickets yet.' : `No ${TICKET_LABEL[status].toLowerCase()} tickets.`}</li>}
+      </ul>
+      {list.data && list.data.totalPages > 1 && (
+        <div className="flex justify-center gap-3">
+          <Button size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
+            Newer
+          </Button>
+          <Button size="sm" disabled={page + 1 >= list.data.totalPages} onClick={() => setPage(page + 1)}>
+            Older
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** How an attachment can be previewed in the page, from its file name. */
+export function attachmentKind(name: string | null | undefined): 'image' | 'video' | 'file' {
+  const n = (name ?? '').toLowerCase();
+  if (/\.(png|jpe?g)$/.test(n)) return 'image';
+  if (/\.mp4$/.test(n)) return 'video';
+  return 'file';
+}
+
+function TicketPage({ id }: { id: number }) {
+  const qc = useQueryClient();
+  const t = useQuery({ queryKey: ['admin', 'ticket', id], queryFn: () => get<Ticket>(`/api/admin/tickets/${id}`) });
+  const [next, setNext] = useState<TicketStatus | null>(null);
+  if (t.isLoading) return <Spinner />;
+  if (!t.data) return <ErrorNote error={t.error} />;
+  const d = t.data;
+  const url = `/api/admin/tickets/${d.id}/attachment`;
+  const kind = attachmentKind(d.attachmentName);
+  const verbs: Record<TicketStatus, string> = { OPEN: 'Reopen', RESOLVED: 'Mark resolved', CLOSED: 'Close' };
+  return (
+    <div className="space-y-6">
+      <Link to="/studio/admin/support" className="text-sm text-muted hover:text-ink">
+        All tickets
+      </Link>
+      <Panel title={`${d.category} ticket`} action={<Badge tone={TICKET_TONE[d.status] ?? 'neutral'}>{TICKET_LABEL[d.status] ?? d.status}</Badge>}>
+        <p className="text-sm text-muted">
+          From{' '}
+          {d.userId ? (
+            <Link to={`/studio/admin/users/${d.userId}`} className="text-ink hover:underline">
+              {d.userEmail}
+            </Link>
+          ) : (
+            (d.userEmail ?? 'an unknown account')
+          )}
+          , {dateTime(d.createdAt)}
+        </p>
+        <p className="mt-3 whitespace-pre-wrap break-words">{d.message}</p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {d.status === 'OPEN' ? (
+            <>
+              <Button size="sm" variant="primary" onClick={() => setNext('RESOLVED')}>
+                Mark resolved
+              </Button>
+              <Button size="sm" onClick={() => setNext('CLOSED')}>
+                Close
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" onClick={() => setNext('OPEN')}>
+              Reopen
+            </Button>
+          )}
+        </div>
+      </Panel>
+      {d.hasAttachment && (
+        <Panel
+          title="Attachment"
+          action={
+            <a href={url} download={d.attachmentName ?? true} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+              <Download className="h-4 w-4" aria-hidden />
+              Download
+            </a>
+          }
+        >
+          <p className="mb-3 truncate text-sm text-muted">{d.attachmentName}</p>
+          {kind === 'image' && <img src={url} alt={`Attachment: ${d.attachmentName}`} className="max-h-96 max-w-full rounded border border-line object-contain" />}
+          {kind === 'video' && <video src={url} controls className="max-h-96 w-full rounded border border-line" />}
+          {kind === 'file' && <p className="text-sm text-muted">No preview for this kind of file. Download it to open it.</p>}
+        </Panel>
+      )}
+      {next && (
+        <ReasonDialog
+          title={`${verbs[next]} this ticket?`}
+          action={verbs[next]}
+          onClose={() => setNext(null)}
+          onSubmit={(reason) =>
+            post<Ticket>(`/api/admin/tickets/${d.id}/status`, { status: next, reason }).then((saved) => {
+              qc.setQueryData(['admin', 'ticket', id], saved);
+              qc.invalidateQueries({ queryKey: ['admin', 'tickets'] });
+              qc.invalidateQueries({ queryKey: ['admin', 'overview'] });
+            })
+          }
+        >
+          <p className="text-muted">The customer isn't emailed; reply to them from the support inbox.</p>
+        </ReasonDialog>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ plans
+
+export interface PlanSettings {
+  plan: string;
+  displayName: string;
+  maxStorageBytes: number;
+  maxActiveStreams: number;
+  maxDestinations: number;
+  maxChannels: number;
+  maxResolution: number;
+  maxFps: number;
+  monthlyHours: number;
+  watermark: boolean;
+  maxScheduledPosts: number;
+  priceInrMonth: number;
+  priceInrYear: number;
+  priceUsdMonth: number;
+  priceUsdYear: number;
+}
+
+/** The plan editor's fields, as typed (prices in rupees / dollars, storage in GB). */
+export interface PlanForm {
+  displayName: string;
+  storageGb: string;
+  streams: string;
+  destinations: string;
+  resolution: string;
+  fps: string;
+  monthlyHours: string;
+  watermark: boolean;
+  inrMonth: string;
+  inrYear: string;
+  usdMonth: string;
+  usdYear: string;
+}
+
+const GB = 1024 ** 3;
+const RESOLUTIONS: [number, string][] = [
+  [720, '720p'],
+  [1080, '1080p'],
+  [1440, '1440p'],
+  [2160, '4K (2160p)'],
+];
+
+export function planForm(p: PlanSettings): PlanForm {
+  const major = (minor: number) => String(minor / 100);
+  return {
+    displayName: p.displayName,
+    storageGb: String(Math.round((p.maxStorageBytes / GB) * 100) / 100),
+    streams: String(p.maxActiveStreams),
+    destinations: String(p.maxDestinations),
+    resolution: String(p.maxResolution),
+    fps: String(p.maxFps),
+    monthlyHours: String(p.monthlyHours),
+    watermark: p.watermark,
+    inrMonth: major(p.priceInrMonth),
+    inrYear: major(p.priceInrYear),
+    usdMonth: major(p.priceUsdMonth),
+    usdYear: major(p.priceUsdYear),
+  };
+}
+
+/** What's wrong with the form, in words (null: it can be saved). The server checks the same rules. */
+export function planProblem(plan: string, f: PlanForm): string | null {
+  const num = (s: string) => (s.trim() === '' ? NaN : Number(s));
+  const whole = (s: string, min: number, max: number) => Number.isInteger(num(s)) && num(s) >= min && num(s) <= max;
+  if (!f.displayName.trim() || f.displayName.trim().length > 40) return 'Give the plan a name of up to 40 characters.';
+  if (!(num(f.storageGb) > 0 && num(f.storageGb) <= 10240)) return 'Storage is more than 0 and at most 10,240 GB.';
+  if (!whole(f.streams, 1, 1000)) return 'Streams at a time is a whole number from 1 to 1,000.';
+  if (!whole(f.destinations, 1, 20)) return 'Destinations per stream is a whole number from 1 to 20.';
+  if (!whole(f.monthlyHours, 0, 744)) return 'Monthly hours is a whole number from 0 (no limit) to 744.';
+  const prices = [f.inrMonth, f.inrYear, f.usdMonth, f.usdYear].map(num);
+  if (prices.some((p) => !Number.isFinite(p) || p < 0)) return "Prices can't be empty or negative.";
+  if (prices.some((p) => Math.round(p * 100) !== Math.round(p * 100 * 1000) / 1000)) return 'Prices have at most two decimals.';
+  const [inrMonth, inrYear, usdMonth, usdYear] = prices;
+  if (plan === 'FREE') {
+    if (prices.some((p) => p !== 0)) return "The Free plan's prices stay 0.";
+  } else {
+    if (prices.some((p) => p === 0)) return 'A paid plan needs every price above 0.';
+    if (inrYear > inrMonth * 12 || usdYear > usdMonth * 12) return "A yearly price can't be more than 12 monthly ones.";
+  }
+  return null;
+}
+
+function planBody(f: PlanForm) {
+  const minor = (s: string) => Math.round(Number(s) * 100);
+  return {
+    displayName: f.displayName.trim(),
+    maxStorageBytes: Math.round(Number(f.storageGb) * GB),
+    maxActiveStreams: Number(f.streams),
+    maxDestinations: Number(f.destinations),
+    maxResolution: Number(f.resolution),
+    maxFps: Number(f.fps),
+    monthlyHours: Number(f.monthlyHours),
+    watermark: f.watermark,
+    priceInrMonth: minor(f.inrMonth),
+    priceInrYear: minor(f.inrYear),
+    priceUsdMonth: minor(f.usdMonth),
+    priceUsdYear: minor(f.usdYear),
+  };
+}
+
+function Plans() {
+  const plans = useQuery({ queryKey: ['admin', 'plans'], queryFn: () => get<PlanSettings[]>('/api/admin/plans') });
+  const [editing, setEditing] = useState<PlanSettings | null>(null);
+  if (plans.isLoading) return <Spinner />;
+  if (!plans.data) return <ErrorNote error={plans.error} />;
+  const price = (month: number, year: number, cur: string) => (month === 0 && year === 0 ? 'Free' : `${money(month, cur)} a month, ${money(year, cur)} a year`);
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted">Changes apply right away: limits to everyone on the plan, prices to every checkout and renewal from then on. Prices include GST.</p>
+      <ul className="grid gap-4 sm:grid-cols-2">
+        {plans.data.map((p) => (
+          <li key={p.plan}>
+            <Panel
+              title={
+                <span className="flex items-center gap-2">
+                  {p.displayName} <Badge>{p.plan}</Badge>
+                </span>
+              }
+              action={
+                <Button size="sm" onClick={() => setEditing(p)}>
+                  Edit
+                </Button>
+              }
+            >
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="text-muted">India</dt>
+                <dd className="tnum">{price(p.priceInrMonth, p.priceInrYear, 'INR')}</dd>
+                <dt className="text-muted">Elsewhere</dt>
+                <dd className="tnum">{price(p.priceUsdMonth, p.priceUsdYear, 'USD')}</dd>
+                <dt className="text-muted">Streams</dt>
+                <dd className="tnum">
+                  {p.maxActiveStreams} at a time, {p.maxDestinations} destination{p.maxDestinations === 1 ? '' : 's'} each
+                </dd>
+                <dt className="text-muted">Quality</dt>
+                <dd className="tnum">
+                  Up to {p.maxResolution}p at {p.maxFps} fps{p.watermark ? ', with watermark' : ''}
+                </dd>
+                <dt className="text-muted">Storage</dt>
+                <dd className="tnum">{bytes(p.maxStorageBytes)}</dd>
+                <dt className="text-muted">Hours</dt>
+                <dd className="tnum">{p.monthlyHours === 0 ? 'No monthly limit' : `${p.monthlyHours} a month`}</dd>
+              </dl>
+            </Panel>
+          </li>
+        ))}
+      </ul>
+      {editing && <PlanDialog plan={editing} onClose={() => setEditing(null)} onSaved={() => plans.refetch()} />}
+    </div>
+  );
+}
+
+function PlanDialog({ plan, onClose, onSaved }: { plan: PlanSettings; onClose: () => void; onSaved: () => void }) {
+  const [f, setF] = useState<PlanForm>(() => planForm(plan));
+  const set = (k: keyof PlanForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
+  const problem = planProblem(plan.plan, f);
+  const paid = plan.plan !== 'FREE';
+  return (
+    <ReasonDialog
+      wide
+      title={`Edit ${plan.displayName}`}
+      action="Save plan"
+      blocked={problem != null}
+      onClose={onClose}
+      onSubmit={(reason) => post(`/api/admin/plans/${plan.plan}`, { plan: planBody(f), reason }).then(onSaved)}
+    >
+      <p className="text-sm text-muted">Saving applies at once: limits for everyone on {plan.displayName} (streams already live keep running), prices for every new purchase and renewal.</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Name" htmlFor="pn">
+          <Input id="pn" value={f.displayName} maxLength={40} onChange={set('displayName')} />
+        </Field>
+        <Field label="Storage (GB)" htmlFor="ps">
+          <Input id="ps" type="number" min={0} step="any" value={f.storageGb} onChange={set('storageGb')} />
+        </Field>
+        <Field label="Streams at a time" htmlFor="pc">
+          <Input id="pc" type="number" min={1} max={1000} value={f.streams} onChange={set('streams')} />
+        </Field>
+        <Field label="Destinations per stream" htmlFor="pd">
+          <Input id="pd" type="number" min={1} max={20} value={f.destinations} onChange={set('destinations')} />
+        </Field>
+        <Field label="Top quality" htmlFor="pr">
+          <Select id="pr" value={f.resolution} onChange={set('resolution')}>
+            {RESOLUTIONS.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Frame rate" htmlFor="pf">
+          <Select id="pf" value={f.fps} onChange={set('fps')}>
+            <option value="30">30 fps</option>
+            <option value="60">60 fps</option>
+          </Select>
+        </Field>
+        <Field label="Streaming hours a month" htmlFor="ph" hint="0 means no limit.">
+          <Input id="ph" type="number" min={0} max={744} value={f.monthlyHours} onChange={set('monthlyHours')} />
+        </Field>
+        <div className="flex items-center justify-between gap-3 self-start pt-7">
+          <span className="text-sm font-medium">AFK Live watermark on the stream</span>
+          <Toggle label="Watermark" checked={f.watermark} onChange={(v) => setF({ ...f, watermark: v })} />
+        </div>
+        <Field label="Price a month (₹)" htmlFor="pim" hint={paid ? 'GST included.' : undefined}>
+          <Input id="pim" type="number" min={0} step="0.01" value={f.inrMonth} onChange={set('inrMonth')} disabled={!paid} />
+        </Field>
+        <Field label="Price a year (₹)" htmlFor="piy">
+          <Input id="piy" type="number" min={0} step="0.01" value={f.inrYear} onChange={set('inrYear')} disabled={!paid} />
+        </Field>
+        <Field label="Price a month ($)" htmlFor="pum">
+          <Input id="pum" type="number" min={0} step="0.01" value={f.usdMonth} onChange={set('usdMonth')} disabled={!paid} />
+        </Field>
+        <Field label="Price a year ($)" htmlFor="puy">
+          <Input id="puy" type="number" min={0} step="0.01" value={f.usdYear} onChange={set('usdYear')} disabled={!paid} />
+        </Field>
+      </div>
+      {problem && (
+        <p role="alert" className="text-sm text-bad">
+          {problem}
+        </p>
+      )}
+    </ReasonDialog>
   );
 }
 

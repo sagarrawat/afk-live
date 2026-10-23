@@ -4,7 +4,12 @@ import com.afklive.streamer.model.AdminAction;
 import com.afklive.streamer.service.AdminService;
 import com.afklive.streamer.service.StatusService;
 import com.afklive.streamer.util.SecurityUtils;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -121,6 +127,69 @@ public class AdminApiController {
     @GetMapping("/cost")
     public AdminService.CostView cost() {
         return admin.cost();
+    }
+
+    // ------------------------------------------------------------------ overview and platform settings
+
+    @GetMapping("/overview")
+    public AdminService.Overview overview() {
+        return admin.overview();
+    }
+
+    public record FreeStreamLimit(Integer limit, String reason) {
+    }
+
+    /** Free accounts can't go live once this many streams (all plans together) are live. */
+    @PostMapping("/settings/free-stream-limit")
+    public AdminService.Overview freeStreamLimit(@RequestBody FreeStreamLimit body, Principal p) {
+        admin.setFreeStreamLimit(SecurityUtils.getEmail(p), body.limit(), body.reason());
+        return admin.overview();
+    }
+
+    // ------------------------------------------------------------------ support tickets
+
+    @GetMapping("/tickets")
+    public Page<AdminService.TicketRow> tickets(@RequestParam(required = false) String status, @RequestParam(defaultValue = "0") int page) {
+        return admin.tickets(status, page);
+    }
+
+    @GetMapping("/tickets/{id}")
+    public AdminService.TicketRow ticket(@PathVariable Long id) {
+        return admin.ticket(id);
+    }
+
+    public record TicketStatus(String status, String reason) {
+    }
+
+    @PostMapping("/tickets/{id}/status")
+    public AdminService.TicketRow ticketStatus(@PathVariable Long id, @RequestBody TicketStatus body, Principal p) {
+        return admin.setTicketStatus(SecurityUtils.getEmail(p), id, body.status(), body.reason());
+    }
+
+    /** Always a download (never rendered inline on our origin); images still preview through an img tag. */
+    @GetMapping("/tickets/{id}/attachment")
+    public ResponseEntity<Resource> attachment(@PathVariable Long id) {
+        AdminService.Attachment a = admin.attachment(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(a.name(), StandardCharsets.UTF_8).build().toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .contentType(MediaType.parseMediaType(a.contentType()))
+                .body(a.file());
+    }
+
+    // ------------------------------------------------------------------ plan configuration
+
+    @GetMapping("/plans")
+    public List<AdminService.PlanView> plans() {
+        return admin.planConfigs();
+    }
+
+    public record PlanUpdate(AdminService.PlanEdit plan, String reason) {
+    }
+
+    @PostMapping("/plans/{plan}")
+    public AdminService.PlanView updatePlan(@PathVariable String plan, @RequestBody PlanUpdate body, Principal p) {
+        return admin.updatePlanConfig(SecurityUtils.getEmail(p), plan, body.plan(), body.reason());
     }
 
     // ------------------------------------------------------------------ RE-7: status page incidents

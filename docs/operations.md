@@ -116,9 +116,17 @@ per worker; a test no worker picks up fails after two minutes with an explanatio
 ## Billing
 
 Plans are priced per concurrent stream (Free, Creator, Pro, Agency). Defaults live in `PlanType`; the
-live values, prices included, are rows in `plan_configs` that an admin edits at `/admin` without a
-deploy. When a release changes the defaults, bump `PlanConfig.CURRENT_DEFAULTS` and the rows are
-refreshed at startup.
+live values, prices included, are rows in `plan_configs` that an admin edits in Admin > Plans
+(`/studio/admin/plans`) without a deploy. An edit needs a reason, is validated (prices never negative,
+Free stays free, a yearly price at most 12 monthly ones, sensible limits), lands in `admin_actions`
+and applies at once: limits for everyone on the plan, prices for every checkout and renewal from then
+on. When a release changes the defaults, bump `PlanConfig.CURRENT_DEFAULTS` and the rows are
+refreshed at startup (this overwrites admin edits).
+
+Admin > Platform also holds the free plan capacity (`app_settings.global_max_streams`): free accounts
+can't go live while that many streams, all plans together, are live. Support tickets are handled in
+Admin > Support (status changes audited; attachments always download, never render on our origin).
+The old server-rendered `/admin` page is gone; `/admin/**` redirects to `/studio/admin`.
 
 - Payments are one-off checkouts (UPI, cards) through the payment gateway. A subscription is a period
   (monthly or yearly); renewal is manual: a reminder 3 days before the end, then 3 days' grace

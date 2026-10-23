@@ -7,6 +7,8 @@ import com.afklive.streamer.model.AdminAction;
 import com.afklive.streamer.model.Invoice;
 import com.afklive.streamer.model.LiveStream;
 import com.afklive.streamer.model.PaymentAudit;
+import com.afklive.streamer.model.PlanConfig;
+import com.afklive.streamer.model.SupportTicket;
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.model.Subscription;
@@ -15,6 +17,8 @@ import com.afklive.streamer.repository.AdminActionRepository;
 import com.afklive.streamer.repository.InvoiceRepository;
 import com.afklive.streamer.repository.LiveStreamRepository;
 import com.afklive.streamer.repository.PaymentAuditRepository;
+import com.afklive.streamer.repository.PlanConfigRepository;
+import com.afklive.streamer.repository.SupportTicketRepository;
 import com.afklive.streamer.repository.QuotaAuditRepository;
 import com.afklive.streamer.repository.WorkerStatusRepository;
 import com.afklive.streamer.model.WorkerStatus;
@@ -67,14 +71,24 @@ public class AdminService {
     private final int dailyQuota;
     private final Double monthlyServerCost;
     private final String serverCostCurrency;
+    private final SupportTicketRepository tickets;
+    private final FileStorageService storage;
+    private final AppConfigService appConfig;
+    private final PlanConfigRepository planConfigs;
 
     public AdminService(StreamJobRepository jobs, LiveStreamRepository streams, UserRepository users,
                         SubscriptionRepository subscriptions, PaymentAuditRepository payments, InvoiceRepository invoices,
                         UsageRepository usage, PlanService plans, StreamService streamService, AdminActionRepository audit,
                         NotificationService notifications, WorkerStatusRepository workerStatus, QuotaAuditRepository quota,
+                        SupportTicketRepository tickets, FileStorageService storage, AppConfigService appConfig,
+                        PlanConfigRepository planConfigs,
                         @Value("${app.youtube.daily-quota:10000}") int dailyQuota,
                         @Value("${app.admin.monthly-server-cost:}") String monthlyServerCost,
                         @Value("${app.admin.server-cost-currency:INR}") String serverCostCurrency) {
+        this.tickets = tickets;
+        this.storage = storage;
+        this.appConfig = appConfig;
+        this.planConfigs = planConfigs;
         this.workerStatus = workerStatus;
         this.quota = quota;
         this.dailyQuota = dailyQuota;
@@ -448,6 +462,309 @@ public class AdminService {
 
     public Page<AdminAction> auditLog(int page) {
         return audit.findAllByOrderByCreatedAtDesc(PageRequest.of(Math.max(0, page), 50));
+    }
+
+    // ------------------------------------------------------------------ overview and platform settings
+
+    public record Revenue(String currency, long allTime, long last30Days) {
+    }
+
+    /**
+     * The platform at a glance. Revenue counts completed payments only (refunded ones drop out), in the
+     * currency's minor unit. {@code freeStreamLimit}: free accounts can't go live once this many streams
+     * (all plans together) are live.
+     */
+    public record Overview(long users, long liveStreams, long storageBytes, long openTickets, int freeStreamLimit,
+                           List<Revenue> revenue) {
+    }
+
+    public Overview overview() {
+        Map<String, long[]> byCurrency = new java.util.TreeMap<>();
+        // payment_audit keeps the server's local time (LocalDateTime.now()).
+        java.time.LocalDateTime monthAgo = java.time.LocalDateTime.now().minusDays(30);
+        for (Object[] row : payments.sumCompletedByCurrencySince(java.time.LocalDateTime.of(1970, 1, 1, 0, 0))) {
+            byCurrency.computeIfAbsent(currency(row[0]), k -> new long[2])[0] += ((Number) row[1]).longValue();
+        }
+        for (Object[] row : payments.sumCompletedByCurrencySince(monthAgo)) {
+            byCurrency.computeIfAbsent(currency(row[0]), k -> new long[2])[1] += ((Number) row[1]).longValue();
+        }
+        List<Revenue> revenue = new ArrayList<>();
+        byCurrency.forEach((c, v) -> revenue.add(new Revenue(c, v[0], v[1])));
+        Long storageBytes = users.sumUsedStorageBytes();
+        return new Overview(users.count(), jobs.countByIsLiveTrue(), storageBytes == null ? 0 : storageBytes,
+                tickets.countByStatus(TICKET_OPEN), appConfig.getGlobalStreamLimit(), revenue);
+    }
+
+    private static String currency(Object raw) {
+        return raw == null || String.valueOf(raw).isBlank() ? "INR" : String.valueOf(raw).toUpperCase(Locale.ROOT);
+    }
+
+    public static final int MAX_FREE_STREAM_LIMIT = 10_000;
+
+    /** Sets how many live streams (all plans) the platform runs before free accounts can't go live. */
+    @Transactional
+    public void setFreeStreamLimit(String admin, Integer limit, String reason) {
+        String why = requireReason(reason);
+        if (limit == null || limit < 0 || limit > MAX_FREE_STREAM_LIMIT) {
+            throw new IllegalArgumentException("Set a limit between 0 and " + MAX_FREE_STREAM_LIMIT + ".");
+        }
+        int before = appConfig.getGlobalStreamLimit();
+        appConfig.setGlobalStreamLimit(limit);
+        record(admin, "SETTING_FREE_LIMIT", "setting", "global_max_streams", before + " → " + limit + ": " + why);
+    }
+
+    // ------------------------------------------------------------------ support tickets
+
+    public static final String TICKET_OPEN = "OPEN";
+    public static final List<String> TICKET_STATUSES = List.of(TICKET_OPEN, "RESOLVED", "CLOSED");
+
+    public record TicketRow(Long id, String userEmail, Long userId, String category, String message, String status,
+                            java.time.LocalDateTime createdAt, String attachmentName, boolean hasAttachment) {
+        static TicketRow of(SupportTicket t) {
+            boolean has = t.getAttachmentKey() != null;
+            String name = !has ? null : t.getAttachmentName() == null || t.getAttachmentName().isBlank() ? "attachment" : t.getAttachmentName();
+            return new TicketRow(t.getId(), t.getUserEmail(), t.getUser() == null ? null : t.getUser().getId(), t.getCategory(),
+                    t.getMessage(), t.getStatus(), t.getCreatedAt(), name, has);
+        }
+    }
+
+    /** Newest first; {@code status} filters (blank: all). */
+    public Page<TicketRow> tickets(String status, int page) {
+        PageRequest p = PageRequest.of(Math.max(0, page), 25);
+        Page<SupportTicket> found = status == null || status.isBlank() ? tickets.findAllByOrderByCreatedAtDesc(p)
+                : tickets.findAllByStatusOrderByCreatedAtDesc(ticketStatus(status), p);
+        return found.map(TicketRow::of);
+    }
+
+    public TicketRow ticket(Long id) {
+        return TicketRow.of(tickets.findById(id).orElseThrow(() -> new NotFoundException("Ticket not found.")));
+    }
+
+    @Transactional
+    public TicketRow setTicketStatus(String admin, Long id, String status, String reason) {
+        String why = requireReason(reason);
+        String next = ticketStatus(status);
+        SupportTicket t = tickets.findById(id).orElseThrow(() -> new NotFoundException("Ticket not found."));
+        String before = t.getStatus();
+        if (next.equals(before)) {
+            throw new ConflictException("The ticket is already " + next.toLowerCase(Locale.ROOT) + ".");
+        }
+        t.setStatus(next);
+        tickets.save(t);
+        record(admin, "TICKET_STATUS", "ticket", id, before + " → " + next + ": " + why);
+        return TicketRow.of(t);
+    }
+
+    private static String ticketStatus(String raw) {
+        String s = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
+        if (!TICKET_STATUSES.contains(s)) {
+            throw new IllegalArgumentException("Status is one of " + String.join(", ", TICKET_STATUSES) + ".");
+        }
+        return s;
+    }
+
+    public record Attachment(String name, String contentType, org.springframework.core.io.Resource file) {
+    }
+
+    /** A ticket's attachment. A content type is set only for a few safe kinds; anything else is plain bytes. */
+    public Attachment attachment(Long id) {
+        SupportTicket t = tickets.findById(id).orElseThrow(() -> new NotFoundException("Ticket not found."));
+        if (t.getAttachmentKey() == null) {
+            throw new NotFoundException("This ticket has no attachment.");
+        }
+        org.springframework.core.io.Resource file;
+        try {
+            file = storage.loadFileAsResource(t.getAttachmentKey());
+        } catch (RuntimeException e) {
+            log.warn("Attachment of ticket {} can't be read: {}", id, e.getMessage());
+            throw new NotFoundException("The attachment file is missing.");
+        }
+        String name = t.getAttachmentName() == null || t.getAttachmentName().isBlank() ? "attachment" : t.getAttachmentName();
+        return new Attachment(name, attachmentType(name), file);
+    }
+
+    static String attachmentType(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        if (n.endsWith(".png")) return "image/png";
+        if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+        if (n.endsWith(".mp4")) return "video/mp4";
+        if (n.endsWith(".pdf")) return "application/pdf";
+        return "application/octet-stream";
+    }
+
+    // ------------------------------------------------------------------ plan configuration (plan_configs)
+
+    /** A plan's live settings; prices are GST-inclusive, in paise (INR) and cents (USD). */
+    public record PlanView(String plan, String displayName, long maxStorageBytes, int maxActiveStreams, int maxDestinations,
+                           int maxChannels, int maxResolution, int maxFps, int monthlyHours, boolean watermark,
+                           int maxScheduledPosts, long priceInrMonth, long priceInrYear, long priceUsdMonth, long priceUsdYear) {
+        static PlanView of(PlanConfig c) {
+            return new PlanView(c.getPlanType().name(), c.getDisplayName(), c.getMaxStorageBytes(), c.getMaxActiveStreams(),
+                    c.getMaxDestinations(), c.getMaxChannels(), c.getMaxResolution(), c.getMaxFps(), c.getMonthlyHours(),
+                    c.isWatermark(), c.getMaxScheduledPosts(), c.getPriceInrMonth(), c.getPriceInrYear(), c.getPriceUsdMonth(),
+                    c.getPriceUsdYear());
+        }
+    }
+
+    public List<PlanView> planConfigs() {
+        List<PlanView> out = new ArrayList<>();
+        for (PlanType t : PlanType.values()) {
+            planConfigs.findById(t).ifPresent(c -> out.add(PlanView.of(c)));
+        }
+        return out;
+    }
+
+    /** Everything an admin can change on a plan. {@code maxChannels} / {@code maxScheduledPosts} null: keep as is. */
+    public record PlanEdit(String displayName, Long maxStorageBytes, Integer maxActiveStreams, Integer maxDestinations,
+                           Integer maxChannels, Integer maxResolution, Integer maxFps, Integer monthlyHours, Boolean watermark,
+                           Integer maxScheduledPosts, Long priceInrMonth, Long priceInrYear, Long priceUsdMonth,
+                           Long priceUsdYear) {
+    }
+
+    static final long MAX_STORAGE_BYTES = 10L * 1024 * 1024 * 1024 * 1024; // 10 TB
+    static final long MAX_PRICE_MINOR = 100_000_000L; // ₹10 lakh or $1M a period: anything above is a typo
+    static final java.util.Set<Integer> RESOLUTIONS = java.util.Set.of(720, 1080, 1440, 2160);
+    static final java.util.Set<Integer> FPS = java.util.Set.of(30, 60);
+
+    /**
+     * Changes a plan's limits and prices in {@code plan_configs}. They apply at once: limits to everyone
+     * on the plan (streams already live keep running), prices to every checkout and renewal from now on.
+     */
+    @Transactional
+    public PlanView updatePlanConfig(String admin, String planId, PlanEdit e, String reason) {
+        String why = requireReason(reason);
+        PlanType type;
+        try {
+            type = PlanType.valueOf(planId.trim().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException ex) {
+            throw new NotFoundException("Unknown plan.");
+        }
+        if (e == null) {
+            throw new IllegalArgumentException("Send the plan's settings.");
+        }
+        String name = e.displayName() == null ? "" : e.displayName().trim();
+        if (name.isEmpty() || name.length() > 40) {
+            throw new IllegalArgumentException("Give the plan a name of up to 40 characters.");
+        }
+        long storageBytes = required(e.maxStorageBytes(), "storage");
+        if (storageBytes <= 0 || storageBytes > MAX_STORAGE_BYTES) {
+            throw new IllegalArgumentException("Storage is more than 0 and at most 10 TB.");
+        }
+        int streamsMax = range(e.maxActiveStreams(), "streams at a time", 1, 1000);
+        int destinations = range(e.maxDestinations(), "destinations per stream", 1, 20);
+        int resolution = required(e.maxResolution(), "top quality");
+        if (!RESOLUTIONS.contains(resolution)) {
+            throw new IllegalArgumentException("Top quality is 720, 1080, 1440 or 2160.");
+        }
+        int fps = required(e.maxFps(), "frame rate");
+        if (!FPS.contains(fps)) {
+            throw new IllegalArgumentException("Frame rate is 30 or 60.");
+        }
+        int hours = range(e.monthlyHours(), "monthly hours", 0, 744);
+        boolean watermark = required(e.watermark(), "watermark");
+        if (e.maxChannels() != null && (e.maxChannels() < 0 || e.maxChannels() > 1000)) {
+            throw new IllegalArgumentException("Channels is between 0 and 1000.");
+        }
+        if (e.maxScheduledPosts() != null && e.maxScheduledPosts() < 0) {
+            throw new IllegalArgumentException("Scheduled posts can't be negative.");
+        }
+        long inrMonth = price(e.priceInrMonth(), "INR monthly price");
+        long inrYear = price(e.priceInrYear(), "INR yearly price");
+        long usdMonth = price(e.priceUsdMonth(), "USD monthly price");
+        long usdYear = price(e.priceUsdYear(), "USD yearly price");
+        if (type == PlanType.FREE) {
+            if (inrMonth != 0 || inrYear != 0 || usdMonth != 0 || usdYear != 0) {
+                throw new IllegalArgumentException("The Free plan's prices stay 0.");
+            }
+        } else {
+            if (inrMonth == 0 || inrYear == 0 || usdMonth == 0 || usdYear == 0) {
+                throw new IllegalArgumentException("A paid plan needs every price above 0.");
+            }
+            if (inrYear > inrMonth * 12 || usdYear > usdMonth * 12) {
+                throw new IllegalArgumentException("A yearly price can't be more than 12 monthly ones.");
+            }
+        }
+
+        PlanConfig c = planConfigs.findById(type).orElseThrow(() -> new NotFoundException("Unknown plan."));
+        List<String> changes = new ArrayList<>();
+        diff(changes, "name", c.getDisplayName(), name);
+        diff(changes, "storage", c.getMaxStorageBytes(), storageBytes);
+        diff(changes, "streams", c.getMaxActiveStreams(), streamsMax);
+        diff(changes, "destinations", c.getMaxDestinations(), destinations);
+        diff(changes, "quality", c.getMaxResolution(), resolution);
+        diff(changes, "fps", c.getMaxFps(), fps);
+        diff(changes, "monthlyHours", c.getMonthlyHours(), hours);
+        diff(changes, "watermark", c.isWatermark(), watermark);
+        if (e.maxChannels() != null) {
+            diff(changes, "channels", c.getMaxChannels(), e.maxChannels());
+        }
+        if (e.maxScheduledPosts() != null) {
+            diff(changes, "scheduledPosts", c.getMaxScheduledPosts(), e.maxScheduledPosts());
+        }
+        diff(changes, "INR/month", c.getPriceInrMonth(), inrMonth);
+        diff(changes, "INR/year", c.getPriceInrYear(), inrYear);
+        diff(changes, "USD/month", c.getPriceUsdMonth(), usdMonth);
+        diff(changes, "USD/year", c.getPriceUsdYear(), usdYear);
+        if (changes.isEmpty()) {
+            throw new IllegalArgumentException("Nothing changed.");
+        }
+        c.setDisplayName(name);
+        c.setMaxStorageBytes(storageBytes);
+        c.setMaxActiveStreams(streamsMax);
+        c.setMaxDestinations(destinations);
+        c.setMaxResolution(resolution);
+        c.setMaxFps(fps);
+        c.setMonthlyHours(hours);
+        c.setWatermark(watermark);
+        if (e.maxChannels() != null) {
+            c.setMaxChannels(e.maxChannels());
+        }
+        if (e.maxScheduledPosts() != null) {
+            c.setMaxScheduledPosts(e.maxScheduledPosts());
+        }
+        c.setPriceInrMonth(inrMonth);
+        c.setPriceInrYear(inrYear);
+        c.setPriceUsdMonth(usdMonth);
+        c.setPriceUsdYear(usdYear);
+        // The old display strings, kept in step for anything that still reads them.
+        c.setPrice(inrMonth == 0 ? "Free" : BillingService.priceLabel(inrMonth, "INR"));
+        c.setBillingCycle(inrMonth == 0 ? "Free" : "Monthly");
+        PlanConfig saved = plans.updatePlan(c); // evicts the plan caches: checkout, renewals and limits see it at once
+        record(admin, "PLAN_CONFIG", "plan", type.name(), String.join(", ", changes) + ": " + why);
+        return PlanView.of(saved);
+    }
+
+    private static <T> T required(T v, String what) {
+        if (v == null) {
+            throw new IllegalArgumentException("Fill in " + what + ".");
+        }
+        return v;
+    }
+
+    private static int range(Integer v, String what, int min, int max) {
+        int x = required(v, what);
+        if (x < min || x > max) {
+            throw new IllegalArgumentException(capitalize(what) + " is between " + min + " and " + max + ".");
+        }
+        return x;
+    }
+
+    private static long price(Long v, String what) {
+        long x = required(v, what);
+        if (x < 0 || x > MAX_PRICE_MINOR) {
+            throw new IllegalArgumentException(capitalize(what) + " can't be negative or that large.");
+        }
+        return x;
+    }
+
+    private static String capitalize(String s) {
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private static void diff(List<String> out, String field, Object before, Object after) {
+        if (!java.util.Objects.equals(before, after)) {
+            out.add(field + " " + before + " → " + after);
+        }
     }
 
     // ------------------------------------------------------------------ helpers
