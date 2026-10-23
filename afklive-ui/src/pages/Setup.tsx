@@ -2,7 +2,8 @@ import clsx from 'clsx';
 import { ListVideo, Smartphone, Upload as UploadIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { destinationUrl } from '@/components/AddDestination';
+import { destinationUrl, readKey } from '@/components/AddDestination';
+import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { MediaPicker } from '@/components/MediaPicker';
 import { GoLiveButton } from '@/components/live-actions';
 import { Button, Field, Input, Panel, useAction } from '@/components/ui';
@@ -167,17 +168,20 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
   const { data: s } = useStream(streamId);
   const { data: me } = useMe();
   const [key, setKey] = useState('');
-  const [added, setAdded] = useState(false);
+  const [added, setAdded] = useState<Destination | null>(null);
   const { busy, run } = useAction();
+  const { tests, test } = useDestinationTests();
   const invalidate = useInvalidate();
+  const { problem } = readKey('YOUTUBE', key);
   if (!s) return null;
   const save = () =>
     run(async () => {
       const d = await post<Destination>('/api/destinations', { name: 'YouTube', key: destinationUrl('YOUTUBE', key), type: 'RTMP', selected: true });
       await put(`/api/streams/${s.id}/destinations`, [{ destinationId: d.id, enabled: true }]);
       await invalidate([...keys.stream(s.id)], [...keys.destinations]);
-      setAdded(true);
-    }, 'YouTube connected.');
+      setAdded(d);
+      void test(d); // MS-6: check the key now, without holding up the next step
+    }, 'YouTube stream key saved.');
   return (
     <Panel title="Send it to YouTube">
       {!added ? (
@@ -193,15 +197,15 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
             <li>Copy the stream key and paste it here. No Google sign-in needed.</li>
           </ol>
           <div className="mt-4">
-            <Field label="YouTube stream key" htmlFor="yt-key">
-              <Input id="yt-key" value={key} autoComplete="off" spellCheck={false} placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" onChange={(e) => setKey(e.target.value)} />
+            <Field label="YouTube stream key" htmlFor="yt-key" error={problem}>
+              <Input id="yt-key" value={key} autoComplete="off" spellCheck={false} aria-invalid={!!problem} placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" onChange={(e) => setKey(e.target.value)} />
             </Field>
           </div>
           <div className="mt-6 flex flex-wrap justify-between gap-2">
             <Button variant="ghost" onClick={() => onFinish(`/studio/streams/${s.id}/destinations`)}>
               Use another platform
             </Button>
-            <Button variant="primary" busy={busy} disabled={!key.trim()} onClick={save}>
+            <Button variant="primary" busy={busy} disabled={!key.trim() || !!problem} onClick={save}>
               Connect YouTube
             </Button>
           </div>
@@ -213,6 +217,7 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
             {s.source === 'PHONE' ? 'Press Go live, then start streaming in your phone app. Until your phone connects, viewers see your Starting soon scene.' : 'Press Go live. Your playlist is usually on YouTube within 15 seconds.'}
             {me?.plan.id === 'FREE' && ' The Free plan includes 10 hours a month at 720p.'}
           </p>
+          <TestNote state={tests[added.id]} platform="YOUTUBE" className="mt-3" />
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <GoLiveButton stream={s} />
             <Button variant="ghost" onClick={() => onFinish(`/studio/streams/${s.id}`)}>

@@ -9,6 +9,7 @@ import { clock, dateTime, duration } from '@/lib/format';
 import { useRuns, useUptime } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
+import { VerticalHint } from './VerticalHint';
 
 const SCENES = [
   ['STARTING', 'Starting soon'],
@@ -22,6 +23,7 @@ export function OverviewTab({ stream: s }: { stream: StreamView }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="space-y-6">
+        <VerticalHint stream={s} />
         {s.source === 'PHONE' ? <PhoneControl stream={s} /> : <NowPlaying stream={s} />}
         {onAir && s.overlays.length > 0 && <OverlayToggles stream={s} />}
         <UptimePanel stream={s} />

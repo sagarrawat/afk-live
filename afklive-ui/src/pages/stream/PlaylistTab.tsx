@@ -8,6 +8,7 @@ import { clock, duration } from '@/lib/format';
 import type { MediaRef, StreamView } from '@/lib/types';
 import { SortableList } from './SortableList';
 import { useStreamUpdate } from './useStreamUpdate';
+import { VerticalHint } from './VerticalHint';
 
 /** PL-1..PL-4: what plays, in what order, how many times. Changes apply live between videos. */
 export function PlaylistTab({ stream: s }: { stream: StreamView }) {
@@ -29,6 +30,7 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
   const order = kind === 'playlist' ? s.playbackOrder : s.musicOrder;
   return (
     <div className="space-y-6">
+      {kind === 'playlist' && <VerticalHint stream={s} />}
       <Panel
         title={kind === 'playlist' ? 'Videos' : 'Music'}
         pad={false}

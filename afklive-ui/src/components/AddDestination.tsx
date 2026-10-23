@@ -42,9 +42,54 @@ export function needsServer(platform: Platform): boolean {
   return platform !== 'CUSTOM' && !SERVERS[platform];
 }
 
+/** A full address for the same platform, server and key together: the key is the captured group. */
+const FULL_ADDRESS: Partial<Record<Platform, RegExp>> = {
+  YOUTUBE: /^rtmps?:\/\/[a-z]\.rtmps?\.youtube\.com(?::\d+)?\/live2(?:\?backup=1)?\/(.*)$/i,
+  FACEBOOK: /^rtmps?:\/\/live-api-s\.facebook\.com(?::\d+)?\/rtmp\/(.*)$/i,
+  TWITCH: /^rtmps?:\/\/[a-z0-9.-]*twitch\.tv(?::\d+)?\/app\/(.*)$/i,
+};
+
+/** Where to find the key, for the "that's the server address" message. */
+const WHERE_KEY: Partial<Record<Platform, string>> = {
+  YOUTUBE: 'Copy the stream key from YouTube Studio (Go live → Stream → Stream key) instead.',
+  FACEBOOK: 'Copy the stream key from Facebook Live Producer (Streaming software → Stream key) instead.',
+  TWITCH: 'Copy the primary stream key from your Twitch dashboard (Settings → Stream) instead.',
+};
+
+/** Text that is a server address, or a piece of one, rather than a key. */
+function looksLikeServer(k: string): boolean {
+  return k.includes('://') || /[/\\]/.test(k) || /^([a-z0-9-]+\.)+[a-z]{2,}(:\d+)?$/i.test(k) || /^(live2|app|rtmps?)$/i.test(k);
+}
+
+/**
+ * What the creator typed in the key box, read as a key: trimmed, taken out of a full address for the
+ * same platform, or a plain-language problem when it can't be a key. (The server address pasted into
+ * the key box once saved `rtmp://a.rtmp.youtube.com/live2/rtmp://a.rtmp.youtube.com/live2`.)
+ */
+export function readKey(platform: Platform, input: string, server = ''): { key: string; problem: string | null } {
+  const k = input.trim();
+  if (!k) return { key: '', problem: null };
+  if (platform === 'CUSTOM') {
+    const nested = k.indexOf('://') !== k.lastIndexOf('://');
+    return { key: k, problem: nested ? 'This address has another address inside it. Paste the server address and the stream key only once.' : null };
+  }
+  const fixed = SERVERS[platform];
+  if (!fixed) {
+    // Two fields: the creator may have pasted server + key here; take the key off the end.
+    const base = server.trim().replace(/\/+$/, '');
+    const rest = base && k.toLowerCase().startsWith(base.toLowerCase() + '/') ? k.slice(base.length + 1).trim() : k;
+    const bad = !rest || rest.includes('://');
+    return { key: rest, problem: bad ? 'This looks like the server address. Paste it in Stream URL above, and only the stream key here.' : null };
+  }
+  const serverProblem = `This looks like the server address. ${WHERE_KEY[platform] ?? 'Copy the stream key instead.'}`;
+  const full = FULL_ADDRESS[platform]?.exec(k);
+  const key = full ? full[1].trim() : k;
+  return { key, problem: !key || looksLikeServer(key) ? serverProblem : null };
+}
+
 /** The address a destination is saved as: a full URL with the key at the end. */
 export function destinationUrl(platform: Platform, key: string, server = ''): string {
-  const k = key.trim();
+  const k = readKey(platform, key, server).key;
   if (platform === 'CUSTOM') return k;
   const base = (SERVERS[platform] ?? server.trim()).replace(/\/+$/, '');
   return `${base}/${k}`;
@@ -60,7 +105,9 @@ export function AddDestinationDialog({ open, onClose, onAdded }: { open: boolean
   const invalidate = useInvalidate();
   const label = platform === 'CUSTOM' ? 'Custom server' : PLATFORM_NAMES[platform];
   const twoFields = needsServer(platform);
+  const { problem } = readKey(platform, key, server);
   const submit = async () => {
+    if (problem) return;
     let saved: Destination | undefined;
     const ok = await run(async () => {
       saved = await post<Destination>('/api/destinations', { name: name.trim() || label, key: destinationUrl(platform, key, server), type: 'RTMP', selected: true });
@@ -84,7 +131,7 @@ export function AddDestinationDialog({ open, onClose, onAdded }: { open: boolean
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" busy={busy} disabled={!key.trim() || (twoFields && !/^(rtmps?|srt):\/\//i.test(server.trim()))} onClick={submit}>
+          <Button variant="primary" busy={busy} disabled={!key.trim() || !!problem || (twoFields && !/^(rtmps?|srt):\/\//i.test(server.trim()))} onClick={submit}>
             Add destination
           </Button>
         </>
@@ -115,10 +162,11 @@ export function AddDestinationDialog({ open, onClose, onAdded }: { open: boolean
             <Input id="dest-server" value={server} autoComplete="off" spellCheck={false} placeholder="rtmps://…" onChange={(e) => setServer(e.target.value)} />
           </Field>
         )}
-        <Field label={platform === 'CUSTOM' ? 'Stream address' : 'Stream key'} htmlFor="dest-key">
+        <Field label={platform === 'CUSTOM' ? 'Stream address' : 'Stream key'} htmlFor="dest-key" error={problem}>
           <Input
             id="dest-key"
             value={key}
+            aria-invalid={!!problem}
             autoComplete="off"
             spellCheck={false}
             placeholder={platform === 'CUSTOM' ? 'rtmp://live.example.com/app/your-key' : 'xxxx-xxxx-xxxx-xxxx-xxxx'}
