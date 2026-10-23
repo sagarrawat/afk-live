@@ -399,6 +399,13 @@ public final class StreamRunner {
         private volatile Process process;
         private volatile boolean restartRequested;
         private volatile boolean reconnectRequested;
+        /**
+         * True only while a relay process is running and reading. Between attempts (backoff) nothing is
+         * queued: that video would be stale anyway, and queueing it used to overflow the buffer during the
+         * wait, which flagged the next, healthy attempt as "couldn't keep up", killed it within a second and
+         * hid the real error, so a destination that dropped once never came back.
+         */
+        private volatile boolean accepting = true; // the first attempt takes the stream from its very start
         /** Turned off while live: report OFF, not STOPPED. */
         volatile boolean removed;
 
@@ -412,8 +419,12 @@ public final class StreamRunner {
         }
 
         void offer(byte[] chunk) {
+            if (!accepting) {
+                return; // no relay running right now: drop, don't build a backlog
+            }
             if (queuedBytes.get() + chunk.length > settings.relayBufferBytes()) {
                 // This destination can't keep up: restart it rather than slow everyone down or run out of memory.
+                accepting = false;
                 restartRequested = true;
                 clearQueue();
                 terminate(process);
@@ -479,6 +490,7 @@ public final class StreamRunner {
                         if (down.get()) {
                             terminate(p);
                         }
+                        accepting = true;
                         listener.onDestination(position, restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, null);
                         Deque<String> errLines = new ArrayDeque<>();
                         Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readLines(p.getErrorStream(), errLines));
@@ -490,6 +502,7 @@ public final class StreamRunner {
                                 reportedLive = true;
                             }
                         }
+                        accepting = false;
                         joinQuietly(writer, Duration.ofSeconds(1));
                         joinQuietly(errReader, Duration.ofSeconds(1));
                         synchronized (errLines) {
@@ -500,6 +513,8 @@ public final class StreamRunner {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
+                    } finally {
+                        accepting = false;
                     }
                     if (down.get() || draining) {
                         break;
