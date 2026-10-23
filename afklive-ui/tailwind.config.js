@@ -18,9 +18,11 @@ export default {
         ok: 'rgb(var(--ok) / <alpha-value>)',
         warn: 'rgb(var(--warn) / <alpha-value>)',
         bad: 'rgb(var(--bad) / <alpha-value>)',
+        sun: 'rgb(var(--sun) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['"Inter Variable"', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['"Schibsted Grotesk Variable"', '"Inter Variable"', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         // A modular scale (1.2) from a 14px UI base.

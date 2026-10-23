@@ -1,22 +1,41 @@
 @import '@fontsource-variable/inter';
+@import '@fontsource-variable/schibsted-grotesk';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* The public site is light; product shots stay dark, as the app is. Same token names as the app. */
+/*
+ * Day and night (docs/brand.md). The page is daylight; `.night` bands (header, hero, phone, footer)
+ * are the hours a channel runs with nobody at the desk. Marigold is the brand at night; by day,
+ * actions are night ink. Red is only ever "on air".
+ */
 :root {
-  --bg: 246 247 250;
+  --bg: 244 245 251;
   --panel: 255 255 255;
-  --raised: 236 239 245;
-  --line: 219 224 232;
-  --ink: 20 24 33;
-  --muted: 92 102 120;
-  --accent: 73 87 222;
+  --raised: 234 236 247;
+  --line: 220 223 238;
+  --ink: 16 18 42;
+  --muted: 84 89 126;
+  --accent: 33 36 92;
   --accent-ink: 255 255 255;
-  --live: 214 45 32;
+  --sun: 255 182 39;
+  --live: 255 68 56;
   --ok: 22 150 84;
-  --warn: 196 120 0;
+  --warn: 214 110 20;
   --bad: 214 45 32;
+}
+
+.night {
+  --bg: 16 18 42;
+  --panel: 26 29 59;
+  --raised: 36 40 76;
+  --line: 46 50 94;
+  --ink: 238 240 250;
+  --muted: 156 161 199;
+  --accent: 255 182 39;
+  --accent-ink: 16 18 42;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--ink));
 }
 
 @layer base {
@@ -24,6 +43,13 @@
     @apply bg-bg text-ink font-sans antialiased;
     font-size: 16px;
     line-height: 1.6;
+  }
+  h1,
+  h2,
+  h3,
+  .display {
+    text-wrap: balance;
+    font-family: 'Schibsted Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
   }
   .tnum {
     font-variant-numeric: tabular-nums;
@@ -42,7 +68,7 @@
 
 @layer components {
   .btn {
-    @apply inline-flex h-11 items-center justify-center gap-2 rounded px-5 font-medium transition-colors;
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-full px-6 font-medium transition-colors;
   }
   .btn-primary {
     @apply btn bg-accent text-accent-ink hover:bg-accent/90;
@@ -51,31 +77,85 @@
     @apply btn border border-line bg-panel text-ink hover:border-muted/60;
   }
   .field {
-    @apply h-11 w-full rounded border border-line bg-panel px-3 text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none;
+    @apply h-11 w-full rounded-md border border-line bg-panel px-3 text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none;
   }
   .label {
     @apply mb-1.5 block text-sm font-medium;
   }
   .note-bad {
-    @apply rounded border border-bad/30 bg-bad/5 px-3 py-2 text-sm text-bad;
+    @apply rounded-md border border-bad/30 bg-bad/5 px-3 py-2 text-sm text-bad;
   }
   .note-ok {
-    @apply rounded border border-ok/30 bg-ok/5 px-3 py-2 text-sm text-ok;
+    @apply rounded-md border border-ok/30 bg-ok/5 px-3 py-2 text-sm text-ok;
   }
   .link {
-    @apply text-accent hover:underline;
+    @apply text-accent underline-offset-2 hover:underline;
+  }
+  .h-section {
+    text-wrap: balance;
+    @apply text-[32px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[44px];
   }
 }
 
-@keyframes tally {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
+/* The hero dial (site/src/dial.ts). */
+.dial {
+  width: 100%;
+  height: auto;
+  overflow: visible;
 }
-.tally {
-  animation: tally 2s ease-in-out infinite;
+.dial-face {
+  fill: rgb(var(--raised) / 0.35);
+}
+.dial-tick {
+  stroke: rgb(var(--muted) / 0.35);
+  stroke-width: 0.8;
+}
+.dial-tick-major {
+  stroke: rgb(var(--muted) / 0.8);
+  stroke-width: 1.2;
+}
+.dial-hour {
+  fill: rgb(var(--muted));
+  font: 500 6.5px 'Inter Variable', system-ui, sans-serif;
+}
+.dial-track {
+  fill: none;
+  stroke: rgb(var(--line));
+  stroke-width: 9;
+}
+.dial-slot {
+  fill: none;
+  stroke-width: 9;
+}
+.dial-slot-a {
+  stroke: rgb(var(--sun));
+}
+.dial-slot-b {
+  stroke: #ffd98a;
+}
+.dial-hand {
+  stroke: rgb(var(--ink));
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.dial-onair {
+  fill: rgb(var(--live));
+}
+.dial-onair-halo {
+  fill: none;
+  stroke: rgb(var(--live));
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: halo 2.4s ease-out infinite;
+}
+@keyframes halo {
+  from {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.4);
+  }
 }

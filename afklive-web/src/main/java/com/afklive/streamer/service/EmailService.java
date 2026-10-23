@@ -48,38 +48,26 @@ public class EmailService {
             String htmlbody
     ) {}
 
-    private String createBaseHtml(String title, String bodyContent) {
+    String createBaseHtml(String title, String bodyContent) {
         return "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head>" +
-               "<body style='font-family: Arial, sans-serif; color: #333; line-height: 1.6; background-color: #f9fafb; margin: 0; padding: 0;'>" +
+               "<body style='font-family: Arial, sans-serif; color: #333; line-height: 1.6; background-color: #F4F5FB; margin: 0; padding: 0;'>" +
                "<center>" +
-               "<table width='100%' border='0' cellpadding='0' cellspacing='0' bgcolor='#f9fafb' style='margin: 0; padding: 20px;'>" +
+               "<table width='100%' border='0' cellpadding='0' cellspacing='0' bgcolor='#F4F5FB' style='margin: 0; padding: 20px;'>" +
                "<tr><td align='center'>" +
 
                // Main Container
-               "<table width='600' border='0' cellpadding='0' cellspacing='0' bgcolor='#ffffff' style='max-width: 600px; width: 100%; border: 1px solid #eee; border-radius: 12px; overflow: hidden;'>" +
+               "<table width='600' border='0' cellpadding='0' cellspacing='0' bgcolor='#ffffff' style='max-width: 600px; width: 100%; border: 1px solid #DCDFEE; border-radius: 16px; overflow: hidden;'>" +
 
-               // Header with Logo
-               "<tr><td style='padding: 30px 30px 20px 30px; text-align: left;'>" +
+               // Header: the logo on a night band (docs/brand.md). PNG, as mail clients don't show SVG.
+               "<tr><td bgcolor='#10122A' style='background-color: #10122A; padding: 22px 30px;'>" +
                    "<a href='" + baseUrl + "' style='text-decoration: none; display: inline-block;'>" +
-                       "<table border='0' cellpadding='0' cellspacing='0' style='margin: 0; padding: 0;'>" +
-                           "<tr>" +
-                               "<td style='padding-right: 12px; vertical-align: middle;'>" +
-                                   // CSS Icon
-                                   "<div style='width: 32px; height: 32px; border: 3px solid transparent; border-top-color: #667eea; border-right-color: #764ba2; border-radius: 50%; box-sizing: border-box; position: relative;'>" +
-                                       "<div style='width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent #764ba2; position: absolute; top: 8px; left: 12px;'></div>" +
-                                   "</div>" +
-                               "</td>" +
-                               "<td style='vertical-align: middle;'>" +
-                                   "<span style='font-size: 24px; font-weight: 800; color: #1a1a2e; font-family: sans-serif; line-height: 32px;'>AFK<span style='color: #667eea;'>Live</span></span>" +
-                               "</td>" +
-                           "</tr>" +
-                       "</table>" +
+                       "<img src='" + baseUrl + "/site/brand/logo-email.png' width='111' height='30' alt='AFK Live' style='display: block; border: 0; color: #EEF0FA; font: 800 20px Arial, sans-serif;'>" +
                    "</a>" +
                "</td></tr>" +
 
                // Title
-               "<tr><td style='padding: 0 30px 10px 30px;'>" +
-                   "<h2 style='color: #1a1a2e; margin: 0; font-size: 24px;'>" + title + "</h2>" +
+               "<tr><td style='padding: 28px 30px 10px 30px;'>" +
+                   "<h2 style='color: #10122A; margin: 0; font-size: 24px;'>" + title + "</h2>" +
                "</td></tr>" +
 
                // Body
@@ -89,7 +77,7 @@ public class EmailService {
 
                // Footer
                "<tr><td style='background-color: #f4f5f7; padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee;'>" +
-                   "&copy; 2026 AFK Live. All rights reserved.<br>" +
+                   "&copy; AFK Live. Stay live while you're away.<br>" +
                    "<a href='" + baseUrl + "/privacy' style='color: #999; text-decoration: underline;'>Privacy Policy</a> | " +
                    "<a href='" + baseUrl + "/terms' style='color: #999; text-decoration: underline;'>Terms of Service</a>" +
                "</td></tr>" +
@@ -103,7 +91,7 @@ public class EmailService {
 
     public void sendUploadNotification(String to, String videoTitle, String status) {
         String content = "<p>The status of your video <strong>" + videoTitle + "</strong> has been updated to:</p>" +
-                         "<p style='font-size: 18px; font-weight: bold; color: #2c68f6;'>" + status + "</p>" +
+                         "<p style='font-size: 18px; font-weight: bold; color: #21245C;'>" + status + "</p>" +
                          "<p>You can view your video details in the library.</p>";
         String html = createBaseHtml("Video Status Update", content);
         sendEmail(to, "AFK Live: Video " + status, html);
@@ -112,9 +100,9 @@ public class EmailService {
     public void sendVerificationEmail(String to, String link) {
         String content = "<p>Please verify your email address to get full access to AFK Live features.</p>" +
                          "<p style='margin: 30px 0; text-align: center;'>" +
-                         "<a href='" + link + "' style='background: #2c68f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;'>Verify Email</a>" +
+                         "<a href='" + link + "' style='background: #21245C; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Verify Email</a>" +
                          "</p>" +
-                         "<p style='font-size: 14px; color: #888;'>Or copy this link to your browser:<br><a href='" + link + "' style='color: #2c68f6;'>" + link + "</a></p>";
+                         "<p style='font-size: 14px; color: #888;'>Or copy this link to your browser:<br><a href='" + link + "' style='color: #21245C;'>" + link + "</a></p>";
         String html = createBaseHtml("Verify your email", content);
         sendEmail(to, "Verify your email - AFK Live", html);
     }
@@ -122,10 +110,10 @@ public class EmailService {
     public void sendPasswordResetEmail(String to, String link) {
         String content = "<p>You requested a password reset. Click the button below to set a new password:</p>" +
                          "<p style='margin: 30px 0; text-align: center;'>" +
-                         "<a href='" + link + "' style='background: #2c68f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;'>Reset Password</a>" +
+                         "<a href='" + link + "' style='background: #21245C; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Reset Password</a>" +
                          "</p>" +
                          "<p style='font-size: 14px; color: #888;'>If you didn't ask to reset your password, you can safely ignore this email.</p>" +
-                         "<p style='font-size: 14px; color: #888;'>Or copy this link:<br><a href='" + link + "' style='color: #2c68f6;'>" + link + "</a></p>";
+                         "<p style='font-size: 14px; color: #888;'>Or copy this link:<br><a href='" + link + "' style='color: #21245C;'>" + link + "</a></p>";
         String html = createBaseHtml("Reset Password", content);
         sendEmail(to, "Reset your password - AFK Live", html);
     }
@@ -140,7 +128,7 @@ public class EmailService {
                              "<li style='margin-bottom: 10px;'><strong>Easy Setup:</strong> Get your stream up and running in minutes with our intuitive dashboard.</li>" +
                          "</ul>" +
                          "<p style='margin-top: 30px; text-align: center;'>" +
-                         "<a href='" + baseUrl + "' style='background: #2c68f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;'>Go to Studio</a>" +
+                         "<a href='" + baseUrl + "' style='background: #21245C; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Go to Studio</a>" +
                          "</p>";
         String html = createBaseHtml("Welcome aboard! 🚀", content);
         sendEmail(to, "Welcome to AFK Live! 🚀", html);
@@ -151,7 +139,7 @@ public class EmailService {
                          "<p>You now have access to premium features, increased storage, and priority support.</p>" +
                          "<p>Thank you for supporting AFK Live!</p>" +
                          "<p style='margin-top: 30px; text-align: center;'>" +
-                         "<a href='" + baseUrl + "' style='background: #2c68f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;'>Open Dashboard</a>" +
+                         "<a href='" + baseUrl + "' style='background: #21245C; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Open Dashboard</a>" +
                          "</p>";
         String html = createBaseHtml("Upgrade Successful", content);
         sendEmail(to, "You've upgraded to " + planName + "!", html);
@@ -175,8 +163,8 @@ public class EmailService {
      */
     public boolean sendAlert(String to, String subject, String title, String body, String link) {
         String content = "<p>" + escape(body) + "</p>"
-                + (link == null ? "" : "<p><a href='" + escape(baseUrl + link) + "' style='display:inline-block;background:#5b8cff;"
-                + "color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600'>Open AFK Live</a></p>")
+                + (link == null ? "" : "<p><a href='" + escape(baseUrl + link) + "' style='display:inline-block;background:#21245C;"
+                + "color:#fff;padding:10px 22px;border-radius:999px;text-decoration:none;font-weight:600'>Open AFK Live</a></p>")
                 + "<p style='font-size:13px;color:#999'>You can turn alert emails off in Settings.</p>";
         return sendEmail(to, subject, createBaseHtml(escape(title), content));
     }

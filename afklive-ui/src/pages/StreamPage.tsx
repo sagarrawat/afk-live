@@ -67,7 +67,7 @@ export function StreamPage() {
               <LiveBadge state={s.live.state} size="lg" />
               {onAir && <HealthDot level={s.live.health?.overall} withText />}
             </div>
-            <h1 className="mt-2 truncate text-xl font-semibold tracking-tight">{s.name}</h1>
+            <h1 className="mt-2 truncate text-2xl font-bold tracking-tight">{s.name}</h1>
             {s.live.stopAt && onAir && <p className="mt-1 text-sm text-muted">Stops {dateTime(s.live.stopAt, s.timeZone)}</p>}
             {!onAir && s.live.state === 'ERROR' && s.live.endReason && <p className="mt-1 text-sm text-bad">{s.live.endReason}</p>}
           </div>
