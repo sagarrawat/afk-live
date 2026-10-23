@@ -114,6 +114,10 @@ EOF
 fi
 # Read values with grep, not by sourcing: the file is for systemd (unquoted spaces, & and {} in URLs).
 env_val() { grep -m1 "^$1=" "$ENV" | cut -d= -f2-; }
+# Push alerts on phones and computers (NT-1, MB-2): a VAPID key, added once (also to older env files).
+if ! grep -q '^APP_PUSH_VAPID_KEY=' "$ENV"; then
+  echo "APP_PUSH_VAPID_KEY=$(openssl ecparam -name prime256v1 -genkey -noout -outform DER | base64 -w0)" >> "$ENV"
+fi
 POSTGRES_PASSWORD=$(env_val POSTGRES_PASSWORD)
 INGEST_AUTH_SECRET=$(env_val INGEST_AUTH_SECRET)
 

@@ -148,3 +148,17 @@ presigned URL (ranged reads, no full download), stores a thumbnail and marks it 
 plain reason. Files aren't re-encoded: the studio re-encodes at playout anyway. A claim older than
 10 minutes is taken over, so a restart never leaves a file stuck. Web instances therefore need
 `ffmpeg`/`ffprobe` on PATH, like workers.
+
+## Push alerts (NT-1, MB-2)
+
+Alerts that are emailed are also pushed to every device where the creator turned on
+"Alerts on this device" (Settings > Notifications): phones (Android, or iPhone with AFK Live added
+to the Home Screen) and computers. The web app sends them itself with VAPID (`PushService`,
+`util/WebPush`, no third-party service); the browser shows them through `/sw.js`.
+
+- `APP_PUSH_VAPID_KEY`: a P-256 key, SEC1 DER in base64. `provision-single-server.sh` adds one;
+  otherwise run `afklive-scripts/vapid-key.sh`. Empty means push is off and the setting is hidden.
+  Keep the key: a new one makes every device turn alerts on again.
+- Only real browser push services are ever called (FCM, Mozilla, Apple, Windows; https on 443). A
+  device the push service reports gone (404/410) is removed.
+- The web app needs outbound HTTPS to those services (the worker doesn't).

@@ -23,3 +23,5 @@ databaseChangeLog:
       file: db/changelog/changes/011-admin.sql
   - include:
       file: db/changelog/changes/012-account-preferences.sql
+  - include:
+      file: db/changelog/changes/013-push.sql
