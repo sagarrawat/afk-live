@@ -47,6 +47,8 @@ public class StreamScheduleService {
     private final com.afklive.streamer.repository.StreamCommandRepository commands;
     private long ticks;
     private final org.springframework.transaction.support.TransactionTemplate tx;
+    @org.springframework.beans.factory.annotation.Autowired
+    private NotificationService notifications;
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "stream-schedules");
         t.setDaemon(true);
@@ -347,14 +349,24 @@ public class StreamScheduleService {
         } catch (Exception e) {
             String reason = e.getMessage() == null ? "Could not start" : e.getMessage();
             log.warn("Schedule {} could not start stream {}: {}", sc.getId(), sc.getStreamId(), reason);
-            tx.executeWithoutResult(status -> {
+            Boolean claimed = tx.execute(status -> {
                 if (schedules.claimOccurrence(sc.getId(), w.date()) == 1) {
                     schedules.recordError(sc.getId(), reason);
                     if (sc.getKind() == StreamSchedule.Kind.ONCE) {
                         schedules.disable(sc.getId());
                     }
+                    return true;
                 }
+                return false;
             });
+            if (Boolean.TRUE.equals(claimed)) {
+                // SC-5: tell the creator, with a link to retry.
+                notifications.notify(email, new NotificationService.Alert(NotificationService.Types.SCHEDULE_FAILED,
+                        com.afklive.streamer.model.Notification.Level.ERROR, sc.getStreamId(),
+                        stream.get().getName() + " didn't start on schedule",
+                        reason + " Fix it and press Retry on the stream's schedule.",
+                        "/streams/" + sc.getStreamId() + "/schedule", null, null, true));
+            }
         }
     }
 

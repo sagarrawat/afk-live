@@ -65,6 +65,12 @@ public class StreamService {
     private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepository;
     @Autowired
     private com.afklive.streamer.repository.LiveStreamRepository liveStreamRepository;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private NotificationService notifications;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private AlertMonitor alertMonitor;
 
     /** "all" (default: web and worker in one process), "web" or "worker". */
     @Value("${app.streaming.role:all}")
@@ -360,6 +366,19 @@ public class StreamService {
             }
         }
         updateScheduledStream(job, reason, failed);
+        try {
+            alertMonitor.closeAll(jobId);
+            if (failed) {
+                String name = job.getStreamId() == null ? "Your stream"
+                        : liveStreamRepository.findById(job.getStreamId()).map(com.afklive.streamer.model.LiveStream::getName).orElse("Your stream");
+                notifications.notify(job.getUser().getEmail(), new NotificationService.Alert(NotificationService.Types.STREAM_FAILED,
+                        com.afklive.streamer.model.Notification.Level.ERROR, job.getStreamId(), name + " stopped",
+                        "It stopped because: " + reason + ". Fix the cause and go live again.",
+                        job.getStreamId() == null ? "/studio" : "/streams/" + job.getStreamId(), null, null, true));
+            }
+        } catch (Exception e) {
+            log.warn("Couldn't send the end-of-stream alert for job {}: {}", jobId, e.getMessage());
+        }
         if (job.getStreamId() != null && "Playlist finished".equals(reason)) {
             liveStreamRepository.clearResumePosition(job.getStreamId()); // next time, start from the top
         }
@@ -415,6 +434,10 @@ public class StreamService {
                 if (!userService.checkCreditLimit(email) && !StreamStates.STOP.equals(job.getDesiredState())) {
                     log.warn("User {} exceeded credit limit. Stopping stream {}.", email, job.getId());
                     requestStop(job, "Credit limit reached");
+                    notifications.notify(email, new NotificationService.Alert(NotificationService.Types.CREDIT_LIMIT,
+                            com.afklive.streamer.model.Notification.Level.ERROR, job.getStreamId(), "Stream stopped: balance limit reached",
+                            "Your pay-as-you-go balance reached its limit, so the stream was stopped. Clear the balance to go live again.",
+                            "/settings#billing", "credit-limit", java.time.Duration.ofDays(1), true));
                 }
             } catch (Exception e) {
                 log.error("Error in billing task for job " + job.getId(), e);
