@@ -226,7 +226,7 @@ public class StreamWorker {
         }
 
         // 2. New streams, then 3. other workers' streams that stopped reporting.
-        for (Long id : jobs.findUnclaimedIds()) {
+        for (Long id : jobs.findUnclaimedIds(workerId, now.minusMinutes(1))) {
             if (running.size() >= maxStreams) {
                 break;
             }

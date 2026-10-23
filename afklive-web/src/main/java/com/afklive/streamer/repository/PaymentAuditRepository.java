@@ -21,4 +21,6 @@ public interface PaymentAuditRepository extends JpaRepository<PaymentAudit, Long
 
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM PaymentAudit p WHERE p.status = :status")
     Long sumAmountByStatus(String status);
+
+    java.util.List<PaymentAudit> findTop50ByMerchantUserIdOrderByCreatedAtDesc(String merchantUserId);
 }

@@ -58,4 +58,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query(value = "SELECT COALESCE(used_storage_bytes, 0) FROM users WHERE id = :id", nativeQuery = true)
     long usedStorage(@Param("id") Long id);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id = :id")
+    Optional<User> lockById(@Param("id") Long id);
+
+    /** AD-3: find by email or name (lower-case needle). */
+    @Query("SELECT u FROM User u WHERE LOWER(u.email) LIKE CONCAT('%', :q, '%') OR LOWER(COALESCE(u.fullName, '')) LIKE CONCAT('%', :q, '%')")
+    org.springframework.data.domain.Page<User> search(@Param("q") String q, org.springframework.data.domain.Pageable pageable);
 }

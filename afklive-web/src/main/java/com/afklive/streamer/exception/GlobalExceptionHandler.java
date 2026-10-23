@@ -39,6 +39,12 @@ public class GlobalExceptionHandler {
         return body(HttpStatus.NOT_FOUND, userFacing(e.getMessage()));
     }
 
+    /** Malformed or mistyped JSON: the client's mistake, not a server error. */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadable(org.springframework.http.converter.HttpMessageNotReadableException e) {
+        return body(HttpStatus.BAD_REQUEST, "The request body isn't valid JSON for this action.");
+    }
+
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<Map<String, Object>> handleConflict(ConflictException e) {
         return body(HttpStatus.CONFLICT, userFacing(e.getMessage()));

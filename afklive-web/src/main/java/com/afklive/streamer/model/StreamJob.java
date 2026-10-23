@@ -62,6 +62,11 @@ public class StreamJob {
     /** The worker running this job; null until claimed. */
     @com.fasterxml.jackson.annotation.JsonIgnore
     private String workerId;
+    /** AD-1: an admin moved this job off this worker; it isn't claimed back by it for a minute. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String avoidWorker;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.ZonedDateTime moveRequestedAt;
     /** Last time the worker confirmed the job is running. A stale heartbeat means the worker is gone. */
     private java.time.ZonedDateTime heartbeatAt;
     private int restarts;
