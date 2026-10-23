@@ -64,6 +64,20 @@ public class LiveStreamController {
         return service.view(email(principal), id);
     }
 
+    /** PL-6 / AU-3. */
+    @PutMapping("/{id}/presentation")
+    public StreamView presentation(@PathVariable Long id, @RequestBody com.afklive.streamer.dto.StreamDtos.Presentation req, Principal principal) {
+        service.setPresentation(email(principal), id, req);
+        return service.view(email(principal), id);
+    }
+
+    /** PL-6: one video's own fit. */
+    @PutMapping("/{id}/playlist/{position}/fit")
+    public StreamView itemFit(@PathVariable Long id, @PathVariable int position, @RequestBody Map<String, String> body, Principal principal) {
+        service.setItemFit(email(principal), id, position, body.get("fit"));
+        return service.view(email(principal), id);
+    }
+
     /** RE-4. */
     @GetMapping("/{id}/uptime")
     public com.afklive.streamer.dto.StreamDtos.Uptime uptime(@PathVariable Long id, Principal principal) {

@@ -332,6 +332,32 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void fitAndCrossfadeReachTheWorkerAndItemFitsSurviveReordering() {
+        // PL-6 / AU-3.
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        service.setPresentation(email, s.getId(), new com.afklive.streamer.dto.StreamDtos.Presentation("blur", 6));
+        assertThatThrownBy(() -> service.setPresentation(email, s.getId(), new com.afklive.streamer.dto.StreamDtos.Presentation(null, 25)))
+                .hasMessageContaining("0 to 20");
+        assertThatThrownBy(() -> service.setPresentation(email, s.getId(), new com.afklive.streamer.dto.StreamDtos.Presentation("stretch", null)))
+                .hasMessageContaining("FIT, FILL or BLUR");
+        var view = service.view(email, s.getId());
+        assertThat(view.fit()).isEqualTo("BLUR");
+        assertThat(view.crossfadeSeconds()).isEqualTo(6);
+
+        service.setItemFit(email, s.getId(), 1, "FILL"); // night.mp4
+        List<Long> ids = view.playlist().stream().map(m -> m.id()).toList();
+        service.setItems(email, s.getId(), StreamItem.Kind.VIDEO, List.of(ids.get(1), ids.get(0))); // reorder
+        view = service.view(email, s.getId());
+        assertThat(view.playlist()).extracting(m -> m.title() + ":" + m.fit()).containsExactly("night.mp4:FILL", "rain.mp4:null");
+
+        StudioSpec spec = service.studioSpec(streams.findById(s.getId()).orElseThrow(), null);
+        assertThat(spec.fit()).isEqualTo("BLUR");
+        assertThat(spec.crossfadeSeconds()).isEqualTo(6.0);
+        assertThat(spec.videos()).extracting(StudioSpec.Media::fit).containsExactly("FILL", null);
+    }
+
+    @Test
     void stopAtUsesTheCreatorsTimeZone() {
         String email = newUser(PlanType.ESSENTIALS);
         LiveStream s = ready(email);

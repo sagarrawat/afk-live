@@ -139,6 +139,13 @@ public class StudioRuns {
         Studio studio = h.studio();
         StudioBuilder.Built built = h.built;
         PlaylistFeed playlist = built.playlist();
+        if (built.streamFit != null) {
+            built.streamFit.set(StudioBuilder.fitOf(next.fit()));
+        }
+        built.crossfadeSeconds = next.crossfadeSeconds();
+        if (built.music() != null) {
+            built.music().setCrossfadeSeconds(next.crossfadeSeconds());
+        }
         if (playlist != null && next.videos() != null) {
             built.videoRefs.set(List.copyOf(next.videos()));
             playlist.setItems(StudioBuilder.items(next.videos()), StudioBuilder.order(next.order()), next.loops());

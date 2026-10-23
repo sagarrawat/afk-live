@@ -61,6 +61,21 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
                       </span>
                     )}
                   </span>
+                  {kind === 'playlist' && (
+                    <select
+                      aria-label={`How ${m.title} fills the frame`}
+                      title={dirty ? 'Save the order first' : 'How this video fills the frame'}
+                      disabled={dirty || busy}
+                      value={m.fit ?? ''}
+                      onChange={(e) => update(() => put(`/api/streams/${s.id}/playlist/${i}/fit`, { fit: e.target.value || null }), 'Saved.')}
+                      className="hidden h-8 rounded border border-line bg-bg px-2 text-sm text-muted sm:block"
+                    >
+                      <option value="">Like the stream</option>
+                      <option value="BLUR">Blurred background</option>
+                      <option value="FIT">Bars</option>
+                      <option value="FILL">Fill and crop</option>
+                    </select>
+                  )}
                   <span className="tnum text-sm text-muted">{clock(m.durationSeconds)}</span>
                   <IconButton label={`Remove ${m.title}`} onClick={() => setItems(items.filter((_, j) => j !== i))}>
                     <Trash2 className="h-4 w-4" />
