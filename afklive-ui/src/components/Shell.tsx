@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Logo } from './Logo';
-import { Bell, CalendarDays, FolderOpen, Home, LifeBuoy, LogOut, Moon, Radio, Settings, Shield, Sun, Wrench } from 'lucide-react';
+import { Activity, Bell, CalendarDays, FolderOpen, HelpCircle, Home, LifeBuoy, LogOut, Moon, Radio, Settings, Shield, Sun, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { csrfToken, post } from '@/lib/api';
@@ -177,8 +177,14 @@ function UserMenu() {
           <MenuItem href="/classic" icon={<Wrench className="h-4 w-4" />}>
             YouTube upload tools
           </MenuItem>
+          <MenuItem href="/studio/help" icon={<HelpCircle className="h-4 w-4" />}>
+            Help
+          </MenuItem>
           <MenuItem href="mailto:support@afklive.in" icon={<LifeBuoy className="h-4 w-4" />}>
             Contact support
+          </MenuItem>
+          <MenuItem href="/status" icon={<Activity className="h-4 w-4" />}>
+            Service status
           </MenuItem>
           <MenuItem onClick={signOut} icon={<LogOut className="h-4 w-4" />}>
             Sign out

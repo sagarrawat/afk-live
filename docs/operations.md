@@ -162,3 +162,33 @@ to the Home Screen) and computers. The web app sends them itself with VAPID (`Pu
 - Only real browser push services are ever called (FCM, Mozilla, Apple, Windows; https on 443). A
   device the push service reports gone (404/410) is removed.
 - The web app needs outbound HTTPS to those services (the worker doesn't).
+
+## Status page (RE-7)
+
+`/status` (public, `site/status.html`) reads `/api/public/status` (`StatusService`, cached 15 s per
+instance). It only ever says operational / degraded / down per part, never names or counts:
+
+- **Website and studio**: up if the page answers and the database checks below succeed.
+- **Stream servers**: workers write a row in `stream_workers` every 10 s (`WorkerStatusReporter`).
+  None in the last 45 s: down. A stream that should run but whose worker stopped reporting, or that
+  has waited over 2 minutes for one: degraded.
+- **Phone streaming** (only when `INGEST_PUBLIC_HOST` is set): MediaMTX has no API open to us, so
+  this is what we saw: an auth-hook call with the right secret in the last 15 minutes
+  (`status_signals`), or a worker receiving a phone's feed now. Neither: "no recent check", left
+  out of the overall status.
+- **Incidents**: posted and updated by admins in Admin > Platform (investigating, cause found,
+  monitoring, resolved), audited in `admin_actions`. Any unresolved incident makes the overall
+  status at least degraded. The last 90 days are shown.
+
+Linked from the site footer, the app's account menu and Help page, and every email's footer.
+
+## Admin: workers, cost and YouTube quota (AD-2, YT-4)
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `APP_MONTHLY_SERVER_COST` | empty | The monthly bill for all servers, a plain number. Admin divides it by the last 30 days' stream hours (all runs, from `stream_jobs`). Empty: no estimate |
+| `APP_SERVER_COST_CURRENCY` | `INR` | Currency of the number above |
+| `APP_YOUTUBE_DAILY_QUOTA` | 10000 | The Google Cloud project's YouTube Data API units per day; Admin > Platform shows today's use (resets at midnight Pacific) |
+
+Worker CPU and memory are the machine's (or container's), since FFmpeg runs as child processes;
+memory "used" leaves out reclaimable page cache (`MemAvailable`).

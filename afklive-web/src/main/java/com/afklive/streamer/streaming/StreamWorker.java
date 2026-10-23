@@ -448,6 +448,11 @@ public class StreamWorker {
         return running.size();
     }
 
+    /** How many streams this worker takes on at most. */
+    public int capacity() {
+        return maxStreams;
+    }
+
     // ------------------------------------------------------------------ one running stream
 
     private final class Running implements StreamRunner.Listener {
