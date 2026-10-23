@@ -132,6 +132,8 @@ class PlaylistFeedTest {
             assertThat(order).last().isEqualTo("c");
             assertThat(feed.finished()).isTrue();
             assertThat(feed.framesPlayed()).isBetween(55L, 65L);
+            // PL-7: the skipped file is reported, so the creator can be told.
+            assertThat(feed.failedItems()).extracting(f -> f.item().title()).containsExactly("Broken");
         }
     }
 

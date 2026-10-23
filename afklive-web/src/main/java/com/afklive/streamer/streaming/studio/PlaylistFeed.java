@@ -61,6 +61,16 @@ public final class PlaylistFeed implements Feed {
     private Playing next;
     private boolean finished;
     private int failuresInARow;
+    /** PL-7: items that failed to play (id -> reason), until they play again; read by the heartbeat. */
+    private final java.util.concurrent.ConcurrentHashMap<String, Failed> failed = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public record Failed(Item item, String reason) {
+    }
+
+    /** PL-7: the items skipped because they couldn't be played. */
+    public List<Failed> failedItems() {
+        return List.copyOf(failed.values());
+    }
     private int pauseTicks;
     private volatile NowPlaying nowPlaying;
     private long framesPlayed;
@@ -214,12 +224,18 @@ public final class PlaylistFeed implements Feed {
                 current.frames++;
                 framesPlayed++;
                 failuresInARow = 0;
+                if (current.frames == 1 && !failed.isEmpty()) {
+                    failed.remove(current.item.id()); // it plays now (replaced file, or a passing glitch)
+                }
                 got = true;
             } else {
                 DecoderSource.State s = current.source.state();
                 if (s == DecoderSource.State.ENDED || s == DecoderSource.State.FAILED) {
                     if (s == DecoderSource.State.FAILED) {
                         log.warn("Playlist item {} could not be played: {}", current.item.id(), current.source.lastError());
+                        if (failed.size() < 50) {
+                            failed.put(current.item.id(), new Failed(current.item, String.valueOf(current.source.lastError())));
+                        }
                         if (++failuresInARow >= Math.max(1, items.size())) {
                             pauseTicks = FAILED_PASS_PAUSE_TICKS; // nothing in the list plays: don't spin
                             failuresInARow = 0;

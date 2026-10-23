@@ -164,6 +164,18 @@ public class AlertMonitor {
                     () -> notifier.notify(email, alert(NotificationService.Types.PHONE_BACK, Notification.Level.SUCCESS, streamId,
                             "Your phone is back on " + name, "Viewers see you live again.", link)));
         }
+        // PL-7: files the worker skipped because they couldn't be played, once a day per file.
+        for (StreamJob job : jobs.findAllByIsLiveTrue()) {
+            for (Map<String, Object> f : failedItems(job.getNowPlaying())) {
+                String title = String.valueOf(f.getOrDefault("title", "A file"));
+                Long streamId = job.getStreamId();
+                notifier.notify(job.getUser().getEmail(), new NotificationService.Alert(NotificationService.Types.ITEM_FAILED,
+                        Notification.Level.WARNING, streamId, title + " was skipped",
+                        displayName(job) + " couldn't play " + title + ", so it went on to the next item. Replace the file or remove it from the playlist.",
+                        streamId == null ? "/studio" : "/streams/" + streamId + "/playlist",
+                        "ITEM_FAILED:" + streamId + ":" + f.get("mediaId"), Duration.ofDays(1), true));
+            }
+        }
         // Forget conditions of runs that ended (their incidents are closed when they end).
         firstBad.keySet().removeIf(k -> !seen.contains(k));
     }
@@ -208,6 +220,19 @@ public class AlertMonitor {
                                 : "Delete files you no longer use, or upgrade for more space.",
                         "/library", "storage", Duration.ofDays(1), true));
             }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<Map<String, Object>> failedItems(String nowPlaying) {
+        if (nowPlaying == null || !nowPlaying.contains("\"failed\"")) {
+            return List.of();
+        }
+        try {
+            Object f = com.afklive.streamer.streaming.StudioSpec.parse(nowPlaying, Map.class).get("failed");
+            return f instanceof List<?> l ? (List<Map<String, Object>>) l : List.of();
+        } catch (Exception e) {
+            return List.of();
         }
     }
 

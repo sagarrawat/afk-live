@@ -40,6 +40,7 @@ public class NotificationService {
         public static final String PAYMENT_FAILED = "PAYMENT_FAILED";
         public static final String PLAN_LIMIT = "PLAN_LIMIT";
         public static final String CREDIT_LIMIT = "CREDIT_LIMIT";
+        public static final String ITEM_FAILED = "ITEM_FAILED";
 
         private Types() {
         }
