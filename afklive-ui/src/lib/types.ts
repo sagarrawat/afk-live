@@ -358,3 +358,39 @@ export interface Uptime {
   windows: { label: string; onAirSeconds: number; downSeconds: number; percent: number | null }[];
   outages: { startedAt: string; resolvedAt?: string | null }[];
 }
+
+/** SC-3: GET /api/schedules/calendar. Local times are wall-clock in the account's time zone. */
+export interface CalendarOccurrence {
+  streamId: number;
+  streamName: string;
+  scheduleId: number;
+  kind: 'ONCE' | 'DAILY' | 'WEEKLY';
+  start: string;
+  end?: string | null;
+  startLocal: string;
+  endLocal?: string | null;
+  scheduleTimeZone: string;
+  movable: boolean;
+}
+
+export interface CalendarClash {
+  start: string;
+  end: string;
+  startLocal: string;
+  endLocal: string;
+  streams: number;
+  streamIds: number[];
+  streamNames: string[];
+  message: string;
+}
+
+export interface ScheduleCalendar {
+  from: string;
+  days: number;
+  timeZone: string;
+  limit: number;
+  planName: string;
+  streams: { id: number; name: string }[];
+  occurrences: CalendarOccurrence[];
+  clashes: CalendarClash[];
+}

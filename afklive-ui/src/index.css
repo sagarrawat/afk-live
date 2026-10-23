@@ -23,6 +23,13 @@
   --ok: 60 203 127;
   --warn: 255 138 52;
   --bad: 255 68 56;
+  /* Calendar colours that tell streams apart: never red, green or amber (those mean on air or health). */
+  --stream-1: 132 144 255;
+  --stream-2: 186 132 250;
+  --stream-3: 84 178 242;
+  --stream-4: 64 200 214;
+  --stream-5: 222 128 222;
+  --stream-6: 170 176 210;
   color-scheme: dark;
 }
 
@@ -40,6 +47,12 @@
   --ok: 22 150 84;
   --warn: 196 96 0;
   --bad: 214 45 32;
+  --stream-1: 72 84 214;
+  --stream-2: 128 72 200;
+  --stream-3: 24 120 190;
+  --stream-4: 10 132 150;
+  --stream-5: 168 60 168;
+  --stream-6: 96 102 140;
   color-scheme: light;
 }
 
