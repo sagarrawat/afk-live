@@ -35,6 +35,23 @@ public class HomeController {
         return "forward:/site/for-" + slug + ".html";
     }
 
+    /** MK-4: the help articles (afklive-ui/site/help.py writes site/help-&lt;slug&gt;.html). */
+    public static final Set<String> HELP_ARTICLES = Set.of("youtube-stream-key", "youtube-preparing", "vertical-or-landscape",
+            "live-here-not-on-youtube", "phone-streaming");
+
+    @GetMapping("/help")
+    public String help() {
+        return "forward:/site/help.html";
+    }
+
+    @GetMapping("/help/{slug}")
+    public String helpArticle(@org.springframework.web.bind.annotation.PathVariable String slug) {
+        if (!HELP_ARTICLES.contains(slug)) {
+            throw new com.afklive.streamer.exception.NotFoundException("Page not found.");
+        }
+        return "forward:/site/help-" + slug + ".html";
+    }
+
     @GetMapping("/terms")
     public String terms() {
         return "forward:/site/terms.html";

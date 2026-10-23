@@ -3,6 +3,8 @@ import { post } from '@/lib/api';
 import { keys, useInvalidate } from '@/lib/queries';
 import type { Destination } from '@/lib/types';
 import clsx from 'clsx';
+import { HELP } from '@/lib/help';
+import { HelpLink } from './HelpLink';
 import { PlatformIcon } from './PlatformIcon';
 import { Button, Dialog, Field, Input, useAction } from './ui';
 
@@ -26,7 +28,7 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
   CUSTOM: 'Other',
 };
 
-const HELP: Record<Platform, string> = {
+const WHERE: Record<Platform, string> = {
   YOUTUBE: 'In YouTube Studio, choose Go live, then Stream. Copy the stream key there. No Google sign-in needed.',
   FACEBOOK: 'In Facebook Live Producer, choose Streaming software and copy the stream key.',
   TWITCH: 'In your Twitch dashboard, Settings > Stream, copy the primary stream key.',
@@ -156,7 +158,15 @@ export function AddDestinationDialog({ open, onClose, onAdded }: { open: boolean
             </button>
           ))}
         </div>
-        <p className="text-sm text-muted">{HELP[platform]}</p>
+        <p className="text-sm text-muted">
+          {WHERE[platform]}
+          {platform === 'YOUTUBE' && (
+            <>
+              {' '}
+              <HelpLink to={HELP.streamKey}>Step by step</HelpLink>
+            </>
+          )}
+        </p>
         {twoFields && (
           <Field label="Stream URL" htmlFor="dest-server">
             <Input id="dest-server" value={server} autoComplete="off" spellCheck={false} placeholder="rtmps://…" onChange={(e) => setServer(e.target.value)} />

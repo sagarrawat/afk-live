@@ -29,9 +29,9 @@ public final class StreamDtos {
         }
     }
 
-    /** {@code fit}: the item's own fit (PL-6), null when it follows the stream. */
+    /** {@code fit}: the item's own fit (PL-6), null when it follows the stream. {@code fps}: probed frame rate (ST-1). */
     public record MediaRef(Long id, String title, Double durationSeconds, Integer width, Integer height,
-                           String contentType, String status, String fit) {
+                           String contentType, String status, String fit, Double fps) {
     }
 
     /** PL-6 / AU-3: how pictures fill the frame, and the music crossfade. Either may be left out. */

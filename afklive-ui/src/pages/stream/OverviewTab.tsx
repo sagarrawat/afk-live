@@ -6,10 +6,13 @@ import { HealthDot, isOnAir } from '@/components/status';
 import { Badge, Button, Panel, Toggle, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
 import { clock, dateTime, duration } from '@/lib/format';
-import { useRuns, useUptime } from '@/lib/queries';
+import { useDestinations, useRuns, useUptime } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
 import { VerticalHint } from './VerticalHint';
+import { YouTubeSideCard } from './YouTubeSideCard';
+import { HelpLink } from '@/components/HelpLink';
+import { HELP, helpForProblem } from '@/lib/help';
 
 const SCENES = [
   ['STARTING', 'Starting soon'],
@@ -23,6 +26,7 @@ export function OverviewTab({ stream: s }: { stream: StreamView }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="space-y-6">
+        <YouTubeSideCard stream={s} />
         <VerticalHint stream={s} />
         {s.source === 'PHONE' ? <PhoneControl stream={s} /> : <NowPlaying stream={s} />}
         {onAir && s.overlays.length > 0 && <OverlayToggles stream={s} />}
@@ -242,6 +246,21 @@ function ReconnectButton({ stream: s }: { stream: StreamView }) {
   );
 }
 
+/** MK-4: a destination's problem links to the article that fixes it (YouTube destinations only). */
+function DestinationHelp({ stream: s, name, error }: { stream: StreamView; name: string; error: string }) {
+  const { data: destinations } = useDestinations();
+  const target = s.destinations.find((t) => t.name === name);
+  const platform = destinations?.find((d) => d.id === target?.destinationId)?.platform;
+  const to = platform ? helpForProblem(error, platform) : null;
+  if (!to) return null;
+  return (
+    <>
+      {' '}
+      <HelpLink to={to}>{to === HELP.streamKey ? 'Find your stream key' : 'What to check'}</HelpLink>
+    </>
+  );
+}
+
 function DestinationsPanel({ stream: s }: { stream: StreamView }) {
   const onAir = isOnAir(s.live.state);
   const health = s.live.health?.destinations ?? [];
@@ -258,6 +277,7 @@ function DestinationsPanel({ stream: s }: { stream: StreamView }) {
                   <span className="block text-sm text-muted">
                     {d.error}
                     {d.restarts > 0 && <span className="tnum"> {d.restarts} reconnect{d.restarts === 1 ? '' : 's'}</span>}
+                    {d.error && d.level !== 'green' && <DestinationHelp stream={s} name={d.name} error={d.error} />}
                   </span>
                 )}
               </span>
