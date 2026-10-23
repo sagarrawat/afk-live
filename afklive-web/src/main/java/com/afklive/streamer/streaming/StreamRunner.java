@@ -64,6 +64,14 @@ public final class StreamRunner {
         default void ended(Process process) {
         }
 
+        /**
+         * Seamless mode: a normal exit means "launch me again from where I got to" (an endless playlist
+         * whose scheduled list ran out), not the end of the stream.
+         */
+        default boolean endless() {
+            return false;
+        }
+
         /** Why the program ended when the encoder exits normally (null: "Playlist finished"). */
         default String finishReason() {
             return null;
@@ -95,7 +103,7 @@ public final class StreamRunner {
     private static final Duration KILL_AFTER = Duration.ofSeconds(5);
 
     private final long jobId;
-    private final EncoderLauncher launcher;
+    private volatile EncoderLauncher launcher;
     /** One relay command per destination position; null where the destination is turned off (DS-5). */
     private volatile List<List<String>> relayCommands;
     private final Listener listener;
@@ -108,6 +116,34 @@ public final class StreamRunner {
     private volatile Process encoder;
     private volatile List<Relay> relays = List.of();
     private Thread supervisor;
+
+    // ------------------------------------------------ seamless mode (FO-2)
+    /**
+     * Seamless mode: producers (encoder, copy-mode player) can be replaced while live, and a crashed
+     * one restarted, without the relays noticing: their output goes through a {@link TsStitcher} that
+     * keeps one continuous timeline, and relays run for the whole stream.
+     */
+    private volatile boolean seamless;
+    private TsStitcher stitcher;
+    private final java.util.concurrent.atomic.AtomicInteger generations = new java.util.concurrent.atomic.AtomicInteger();
+    private volatile Producer current;
+    private volatile Producer pending;
+
+    /** One producer process and the threads reading it. */
+    private final class Producer {
+        final int generation;
+        final EncoderLauncher launcher;
+        final Process process;
+        final Deque<String> errors = new ArrayDeque<>();
+        final CountDownLatch outputDone = new CountDownLatch(1);
+        Thread stderr;
+
+        Producer(int generation, EncoderLauncher launcher, Process process) {
+            this.generation = generation;
+            this.launcher = launcher;
+            this.process = process;
+        }
+    }
 
     public StreamRunner(long jobId, Supplier<List<String>> encoderCommand, List<List<String>> relayCommands,
                         Listener listener, Settings settings) {
@@ -127,7 +163,76 @@ public final class StreamRunner {
         if (supervisor != null) {
             return;
         }
-        supervisor = platformThread("stream-" + jobId, this::superviseEncoder);
+        supervisor = platformThread("stream-" + jobId, seamless ? this::superviseSeamless : this::superviseEncoder);
+    }
+
+    /** Turns on seamless mode (before {@link #start}): producers can be swapped live; see {@link #handOff}. */
+    public synchronized StreamRunner seamless() {
+        if (supervisor == null) {
+            seamless = true;
+        }
+        return this;
+    }
+
+    /** Which producer is on air: for copy mode vs studio, and tests. */
+    public EncoderLauncher currentLauncher() {
+        Producer c = current;
+        return c != null ? c.launcher : launcher;
+    }
+
+    /**
+     * Seamless mode only: starts {@code next} next to the current producer and switches to it at its
+     * first keyframe; the old one is then stopped. Destinations stay connected and the timeline carries
+     * on. If {@code next} fails or produces nothing within {@code timeout}, it is dropped and the
+     * current producer simply continues; {@code onDone} learns which happened.
+     */
+    public boolean handOff(EncoderLauncher next, Duration timeout, java.util.function.Consumer<Boolean> onDone) {
+        Producer p;
+        synchronized (this) {
+            if (!seamless || stopping.get() || finished.get() || current == null || pending != null) {
+                return false;
+            }
+            try {
+                p = launchProducer(next, true);
+            } catch (IOException e) {
+                log.warn("Hand-off for job {} could not start: {}", jobId, e.getMessage());
+                return false;
+            }
+        }
+        Producer started = p;
+        platformThread("handoff-" + jobId, () -> {
+            boolean switched = false;
+            try {
+                long deadline = System.nanoTime() + timeout.toNanos();
+                while (System.nanoTime() < deadline && !stopping.get()) {
+                    if (current == started) {
+                        switched = true;
+                        break;
+                    }
+                    if (!started.process.isAlive() && pending == started) {
+                        break;
+                    }
+                    Thread.sleep(50);
+                }
+                switched = switched || current == started;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            if (!switched) {
+                synchronized (StreamRunner.this) {
+                    if (pending == started) {
+                        pending = null;
+                    }
+                }
+                stitcher.cancel(started.generation);
+                terminate(started.process);
+                log.warn("Hand-off for job {} didn't take over in time; staying on the current producer", jobId);
+            }
+            if (onDone != null) {
+                onDone.accept(switched);
+            }
+        });
+        return true;
     }
 
     /** Stops the stream; the listener then gets onFinished(reason, false). Safe to call repeatedly. */
@@ -138,6 +243,14 @@ public final class StreamRunner {
         stopReason = reason;
         stopSignal.countDown();
         terminate(encoder);
+        Producer c = current;
+        Producer n = pending;
+        if (c != null) {
+            terminate(c.process);
+        }
+        if (n != null) {
+            terminate(n.process);
+        }
         relays.forEach(Relay::shutdown);
     }
 
@@ -247,6 +360,175 @@ public final class StreamRunner {
     private record RunResult(int exitCode, String error) {
     }
 
+    /** Starts a producer and its reader threads; its output goes to the stitcher under a new generation. */
+    private Producer launchProducer(EncoderLauncher l, boolean asPending) throws IOException {
+        Process proc = l.launch();
+        int gen = generations.incrementAndGet();
+        Producer p = new Producer(gen, l, proc);
+        stitcher.expect(gen);
+        if (asPending) {
+            pending = p;
+        } else {
+            current = p;
+            encoder = proc;
+        }
+        p.stderr = platformThread("encoder-err-" + jobId + "-" + gen,
+                () -> readEncoderStderr(proc.getErrorStream(), p.errors, () -> current == p));
+        platformThread("encoder-out-" + jobId + "-" + gen, () -> {
+            try (InputStream out = proc.getInputStream()) {
+                byte[] buf = new byte[CHUNK];
+                int n;
+                while ((n = out.read(buf)) > 0) {
+                    stitcher.feed(gen, buf, n);
+                }
+            } catch (IOException e) {
+                if (!stopping.get() && current == p) {
+                    log.warn("Reading producer output for job {} failed: {}", jobId, e.getMessage());
+                }
+            } finally {
+                p.outputDone.countDown();
+            }
+        });
+        return p;
+    }
+
+    /** The stitcher switched to {@code generation}: make it current and stop the one it replaced. */
+    private void onStitched(int generation) {
+        Producer next = pending;
+        if (next == null || next.generation != generation) {
+            return; // a restart after a crash: already current
+        }
+        Producer old = current;
+        current = next;
+        encoder = next.process;
+        launcher = next.launcher;
+        pending = null;
+        if (old != null) {
+            Thread.ofPlatform().daemon(true).start(() -> terminate(old.process));
+        }
+        log.info("Job {} switched producer without reconnecting", jobId);
+    }
+
+    private void startRelays() {
+        synchronized (this) {
+            List<Relay> generation = new ArrayList<>();
+            List<List<String>> commands = relayCommands;
+            for (int i = 0; i < commands.size(); i++) {
+                if (commands.get(i) != null) {
+                    generation.add(new Relay(i, commands.get(i)));
+                }
+            }
+            relays = List.copyOf(generation);
+            generation.forEach(Relay::start);
+        }
+    }
+
+    private void superviseSeamless() {
+        stitcher = new TsStitcher(data -> {
+            for (Relay r : relays) {
+                r.offer(data);
+            }
+        }, this::onStitched);
+        Deque<Long> failureTimes = new ArrayDeque<>();
+        Duration backoff = settings.initialBackoff();
+        int restarts = 0;
+        startRelays();
+        Producer lastExited = null;
+        try {
+            while (!stopping.get()) {
+                long startedAt = System.nanoTime();
+                if (current == null || current == lastExited) {
+                    synchronized (this) {
+                        if (stopping.get()) {
+                            break;
+                        }
+                        launchProducer(launcher, false);
+                    }
+                    listener.onEncoderStarted(restarts);
+                }
+                // Wait for whichever producer is on air to exit; a hand-off moves "current" along.
+                Producer exited;
+                int code;
+                while (true) {
+                    Producer c = current;
+                    code = c.process.waitFor(); // runs as long as the stream; a hand-off ends it on purpose
+                    c.outputDone.await(5, TimeUnit.SECONDS);
+                    joinQuietly(c.stderr, Duration.ofSeconds(2));
+                    try {
+                        c.launcher.ended(c.process);
+                    } catch (Exception e) {
+                        log.warn("Producer cleanup for job {} failed", jobId, e);
+                    }
+                    if (c == current || stopping.get()) {
+                        exited = c;
+                        break;
+                    }
+                }
+                if (stopping.get()) {
+                    break;
+                }
+                if (code == 0 && exited.launcher.endless()) {
+                    lastExited = exited;
+                    stitcher.ended(exited.generation);
+                    continue; // relaunched straight away; the stitcher joins the two seamlessly
+                }
+                if (code == 0) {
+                    String why = exited.launcher.finishReason();
+                    relays.forEach(Relay::drainAndClose);
+                    for (Relay r : relays) {
+                        r.awaitDone(Duration.ofSeconds(15));
+                    }
+                    finish(why != null ? why : "Playlist finished", false);
+                    return;
+                }
+                lastExited = exited;
+                stitcher.ended(exited.generation);
+                Producer waiting = pending;
+                if (waiting != null) {
+                    // A hand-off was under way: let the new producer take over instead of restarting the old one.
+                    long until = System.nanoTime() + Duration.ofSeconds(15).toNanos();
+                    while (current == exited && pending == waiting && System.nanoTime() < until && !stopping.get()) {
+                        Thread.sleep(50);
+                    }
+                    if (current != exited) {
+                        continue;
+                    }
+                }
+                String error;
+                synchronized (exited.errors) {
+                    error = exited.errors.isEmpty() ? "exit code " + code : String.join(" | ", exited.errors);
+                }
+                long now = System.nanoTime();
+                failureTimes.addLast(now);
+                while (!failureTimes.isEmpty() && now - failureTimes.peekFirst() > settings.failureWindow().toNanos()) {
+                    failureTimes.removeFirst();
+                }
+                restarts++;
+                listener.onEncoderFailure(restarts, error);
+                if (failureTimes.size() >= settings.maxEncoderFailures()) {
+                    finish("Stream kept failing: " + error, true);
+                    return;
+                }
+                if (Duration.ofNanos(now - startedAt).compareTo(settings.stableAfter()) >= 0) {
+                    backoff = settings.initialBackoff();
+                }
+                log.warn("Producer for job {} exited with {}; restart {} in {} ms (destinations stay connected)",
+                        jobId, code, restarts, backoff.toMillis());
+                if (stopSignal.await(backoff.toMillis(), TimeUnit.MILLISECONDS)) {
+                    break;
+                }
+                backoff = min(backoff.multipliedBy(2), settings.maxBackoff());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.error("Stream supervisor for job {} crashed", jobId, e);
+            finish("Stream supervisor error: " + e.getMessage(), true);
+            return;
+        }
+        finish(stopReason != null ? stopReason : "Stopped", false);
+    }
+
     private RunResult runEncoderOnce(int restarts) throws IOException {
         Process p = launcher.launch();
         encoder = p;
@@ -320,10 +602,16 @@ public final class StreamRunner {
     }
 
     private void readEncoderStderr(InputStream err, Deque<String> errorLines) {
+        readEncoderStderr(err, errorLines, () -> true);
+    }
+
+    private void readEncoderStderr(InputStream err, Deque<String> errorLines, java.util.function.BooleanSupplier report) {
         double fps = 0;
         double bitrate = 0;
         double speed = 0;
         long drops = 0;
+        long frames = 0;
+        long outTimeUs = 0;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(err, StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
@@ -335,9 +623,16 @@ public final class StreamRunner {
                     case "bitrate" -> bitrate = parseLeadingNumber(value);
                     case "speed" -> speed = parseLeadingNumber(value);
                     case "drop_frames" -> drops = (long) parseLeadingNumber(value);
-                    case "progress" -> listener.onProgress(new Progress(fps, bitrate, speed, drops));
-                    case "frame", "stream_0_0_q", "total_size", "out_time_us", "out_time_ms", "out_time",
-                         "dup_frames" -> {
+                    case "frame" -> frames = (long) parseLeadingNumber(value);
+                    case "out_time_us" -> outTimeUs = (long) parseLeadingNumber(value);
+                    case "progress" -> {
+                        // Stream copy (FO-2 copy mode) reports no fps: frames over time give it.
+                        double rate = fps > 0 || frames == 0 || outTimeUs <= 0 ? fps : frames / (outTimeUs / 1e6);
+                        if (report.getAsBoolean()) {
+                            listener.onProgress(new Progress(rate, bitrate, speed, drops));
+                        }
+                    }
+                    case "stream_0_0_q", "total_size", "out_time_ms", "out_time", "dup_frames" -> {
                         // progress fields we don't store
                     }
                     default -> {

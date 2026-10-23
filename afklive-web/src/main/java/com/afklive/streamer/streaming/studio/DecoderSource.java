@@ -472,6 +472,28 @@ public final class DecoderSource implements AutoCloseable {
         }
     }
 
+    /**
+     * The picture as the studio puts it on the canvas: [0:v:0] in, [v] out. Shared with playout copies
+     * (FO-2), so a file prepared for copy mode looks exactly like the studio playing it.
+     */
+    public static String videoChain(Canvas canvas, Fit fit, boolean live) {
+        // Drop to the stream's frame rate first: a 60 fps source is scaled half as often.
+        return "[0:v:0]fps=" + canvas.fps() + (live ? "" : ":start_time=0") + "[rated];"
+                + fitGraph(canvas, fit, "[rated]") + ";[fit]setsar=1,format=yuv420p[v]";
+    }
+
+    /** The sound as the studio plays it: loudness correction, the canvas sample rate, 16-bit stereo. */
+    public static String audioChain(Canvas canvas, double gainDb, boolean live) {
+        // Files start both streams at 0 so a late first audio packet becomes silence rather than drift.
+        String startAt = live ? "" : ":first_pts=0";
+        // AU-5: loudness correction; a boost goes through a limiter so peaks never clip.
+        String gain = Math.abs(gainDb) < 0.1 ? ""
+                : String.format(Locale.ROOT, "volume=%.1fdB,", gainDb)
+                        + (gainDb > 0 ? "alimiter=limit=0.95:level=disabled," : "");
+        return gain + "aresample=" + canvas.sampleRate() + ":async=1000" + startAt + ","
+                + "aformat=sample_fmts=s16:channel_layouts=stereo";
+    }
+
     public List<String> command(Path audioFifo) {
         return command(audioFifo, options.input(), options.audio());
     }
@@ -487,19 +509,9 @@ public final class DecoderSource implements AutoCloseable {
             cmd.addAll(List.of("-ss", String.format(Locale.ROOT, "%.3f", options.startSeconds())));
         }
         cmd.addAll(input);
-        // Files start both streams at 0 so a late first audio packet becomes silence rather than drift.
-        String startAt = options.live() ? "" : ":first_pts=0";
-        // AU-5: loudness correction; a boost goes through a limiter so peaks never clip.
-        String gain = Math.abs(options.gainDb()) < 0.1 ? ""
-                : String.format(Locale.ROOT, "volume=%.1fdB,", options.gainDb())
-                        + (options.gainDb() > 0 ? "alimiter=limit=0.95:level=disabled," : "");
-        String audioChain = gain + "aresample=" + canvas.sampleRate() + ":async=1000" + startAt + ","
-                + "aformat=sample_fmts=s16:channel_layouts=stereo";
+        String audioChain = audioChain(canvas, options.gainDb(), options.live());
         if (options.video()) {
-            StringBuilder graph = new StringBuilder();
-            // Drop to the stream's frame rate first: a 60 fps source is scaled half as often.
-            graph.append("[0:v:0]fps=").append(canvas.fps()).append(options.live() ? "" : ":start_time=0").append("[rated];")
-                    .append(fitGraph(canvas, options.fit(), "[rated]")).append(";[fit]setsar=1,format=yuv420p[v]");
+            StringBuilder graph = new StringBuilder(videoChain(canvas, options.fit(), options.live()));
             if (audio) {
                 graph.append(";[0:a:0]").append(audioChain).append("[a]");
             }

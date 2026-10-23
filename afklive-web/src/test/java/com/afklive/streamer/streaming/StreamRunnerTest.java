@@ -237,4 +237,67 @@ class StreamRunnerTest {
         Process p = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
         return p.waitFor(60, TimeUnit.SECONDS) ? p.exitValue() : -1;
     }
+
+    // ------------------------------------------------------------- seamless mode (FO-2)
+
+    private static String shellQuote(List<String> cmd) {
+        return String.join(" ", cmd.stream().map(a -> "'" + a.replace("'", "'\\''") + "'").toList());
+    }
+
+    @Test
+    void aHandOffSwitchesProducerWithoutReconnectingTheDestination() throws Exception {
+        Path out = dir.resolve("handoff.flv");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(20, () -> realtimeEncoder(5), List.of(relayTo(out)), rec, FAST).seamless();
+        runner.start();
+        Thread.sleep(2500);
+        java.util.concurrent.CompletableFuture<Boolean> done = new java.util.concurrent.CompletableFuture<>();
+        StreamRunner.EncoderLauncher next = StreamRunner.EncoderLauncher.command(() -> realtimeEncoder(0));
+        assertThat(runner.handOff(next, Duration.ofSeconds(20), done::complete)).isTrue();
+        assertThat(done.get(30, TimeUnit.SECONDS)).as("switched").isTrue();
+        assertThat(runner.currentLauncher()).isSameAs(next);
+        assertThat(runner.awaitFinished(Duration.ofSeconds(60))).isTrue();
+
+        assertThat(rec.finishedReason).isEqualTo("Playlist finished"); // the second producer ran to its end
+        assertThat(rec.restarts.getOrDefault(0, 0)).as("the destination never reconnected").isZero();
+        assertThat(rec.statuses.stream().filter(x -> x.equals("0:RECONNECTING")).count()).isZero();
+        // About 2.5 s of the first producer, then the second one's 4 s, on one unbroken timeline.
+        TsStitcherTest.assertContinuous(TsStitcherTest.probe(out), 6.5);
+    }
+
+    @Test
+    void aCrashedProducerIsRestartedWhileTheDestinationStaysConnected() throws Exception {
+        Path out = dir.resolve("seamless-crash.flv");
+        AtomicInteger attempts = new AtomicInteger();
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(21, () -> attempts.getAndIncrement() == 0
+                ? List.of("sh", "-c", shellQuote(realtimeEncoder(0)) + "; exit 3") // plays 4 s, then "crashes"
+                : realtimeEncoder(0), List.of(relayTo(out)), rec, FAST).seamless();
+        runner.start();
+        assertThat(runner.awaitFinished(Duration.ofSeconds(60))).isTrue();
+
+        assertThat(rec.encoderFailures.get()).isEqualTo(1);
+        assertThat(rec.finishedReason).isEqualTo("Playlist finished");
+        assertThat(rec.restarts.getOrDefault(0, 0)).as("the destination never reconnected").isZero();
+        TsStitcherTest.assertContinuous(TsStitcherTest.probe(out), 8);
+    }
+
+    @Test
+    void aHandOffThatNeverStartsLeavesTheCurrentProducerOnAir() throws Exception {
+        Path out = dir.resolve("handoff-fails.flv");
+        Recorder rec = new Recorder();
+        StreamRunner.EncoderLauncher first = StreamRunner.EncoderLauncher.command(() -> realtimeEncoder(0));
+        StreamRunner runner = new StreamRunner(22, first, List.of(relayTo(out)), rec, FAST).seamless();
+        runner.start();
+        Thread.sleep(1500);
+        java.util.concurrent.CompletableFuture<Boolean> done = new java.util.concurrent.CompletableFuture<>();
+        assertThat(runner.handOff(StreamRunner.EncoderLauncher.command(() -> List.of("sh", "-c", "exit 1")),
+                Duration.ofSeconds(5), done::complete)).isTrue();
+        assertThat(done.get(30, TimeUnit.SECONDS)).as("not switched").isFalse();
+        assertThat(runner.currentLauncher()).isSameAs(first);
+        assertThat(runner.awaitFinished(Duration.ofSeconds(60))).isTrue();
+        assertThat(rec.finishedReason).isEqualTo("Playlist finished");
+        assertThat(rec.failed).isFalse();
+        TsStitcherTest.assertContinuous(TsStitcherTest.probe(out), 4);
+    }
 }

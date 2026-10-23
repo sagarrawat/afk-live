@@ -141,4 +141,41 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
         assertThatThrownBy(() -> storage.size(idle)).isInstanceOf(Exception.class);
         assertThat(storage.size(played)).isPositive();
     }
+
+    @Test
+    void profileCopiesAreEncodedAsTheStreamSendsThemAndJoinWithoutReencoding() throws Exception {
+        MediaAsset a = upload("copies-profile@example.com");
+        // Asked for, not ready yet.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", -3.2, true)).isNull();
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", -3.2, true)).isNull(); // asked only once
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                Integer.class, a.getId())).isEqualTo(1);
+        // A playout copy for the same canvas is a separate thing.
+        copies.forget();
+        assertThat(copies.keyFor(a.getS3Key(), 180, 320, 30)).isEqualTo(a.getS3Key());
+        while (copies.prepareNext()) {
+            // make both
+        }
+        String profile = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", -3.2, false);
+        assertThat(profile).isNotNull().endsWith(".ts");
+        copies.forget();
+        assertThat(copies.keyFor(a.getS3Key(), 180, 320, 30)).isNotEqualTo(profile).endsWith(".mp4");
+
+        MediaProbe.MediaInfo info = probe.probe(storage.readLocation(profile));
+        assertThat(info.width()).isEqualTo(180);
+        assertThat(info.height()).isEqualTo(320);
+        assertThat(info.fps()).isBetween(29.9, 30.1);
+        assertThat(info.hasAudio()).isTrue();
+
+        // Copy mode's core: the same file three times, joined by stream copy, is one clean programme.
+        Path list = dir.resolve("list.ffconcat");
+        String file = storage.readLocation(profile);
+        Files.writeString(list, "ffconcat version 1.0\nfile '" + file + "'\nfile '" + file + "'\nfile '" + file + "'\n");
+        Path joined = dir.resolve("joined.ts");
+        Process p = new ProcessBuilder("ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", list.toString(),
+                "-map", "0", "-c", "copy", "-f", "mpegts", joined.toString()).redirectErrorStream(true).start();
+        String log = new String(p.getInputStream().readAllBytes());
+        assertThat(p.waitFor()).as(log).isZero();
+        com.afklive.streamer.streaming.TsStitcherTest.assertContinuous(com.afklive.streamer.streaming.TsStitcherTest.probe(joined), 9);
+    }
 }

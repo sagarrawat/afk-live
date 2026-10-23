@@ -104,6 +104,12 @@ public record StreamSpec(
     }
 
     /** This spec with a new destination list (same order and positions as the run's). */
+    /** The same run with other studio settings (FO-2: what copy mode was playing, live changes included). */
+    public StreamSpec withStudio(StudioSpec next) {
+        return new StreamSpec(username, videoKey, musicKey, musicVolume, loopCount, watermarkKey, muteVideoAudio, streamMode,
+                maxHeight, overlayEnabled, overlayTemplate, scheduledStreamId, destinations, streamId, next);
+    }
+
     public StreamSpec withDestinations(List<Destination> next) {
         return new StreamSpec(username, videoKey, musicKey, musicVolume, loopCount, watermarkKey, muteVideoAudio, streamMode,
                 maxHeight, overlayEnabled, overlayTemplate, scheduledStreamId, next, streamId, studio);
