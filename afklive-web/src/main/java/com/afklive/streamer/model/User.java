@@ -27,6 +27,15 @@ public class User {
     @Column(name = "used_storage_bytes", insertable = false, updatable = false)
     private long usedStorageBytes = 0;
 
+    /** ON-3: the creator's time zone (IANA id) and billing currency (INR or USD); null until set. */
+    @Column(name = "time_zone", length = 64)
+    private String timeZone;
+    @Column(length = 3)
+    private String currency;
+    /** ON-2: when the setup wizard was finished or skipped. */
+    @Column(name = "onboarded_at")
+    private java.time.ZonedDateTime onboardedAt;
+
     private String password;
     private boolean enabled = true;
     private String verificationToken;
@@ -259,5 +268,29 @@ public class User {
 
     public void setEmailAlerts(boolean emailAlerts) {
         this.emailAlerts = emailAlerts;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
+    public void setTimeZone(String timeZone) {
+        this.timeZone = timeZone;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public java.time.ZonedDateTime getOnboardedAt() {
+        return onboardedAt;
+    }
+
+    public void setOnboardedAt(java.time.ZonedDateTime onboardedAt) {
+        this.onboardedAt = onboardedAt;
     }
 }

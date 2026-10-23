@@ -20,7 +20,9 @@ non-functional requirements (continuity, quality, latency, cost). Reference stor
   - Media library: `MediaService` + `/api/media` (resumable multipart uploads with storage reserved up front, search/sort/filter, storage meter, bulk delete that refuses files a live stream uses), `MediaProcessor` (claims Processing files, probes, thumbnails, Ready/Failed with a reason). Storage usage changes only through `UserRepository.reserveStorage/addStorage`
   - Admin: `AdminService` + `/api/admin` (ADMIN only): live streams with worker and health, stop/move (move = `StreamJobRepository.release`, the old worker's heartbeat fails and another claims it), worker load, user lookup with plan/payments/invoices/streams, plan set/extend/disable/refund. Every change needs a reason and lands in `admin_actions`
   - `src/main/resources/db/changelog/`: Liquibase migrations (the only way to change the schema)
-  - `src/main/resources/static/`: current frontend (Alpine + Tailwind CDN); to be replaced per the design direction
+  - `src/main/resources/static/`: marketing pages, `remote.html`, and `classic.html` (the old Alpine app, kept for the YouTube upload/comment tools until they move). The app itself is `afklive-ui`
+  - `/api/me` (`MeController`): the signed-in account, plan and preferences (time zone, currency, onboarded)
+- `afklive-ui/`: the app (React 18, Vite, TypeScript, Tailwind, TanStack Query, dnd-kit, Lucide). Built by Maven into `static/app/`; Spring serves every `/studio/**` route with `app/index.html`. Design tokens are CSS variables in `src/index.css` (dark-first; red only for on air; green/amber/red only for health). `src/lib/api.ts` (fetch + CSRF), `src/lib/upload.ts` (resumable uploads), `src/pages/` (screens), `src/components/ui.tsx` (shared kit)
 - `afklive-optimizer/`: AWS Lambda that normalizes uploaded videos with FFmpeg.
 - `docs/product-spec.md`: product spec (source of truth for scope and priorities).
 - `docs/operations.md`: how web and worker processes run, deploy, and the worker egress firewall.
@@ -28,8 +30,10 @@ non-functional requirements (continuity, quality, latency, cost). Reference stor
 ## Build, test, run
 
 ```sh
-mvn -B verify                                  # build + all tests (what CI runs on every PR)
-mvn -B test -pl afklive-web -Dtest=SomeTest    # one test class
+mvn -B verify                                  # build + all tests incl. the UI's (what CI runs on every PR); needs Node 20+
+mvn -B test -pl afklive-web -Dtest=SomeTest -DskipUi -DskipUiTests   # one Java test class, no UI build
+cd afklive-ui && npm test                      # UI tests (Vitest); npm run typecheck
+cd afklive-ui && npm run dev                   # the app on :5173 with hot reload, API proxied to the Spring app on :8080
 ```
 
 Tests that need the database extend `PostgresIntegrationTest`, which starts an embedded PostgreSQL
@@ -56,4 +60,5 @@ FFmpeg must be on PATH.
 - Streaming changes must respect the continuity rules in the spec: planned changes never disconnect a destination.
 - Web and worker communicate only through the database, with conditional updates (claim, heartbeat, markEnded). Never signal processes by PID or keep stream state only in memory on the web side.
 - Process-level behaviour is tested with real FFmpeg (StreamRunnerTest, StreamWorkerIntegrationTest, StudioTest, PlaylistFeedTest); keep those passing.
+- UI: plain language in primary flows (no "RTMP", "bitrate" or "stream key" outside setup and health detail), status before settings, one primary action per screen; every screen must work at 375 px wide. Never send full stream keys to the browser (`DestinationView` masks them).
 - Encoding must meet YouTube's ingest minimums (1080p30 ≥ 5 Mbps, keyframe every 2 s, AAC 44.1 kHz).

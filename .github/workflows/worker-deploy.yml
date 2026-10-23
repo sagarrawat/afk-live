@@ -20,7 +20,7 @@ jobs:
           cache: maven
 
       - name: Build and test
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg && mvn -B verify -pl afklive-web -am
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg && mvn -B verify -pl afklive-web -am -DskipUi -DskipUiTests  # workers don't serve the app UI
 
       - name: Copy JAR to the worker
         uses: appleboy/scp-action@v0.1.7
