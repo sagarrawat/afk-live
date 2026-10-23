@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+@font-face { font-family: 'Schibsted'; src: url(data:font/woff2;base64,{{FONT}}) format('woff2'); font-weight: 400 900; }
+html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+body { background: #10122A; color: #EEF0FA; font-family: 'Schibsted', sans-serif; position: relative; }
+.logo { position: absolute; left: 72px; top: 64px; height: 52px; }
+h1 { position: absolute; left: 72px; top: 178px; width: 600px; margin: 0; font-size: 84px; line-height: 0.98; font-weight: 800; letter-spacing: -0.035em; }
+p { position: absolute; left: 72px; bottom: 64px; margin: 0; font-size: 28px; color: #9CA1C7; }
+.dial { position: absolute; right: -150px; top: 35px; width: 640px; height: 640px; }
+</style></head><body>
+<svg class="logo" viewBox="0 0 {{LOGO_W}} 64">{{LOGO}}</svg>
+<h1>Your channel never goes offline.</h1>
+<p>24/7 YouTube live from your videos or your phone</p>
+<svg class="dial" viewBox="-100 -100 200 200">
+  <circle r="86" fill="none" stroke="#252950" stroke-width="1"/>
+  <g stroke="#3A3F72" stroke-width="1.2">{{TICKS}}</g>
+  <circle r="74" fill="none" stroke="#FFB627" stroke-width="9"/>
+  <circle r="74" fill="none" stroke="#10122A" stroke-width="10" stroke-dasharray="1.4 75.1" stroke-dashoffset="-18"/>
+  <line x1="0" y1="0" x2="-52" y2="-52" stroke="#EEF0FA" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="-52.3" cy="-52.3" r="7" fill="#FF4438"/>
+  <circle r="3.5" fill="#EEF0FA"/>
+</svg>
+</body></html>

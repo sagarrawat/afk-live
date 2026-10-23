@@ -1,41 +1,44 @@
 @import '@fontsource-variable/inter';
+@import '@fontsource-variable/schibsted-grotesk';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /*
- * A broadcast control room: cool graphite surfaces, one periwinkle accent for actions, red only for
- * "on air", and green / amber / red only for health.
+ * The night shift (docs/brand.md): deep night surfaces, marigold for actions and the brand, red only
+ * for "on air", and green / amber / red only for health. In the light theme, actions are night ink.
  */
 :root,
 [data-theme='dark'] {
-  --bg: 18 23 34;
-  --panel: 24 30 43;
-  --raised: 33 40 56;
-  --line: 45 54 72;
-  --ink: 230 234 242;
-  --muted: 140 150 168;
-  --accent: 124 140 255;
-  --accent-ink: 14 17 38;
-  --live: 240 68 56;
+  --bg: 16 18 42;
+  --panel: 24 27 56;
+  --raised: 34 38 74;
+  --line: 46 50 94;
+  --ink: 238 240 250;
+  --muted: 150 155 194;
+  --accent: 255 182 39;
+  --accent-ink: 16 18 42;
+  --sun: 255 182 39;
+  --live: 255 68 56;
   --ok: 60 203 127;
-  --warn: 245 165 36;
-  --bad: 240 68 56;
+  --warn: 255 138 52;
+  --bad: 255 68 56;
   color-scheme: dark;
 }
 
 [data-theme='light'] {
-  --bg: 244 246 250;
+  --bg: 244 245 251;
   --panel: 255 255 255;
-  --raised: 238 241 246;
-  --line: 219 224 232;
-  --ink: 20 24 33;
-  --muted: 92 102 120;
-  --accent: 73 87 222;
+  --raised: 234 236 247;
+  --line: 220 223 238;
+  --ink: 16 18 42;
+  --muted: 84 89 126;
+  --accent: 33 36 92;
   --accent-ink: 255 255 255;
+  --sun: 255 182 39;
   --live: 214 45 32;
   --ok: 22 150 84;
-  --warn: 196 120 0;
+  --warn: 196 96 0;
   --bad: 214 45 32;
   color-scheme: light;
 }
@@ -53,6 +56,10 @@
   /* Timecodes and metrics never jitter. */
   .tnum {
     font-variant-numeric: tabular-nums;
+  }
+  h1,
+  .font-display {
+    font-family: 'Schibsted Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
   }
   :focus-visible {
     outline: 2px solid rgb(var(--accent));

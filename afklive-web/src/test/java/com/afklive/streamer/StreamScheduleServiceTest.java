@@ -119,6 +119,34 @@ class StreamScheduleServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void aSlotPlaysItsOwnVideosAndLiveEditsKeepThem() {
+        // SC-4: mornings play aarti, the stream's own playlist stays for the rest of the day.
+        Fixture f = readyStream();
+        User u = users.findByEmail(f.email()).orElseThrow();
+        MediaAsset morning = media.save(new MediaAsset(u, "morning-aarti.mp4", "key/" + UUID.randomUUID() + ".mp4", 1L, MediaAsset.ContentType.VIDEO));
+        MediaAsset song = media.save(new MediaAsset(u, "song.mp3", "key/" + UUID.randomUUID() + ".mp3", 1L, MediaAsset.ContentType.AUDIO));
+        LocalTime start = LocalTime.now(IST).minusMinutes(1).withSecond(0).withNano(0);
+        String end = start.plusHours(1).toString();
+        assertThatThrownBy(() -> schedules.create(f.email(), f.stream().getId(), new ScheduleRequest("DAILY", null, null, null,
+                start.toString(), end, "Asia/Kolkata", null, true, List.of(song.getId()))))
+                .hasMessageContaining("isn't a video");
+        ScheduleView v = schedules.create(f.email(), f.stream().getId(), new ScheduleRequest("DAILY", null, null, null,
+                start.toString(), end, "Asia/Kolkata", null, true, List.of(morning.getId())));
+        assertThat(v.playlist()).extracting(x -> x.title()).containsExactly("morning-aarti.mp4");
+
+        schedules.runDue(ZonedDateTime.now(ZoneId.of("UTC")));
+        StreamJob job = jobs.findAllByStreamIdAndIsLiveTrue(f.stream().getId()).getFirst();
+        assertThat(com.afklive.streamer.streaming.StreamSpec.fromJson(job.getSpec()).studio().videos())
+                .extracting(m -> m.title()).containsExactly("morning-aarti.mp4");
+        // A live change (music volume) rebuilds the run's settings: the slot's list stays.
+        liveStreams.update(f.email(), f.stream().getId(), new com.afklive.streamer.dto.StreamDtos.UpdateStream(null, null, null, null,
+                null, null, null, null, null, 0.4, null));
+        StreamJob after = jobs.findById(job.getId()).orElseThrow();
+        assertThat(com.afklive.streamer.streaming.StreamSpec.fromJson(after.getSpec()).studio().videos())
+                .extracting(m -> m.title()).containsExactly("morning-aarti.mp4");
+    }
+
+    @Test
     void aFailedStartIsRecordedAndCanBeRetried() {
         Fixture f = readyStream();
         // Break it: no destinations.

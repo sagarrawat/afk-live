@@ -53,6 +53,9 @@ public class StudioBuilder {
         java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> videoRefs;
         java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> musicRefs;
         final Map<String, StudioSpec.SceneSetting> sceneSettings = new java.util.concurrent.ConcurrentHashMap<>();
+        /** PL-6: the stream's fit for items without their own; a live change applies from the next item. */
+        java.util.concurrent.atomic.AtomicReference<DecoderSource.Fit> streamFit;
+        volatile double crossfadeSeconds;
 
         private Built(Studio studio, PlaylistFeed playlist, PlaylistFeed music, Canvas canvas, String ffmpeg,
                       PlaylistFeed.SourceFactory factory) {
@@ -82,7 +85,9 @@ public class StudioBuilder {
             if (!media.isEmpty()) {
                 cache.prefetch(media.getFirst().key());
             }
-            return new PlaylistFeed(canvas, items(media), order(musicOrder), 0, null, prefetching(factory, musicRefs), true, random);
+            PlaylistFeed feed = new PlaylistFeed(canvas, items(media), order(musicOrder), 0, null, prefetching(factory, musicRefs), true, random);
+            feed.setCrossfadeSeconds(crossfadeSeconds);
+            return feed;
         }
 
         Feed background(StudioSpec.SceneSetting setting) throws IOException {
@@ -98,12 +103,14 @@ public class StudioBuilder {
         Map<String, Double> durationKnown = new java.util.concurrent.ConcurrentHashMap<>();
         Random random = new Random();
 
+        java.util.concurrent.atomic.AtomicReference<DecoderSource.Fit> streamFit = new java.util.concurrent.atomic.AtomicReference<>(fitOf(spec.fit()));
         PlaylistFeed.SourceFactory factory = (item, start, audioOnly) -> {
             String key = keyOf(item);
             cache.pin(key);
             DecoderSource source = new DecoderSource(canvas,
-                    audioOnly ? DecoderSource.Options.audioFile(item.path(), start)
-                            : DecoderSource.Options.file(item.path(), item.hasAudio(), start),
+                    (audioOnly ? DecoderSource.Options.audioFile(item.path(), start)
+                            : DecoderSource.Options.file(item.path(), item.hasAudio(), start)
+                                    .withFit(item.fit() != null ? item.fit() : streamFit.get())).withGain(item.gainDb()),
                     workDir, ffmpeg, "job" + jobId + "-" + item.id());
             return source.resolveInputWith(() -> {
                         Path file = cache.fetch(key);
@@ -190,7 +197,7 @@ public class StudioBuilder {
         Feed liveVideo;
         if ("PHONE".equals(spec.source())) {
             String readUrl = spec.phone().ingestUrl() != null ? spec.phone().ingestUrl() : ingestReader.readUrl(spec.phone().ingestKey());
-            DecoderSource input = new DecoderSource(canvas, DecoderSource.Options.live(readUrl),
+            DecoderSource input = new DecoderSource(canvas, DecoderSource.Options.live(readUrl).withFit(fitOf(spec.fit())),
                     workDir, ffmpeg, "job" + jobId + "-phone").start();
             liveVideo = new LiveFeed(canvas, input, backgrounds.get(StudioSpec.BRB), LiveFeed.Settings.defaults(), null);
         } else {
@@ -204,6 +211,11 @@ public class StudioBuilder {
         long grace = spec.phone() != null ? spec.phone().graceSeconds() * 1000L : 0;
         Studio studio = new Studio(canvas, workDir, ffmpeg, scenes, first, global, grace, listener);
         Built built = new Built(studio, playlist, music, canvas, ffmpeg, factory);
+        built.streamFit = streamFit;
+        built.crossfadeSeconds = spec.crossfadeSeconds();
+        if (music != null) {
+            music.setCrossfadeSeconds(spec.crossfadeSeconds());
+        }
         built.videoRefs = videoRefs;
         built.musicRefs = musicRefs;
         built.sceneSettings.putAll(settings);
@@ -240,10 +252,16 @@ public class StudioBuilder {
             for (StudioSpec.Media m : media) {
                 // The path is a placeholder; the real file is resolved from the cache when the decoder starts.
                 items.add(new PlaylistFeed.Item(m.id() + "|" + m.key(), m.title(), Path.of(m.id()),
-                        m.hasAudio() == null || m.hasAudio(), m.duration()));
+                        m.hasAudio() == null || m.hasAudio(), m.duration(), DecoderSource.Fit.parse(m.fit()), m.gainDb()));
             }
         }
         return items;
+    }
+
+    /** The stream's fit: FIT unless set (older specs have none). */
+    static DecoderSource.Fit fitOf(String value) {
+        DecoderSource.Fit f = DecoderSource.Fit.parse(value);
+        return f == null ? DecoderSource.Fit.FIT : f;
     }
 
     /** Item ids carry the storage key ("mediaId|key") so the factory can fetch the file. */

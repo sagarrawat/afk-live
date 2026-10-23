@@ -53,6 +53,8 @@ public class LiveStreamService {
     private final UserRepository users;
     private final IngestService ingest;
     private final NotificationService notifications;
+    private final com.afklive.streamer.repository.StreamJobDestinationRepository jobDestinations;
+    private final com.afklive.streamer.repository.StreamIncidentRepository incidents;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -117,7 +119,47 @@ public class LiveStreamService {
                 tv, scheduleViews(s), liveState(s),
                 s.getSource() == LiveStream.Source.PHONE
                         ? new PhoneSettings(s.isEndOnInputLoss(), s.getInputGraceSeconds(), s.getSrtLatencyMs(), s.getIngestLastPublishAt())
-                        : null);
+                        : null,
+                s.getFit(), s.getCrossfadeSeconds());
+    }
+
+    static final int MAX_CROSSFADE_SECONDS = 20;
+
+    /** PL-6 / AU-3: live changes apply from the next item or track, without a drop. */
+    @Transactional
+    public void setPresentation(String email, Long id, com.afklive.streamer.dto.StreamDtos.Presentation req) {
+        LiveStream s = get(email, id);
+        if (req.fit() != null) {
+            s.setFit(fitName(req.fit()));
+        }
+        if (req.crossfadeSeconds() != null) {
+            if (req.crossfadeSeconds() < 0 || req.crossfadeSeconds() > MAX_CROSSFADE_SECONDS) {
+                throw new IllegalArgumentException("Crossfade is 0 to " + MAX_CROSSFADE_SECONDS + " seconds.");
+            }
+            s.setCrossfadeSeconds(req.crossfadeSeconds());
+        }
+        streams.save(s);
+        reloadIfLive(s);
+    }
+
+    /** PL-6: one playlist item's own fit; null or "" follows the stream. */
+    @Transactional
+    public void setItemFit(String email, Long id, int position, String fit) {
+        LiveStream s = get(email, id);
+        StreamItem item = items.findAllByStreamIdAndKindOrderByPositionAsc(id, StreamItem.Kind.VIDEO).stream()
+                .filter(i -> i.getPosition() == position).findFirst()
+                .orElseThrow(() -> new com.afklive.streamer.exception.NotFoundException("That video isn't in the playlist."));
+        item.setFit(fit == null || fit.isBlank() ? null : fitName(fit));
+        items.save(item);
+        reloadIfLive(s);
+    }
+
+    private static String fitName(String fit) {
+        var f = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
+        if (f == null) {
+            throw new IllegalArgumentException("Fit is FIT, FILL or BLUR.");
+        }
+        return f.name();
     }
 
     @Transactional
@@ -189,6 +231,45 @@ public class LiveStreamService {
         return s;
     }
 
+    /**
+     * ST-4: a copy to start a similar channel from: name, picture settings, playlist, music, audio,
+     * overlays and scenes. Destinations come along switched off (two streams on one key would fight)
+     * and schedules stay behind; a phone stream gets its own new ingest key.
+     */
+    @Transactional
+    public LiveStream duplicate(String email, Long id) {
+        LiveStream src = get(email, id);
+        String base = src.getName().length() > 92 ? src.getName().substring(0, 92) : src.getName();
+        LiveStream copy = create(email, new CreateStream(base + " (copy)", src.getSource().name(), src.getOrientation().name(),
+                src.getQualityHeight(), src.getFps()));
+        copy.setPlaybackOrder(src.getPlaybackOrder());
+        copy.setLoopCount(src.getLoopCount());
+        copy.setMusicOrder(src.getMusicOrder());
+        copy.setAudioMode(src.getAudioMode());
+        copy.setVideoVolume(src.getVideoVolume());
+        copy.setMusicVolume(src.getMusicVolume());
+        copy.setOverlays(src.getOverlays());
+        copy.setScenes(src.getScenes());
+        copy.setTimeZone(src.getTimeZone());
+        copy.setEndOnInputLoss(src.isEndOnInputLoss());
+        copy.setInputGraceSeconds(src.getInputGraceSeconds());
+        copy.setSrtLatencyMs(src.getSrtLatencyMs());
+        copy.setFit(src.getFit());
+        copy.setCrossfadeSeconds(src.getCrossfadeSeconds());
+        copy = streams.save(copy);
+        for (StreamItem.Kind kind : StreamItem.Kind.values()) {
+            for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(src.getId(), kind)) {
+                StreamItem c = new StreamItem(copy.getId(), kind, i.getPosition(), i.getMedia());
+                c.setFit(i.getFit());
+                items.save(c);
+            }
+        }
+        for (StreamTarget t : targets.findAllByStreamId(src.getId())) {
+            targets.save(new StreamTarget(copy.getId(), t.getDestinationId(), false));
+        }
+        return copy;
+    }
+
     @Transactional
     public void delete(String email, Long id) {
         LiveStream s = get(email, id);
@@ -216,6 +297,11 @@ public class LiveStreamService {
         }
         MediaAsset.ContentType wanted = kind == StreamItem.Kind.VIDEO ? MediaAsset.ContentType.VIDEO : MediaAsset.ContentType.AUDIO;
         List<StreamItem> next = new ArrayList<>();
+        // PL-6: an item keeps its own fit through reorders and additions.
+        Map<Long, java.util.Deque<String>> fits = new HashMap<>();
+        for (StreamItem old : items.findAllByStreamIdAndKindOrderByPositionAsc(id, kind)) {
+            fits.computeIfAbsent(old.getMedia().getId(), k -> new java.util.ArrayDeque<>()).add(old.getFit() == null ? "" : old.getFit());
+        }
         int pos = 0;
         for (Long mid : mediaIds) {
             MediaAsset m = owned.get(mid);
@@ -226,7 +312,11 @@ public class LiveStreamService {
                 throw new IllegalArgumentException("\"" + m.getTitle() + "\" is " + m.getContentType().name().toLowerCase()
                         + "; this list takes " + wanted.name().toLowerCase() + " files.");
             }
-            next.add(new StreamItem(id, kind, pos++, m));
+            StreamItem item = new StreamItem(id, kind, pos++, m);
+            java.util.Deque<String> kept = fits.get(mid);
+            String fit = kept == null ? null : kept.poll();
+            item.setFit(fit == null || fit.isEmpty() ? null : fit);
+            next.add(item);
         }
         items.deleteAll(items.findAllByStreamIdAndKindOrderByPositionAsc(id, kind));
         items.flush();
@@ -254,9 +344,62 @@ public class LiveStreamService {
             throw new IllegalArgumentException("Your " + plan.getDisplayName() + " plan sends a stream to " + plan.getMaxDestinations()
                     + " destination" + (plan.getMaxDestinations() == 1 ? "" : "s") + " at once. Upgrade to add more.");
         }
+        Optional<StreamJob> live = currentJob(s);
+        if (live.isPresent() && enabled == 0) {
+            throw new IllegalArgumentException("A live stream needs at least one destination. Stop the stream to turn off the last one.");
+        }
         targets.deleteAll(targets.findAllByStreamId(id));
         targets.flush();
         targets.saveAll(next);
+        live.ifPresent(job -> applyTargetsLive(job, s));
+    }
+
+    /**
+     * DS-5: destinations turned on or off while live reach the running stream without touching the
+     * others. Positions in the run's list never change (destination health is keyed by them): a
+     * destination turned off stays in the list marked off; a new one is added at the end.
+     */
+    private void applyTargetsLive(StreamJob job, LiveStream s) {
+        StreamSpec spec = StreamSpec.fromJson(job.getSpec());
+        List<StreamSpec.Destination> current = spec.destinations() == null ? List.of() : spec.destinations();
+        List<StreamSpec.Destination> next = new ArrayList<>();
+        boolean[] wanted = new boolean[current.size()];
+        List<StreamDestination> added = new ArrayList<>();
+        for (StreamDestination d : enabledDestinations(s)) {
+            int match = -1;
+            for (int i = 0; i < current.size(); i++) {
+                if (!wanted[i] && java.util.Objects.equals(current.get(i).url(), d.getStreamKey())) {
+                    match = i;
+                    break;
+                }
+            }
+            if (match >= 0) {
+                wanted[match] = true;
+            } else {
+                added.add(d);
+            }
+        }
+        for (int i = 0; i < current.size(); i++) {
+            next.add(current.get(i).withOff(!wanted[i]));
+        }
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        for (StreamDestination d : added) {
+            String name = d.getName() == null ? "Destination" : d.getName();
+            next.add(new StreamSpec.Destination(name, d.getStreamKey()));
+            StreamJobDestination row = new StreamJobDestination(job, next.size() - 1, name);
+            row.setUpdatedAt(now);
+            jobDestinations.save(row);
+        }
+        if (next.equals(current)) {
+            return;
+        }
+        for (int i = 0; i < current.size(); i++) {
+            if (next.get(i).off() != current.get(i).off()) {
+                jobDestinations.updateState(job.getId(), i, next.get(i).off() ? "OFF" : "CONNECTING", 0, null, now);
+            }
+        }
+        jobs.updateSpec(job.getId(), spec.withDestinations(next).toJson());
+        command(job, StreamCommand.Type.TARGETS, StreamSpec.destinationsJson(next));
     }
 
     // ------------------------------------------------------------------ overlays and scenes
@@ -360,13 +503,19 @@ public class LiveStreamService {
 
     /** GL-1: everything that would make a start fail, each with where to fix it. */
     public Preflight preflight(String email, Long id) {
+        return preflight(email, id, null);
+    }
+
+    public Preflight preflight(String email, Long id, List<Long> playlist) {
         LiveStream s = get(email, id);
         User user = s.getUser();
         List<Check> checks = new ArrayList<>();
 
         if (s.getSource() == LiveStream.Source.PLAYLIST) {
-            List<StreamItem> videos = items.findAllByStreamIdAndKindOrderByPositionAsc(id, StreamItem.Kind.VIDEO);
-            long ready = videos.stream().filter(i -> i.getMedia().getStatus() == MediaStatus.READY).count();
+            List<MediaAsset> videos = playlist == null || playlist.isEmpty()
+                    ? items.findAllByStreamIdAndKindOrderByPositionAsc(id, StreamItem.Kind.VIDEO).stream().map(StreamItem::getMedia).toList()
+                    : slotVideos(email, String.join(",", playlist.stream().map(String::valueOf).toList()));
+            long ready = videos.stream().filter(m -> m.getStatus() == MediaStatus.READY).count();
             if (videos.isEmpty()) {
                 checks.add(new Check("playlist", false, "Add at least one video to the playlist.", "playlist"));
             } else if (ready == 0) {
@@ -443,6 +592,12 @@ public class LiveStreamService {
     /** GL-2: go live. Runs pre-flight; on success a worker picks the run up within seconds. */
     @Transactional
     public StreamJob goLive(String email, Long id, String scene) {
+        return goLive(email, id, scene, null);
+    }
+
+    /** {@code playlist}: SC-4, a scheduled slot's own videos for this run (null: the stream's playlist). */
+    @Transactional
+    public StreamJob goLive(String email, Long id, String scene, List<Long> playlist) {
         get(email, id); // ownership first, before taking any lock
         // Plan limits count the user's live runs: serialize this user's starts (and free-tier starts
         // platform-wide), then this stream's, so two simultaneous starts can't both pass the check.
@@ -451,7 +606,7 @@ public class LiveStreamService {
             jobs.lockFreeCapacity();
         }
         streams.lockById(id);
-        Preflight pf = preflight(email, id);
+        Preflight pf = preflight(email, id, playlist);
         if (!pf.ok()) {
             String first = pf.checks().stream().filter(c -> !c.ok()).map(Check::message).findFirst().orElse("Pre-flight failed.");
             pf.checks().stream().filter(c -> !c.ok() && Set.of("concurrency", "quality", "hours", "capacity", "destinations-limit").contains(c.id()))
@@ -465,7 +620,9 @@ public class LiveStreamService {
         if (scene != null && !SCENES.contains(scene)) {
             throw new IllegalArgumentException("Unknown scene: " + scene);
         }
-        StudioSpec studio = studioSpec(s, scene);
+        String override = playlist == null || playlist.isEmpty() ? null
+                : String.join(",", playlist.stream().map(String::valueOf).toList());
+        StudioSpec studio = studioSpec(s, scene, override);
         List<StreamDestination> enabled = enabledDestinations(s);
         List<StreamSpec.Destination> dests = new ArrayList<>();
         for (StreamDestination d : enabled) {
@@ -483,6 +640,7 @@ public class LiveStreamService {
         job.setSpec(spec.toJson());
         job.setStreamId(s.getId());
         job.setScene(studio.initialScene());
+        job.setPlaylistOverride(override);
         for (int i = 0; i < dests.size(); i++) {
             job.getDestinations().add(new StreamJobDestination(job, i, dests.get(i).name()));
         }
@@ -588,6 +746,12 @@ public class LiveStreamService {
     }
 
     @Transactional
+    /** GL-5: redial every destination; the picture and the playlist carry on. */
+    public void reconnect(String email, Long id) {
+        StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
+        command(job, StreamCommand.Type.RECONNECT, null);
+    }
+
     public void skip(String email, Long id) {
         StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         command(job, StreamCommand.Type.SKIP, null);
@@ -598,6 +762,49 @@ public class LiveStreamService {
         return jobs.findTop20ByStreamIdOrderByStartTimeDesc(id).stream()
                 .map(j -> new RunView(j.getId(), j.getStartTime(), j.getEndTime(), j.getStatus(), j.getEndReason(), j.getRestarts()))
                 .toList();
+    }
+
+    /**
+     * RE-4: for the last 24 hours, 7 and 30 days, how much of the time the stream was on air it was
+     * also up. "Down" is an outage the alert monitor recorded (down for a minute or more); shorter
+     * hiccups don't count, the same line the alerts use.
+     */
+    public com.afklive.streamer.dto.StreamDtos.Uptime uptime(String email, Long id, ZonedDateTime now) {
+        get(email, id);
+        List<StreamJob> runs = jobs.findRunsSince(id, now.minusDays(30));
+        Map<Long, StreamJob> byId = new HashMap<>();
+        runs.forEach(j -> byId.put(j.getId(), j));
+        List<com.afklive.streamer.model.StreamIncident> downs = byId.isEmpty() ? List.of()
+                : incidents.findAllByJobIdInAndKindOrderByStartedAtDesc(byId.keySet(), "DOWN");
+        List<com.afklive.streamer.dto.StreamDtos.UptimeWindow> windows = new ArrayList<>();
+        for (Object[] w : new Object[][]{{"24 hours", now.minusHours(24)}, {"7 days", now.minusDays(7)}, {"30 days", now.minusDays(30)}}) {
+            ZonedDateTime from = (ZonedDateTime) w[1];
+            long onAir = 0;
+            for (StreamJob j : runs) {
+                onAir += overlap(j.getStartTime(), j.getEndTime(), from, now);
+            }
+            long down = 0;
+            for (var inc : downs) {
+                StreamJob j = byId.get(inc.getJobId());
+                ZonedDateTime end = inc.getResolvedAt() != null ? inc.getResolvedAt() : j != null && j.getEndTime() != null ? j.getEndTime() : now;
+                down += overlap(inc.getStartedAt(), end, from, now);
+            }
+            down = Math.min(down, onAir);
+            Double pct = onAir == 0 ? null : Math.floor(1000.0 * (onAir - down) / onAir) / 10.0;
+            windows.add(new com.afklive.streamer.dto.StreamDtos.UptimeWindow((String) w[0], onAir, down, pct));
+        }
+        List<com.afklive.streamer.dto.StreamDtos.Outage> outages = downs.stream().limit(20)
+                .map(i -> new com.afklive.streamer.dto.StreamDtos.Outage(i.getStartedAt(), i.getResolvedAt())).toList();
+        return new com.afklive.streamer.dto.StreamDtos.Uptime(windows, outages);
+    }
+
+    private static long overlap(ZonedDateTime start, ZonedDateTime end, ZonedDateTime from, ZonedDateTime to) {
+        if (start == null) {
+            return 0;
+        }
+        ZonedDateTime a = start.isAfter(from) ? start : from;
+        ZonedDateTime b = end == null || end.isAfter(to) ? to : end;
+        return Math.max(0, java.time.Duration.between(a, b).getSeconds());
     }
 
     public List<QualityOption> qualityOptions(String email) {
@@ -663,10 +870,41 @@ public class LiveStreamService {
 
     /** The worker's instructions, with every library reference resolved to a storage key the owner may use. */
     public StudioSpec studioSpec(LiveStream s, String scene) {
+        return studioSpec(s, scene, null);
+    }
+
+    /** SC-4: the owner's video files for a slot's list ("12,7,9"), in that order; others are left out. */
+    List<MediaAsset> slotVideos(String email, String ids) {
+        List<Long> wanted = new ArrayList<>();
+        for (String p : ids.split(",")) {
+            try {
+                wanted.add(Long.parseLong(p.trim()));
+            } catch (NumberFormatException ignored) {
+                // skip
+            }
+        }
+        Map<Long, MediaAsset> owned = new HashMap<>();
+        for (MediaAsset m : media.findAllByIdInAndUserEmail(new HashSet<>(wanted), email)) {
+            if (m.getContentType() == MediaAsset.ContentType.VIDEO) {
+                owned.put(m.getId(), m);
+            }
+        }
+        return wanted.stream().map(owned::get).filter(Objects::nonNull).toList();
+    }
+
+    StudioSpec studioSpec(LiveStream s, String scene, String playlistOverride) {
         List<StudioSpec.Media> videos = new ArrayList<>();
-        for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(s.getId(), StreamItem.Kind.VIDEO)) {
-            if (i.getMedia().getStatus() == MediaStatus.READY) {
-                videos.add(mediaOf(i.getMedia()));
+        if (playlistOverride != null) {
+            for (MediaAsset m : slotVideos(s.getUser().getEmail(), playlistOverride)) {
+                if (m.getStatus() == MediaStatus.READY) {
+                    videos.add(mediaOf(m));
+                }
+            }
+        } else {
+            for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(s.getId(), StreamItem.Kind.VIDEO)) {
+                if (i.getMedia().getStatus() == MediaStatus.READY) {
+                    videos.add(mediaOf(i.getMedia(), i.getFit()));
+                }
             }
         }
         List<StudioSpec.Media> music = new ArrayList<>();
@@ -691,7 +929,7 @@ public class LiveStreamService {
         }
         if (planService.getPlanConfig(s.getUser().getPlanType()).isWatermark()) {
             // BI-1: the Free plan's small mark, added here so it can't be removed from the client.
-            overlays.add(new StudioSpec.OverlaySetting("afk-watermark", "TEXT", true, 0.83, 0.92, 0, 0.03, "AFK Live",
+            overlays.add(new StudioSpec.OverlaySetting(com.afklive.streamer.streaming.studio.OverlayCompositor.WATERMARK_ID, "TEXT", true, 0.8, 0.92, 0, 0.03, "AFK Live",
                     null, null, "#ffffff", "#66000000", 0.8, null, null, 0, null));
         }
         List<StudioSpec.SceneSetting> scenes = new ArrayList<>();
@@ -704,7 +942,7 @@ public class LiveStreamService {
                     key == null ? "COLOR" : sc.backgroundType(), sc.color(), sc.music()));
         }
         StudioSpec.Position resume = null;
-        if (s.getResumePosition() != null) {
+        if (s.getResumePosition() != null && playlistOverride == null) { // a slot's own list starts at the top
             try {
                 resume = StudioSpec.parse(s.getResumePosition(), StudioSpec.Position.class);
             } catch (Exception ignored) {
@@ -714,7 +952,8 @@ public class LiveStreamService {
         return new StudioSpec(s.getQualityHeight(), s.getOrientation() == LiveStream.Orientation.VERTICAL, s.getFps(),
                 s.getSource().name(), videos, s.getPlaybackOrder().name(), s.getLoopCount(), music,
                 s.getMusicOrder().name(), s.getAudioMode().name(), s.getVideoVolume(), s.getMusicVolume(),
-                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, phone(s), false);
+                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, phone(s), false,
+                s.getFit(), s.getCrossfadeSeconds());
     }
 
     private StudioSpec.Phone phone(LiveStream s) {
@@ -726,8 +965,23 @@ public class LiveStreamService {
     }
 
     private static StudioSpec.Media mediaOf(MediaAsset m) {
+        return mediaOf(m, null);
+    }
+
+    private static StudioSpec.Media mediaOf(MediaAsset m, String fit) {
         return new StudioSpec.Media(String.valueOf(m.getId()), m.getS3Key(), m.getTitle(),
-                m.getDurationSeconds() == null ? 0 : m.getDurationSeconds(), m.getHasAudio());
+                m.getDurationSeconds() == null ? 0 : m.getDurationSeconds(), m.getHasAudio(), fit, gainFor(m.getLoudnessLufs()));
+    }
+
+    /** AU-5: every file is brought to YouTube's playback loudness; no file is boosted or cut by more than 12 dB. */
+    static final double TARGET_LUFS = -14;
+
+    static double gainFor(Double lufs) {
+        if (lufs == null) {
+            return 0;
+        }
+        double g = TARGET_LUFS - lufs;
+        return Math.round(Math.max(-12, Math.min(12, g)) * 10) / 10.0;
     }
 
     /** Edits made while live reach the running studio without restarting anything. */
@@ -745,7 +999,7 @@ public class LiveStreamService {
      */
     private StudioSpec persistSpec(StreamJob job, LiveStream s, boolean sceneFromJob) {
         StreamSpec current = StreamSpec.fromJson(job.getSpec());
-        StudioSpec next = studioSpec(s, sceneFromJob ? job.getScene() : null);
+        StudioSpec next = studioSpec(s, sceneFromJob ? job.getScene() : null, job.getPlaylistOverride());
         if (current.studio() != null && current.studio().finishAfterPass()) {
             next = next.withFinishAfterPass();
         }
@@ -867,12 +1121,17 @@ public class LiveStreamService {
         return list.stream().map(i -> {
             MediaAsset m = i.getMedia();
             return new MediaRef(m.getId(), m.getTitle(), m.getDurationSeconds(), m.getWidth(), m.getHeight(),
-                    m.getContentType().name(), m.getStatus().name());
+                    m.getContentType().name(), m.getStatus().name(), i.getFit());
         }).toList();
     }
 
     private List<ScheduleView> scheduleViews(LiveStream s) {
-        return schedules.findAllByStreamIdOrderByIdAsc(s.getId()).stream().map(StreamScheduleService::view).toList();
+        String email = s.getUser().getEmail();
+        return schedules.findAllByStreamIdOrderByIdAsc(s.getId()).stream()
+                .map(sc -> StreamScheduleService.view(sc, sc.getPlaylist() == null ? List.of()
+                        : slotVideos(email, sc.getPlaylist()).stream()
+                        .map(m -> new com.afklive.streamer.dto.StreamDtos.SlotItem(m.getId(), m.getTitle())).toList()))
+                .toList();
     }
 
     private int planMaxHeight(User user) {

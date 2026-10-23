@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get } from './api';
-import type {
+import type { Uptime,
   BillingOverview,
   BillingProfile,
   Destination,
@@ -23,6 +23,7 @@ export const keys = {
   streams: ['streams'] as const,
   stream: (id: number) => ['streams', id] as const,
   runs: (id: number) => ['streams', id, 'runs'] as const,
+  uptime: (id: number) => ['streams', id, 'uptime'] as const,
   quality: ['quality-options'] as const,
   destinations: ['destinations'] as const,
   media: (q: Record<string, unknown>) => ['media', q] as const,
@@ -46,6 +47,8 @@ export const useStream = (id: number) =>
     queryFn: () => get<StreamView>(`/api/streams/${id}`),
     refetchInterval: (q) => (q.state.data && isOnAir(q.state.data.live.state) ? 3_000 : 15_000),
   });
+
+export const useUptime = (id: number) => useQuery({ queryKey: keys.uptime(id), queryFn: () => get<Uptime>(`/api/streams/${id}/uptime`), refetchInterval: 60_000 });
 
 export const useRuns = (id: number) => useQuery({ queryKey: keys.runs(id), queryFn: () => get<RunView[]>(`/api/streams/${id}/runs`) });
 

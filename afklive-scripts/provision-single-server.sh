@@ -94,24 +94,32 @@ INGEST_READ_PASS=$(alnum 20)
 INGEST_READ_ALLOWED=127.0.0.0/8,::1/128
 INGEST_AUTH_SECRET=$(alnum 24)
 
-# Fill these in, then: sudo systemctl restart afklive afklive-worker
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-ZEPTOMAIL_URL=
-ZEPTOMAIL_TOKEN=
+# Fill these in (remove the "# "), then: sudo systemctl restart afklive afklive-worker
+# An empty value overrides the app's default, so leave unused ones commented out.
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# ZEPTOMAIL_URL=
+# ZEPTOMAIL_TOKEN=
 APP_EMAIL_SUPPORT=support@$DOMAIN
 APP_EMAIL_NO_REPLY=no-reply@$DOMAIN
-PHONEPE_CLIENT_ID=
-PHONEPE_CLIENT_SECRET=
+# PHONEPE_CLIENT_ID=
+# PHONEPE_CLIENT_SECRET=
 PHONEPE_ENV=SANDBOX
 APP_BILLING_SELLER_NAME=AFK Live
-APP_BILLING_SELLER_ADDRESS=
-APP_BILLING_SELLER_GSTIN=
-APP_BILLING_SELLER_STATE=
+# APP_BILLING_SELLER_ADDRESS=
+# APP_BILLING_SELLER_GSTIN=
+# APP_BILLING_SELLER_STATE=
 EOF
   chown root:afklive "$ENV" && chmod 640 "$ENV"
 fi
-set -a; . "$ENV"; set +a
+# Read values with grep, not by sourcing: the file is for systemd (unquoted spaces, & and {} in URLs).
+env_val() { grep -m1 "^$1=" "$ENV" | cut -d= -f2-; }
+# Push alerts on phones and computers (NT-1, MB-2): a VAPID key, added once (also to older env files).
+if ! grep -q '^APP_PUSH_VAPID_KEY=' "$ENV"; then
+  echo "APP_PUSH_VAPID_KEY=$(openssl ecparam -name prime256v1 -genkey -noout -outform DER | base64 -w0)" >> "$ENV"
+fi
+POSTGRES_PASSWORD=$(env_val POSTGRES_PASSWORD)
+INGEST_AUTH_SECRET=$(env_val INGEST_AUTH_SECRET)
 
 # --- PostgreSQL ---------------------------------------------------------------------------------------
 sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='afklive'" | grep -q 1 \

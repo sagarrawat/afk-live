@@ -153,8 +153,9 @@ public class DestinationController {
             String hint = key.length() <= 4 ? (key.isEmpty() ? "" : "••••") : "••••" + key.substring(key.length() - 4);
             String host = server.toLowerCase(java.util.Locale.ROOT);
             String platform = host.contains("youtube.com") ? "YOUTUBE" : host.contains("facebook.com") ? "FACEBOOK"
-                    : host.contains("instagram.com") ? "INSTAGRAM" : host.contains("twitch.tv") ? "TWITCH"
-                    : host.contains("kick.com") || host.contains("live-video.net") ? "KICK" : "CUSTOM";
+                    : host.contains("instagram.com") || host.contains("fbcdn.net") ? "INSTAGRAM" : host.contains("twitch.tv") ? "TWITCH"
+                    : host.contains("kick.com") || host.contains("live-video.net") ? "KICK"
+                    : host.contains("tiktok") ? "TIKTOK" : host.contains("rumble") ? "RUMBLE" : "CUSTOM";
             return new DestinationView(d.getId(), d.getName(), d.getType(), platform, server, hint, d.isSelected());
         }
     }

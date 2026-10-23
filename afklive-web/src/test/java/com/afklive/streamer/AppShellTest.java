@@ -65,6 +65,11 @@ class AppShellTest extends PostgresIntegrationTest {
         mvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/index.html"));
         mvc.perform(get("/pricing")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/pricing.html"));
         mvc.perform(get("/features")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/for/lofi")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/for-lofi.html")); // MK-3
+        mvc.perform(get("/for/../../etc")).andExpect(status().is4xxClientError());
+        mvc.perform(get("/for/nope")).andExpect(status().isNotFound());
+        mvc.perform(get("/sitemap.xml")).andExpect(status().isOk()).andExpect(content().string(containsString("https://afklive.in/for/lofi")));
+        mvc.perform(get("/robots.txt")).andExpect(status().isOk());
         mvc.perform(get("/").with(user(email).roles("USER")))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio"));
         mvc.perform(get("/").with(user("ops@example.com").roles("ADMIN")))
@@ -77,6 +82,18 @@ class AppShellTest extends PostgresIntegrationTest {
         }
         mvc.perform(get("/login").param("error", ""))
                 .andExpect(content().string(containsString("match. Try again")));
+    }
+
+    @Test
+    void brandIconsAndTheAppManifestAreReachableSignedOut() throws Exception {
+        // Browsers fetch these without a session (tab icon, home-screen install, link previews).
+        mvc.perform(get("/favicon.ico")).andExpect(status().isOk());
+        // Built by the UI build (absent with -DskipUi), so check it isn't sent to sign-in rather than that it exists.
+        for (String path : new String[]{"/site/brand/og.png", "/app/manifest.webmanifest", "/app/icon-192.png"}) {
+            int code = mvc.perform(get(path)).andReturn().getResponse().getStatus();
+            org.assertj.core.api.Assertions.assertThat(code).as(path).isIn(200, 404);
+        }
+        mvc.perform(get("/login")).andExpect(content().string(containsString("/site/brand/favicon.svg")));
     }
 
     @Test
@@ -120,5 +137,24 @@ class AppShellTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$[0].keyHint").value("••••8f2k"))
                 .andExpect(jsonPath("$[1].keyHint").value("••••9a1c"))
                 .andExpect(jsonPath("$[1].platform").value("YOUTUBE"));
+    }
+
+    @Test
+    void destinationsAreRecognisedByTheirServer() throws Exception {
+        User u = users.findByEmail(email).orElseThrow();
+        String[][] cases = {
+                {"rtmps://fa723fc1b171.global-contribute.live-video.net/app/sk_us-west_1", "KICK"},
+                {"rtmps://edgetee-upload-bom1-1.xx.fbcdn.net:443/rtmp/17912345", "INSTAGRAM"},
+                {"rtmp://push-rtmp-l11-va01.tiktokcdn.com/game/stream-123", "TIKTOK"},
+                {"rtmp://live.rumble.com/live/r-abc123", "RUMBLE"},
+                {"rtmp://live.example.com/app/key-0001", "CUSTOM"},
+        };
+        for (String[] c : cases) {
+            destinations.save(new StreamDestination(c[1], c[0], "RTMP", u));
+        }
+        var result = mvc.perform(get("/api/destinations").with(user(email).roles("USER"))).andExpect(status().isOk());
+        for (int i = 0; i < cases.length; i++) {
+            result.andExpect(jsonPath("$[" + i + "].platform").value(cases[i][1]));
+        }
     }
 }

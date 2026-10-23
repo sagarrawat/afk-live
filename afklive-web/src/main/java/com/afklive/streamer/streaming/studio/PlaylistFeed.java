@@ -19,7 +19,16 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public final class PlaylistFeed implements Feed {
 
     /** One playlist entry. {@code durationSeconds} is 0 when unknown (prerolling then waits for the decoder to finish). */
-    public record Item(String id, String title, Path path, boolean hasAudio, double durationSeconds) {
+    /** {@code fit}: how this item fills the frame (PL-6); null uses the stream's. */
+    public record Item(String id, String title, Path path, boolean hasAudio, double durationSeconds, DecoderSource.Fit fit,
+                       double gainDb) {
+        public Item(String id, String title, Path path, boolean hasAudio, double durationSeconds) {
+            this(id, title, path, hasAudio, durationSeconds, null, 0);
+        }
+
+        public Item(String id, String title, Path path, boolean hasAudio, double durationSeconds, DecoderSource.Fit fit) {
+            this(id, title, path, hasAudio, durationSeconds, fit, 0);
+        }
     }
 
     public enum Order { IN_ORDER, SHUFFLE }
@@ -61,7 +70,20 @@ public final class PlaylistFeed implements Feed {
     private Playing next;
     private boolean finished;
     private int failuresInARow;
+    /** PL-7: items that failed to play (id -> reason), until they play again; read by the heartbeat. */
+    private final java.util.concurrent.ConcurrentHashMap<String, Failed> failed = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public record Failed(Item item, String reason) {
+    }
+
+    /** PL-7: the items skipped because they couldn't be played. */
+    public List<Failed> failedItems() {
+        return List.copyOf(failed.values());
+    }
     private int pauseTicks;
+    /** AU-3: seconds a music track overlaps into the next (audio-only lists); 0 cuts straight. */
+    private volatile double crossfadeSeconds;
+    private Frame fadeFrame;
     private volatile NowPlaying nowPlaying;
     private long framesPlayed;
     private boolean nextStartsNewPass;
@@ -117,6 +139,11 @@ public final class PlaylistFeed implements Feed {
             }
             loops = loopsCompleted + 1;
         });
+    }
+
+    /** AU-3: overlap tracks by this many seconds (0 to 20); applies from the next change of track. */
+    public void setCrossfadeSeconds(double seconds) {
+        crossfadeSeconds = Math.max(0, Math.min(20, seconds));
     }
 
     /** Jump to the next item now. */
@@ -214,12 +241,18 @@ public final class PlaylistFeed implements Feed {
                 current.frames++;
                 framesPlayed++;
                 failuresInARow = 0;
+                if (current.frames == 1 && !failed.isEmpty()) {
+                    failed.remove(current.item.id()); // it plays now (replaced file, or a passing glitch)
+                }
                 got = true;
             } else {
                 DecoderSource.State s = current.source.state();
                 if (s == DecoderSource.State.ENDED || s == DecoderSource.State.FAILED) {
                     if (s == DecoderSource.State.FAILED) {
                         log.warn("Playlist item {} could not be played: {}", current.item.id(), current.source.lastError());
+                        if (failed.size() < 50) {
+                            failed.put(current.item.id(), new Failed(current.item, String.valueOf(current.source.lastError())));
+                        }
                         if (++failuresInARow >= Math.max(1, items.size())) {
                             pauseTicks = FAILED_PASS_PAUSE_TICKS; // nothing in the list plays: don't spin
                             failuresInARow = 0;
@@ -235,9 +268,43 @@ public final class PlaylistFeed implements Feed {
         }
         if (!got) {
             out.silence();
+        } else {
+            crossfade(out);
         }
         maybePreroll();
         publishNowPlaying();
+    }
+
+    /**
+     * AU-3: in the last seconds of a track, bring the next one in under it (equal-power curves, so
+     * the loudness holds). The next track is then already playing when this one ends.
+     */
+    private void crossfade(Frame out) {
+        double fade = crossfadeSeconds;
+        if (!audioOnly || fade <= 0 || current == null || next == null) {
+            return;
+        }
+        double remaining = duration(current) - current.elapsed(canvas);
+        if (duration(current) <= 0 || remaining > fade) {
+            return;
+        }
+        if (fadeFrame == null) {
+            fadeFrame = new Frame(canvas);
+        }
+        if (!next.source.poll(fadeFrame)) {
+            return; // not ready yet: this tick stays the outgoing track alone
+        }
+        next.frames++;
+        double t = Math.max(0, Math.min(1, 1 - remaining / fade));
+        Yuv.mix(out.audio, Math.cos(t * Math.PI / 2), fadeFrame.audio, Math.sin(t * Math.PI / 2));
+    }
+
+    private double duration(Playing p) {
+        double d = p.item.durationSeconds();
+        if (d <= 0 && p.source.knownDurationSeconds() != null) {
+            d = p.source.knownDurationSeconds();
+        }
+        return d;
     }
 
     private void maybePreroll() {
@@ -248,7 +315,8 @@ public final class PlaylistFeed implements Feed {
         if (duration <= 0 && current.source.knownDurationSeconds() != null) {
             duration = current.source.knownDurationSeconds(); // learned when the file arrived
         }
-        boolean nearEnd = duration > 0 && duration - current.elapsed(canvas) < PREROLL_SECONDS;
+        double lead = audioOnly ? Math.max(PREROLL_SECONDS, crossfadeSeconds + 2) : PREROLL_SECONDS;
+        boolean nearEnd = duration > 0 && duration - current.elapsed(canvas) < lead;
         if (nearEnd || current.source.decoderFinished()) {
             int before = loopsCompleted;
             next = takeNextUnopened();

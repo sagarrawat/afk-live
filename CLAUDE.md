@@ -22,9 +22,10 @@ non-functional requirements (continuity, quality, latency, cost). Reference stor
   - `src/main/resources/db/changelog/`: Liquibase migrations (the only way to change the schema)
   - `src/main/resources/static/`: legal pages, `remote.html`, and `classic.html` (the old Alpine app, kept for the YouTube upload/comment tools until they move). The app itself is `afklive-ui`
   - `/api/me` (`MeController`): the signed-in account, plan and preferences (time zone, currency, onboarded)
-- `afklive-ui/`: the app (React 18, Vite, TypeScript, Tailwind, TanStack Query, dnd-kit, Lucide). Built by Maven into `static/app/`; Spring serves every `/studio/**` route with `app/index.html`. Design tokens are CSS variables in `src/index.css` (dark-first; red only for on air; green/amber/red only for health). `src/lib/api.ts` (fetch + CSRF), `src/lib/upload.ts` (resumable uploads), `src/pages/` (screens), `src/components/ui.tsx` (shared kit). `site/` is the public site (`/`, `/pricing`; light theme, plain HTML + a little TS, built by `vite.site.config.ts` into `static/site/`); its `assets/site.css` also styles the Thymeleaf sign-in pages
+- `afklive-ui/`: the app (React 18, Vite, TypeScript, Tailwind, TanStack Query, dnd-kit, Lucide). Built by Maven into `static/app/`; Spring serves every `/studio/**` route with `app/index.html`. Design tokens are CSS variables in `src/index.css` (dark-first; marigold for actions and the brand; red only for on air; green/amber/red only for health). Brand rules and the logo/icon generator: `docs/brand.md`, `afklive-ui/brand/build.py`; use `components/Logo.tsx`, never redraw the mark. `src/lib/api.ts` (fetch + CSRF), `src/lib/upload.ts` (resumable uploads), `src/pages/` (screens), `src/components/ui.tsx` (shared kit). `site/` is the public site (`/`, `/pricing`; light theme, plain HTML + a little TS, built by `vite.site.config.ts` into `static/site/`); its `assets/site.css` also styles the Thymeleaf sign-in pages
 - `afklive-optimizer/`: AWS Lambda that normalizes uploaded videos with FFmpeg.
 - `docs/product-spec.md`: product spec (source of truth for scope and priorities).
+- `docs/brand.md`: logo, colours, type, imagery.
 - `docs/operations.md`: how web and worker processes run, deploy, and the worker egress firewall.
 
 ## Build, test, run

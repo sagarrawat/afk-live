@@ -81,7 +81,12 @@ export interface MediaRef {
   height?: number | null;
   contentType: 'VIDEO' | 'AUDIO' | 'IMAGE';
   status: 'READY' | 'PROCESSING' | 'FAILED';
+  /** PL-6: this item's own fit; null follows the stream. */
+  fit?: Fit | null;
 }
+
+/** PL-6: FIT = whole picture with bars, FILL = fill and crop, BLUR = whole picture on a blurred copy. */
+export type Fit = 'FIT' | 'FILL' | 'BLUR';
 
 export interface TargetView {
   destinationId: number;
@@ -132,6 +137,8 @@ export interface ScheduleView {
   enabled: boolean;
   nextStart?: string | null;
   lastError?: string | null;
+  /** SC-4: this slot's own videos; empty plays the stream's playlist. */
+  playlist?: { id: number; title: string }[];
 }
 
 export interface StreamView {
@@ -157,6 +164,8 @@ export interface StreamView {
   schedules: ScheduleView[];
   live: LiveState;
   phone?: { endOnInputLoss: boolean; inputGraceSeconds: number; srtLatencyMs: number; lastConnectedAt?: string | null } | null;
+  fit: Fit;
+  crossfadeSeconds: number;
 }
 
 export interface Check {
@@ -203,7 +212,7 @@ export interface Destination {
   id: number;
   name: string;
   type: string;
-  platform: 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TWITCH' | 'KICK' | 'CUSTOM';
+  platform: 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TWITCH' | 'KICK' | 'TIKTOK' | 'RUMBLE' | 'CUSTOM';
   server: string;
   keyHint: string;
   selected: boolean;
@@ -342,4 +351,10 @@ export interface BillingProfile {
   country?: string | null;
   stateCode?: string | null;
   gstin?: string | null;
+}
+
+/** RE-4: share of on-air time without an outage; percent is null when the stream wasn't on air in that window. */
+export interface Uptime {
+  windows: { label: string; onAirSeconds: number; downSeconds: number; percent: number | null }[];
+  outages: { startedAt: string; resolvedAt?: string | null }[];
 }

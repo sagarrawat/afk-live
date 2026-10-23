@@ -152,6 +152,10 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     List<StreamJob> findTop20ByStreamIdOrderByStartTimeDesc(Long streamId);
 
+    /** RE-4: runs of a stream that were on air at some point after {@code from}. */
+    @Query("SELECT j FROM StreamJob j WHERE j.streamId = :streamId AND j.startTime IS NOT NULL AND (j.endTime IS NULL OR j.endTime > :from)")
+    List<StreamJob> findRunsSince(@org.springframework.data.repository.query.Param("streamId") Long streamId, @org.springframework.data.repository.query.Param("from") java.time.ZonedDateTime from);
+
     /** Free-tier capacity is platform-wide: starts that count it are serialized with this lock. */
     @org.springframework.data.jpa.repository.Query(value = "SELECT pg_advisory_xact_lock(7391001)", nativeQuery = true)
     Object lockFreeCapacity();

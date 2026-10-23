@@ -47,6 +47,45 @@ class OverlayCompositorTest {
     }
 
     @Test
+    void theFreePlanWatermarkCarriesTheMarkInBrandColours() {
+        // Same words, same place: the watermark adds the moon-and-dot mark to the left of the name.
+        OverlayCompositor plain = new OverlayCompositor(CANVAS);
+        plain.setOverlays(List.of(Overlay.text("plain", "AFK Live", 0.5, 0.5, 0.06, 0xffffff, 0x66000000)));
+        OverlayCompositor mark = new OverlayCompositor(CANVAS);
+        mark.setOverlays(List.of(Overlay.text(OverlayCompositor.WATERMARK_ID, "AFK Live", 0.5, 0.5, 0.06, 0xffffff, 0x66000000)));
+        byte[] a = black();
+        byte[] b = black();
+        plain.blend(a, 0, Instant.now(), Map.of());
+        mark.blend(b, 0, Instant.now(), Map.of());
+        assertThat(rightmostChange(b)).isGreaterThan(rightmostChange(a) + 10);
+        // The moon is marigold: its chroma differs from the white text and the grey box.
+        int cbOffset = CANVAS.width() * CANVAS.height();
+        boolean coloured = false;
+        for (int y = 180; y < 210 && !coloured; y++) {
+            for (int x = 320; x < 340; x++) {
+                int cb = b[cbOffset + (y / 2) * (CANVAS.width() / 2) + x / 2] & 0xff;
+                if (cb < 100) {
+                    coloured = true;
+                    break;
+                }
+            }
+        }
+        assertThat(coloured).as("a yellow (low Cb) pixel where the mark is").isTrue();
+    }
+
+    private static int rightmostChange(byte[] f) {
+        byte[] base = black();
+        for (int x = CANVAS.width() - 1; x >= 0; x--) {
+            for (int y = 0; y < CANVAS.height(); y++) {
+                if (luma(f, x, y) != luma(base, x, y)) {
+                    return x;
+                }
+            }
+        }
+        return -1;
+    }
+
+    @Test
     void hiddenOverlaysDrawNothing() {
         OverlayCompositor c = new OverlayCompositor(CANVAS);
         c.setOverlays(List.of(Overlay.text("t", "Hidden", 0.1, 0.1, 0.08, 0xffffff, 0xff000000).withVisible(false)));

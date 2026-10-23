@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { Logo } from './Logo';
 import { Bell, FolderOpen, Home, LifeBuoy, LogOut, Moon, Radio, Settings, Shield, Sun, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -35,11 +36,8 @@ export function useTheme(): [string, () => void] {
 
 function Wordmark() {
   return (
-    <Link to="/studio" className="flex items-center gap-2 font-semibold tracking-tight">
-      <span aria-hidden className="grid h-7 w-7 place-items-center rounded bg-raised">
-        <span className="h-2.5 w-2.5 rounded-full bg-live" />
-      </span>
-      AFK Live
+    <Link to="/studio" className="-m-1 flex items-center p-1 text-ink">
+      <Logo className="h-7 w-auto" />
     </Link>
   );
 }

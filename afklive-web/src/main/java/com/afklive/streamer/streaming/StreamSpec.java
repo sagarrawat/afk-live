@@ -56,7 +56,15 @@ public record StreamSpec(
     }
 
     /** A platform to send to. {@code url} is a full rtmp/rtmps/srt URL or a bare YouTube stream key. */
-    public record Destination(String name, String url) {
+    public record Destination(String name, String url, boolean off) {
+        public Destination(String name, String url) {
+            this(name, url, false);
+        }
+
+        /** The same destination, turned on or off while live (DS-5); its position in the list never changes. */
+        public Destination withOff(boolean value) {
+            return new Destination(name, url, value);
+        }
     }
 
     private static final ObjectMapper JSON = new ObjectMapper()
@@ -76,5 +84,28 @@ public record StreamSpec(
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not read stream spec", e);
         }
+    }
+
+    /** The TARGETS command payload: a run's destination list. */
+    public static String destinationsJson(List<Destination> destinations) {
+        try {
+            return JSON.writeValueAsString(destinations);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize destinations", e);
+        }
+    }
+
+    public static List<Destination> destinationsFromJson(String json) {
+        try {
+            return JSON.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<Destination>>() { });
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not read destinations", e);
+        }
+    }
+
+    /** This spec with a new destination list (same order and positions as the run's). */
+    public StreamSpec withDestinations(List<Destination> next) {
+        return new StreamSpec(username, videoKey, musicKey, musicVolume, loopCount, watermarkKey, muteVideoAudio, streamMode,
+                maxHeight, overlayEnabled, overlayTemplate, scheduledStreamId, next, streamId, studio);
     }
 }
