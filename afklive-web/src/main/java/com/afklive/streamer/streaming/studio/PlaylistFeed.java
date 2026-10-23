@@ -64,6 +64,7 @@ public final class PlaylistFeed implements Feed {
     private int pauseTicks;
     private volatile NowPlaying nowPlaying;
     private long framesPlayed;
+    private boolean nextStartsNewPass;
 
     private static final class Playing {
         final Item item;
@@ -103,11 +104,27 @@ public final class PlaylistFeed implements Feed {
 
     // ---------------------------------------------------------------- control (any thread)
 
+    /** Let the current pass through the list finish, then end (the "stop after the playlist" option). */
+    public void endAfterThisPass() {
+        commands.add(() -> {
+            if (next != null && nextStartsNewPass) {
+                // The item queued up next already belongs to the following pass: undo that.
+                next.source.close();
+                next = null;
+                nextStartsNewPass = false;
+                loopsCompleted--;
+                remainingInPass.clear();
+            }
+            loops = loopsCompleted + 1;
+        });
+    }
+
     /** Jump to the next item now. */
     public void skip() {
         commands.add(() -> {
             if (current != null) {
                 log.debug("Skipping {}", current.item.id());
+                lastPlayedId = current.item.id();
                 current.source.close();
                 current = null;
             }
@@ -142,6 +159,10 @@ public final class PlaylistFeed implements Feed {
             if (next != null) {
                 next.source.close(); // prepared from the old list; prepare again
                 next = null;
+                if (nextStartsNewPass) {
+                    loopsCompleted--; // that pass never started
+                    nextStartsNewPass = false;
+                }
             }
         });
     }
@@ -153,8 +174,9 @@ public final class PlaylistFeed implements Feed {
     /** Current position, for saving and resuming. */
     public Position position() {
         NowPlaying np = nowPlaying;
-        return np == null || np.item() == null ? new Position(null, 0, loopsCompleted)
-                : new Position(np.item().id(), np.elapsedSeconds(), loopsCompleted);
+        int loopsDone = publishedLoops;
+        return np == null || np.item() == null ? new Position(null, 0, loopsDone)
+                : new Position(np.item().id(), np.elapsedSeconds(), loopsDone);
     }
 
     /** Frames actually taken from files (not held or silent ticks). */
@@ -223,9 +245,14 @@ public final class PlaylistFeed implements Feed {
             return;
         }
         double duration = current.item.durationSeconds();
+        if (duration <= 0 && current.source.knownDurationSeconds() != null) {
+            duration = current.source.knownDurationSeconds(); // learned when the file arrived
+        }
         boolean nearEnd = duration > 0 && duration - current.elapsed(canvas) < PREROLL_SECONDS;
         if (nearEnd || current.source.decoderFinished()) {
+            int before = loopsCompleted;
             next = takeNextUnopened();
+            nextStartsNewPass = next != null && loopsCompleted != before;
         }
     }
 
@@ -234,6 +261,7 @@ public final class PlaylistFeed implements Feed {
         if (next != null) {
             Playing p = next;
             next = null;
+            nextStartsNewPass = false;
             return p;
         }
         return takeNextUnopened();
@@ -287,7 +315,11 @@ public final class PlaylistFeed implements Feed {
         remainingInPass.addAll(ids);
     }
 
+    /** Completed passes as of the item now playing (a prerolled item from the next pass doesn't count yet). */
+    private volatile int publishedLoops;
+
     private void publishNowPlaying() {
+        publishedLoops = loopsCompleted - (nextStartsNewPass ? 1 : 0);
         if (current == null) {
             nowPlaying = new NowPlaying(null, 0, upNext());
             return;

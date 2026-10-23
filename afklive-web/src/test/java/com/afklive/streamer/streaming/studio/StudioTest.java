@@ -144,7 +144,7 @@ class StudioTest {
             long cut = System.nanoTime();
             phone.destroyForcibly();
             waitFor(() -> switches.getLast() == Boolean.FALSE, 5_000);
-            assertThat((switchTimes.getLast() - cut) / 1_000_000).isLessThan(2_500);
+            assertThat((switchTimes.getLast() - cut) / 1_000_000).isLessThan(2_000); // spec: fallback within 2 s
             assertThat(studio.status().scene()).isEqualTo("brb");
             Thread.sleep(1500);
 
@@ -152,7 +152,8 @@ class StudioTest {
             phone = phone(port);
             long back = System.nanoTime();
             waitFor(() -> switches.getLast() == Boolean.TRUE, 15_000);
-            assertThat((switchTimes.getLast() - back) / 1_000_000).isLessThan(6_000);
+            // Spec: live again within 2 s of a stable input; this includes the test sender's own start-up (~0.5-1 s).
+            assertThat((switchTimes.getLast() - back) / 1_000_000).isLessThan(3_500);
             Thread.sleep(1000);
             stopped = System.nanoTime();
             runner.stop("Stopped by user");
@@ -197,5 +198,31 @@ class StudioTest {
             Thread.sleep(50);
         }
         throw new AssertionError("Condition not met within " + millis + " ms");
+    }
+
+    @Test
+    void aClosedStudioRefusesToLaunchAnEncoder() throws Exception {
+        Studio studio = new Studio(CANVAS, dir.resolve("w3"), "ffmpeg",
+                List.of(new Studio.Scene("s", StillFeed.color(CANVAS, 0), null, 0, 0, List.of(), null)), "s", List.of(), 0, null);
+        studio.close();
+        org.assertj.core.api.Assertions.assertThatThrownBy(studio::launch).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test
+    void closingALiveFeedLeavesItsFallbackSceneAlone() {
+        java.util.concurrent.atomic.AtomicBoolean fallbackClosed = new java.util.concurrent.atomic.AtomicBoolean();
+        Feed fallback = new Feed() {
+            @Override
+            public void next(Frame out) {
+            }
+
+            @Override
+            public void close() {
+                fallbackClosed.set(true);
+            }
+        };
+        DecoderSource input = new DecoderSource(CANVAS, DecoderSource.Options.live("tcp://127.0.0.1:1"), dir, "ffmpeg", "x");
+        new LiveFeed(CANVAS, input, fallback, LiveFeed.Settings.defaults(), null).close();
+        assertThat(fallbackClosed).isFalse();
     }
 }

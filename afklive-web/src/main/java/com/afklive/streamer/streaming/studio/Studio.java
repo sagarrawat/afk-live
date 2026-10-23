@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -71,7 +70,7 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
     private final Listener listener;
     private final long endAfterInputLostMillis;
     private final OverlayCompositor overlays;
-    private final Map<String, Scene> scenes = new LinkedHashMap<>();
+    private final Map<String, Scene> scenes = new java.util.concurrent.ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<Runnable> commands = new ConcurrentLinkedQueue<>();
     private final Frame base;
     private final Frame music;
@@ -114,8 +113,16 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
             audioWriter = Thread.ofPlatform().daemon(true).name("studio-audio-out").start(this::writeAudio);
         }
 
+        boolean hasRoom() {
+            return !dead && !ending && !freeVideo.isEmpty() && audio.remainingCapacity() > 0;
+        }
+
         /** Queues one frame; returns false (and drops it) if the encoder isn't keeping up. */
         boolean offer(Frame f) {
+            return offer(f, false);
+        }
+
+        boolean offer(Frame f, boolean silent) {
             if (dead || ending) {
                 return false;
             }
@@ -127,7 +134,7 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
                 return false;
             }
             System.arraycopy(f.video, 0, v, 0, v.length);
-            audio.offer(f.audio.clone());
+            audio.offer(silent ? new byte[f.audio.length] : f.audio.clone());
             video.offer(v);
             return true;
         }
@@ -291,6 +298,9 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
 
     @Override
     public synchronized Process launch() throws IOException {
+        if (closed) {
+            throw new IOException("Studio is closed");
+        }
         Files.createDirectories(workDir);
         Path fifo = workDir.resolve("studio-" + UUID.randomUUID().toString().substring(0, 8) + ".pcm");
         DecoderSource.Fifos.create(fifo);
@@ -348,7 +358,10 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
                 continue;
             }
             if (-wait > 1_000_000_000L) {
-                // More than a second behind (machine overloaded or paused): carry on from now, don't burst.
+                // More than a second behind (machine overloaded or paused): carry on from now, don't burst,
+                // and owe the encoder the frames we skipped so the output timeline catches up with real time.
+                long skipped = -wait / frameNanos;
+                owe(skipped);
                 t0 = System.nanoTime() - n * frameNanos;
             }
             try {
@@ -416,12 +429,29 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
         }
         if (o.offer(frame)) {
             framesOut.incrementAndGet();
+            // Pay back frames the encoder couldn't take earlier (repeats of this picture, silent), as room allows,
+            // so the output's timeline never falls permanently behind the clock.
+            while (owed > 0 && o.hasRoom() && o.offer(frame, true)) {
+                owed--;
+                framesOut.incrementAndGet();
+            }
         } else {
             framesDropped.incrementAndGet();
+            owe(1);
         }
     }
 
     private Frame scratch;
+    /** Frames the encoder is short of (dropped or skipped), to be repeated when it has room. */
+    private long owed;
+
+    private void owe(long frames) {
+        long cap = canvas.fps() * 30L;
+        if (owed + frames > cap) {
+            log.warn("Encoder more than 30 s behind the studio clock; giving up on {} frames", owed + frames - cap);
+        }
+        owed = Math.min(cap, owed + frames);
+    }
 
     private Frame outFrame() {
         if (scratch == null) {

@@ -41,6 +41,7 @@ public final class OverlayCompositor {
     private volatile List<Overlay> overlays = List.of();
     private final Map<String, Cached> cache = new HashMap<>();
     private final Map<java.nio.file.Path, BufferedImage> images = new HashMap<>();
+    private List<Overlay> lastList;
 
     private record Cached(Overlay overlay, String text, Patch patch) {
     }
@@ -54,7 +55,9 @@ public final class OverlayCompositor {
     }
 
     public void setOverlays(List<Overlay> list) {
-        this.overlays = List.copyOf(list);
+        if (!list.equals(overlays)) {
+            this.overlays = List.copyOf(list);
+        }
     }
 
     public List<Overlay> overlays() {
@@ -65,9 +68,9 @@ public final class OverlayCompositor {
     public void blend(byte[] yuv, long frameIndex, Instant now, Map<String, String> vars) {
         List<Overlay> list = overlays;
         if (list.isEmpty()) {
-            if (!cache.isEmpty()) {
-                cache.clear();
-            }
+            cache.clear();
+            images.clear();
+            lastList = list;
             return;
         }
         for (Overlay o : list) {
@@ -96,20 +99,37 @@ public final class OverlayCompositor {
                 log.debug("Overlay {} failed: {}", o.id(), e.getMessage());
             }
         }
-        if (cache.size() > list.size() * 2) {
-            cache.keySet().removeIf(id -> list.stream().noneMatch(o -> o.id().equals(id)));
+        if (list != lastList) {
+            // The overlay set changed: forget renders and images it no longer uses (logos replaced at the same path too).
+            lastList = list;
+            java.util.Set<String> keys = new java.util.HashSet<>();
+            java.util.Set<java.nio.file.Path> paths = new java.util.HashSet<>();
+            for (Overlay o : list) {
+                keys.add(cacheKey(o));
+                if (o.image() != null) {
+                    paths.add(o.image());
+                }
+            }
+            cache.keySet().retainAll(keys);
+            images.keySet().retainAll(paths);
         }
     }
 
     private Patch patchFor(Overlay o, String text) {
-        Cached c = cache.get(o.id());
+        String key = cacheKey(o);
+        Cached c = cache.get(key);
         if (c != null && c.overlay().equals(o) && java.util.Objects.equals(c.text(), text)) {
             return c.patch();
         }
         BufferedImage img = render(o, text);
         Patch p = img == null ? null : toPatch(img, px(o.x(), canvas.width()), px(o.y(), canvas.height()), o.opacity());
-        cache.put(o.id(), new Cached(o, text, p));
+        cache.put(key, new Cached(o, text, p));
         return p;
+    }
+
+    /** Overlays are cached per id and placement, so a global and a scene overlay sharing an id don't evict each other. */
+    private static String cacheKey(Overlay o) {
+        return o.id() + "@" + o.type() + "@" + o.x() + "," + o.y();
     }
 
     // ---------------------------------------------------------------- rendering (Java2D)

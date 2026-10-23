@@ -12,6 +12,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -22,10 +23,15 @@ import java.util.concurrent.atomic.AtomicLong;
  * Decodes one input (a file, or a live feed) with FFmpeg into canvas-format raw frames: video on the
  * process's stdout, audio through a named pipe (or stdout, for audio-only sources).
  * <p>
- * File sources are pulled: the decoder runs ahead by a few frames and then waits. Live sources are
- * pushed: the decoder runs in real time, and {@link #poll} drops the oldest frames when the buffer
- * grows, which keeps the delay low. A live decoder that exits (the phone disconnected) is restarted
- * every second until the source is closed.
+ * Every video frame and every audio chunk (exactly one frame's worth of samples) carries a sequence
+ * number, and {@link #poll} pairs them by number, never by queue position. So A/V alignment can't
+ * drift whatever gets dropped: audio for a frame that was skipped is discarded with it, and a frame
+ * whose audio was lost plays with silence.
+ * <p>
+ * File sources are pulled: the decoder runs a few frames ahead and then waits. When a file's audio
+ * outlasts its video, the surplus is discarded so the decoder can finish. Live sources are pushed:
+ * the decoder runs in real time, {@link #poll} skips ahead when frames pile up (keeping the delay
+ * low), and a decoder that exits (the phone disconnected) is restarted until the source is closed.
  */
 @Slf4j
 public final class DecoderSource implements AutoCloseable {
@@ -53,12 +59,32 @@ public final class DecoderSource implements AutoCloseable {
         }
     }
 
-    /** Frames buffered by a file source: enough to cover a decoder hiccup, small enough to keep 1080p memory bounded. */
-    static final int FILE_BUFFER_FRAMES = 8;
+    /** Produces FFmpeg input arguments; may block (runs on the decoder's own thread). */
+    @FunctionalInterface
+    public interface InputResolver {
+        Resolved input() throws IOException;
+    }
+
+    /**
+     * Input arguments, plus facts only known once the file is here: whether it has audio and its
+     * duration in seconds (null: unknown / as configured).
+     */
+    public record Resolved(List<String> input, Boolean hasAudio, Double durationSeconds) {
+        public Resolved(List<String> input, Boolean hasAudio) {
+            this(input, hasAudio, null);
+        }
+    }
+
+    /** Frames buffered by a file source: covers a decoder hiccup while keeping 1080p memory bounded (~18 MB). */
+    static final int FILE_BUFFER_FRAMES = 6;
     /** Live buffer limit; {@link #poll} trims back to {@link #LIVE_TARGET_FRAMES} when it's exceeded. */
-    static final int LIVE_BUFFER_FRAMES = 15;
+    static final int LIVE_BUFFER_FRAMES = 12;
     static final int LIVE_TARGET_FRAMES = 3;
-    static final long LIVE_RETRY_MILLIS = 1000;
+    static final long LIVE_RETRY_MILLIS = 250;
+
+    /** A frame's worth of video or audio with its position in the run. */
+    private record Chunk(long seq, byte[] data) {
+    }
 
     private final Canvas canvas;
     private final Options options;
@@ -66,21 +92,31 @@ public final class DecoderSource implements AutoCloseable {
     private final String ffmpeg;
     private final String name;
 
-    private final int capacity;
     private final BlockingQueue<byte[]> videoFree;
-    private final BlockingQueue<byte[]> videoFilled;
-    private final BlockingQueue<byte[]> audioFilled;
+    private final BlockingQueue<Chunk> videoFilled;
+    private final BlockingQueue<Chunk> audioFilled;
 
     private volatile boolean closed;
     private volatile Process process;
+    /** The supervisor has finished for good (file decoded and drained, or source closed). */
     private volatile boolean decoderDone;
     private volatile boolean processExited;
+    /** This run's video reached its end: no more frames will come. */
+    private volatile boolean videoEnded;
+    private volatile long lastVideoSeq = -1;
+    /** This run's audio reached its end (or the input has none): never wait for more. */
+    private volatile boolean audioEnded;
     private volatile int exitCode = -1;
     private volatile String lastError;
+    private volatile Double knownDuration;
     private final AtomicLong framesOut = new AtomicLong();
     private volatile long lastFrameNanos;
     private volatile long startedNanos;
+    /** Sequence numbers keep increasing across live restarts, so old and new runs never pair up. */
+    private long generationBase;
     private Thread supervisor;
+    private volatile InputResolver resolver;
+    private volatile Runnable onClose;
 
     public DecoderSource(Canvas canvas, Options options, Path workDir, String ffmpeg, String name) {
         this.canvas = canvas;
@@ -88,7 +124,7 @@ public final class DecoderSource implements AutoCloseable {
         this.workDir = workDir;
         this.ffmpeg = ffmpeg;
         this.name = name;
-        this.capacity = options.live() ? LIVE_BUFFER_FRAMES : FILE_BUFFER_FRAMES;
+        int capacity = options.live() ? LIVE_BUFFER_FRAMES : FILE_BUFFER_FRAMES;
         if (options.video()) {
             this.videoFree = new ArrayBlockingQueue<>(capacity + 1);
             this.videoFilled = new ArrayBlockingQueue<>(capacity + 1);
@@ -99,8 +135,20 @@ public final class DecoderSource implements AutoCloseable {
             this.videoFree = null;
             this.videoFilled = null;
         }
-        // Audio chunks are small; allow more of them so the audio reader never stalls the decoder first.
-        this.audioFilled = options.audio() ? new ArrayBlockingQueue<>(capacity * 4) : null;
+        // Audio chunks are small (6 KB); room for a few seconds so audio never stalls the decoder first.
+        this.audioFilled = options.audio() ? new ArrayBlockingQueue<>(capacity * 8 + 32) : null;
+    }
+
+    /** Resolve the input lazily, on the decoder thread, right before each start. */
+    public DecoderSource resolveInputWith(InputResolver r) {
+        this.resolver = r;
+        return this;
+    }
+
+    /** Runs once when the source is closed (e.g. to release a cached file). */
+    public DecoderSource whenClosed(Runnable r) {
+        this.onClose = r;
+        return this;
     }
 
     public synchronized DecoderSource start() {
@@ -120,15 +168,31 @@ public final class DecoderSource implements AutoCloseable {
     }
 
     public State state() {
-        if (decoderDone && isDrained()) {
-            return framesOut.get() == 0 && exitCode != 0 ? State.FAILED : State.ENDED;
+        if (options.live()) {
+            return framesOut.get() > 0 ? State.PLAYING : State.STARTING;
+        }
+        boolean ended = options.video() ? videoEnded && videoFilled.isEmpty() : audioEnded && audioFilled.isEmpty();
+        if (ended || decoderDone) {
+            if (framesOut.get() > 0) {
+                return ended || isDrained() ? State.ENDED : State.PLAYING;
+            }
+            // Nothing played: a broken file, or one with no frames. Wait for the exit code to say which.
+            if (!decoderDone) {
+                return State.STARTING;
+            }
+            return exitCode == 0 ? State.ENDED : State.FAILED;
         }
         return framesOut.get() > 0 ? State.PLAYING : State.STARTING;
     }
 
-    /** True once the decoder process has exited: a file has been read to the end (its last frames may still be queued). */
+    /** True once the input has been read to its end (its last frames may still be queued): time to preroll. */
     public boolean decoderFinished() {
-        return processExited || decoderDone;
+        return (options.video() ? videoEnded : audioEnded) || processExited || decoderDone;
+    }
+
+    /** The input's duration if the resolver found it out, else null. */
+    public Double knownDurationSeconds() {
+        return knownDuration;
     }
 
     public String lastError() {
@@ -146,9 +210,7 @@ public final class DecoderSource implements AutoCloseable {
     }
 
     private boolean isDrained() {
-        boolean videoEmpty = videoFilled == null || videoFilled.isEmpty();
-        boolean audioEmpty = audioFilled == null || audioFilled.isEmpty() || options.video();
-        return videoEmpty && audioEmpty;
+        return (videoFilled == null || videoFilled.isEmpty()) && (audioFilled == null || options.video() || audioFilled.isEmpty());
     }
 
     public int bufferedFrames() {
@@ -164,50 +226,78 @@ public final class DecoderSource implements AutoCloseable {
             if (options.live()) {
                 // Keep the delay low: if frames piled up (our clock ran slow, or a burst arrived), skip ahead.
                 while (videoFilled.size() > LIVE_TARGET_FRAMES + 2) {
-                    byte[] stale = videoFilled.poll();
+                    Chunk stale = videoFilled.poll();
                     if (stale != null) {
-                        videoFree.offer(stale);
-                    }
-                    if (audioFilled != null) {
-                        audioFilled.poll();
+                        videoFree.offer(stale.data());
                     }
                 }
             }
-            byte[] v = videoFilled.poll();
+            Chunk v = videoFilled.poll();
             if (v == null) {
                 return false;
             }
-            System.arraycopy(v, 0, out.video, 0, out.video.length);
-            videoFree.offer(v);
-            takeAudio(out, true);
+            System.arraycopy(v.data(), 0, out.video, 0, out.video.length);
+            videoFree.offer(v.data());
+            pairAudio(out, v.seq());
         } else {
-            if (!takeAudio(out, false)) {
+            Chunk a = audioFilled.poll();
+            if (a == null) {
                 return false;
             }
+            System.arraycopy(a.data(), 0, out.audio, 0, out.audio.length);
         }
         framesOut.incrementAndGet();
         lastFrameNanos = System.nanoTime();
         return true;
     }
 
-    private boolean takeAudio(Frame out, boolean silenceIfMissing) {
-        byte[] a = audioFilled == null ? null : audioFilled.poll();
-        if (a == null && audioFilled != null && options.video() && !decoderDone && !options.live()) {
-            // Video and audio come from the same decoder; give the audio reader a moment to catch up.
-            try {
-                a = audioFilled.poll(20, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-        if (a != null) {
-            System.arraycopy(a, 0, out.audio, 0, out.audio.length);
-            return true;
-        }
-        if (silenceIfMissing) {
+    /** Fills {@code out.audio} with the chunk numbered {@code seq}, discarding older ones; silence if it's missing. */
+    private void pairAudio(Frame out, long seq) {
+        if (audioFilled == null) {
             out.silence();
+            return;
         }
-        return false;
+        long waitUntil = 0;
+        while (true) {
+            Chunk a = audioFilled.peek();
+            if (a == null) {
+                // For files, audio is decoded alongside video and is rarely late; wait a moment unless it has ended.
+                if (options.live() || audioEnded) {
+                    break;
+                }
+                long now = System.nanoTime();
+                if (waitUntil == 0) {
+                    waitUntil = now + 5_000_000L;
+                }
+                if (now >= waitUntil) {
+                    break;
+                }
+                java.util.concurrent.locks.LockSupport.parkNanos(250_000L);
+                continue;
+            }
+            if (a.seq() < seq) {
+                audioFilled.poll(); // audio for a frame that was skipped
+                continue;
+            }
+            if (a.seq() == seq) {
+                audioFilled.poll();
+                System.arraycopy(a.data(), 0, out.audio, 0, out.audio.length);
+                return;
+            }
+            break; // the next chunk is for a later frame: this frame's audio was lost
+        }
+        out.silence();
+    }
+
+    /** Test hook: queue a chunk as if the decoder had produced it (no process involved). */
+    void inject(boolean video, long seq, byte[] data) {
+        if (video) {
+            byte[] buf = videoFree.poll();
+            System.arraycopy(data, 0, buf, 0, Math.min(data.length, buf.length));
+            videoFilled.offer(new Chunk(seq, buf));
+        } else {
+            audioFilled.offer(new Chunk(seq, data));
+        }
     }
 
     // ---------------------------------------------------------------- decoder process
@@ -229,12 +319,30 @@ public final class DecoderSource implements AutoCloseable {
     private void runOnce() {
         Path fifo = null;
         List<Thread> readers = new ArrayList<>();
+        long base = generationBase;
+        generationBase += 1L << 40;
+        videoEnded = false;
+        audioEnded = false;
+        lastVideoSeq = -1;
         try {
-            if (options.video() && options.audio()) {
+            InputResolver r = resolver;
+            Resolved resolved = r != null ? r.input() : new Resolved(options.input(), null);
+            if (resolved.durationSeconds() != null && resolved.durationSeconds() > 0) {
+                knownDuration = resolved.durationSeconds();
+            }
+            boolean audio = options.audio() && !Boolean.FALSE.equals(resolved.hasAudio());
+            if (!audio) {
+                audioEnded = true;
+            }
+            if (closed) {
+                return;
+            }
+            if (options.video() && audio) {
                 fifo = workDir.resolve("a-" + UUID.randomUUID().toString().substring(0, 8) + ".pcm");
+                Files.createDirectories(workDir);
                 Fifos.create(fifo);
             }
-            Process p = new ProcessBuilder(command(fifo)).start();
+            Process p = new ProcessBuilder(command(fifo, resolved.input(), audio)).start();
             process = p;
             if (closed) {
                 p.destroyForcibly();
@@ -243,24 +351,28 @@ public final class DecoderSource implements AutoCloseable {
             Thread err = Thread.ofPlatform().daemon(true).name("decoder-err-" + name).start(() -> readErrors(p.getErrorStream(), errors));
             if (options.video()) {
                 readers.add(Thread.ofPlatform().daemon(true).name("decoder-v-" + name)
-                        .start(() -> readChunks(p.getInputStream(), canvas.frameBytes(), true)));
-                if (options.audio()) {
+                        .start(() -> readChunks(p.getInputStream(), canvas.frameBytes(), true, base)));
+                if (audio) {
                     Path audioPipe = fifo;
-                    readers.add(Thread.ofPlatform().daemon(true).name("decoder-a-" + name).start(() -> readFifo(audioPipe, p)));
+                    readers.add(Thread.ofPlatform().daemon(true).name("decoder-a-" + name).start(() -> readFifo(audioPipe, p, base)));
                 }
             } else {
                 readers.add(Thread.ofPlatform().daemon(true).name("decoder-a-" + name)
-                        .start(() -> readChunks(p.getInputStream(), canvas.audioBytesPerFrame(), false)));
+                        .start(() -> readChunks(p.getInputStream(), canvas.audioBytesPerFrame(), false, base)));
             }
             int code = p.waitFor();
             if (!options.live()) {
                 processExited = true;
             }
             for (Thread t : readers) {
-                if (fifo != null && t.isAlive()) {
-                    Fifos.release(fifo); // a decoder that died before opening the pipe must not leave the reader blocked
+                // Readers finish once the consumer has taken (or discarded) what's left. A reader still opening
+                // the audio pipe of a decoder that died early is released by opening the other end ourselves.
+                while (t.isAlive()) {
+                    if (fifo != null) {
+                        Fifos.release(fifo);
+                    }
+                    t.join(200);
                 }
-                t.join(closed ? 1000 : 0);
             }
             err.join(1000);
             exitCode = code;
@@ -278,6 +390,8 @@ public final class DecoderSource implements AutoCloseable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
+            videoEnded = true;
+            audioEnded = true;
             if (fifo != null) {
                 try {
                     Files.deleteIfExists(fifo);
@@ -289,16 +403,20 @@ public final class DecoderSource implements AutoCloseable {
     }
 
     public List<String> command(Path audioFifo) {
+        return command(audioFifo, options.input(), options.audio());
+    }
+
+    List<String> command(Path audioFifo, List<String> input, boolean audio) {
         List<String> cmd = new ArrayList<>();
         cmd.add(ffmpeg);
         cmd.addAll(List.of("-hide_banner", "-nostdin", "-loglevel", "error"));
         if (options.live()) {
             // Start fast: each reconnect of the phone is a new decoder run, so its timestamps are continuous.
-            cmd.addAll(List.of("-fflags", "nobuffer", "-analyzeduration", "1000000", "-probesize", "1000000"));
+            cmd.addAll(List.of("-fflags", "nobuffer", "-analyzeduration", "500000", "-probesize", "500000"));
         } else if (options.startSeconds() > 0) {
-            cmd.addAll(List.of("-ss", String.format(java.util.Locale.ROOT, "%.3f", options.startSeconds())));
+            cmd.addAll(List.of("-ss", String.format(Locale.ROOT, "%.3f", options.startSeconds())));
         }
-        cmd.addAll(options.input());
+        cmd.addAll(input);
         // Files start both streams at 0 so a late first audio packet becomes silence rather than drift.
         String startAt = options.live() ? "" : ":first_pts=0";
         String audioChain = "aresample=" + canvas.sampleRate() + ":async=1000" + startAt + ","
@@ -309,12 +427,12 @@ public final class DecoderSource implements AutoCloseable {
                     .append(":force_original_aspect_ratio=decrease,pad=").append(canvas.width()).append(':').append(canvas.height())
                     .append(":(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=").append(canvas.fps())
                     .append(options.live() ? "" : ":start_time=0").append(",format=yuv420p[v]");
-            if (options.audio()) {
+            if (audio) {
                 graph.append(";[0:a:0]").append(audioChain).append("[a]");
             }
             cmd.addAll(List.of("-filter_complex", graph.toString()));
             cmd.addAll(List.of("-map", "[v]", "-f", "rawvideo", "-pix_fmt", "yuv420p", "pipe:1"));
-            if (options.audio()) {
+            if (audio) {
                 cmd.addAll(List.of("-map", "[a]", "-f", "s16le", "-ar", String.valueOf(canvas.sampleRate()), "-ac", "2",
                         "-y", audioFifo.toString()));
             }
@@ -324,9 +442,9 @@ public final class DecoderSource implements AutoCloseable {
         return cmd;
     }
 
-    private void readFifo(Path fifo, Process p) {
+    private void readFifo(Path fifo, Process p, long base) {
         try (InputStream in = Files.newInputStream(fifo)) {
-            readChunks(in, canvas.audioBytesPerFrame(), false);
+            readChunks(in, canvas.audioBytesPerFrame(), false, base);
         } catch (IOException e) {
             if (!closed && p.isAlive()) {
                 log.debug("Audio pipe for {} failed: {}", name, e.getMessage());
@@ -334,10 +452,11 @@ public final class DecoderSource implements AutoCloseable {
         }
     }
 
-    private void readChunks(InputStream in, int size, boolean video) {
+    private void readChunks(InputStream in, int size, boolean video, long base) {
+        long seq = base;
         try (in) {
             while (!closed) {
-                byte[] buf = video ? videoFree.poll(500, TimeUnit.MILLISECONDS) : new byte[size];
+                byte[] buf = video ? videoFree.poll(200, TimeUnit.MILLISECONDS) : new byte[size];
                 if (buf == null) {
                     continue; // consumer hasn't freed a buffer yet (paused file source)
                 }
@@ -347,17 +466,24 @@ public final class DecoderSource implements AutoCloseable {
                     }
                     return;
                 }
-                BlockingQueue<byte[]> target = video ? videoFilled : audioFilled;
+                Chunk chunk = new Chunk(seq, buf);
+                if (video) {
+                    lastVideoSeq = seq;
+                }
+                seq++;
+                BlockingQueue<Chunk> target = video ? videoFilled : audioFilled;
                 if (options.live()) {
-                    while (!target.offer(buf)) {
-                        byte[] dropped = target.poll(); // never block a live decoder: drop the oldest
+                    while (!target.offer(chunk)) {
+                        Chunk dropped = target.poll(); // never block a live decoder: drop the oldest
                         if (video && dropped != null) {
-                            videoFree.offer(dropped);
+                            videoFree.offer(dropped.data());
                         }
                     }
                 } else {
-                    while (!closed && !target.offer(buf, 500, TimeUnit.MILLISECONDS)) {
-                        // wait for the consumer
+                    while (!closed && !target.offer(chunk, 100, TimeUnit.MILLISECONDS)) {
+                        if (!video && options.video() && videoEnded && chunk.seq() > lastVideoSeq) {
+                            break; // audio past the end of the video: nobody will play it, let the decoder finish
+                        }
                     }
                 }
             }
@@ -365,6 +491,12 @@ public final class DecoderSource implements AutoCloseable {
             // decoder ended
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } finally {
+            if (video) {
+                videoEnded = true;
+            } else {
+                audioEnded = true;
+            }
         }
     }
 
@@ -403,7 +535,18 @@ public final class DecoderSource implements AutoCloseable {
 
     @Override
     public void close() {
+        if (closed) {
+            return;
+        }
         closed = true;
+        Runnable done = onClose;
+        if (done != null) {
+            try {
+                done.run();
+            } catch (RuntimeException e) {
+                log.debug("onClose for {} failed", name, e);
+            }
+        }
         Process p = process;
         if (p != null && p.isAlive()) {
             p.destroy();

@@ -99,7 +99,6 @@ public final class LiveFeed implements Feed {
 
     @Override
     public void close() {
-        input.close();
-        fallback.close();
+        input.close(); // the fallback is another scene's feed; the studio closes it with that scene
     }
 }

@@ -144,4 +144,82 @@ class PlaylistFeedTest {
             assertThat(music.framesPlayed()).isBetween(43L, 47L);
         }
     }
+
+    @Test
+    void aFileWhoseAudioOutlastsItsVideoEndsWithTheVideo() throws Exception {
+        Path longAudio = dir.resolve("long-audio.mp4");
+        StudioFixtures.run(List.of("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-t", "2", "-i", "testsrc2=size=320x180:rate=25",
+                "-f", "lavfi", "-t", "5", "-i", "sine=f=500:r=48000", "-map", "0:v", "-map", "1:a",
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", longAudio.toString()));
+        PlaylistFeed.Item x = new PlaylistFeed.Item("x", "Long audio", longAudio, true, 0);
+        try (PlaylistFeed feed = new PlaylistFeed(CANVAS, List.of(x, c), PlaylistFeed.Order.IN_ORDER, 1,
+                null, StudioFixtures.factory(dir), false, new Random(1))) {
+            List<String> order = drain(feed, 200_000);
+            assertThat(order).containsExactly("x", "c");
+            assertThat(feed.finished()).isTrue();
+            assertThat(feed.framesPlayed()).isBetween(115L, 125L);
+        }
+    }
+
+    @Test
+    void aFileWhoseVideoOutlastsItsAudioPlaysWithoutWaitingForAudio() throws Exception {
+        Path shortAudio = dir.resolve("short-audio.mp4");
+        StudioFixtures.run(List.of("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-t", "4", "-i", "testsrc2=size=320x180:rate=25",
+                "-f", "lavfi", "-t", "1", "-i", "sine=f=500:r=48000", "-map", "0:v", "-map", "1:a",
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", shortAudio.toString()));
+        PlaylistFeed.Item y = new PlaylistFeed.Item("y", "Short audio", shortAudio, true, 4);
+        try (PlaylistFeed feed = new PlaylistFeed(CANVAS, List.of(y), PlaylistFeed.Order.IN_ORDER, 1,
+                null, StudioFixtures.factory(dir), false, new Random(1))) {
+            Frame f = new Frame(CANVAS);
+            int slowTicks = 0;
+            long deadline = System.nanoTime() + 30_000_000_000L;
+            while (!feed.finished() && System.nanoTime() < deadline) {
+                long t = System.nanoTime();
+                feed.next(f);
+                if (feed.framesPlayed() > 40 && System.nanoTime() - t > 8_000_000L) {
+                    slowTicks++;
+                }
+                Thread.sleep(1);
+            }
+            assertThat(feed.framesPlayed()).isBetween(115L, 125L);
+            assertThat(slowTicks).isLessThan(5);
+        }
+    }
+
+    @Test
+    void aPositionSavedWhileTheNextPassIsPrerolledStillCountsThatPass() throws Exception {
+        try (PlaylistFeed feed = new PlaylistFeed(CANVAS, List.of(a, c), PlaylistFeed.Order.IN_ORDER, 2,
+                null, StudioFixtures.factory(dir), false, new Random(1))) {
+            Frame f = new Frame(CANVAS);
+            long deadline = System.nanoTime() + 30_000_000_000L;
+            // Play into c (the last item of pass 1); its preroll starts the next pass immediately (2 s items).
+            while ((feed.nowPlaying() == null || feed.nowPlaying().item() == null || !"c".equals(feed.nowPlaying().item().id())
+                    || feed.nowPlaying().elapsedSeconds() < 0.5) && System.nanoTime() < deadline) {
+                feed.next(f);
+                Thread.sleep(1);
+            }
+            PlaylistFeed.Position saved = feed.position();
+            assertThat(saved.itemId()).isEqualTo("c");
+            assertThat(saved.loopsCompleted()).isZero();
+            try (PlaylistFeed resumed = new PlaylistFeed(CANVAS, List.of(a, c), PlaylistFeed.Order.IN_ORDER, 2,
+                    saved, StudioFixtures.factory(dir), false, new Random(1))) {
+                assertThat(drain(resumed, 200_000)).containsExactly("c", "a", "c");
+            }
+        }
+    }
+
+    @Test
+    void endAfterThisPassFinishesAForeverPlaylistAtTheEndOfTheList() throws Exception {
+        try (PlaylistFeed feed = new PlaylistFeed(CANVAS, List.of(a, c), PlaylistFeed.Order.IN_ORDER, 0,
+                null, StudioFixtures.factory(dir), false, new Random(1))) {
+            Frame f = new Frame(CANVAS);
+            while (feed.framesPlayed() < 10) {
+                feed.next(f);
+                Thread.sleep(1);
+            }
+            feed.endAfterThisPass();
+            assertThat(drain(feed, 200_000)).containsExactly("a", "c");
+            assertThat(feed.finished()).isTrue();
+        }
+    }
 }
