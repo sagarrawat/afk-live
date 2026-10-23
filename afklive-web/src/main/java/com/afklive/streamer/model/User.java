@@ -60,6 +60,40 @@ public class User {
     @Column(name = "alert_preferences", columnDefinition = "TEXT")
     private String alertPreferences;
 
+    /** ON-6: the authenticator app secret (Base32), encrypted at rest; null when two-step sign-in is off. */
+    @JsonIgnore
+    @Column(name = "two_factor_secret", columnDefinition = "TEXT")
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
+    private String twoFactorSecret;
+
+    /** ON-6: a secret being set up, until the creator confirms it with a code. */
+    @JsonIgnore
+    @Column(name = "two_factor_pending_secret", columnDefinition = "TEXT")
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
+    private String twoFactorPendingSecret;
+
+    @Column(name = "two_factor_enabled_at")
+    private java.time.ZonedDateTime twoFactorEnabledAt;
+
+    @JsonIgnore
+    @Column(name = "two_factor_last_step")
+    private Long twoFactorLastStep;
+
+    @JsonIgnore
+    @Column(name = "two_factor_failures", nullable = false)
+    private int twoFactorFailures;
+
+    @JsonIgnore
+    @Column(name = "two_factor_locked_until")
+    private java.time.ZonedDateTime twoFactorLockedUntil;
+
+    /** ON-7: when the creator asked to delete the account, and when its data goes. */
+    @Column(name = "deletion_requested_at")
+    private java.time.ZonedDateTime deletionRequestedAt;
+
+    @Column(name = "deletion_scheduled_for")
+    private java.time.ZonedDateTime deletionScheduledFor;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UserSettings settings;
 
@@ -304,5 +338,79 @@ public class User {
 
     public void setAlertPreferences(String alertPreferences) {
         this.alertPreferences = alertPreferences;
+    }
+
+    @JsonIgnore
+    public String getTwoFactorSecret() {
+        return twoFactorSecret;
+    }
+
+    public void setTwoFactorSecret(String twoFactorSecret) {
+        this.twoFactorSecret = twoFactorSecret;
+    }
+
+    @JsonIgnore
+    public String getTwoFactorPendingSecret() {
+        return twoFactorPendingSecret;
+    }
+
+    public void setTwoFactorPendingSecret(String twoFactorPendingSecret) {
+        this.twoFactorPendingSecret = twoFactorPendingSecret;
+    }
+
+    public java.time.ZonedDateTime getTwoFactorEnabledAt() {
+        return twoFactorEnabledAt;
+    }
+
+    public void setTwoFactorEnabledAt(java.time.ZonedDateTime twoFactorEnabledAt) {
+        this.twoFactorEnabledAt = twoFactorEnabledAt;
+    }
+
+    @JsonIgnore
+    public boolean isTwoFactorEnabled() {
+        return twoFactorSecret != null;
+    }
+
+    @JsonIgnore
+    public Long getTwoFactorLastStep() {
+        return twoFactorLastStep;
+    }
+
+    public void setTwoFactorLastStep(Long twoFactorLastStep) {
+        this.twoFactorLastStep = twoFactorLastStep;
+    }
+
+    @JsonIgnore
+    public int getTwoFactorFailures() {
+        return twoFactorFailures;
+    }
+
+    public void setTwoFactorFailures(int twoFactorFailures) {
+        this.twoFactorFailures = twoFactorFailures;
+    }
+
+    @JsonIgnore
+    public java.time.ZonedDateTime getTwoFactorLockedUntil() {
+        return twoFactorLockedUntil;
+    }
+
+    public void setTwoFactorLockedUntil(java.time.ZonedDateTime twoFactorLockedUntil) {
+        this.twoFactorLockedUntil = twoFactorLockedUntil;
+    }
+
+    public java.time.ZonedDateTime getDeletionRequestedAt() {
+        return deletionRequestedAt;
+    }
+
+    public void setDeletionRequestedAt(java.time.ZonedDateTime deletionRequestedAt) {
+        this.deletionRequestedAt = deletionRequestedAt;
+    }
+
+    public java.time.ZonedDateTime getDeletionScheduledFor() {
+        return deletionScheduledFor;
+    }
+
+    public void setDeletionScheduledFor(java.time.ZonedDateTime deletionScheduledFor) {
+        this.deletionScheduledFor = deletionScheduledFor;
     }
 }

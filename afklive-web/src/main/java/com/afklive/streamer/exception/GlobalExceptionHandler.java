@@ -50,6 +50,13 @@ public class GlobalExceptionHandler {
         return body(HttpStatus.CONFLICT, userFacing(e.getMessage()));
     }
 
+    @ExceptionHandler(TooManyAttemptsException.class)
+    public ResponseEntity<Map<String, Object>> handleTooMany(TooManyAttemptsException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(Math.max(1, e.retryAfterSeconds())))
+                .body(Map.of("success", false, "message", userFacing(e.getMessage())));
+    }
+
     @ExceptionHandler({IllegalStateException.class, IllegalArgumentException.class})
     public ResponseEntity<Map<String, Object>> handleBadRequest(RuntimeException e) {
         return body(HttpStatus.BAD_REQUEST, userFacing(e.getMessage()));

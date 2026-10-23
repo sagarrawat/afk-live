@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Enter your code: AFK Live</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="/site/assets/site.css">
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" href="/site/brand/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/site/brand/apple-touch-icon.png">
+    <meta name="theme-color" content="#10122A">
+</head>
+<body class="min-h-screen">
+<main class="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-10 sm:px-6 lg:justify-center">
+    <a href="/"><img src="/site/brand/logo-on-light.svg" alt="AFK Live" width="111" height="30" class="h-[30px] w-auto"></a>
+    <div class="mt-12 rounded-2xl border border-line bg-panel p-6 shadow-[0_24px_48px_-32px_rgba(16,18,42,0.35)] sm:p-8 lg:mt-8">
+        <h1 class="display text-[28px] font-extrabold tracking-[-0.02em]">Enter your code</h1>
+        <p class="mt-1 text-muted">Open your authenticator app and enter the 6-digit code for AFK Live.</p>
+        <form th:action="@{/login/2fa}" method="post" class="mt-6 space-y-4">
+            <p th:if="${error}" class="note-bad" role="alert" th:text="${error}"></p>
+            <div>
+                <label for="code" class="label">Code</label>
+                <input id="code" name="code" required autofocus autocomplete="one-time-code" inputmode="text"
+                       maxlength="16" spellcheck="false" class="field tracking-[0.2em]" placeholder="123456">
+            </div>
+            <button type="submit" class="btn-primary w-full">Continue</button>
+        </form>
+        <p class="mt-6 text-sm text-muted">Lost your phone? Enter one of your recovery codes instead (like <span class="whitespace-nowrap">abcde-fghij</span>). Each works once.</p>
+        <form th:action="@{/logout}" method="post" class="mt-4">
+            <button type="submit" class="link text-sm">Sign in with another account</button>
+        </form>
+    </div>
+    <p class="mt-auto pt-10 text-center lg:mt-10 text-sm text-muted"><a href="mailto:support@afklive.in" class="hover:text-ink">Help</a></p>
+</main>
+</body>
+</html>
