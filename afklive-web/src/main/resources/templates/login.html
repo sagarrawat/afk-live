@@ -2,162 +2,52 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <meta name="color-scheme" content="light only">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - AFK Live</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/theme.css">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 2 A22 22 0 0 1 46 24' fill='none' stroke='%23667eea' stroke-width='4' /%3E%3Cpath d='M46 24 A22 22 0 0 1 24 46' fill='none' stroke='%23764ba2' stroke-width='4' /%3E%3Cpolygon points='20,14 20,34 36,24' fill='%23764ba2' /%3E%3C/svg%3E">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'buffer-navy': '#091e42',
-                        'buffer-blue': '#2c68f6',
-                    },
-                    fontFamily: { sans: ['Inter', 'sans-serif'] }
-                }
-            }
-        }
-        // Clear session persistence on fresh login
-        localStorage.removeItem('activeView');
-
-        function togglePasswordVisibility() {
-            const passwordInput = document.getElementById('password-input');
-            const eyeIcon = document.getElementById('eye-icon');
-            const eyeOffIcon = document.getElementById('eye-off-icon');
-
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                eyeIcon.classList.add('hidden');
-                eyeOffIcon.classList.remove('hidden');
-            } else {
-                passwordInput.type = 'password';
-                eyeIcon.classList.remove('hidden');
-                eyeOffIcon.classList.add('hidden');
-            }
-        }
-    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in: AFK Live</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="/site/assets/site.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121722'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23f04438'/%3E%3C/svg%3E">
 </head>
-<body class="h-screen flex overflow-hidden bg-white font-sans text-gray-900">
-
-    <!-- LEFT COLUMN (Branding) -->
-    <div class="hidden lg:flex w-5/12 flex-col justify-between bg-buffer-navy p-12 text-white relative overflow-hidden">
-        <!-- Logo -->
-        <div class="z-10">
-            <div class="afk-logo" style="filter: brightness(0) invert(1);">
-                <div class="afk-icon"><div class="afk-play"></div></div>
-                <div class="afk-text">AFK<span class="afk-live">Live</span></div>
+<body class="min-h-screen">
+<main class="mx-auto flex min-h-screen max-w-md flex-col px-4 py-10 sm:px-6">
+    <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
+        <span aria-hidden="true" class="grid h-7 w-7 place-items-center rounded bg-[#121722]"><span class="h-2.5 w-2.5 rounded-full bg-live"></span></span>
+        AFK Live
+    </a>
+    <div class="mt-12 rounded-lg border border-line bg-panel p-6 sm:p-8">
+        <h1 class="text-2xl font-semibold tracking-tight">Sign in</h1>
+        <p class="mt-1 text-muted">Welcome back. Your streams are where you left them.</p>
+        <div class="mt-6">
+        <a href="/oauth2/authorization/google" class="btn-secondary w-full">
+            <svg class="h-5 w-5" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+            Continue with Google
+        </a>
+        <div class="my-6 flex items-center gap-3 text-sm text-muted"><span class="h-px flex-1 bg-line"></span>or with email<span class="h-px flex-1 bg-line"></span></div>
+        </div>
+        <form th:action="@{/login}" method="post" class="space-y-4">
+            <p th:if="${param.error}" class="note-bad" role="alert">That email and password don't match. Try again, or reset your password.</p>
+            <p th:if="${param.logout}" class="note-ok">You're signed out.</p>
+            <p th:if="${success}" class="note-ok" th:text="${success}"></p>
+            <div>
+                <label for="email" class="label">Email</label>
+                <input id="email" type="email" name="username" required autocomplete="email" class="field">
             </div>
-        </div>
-
-        <!-- Content -->
-        <div class="z-10 max-w-md">
-            <h2 class="text-4xl font-bold mb-6 leading-tight">Stream while you sleep.</h2>
-            <p class="text-lg text-gray-300 leading-relaxed">
-                Automate your YouTube growth with 24/7 live streams.
-                Upload once, broadcast forever.
-            </p>
-        </div>
-
-        <!-- Footer -->
-        <div class="z-10 text-sm text-gray-400">
-            &copy; 2026 AFK Live.
-        </div>
-
-        <!-- Background Decor -->
-        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-blue-600 rounded-full blur-3xl opacity-20"></div>
-        <div class="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-purple-600 rounded-full blur-3xl opacity-20"></div>
+            <div>
+                <div class="flex items-baseline justify-between">
+                    <label for="password" class="label">Password</label>
+                    <a href="/forgot-password" class="link text-sm">Forgot it?</a>
+                </div>
+                <input id="password" type="password" name="password" required autocomplete="current-password" class="field">
+            </div>
+            <label class="flex items-center gap-2 text-sm">
+                <input name="remember-me" type="checkbox" checked class="h-4 w-4 accent-[rgb(var(--accent))]"> Keep me signed in
+            </label>
+            <button type="submit" class="btn-primary w-full">Sign in</button>
+        </form>
+        <p class="mt-6 text-center text-sm text-muted">New to AFK Live? <a href="/register" class="link font-medium">Create a free account</a></p>
     </div>
-
-    <!-- RIGHT COLUMN (Form) -->
-    <div class="flex-1 flex flex-col justify-center items-center p-8 lg:p-12 overflow-y-auto">
-        <div class="w-full max-w-md space-y-8">
-
-            <!-- Header (Mobile Logo visible here if needed, but keeping it clean) -->
-            <div class="text-center">
-                <div class="lg:hidden flex justify-center mb-6">
-                    <div class="afk-logo" style="transform: scale(0.8);">
-                        <div class="afk-icon"><div class="afk-play"></div></div>
-                        <div class="afk-text">AFK<span class="afk-live">Live</span></div>
-                    </div>
-                </div>
-                <h2 class="text-3xl font-bold text-gray-900">Log in to your account</h2>
-                <p class="mt-2 text-gray-500">Welcome back! Please enter your details.</p>
-            </div>
-
-            <!-- OAuth -->
-            <a href="/oauth2/authorization/google" class="flex items-center justify-center gap-3 w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 px-4 rounded-lg transition shadow-sm">
-                <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-5 h-5" alt="Google">
-                <span>Log in with Google</span>
-            </a>
-
-            <div class="relative flex py-2 items-center">
-                <div class="flex-grow border-t border-gray-200"></div>
-                <span class="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase font-semibold tracking-wider">Or with email</span>
-                <div class="flex-grow border-t border-gray-200"></div>
-            </div>
-
-            <!-- Form -->
-            <form th:action="@{/login}" method="post" class="space-y-6">
-                <!-- Alerts -->
-                <div th:if="${param.error}" class="bg-red-50 border border-red-100 text-red-600 text-sm p-4 rounded-lg flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    Invalid email or password.
-                </div>
-                <div th:if="${param.logout}" class="bg-green-50 border border-green-100 text-green-600 text-sm p-4 rounded-lg flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                    Logged out successfully.
-                </div>
-                <div th:if="${success}" class="bg-green-50 border border-green-100 text-green-600 text-sm p-4 rounded-lg flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                    <span th:text="${success}"></span>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input type="email" name="username" required class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder-gray-400" placeholder="Enter your email">
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
-                        <span>Password</span>
-                        <a href="/forgot-password" class="text-blue-600 hover:text-blue-700 font-medium text-sm">Forgot password?</a>
-                    </label>
-                    <div class="relative">
-                        <input id="password-input" type="password" name="password" required class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition placeholder-gray-400 pr-10" placeholder="••••••••">
-                        <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
-                            <!-- Eye Icon (Show) -->
-                            <svg id="eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                            <!-- Eye Off Icon (Hide) -->
-                            <svg id="eye-off-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex items-center">
-                    <input id="remember-me" name="remember-me" type="checkbox" checked class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                    <label for="remember-me" class="ml-2 block text-sm text-gray-700">Remember me</label>
-                </div>
-
-                <button type="submit" class="w-full bg-buffer-blue hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition transform active:scale-[0.99]">
-                    Log In
-                </button>
-            </form>
-
-            <p class="text-center text-sm text-gray-600">
-                Don't have an account?
-                <a href="/register" class="font-semibold text-blue-600 hover:text-blue-700">Sign up for free</a>
-            </p>
-        </div>
-    </div>
+    <p class="mt-auto pt-10 text-center text-sm text-muted"><a href="/terms" class="hover:text-ink">Terms</a> &nbsp; <a href="/privacy" class="hover:text-ink">Privacy</a> &nbsp; <a href="mailto:support@afklive.in" class="hover:text-ink">Help</a></p>
+</main>
 
 </body>
 </html>

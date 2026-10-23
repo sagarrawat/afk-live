@@ -1,0 +1,81 @@
+@import '@fontsource-variable/inter';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* The public site is light; product shots stay dark, as the app is. Same token names as the app. */
+:root {
+  --bg: 246 247 250;
+  --panel: 255 255 255;
+  --raised: 236 239 245;
+  --line: 219 224 232;
+  --ink: 20 24 33;
+  --muted: 92 102 120;
+  --accent: 73 87 222;
+  --accent-ink: 255 255 255;
+  --live: 214 45 32;
+  --ok: 22 150 84;
+  --warn: 196 120 0;
+  --bad: 214 45 32;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded px-5 font-medium transition-colors;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-accent-ink hover:bg-accent/90;
+  }
+  .btn-secondary {
+    @apply btn border border-line bg-panel text-ink hover:border-muted/60;
+  }
+  .field {
+    @apply h-11 w-full rounded border border-line bg-panel px-3 text-ink placeholder:text-muted/70 focus:border-accent focus:outline-none;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium;
+  }
+  .note-bad {
+    @apply rounded border border-bad/30 bg-bad/5 px-3 py-2 text-sm text-bad;
+  }
+  .note-ok {
+    @apply rounded border border-ok/30 bg-ok/5 px-3 py-2 text-sm text-ok;
+  }
+  .link {
+    @apply text-accent hover:underline;
+  }
+}
+
+@keyframes tally {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.tally {
+  animation: tally 2s ease-in-out infinite;
+}

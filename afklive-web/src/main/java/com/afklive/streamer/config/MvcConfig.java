@@ -17,8 +17,9 @@ public class MvcConfig implements WebMvcConfigurer {
         registry.addRedirectViewController("/app", "/studio");
         // The previous Alpine app, kept for the YouTube upload and comment tools until they move over.
         registry.addViewController("/classic").setViewName("forward:/classic.html");
-        registry.addViewController("/pricing").setViewName("forward:/pricing.html");
-        registry.addViewController("/features").setViewName("forward:/features.html");
+        // The public site (afklive-ui/site, built into static/site/).
+        registry.addViewController("/pricing").setViewName("forward:/site/pricing.html");
+        registry.addRedirectViewController("/features", "/#playlists");
         registry.addViewController("/login").setViewName("login");
         registry.addViewController("/register").setViewName("register");
     }

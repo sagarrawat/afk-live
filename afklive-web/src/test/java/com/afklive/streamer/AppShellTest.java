@@ -61,6 +61,25 @@ class AppShellTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void publicSiteAndSignInPages() throws Exception {
+        mvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/index.html"));
+        mvc.perform(get("/pricing")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/pricing.html"));
+        mvc.perform(get("/features")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/").with(user(email).roles("USER")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio"));
+        mvc.perform(get("/").with(user("ops@example.com").roles("ADMIN")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio/admin"));
+        for (String page : new String[]{"/login", "/register", "/forgot-password"}) {
+            mvc.perform(get(page))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("/site/assets/site.css")))
+                    .andExpect(content().string(containsString("name=\"_csrf\"")));
+        }
+        mvc.perform(get("/login").param("error", ""))
+                .andExpect(content().string(containsString("match. Try again")));
+    }
+
+    @Test
     void meReturnsThePlanAndSavesPreferences() throws Exception {
         mvc.perform(get("/api/me").with(user(email).roles("USER")))
                 .andExpect(status().isOk())

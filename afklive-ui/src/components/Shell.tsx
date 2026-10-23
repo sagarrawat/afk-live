@@ -178,7 +178,7 @@ function UserMenu() {
           <MenuItem href="/classic" icon={<Wrench className="h-4 w-4" />}>
             YouTube upload tools
           </MenuItem>
-          <MenuItem href="mailto:support@afklive.com" icon={<LifeBuoy className="h-4 w-4" />}>
+          <MenuItem href="mailto:support@afklive.in" icon={<LifeBuoy className="h-4 w-4" />}>
             Contact support
           </MenuItem>
           <MenuItem onClick={signOut} icon={<LogOut className="h-4 w-4" />}>

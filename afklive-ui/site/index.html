@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AFK Live: stay live 24/7 on YouTube, from your videos or your phone</title>
+  <meta name="description" content="Upload once and stay live around the clock, or stream from your phone with overlays and a stream that survives bad signal. No PC, no YouTube sign-in. Free to start." />
+  <link rel="canonical" href="https://afk.live/" />
+  <meta property="og:title" content="AFK Live: stay live 24/7 on YouTube, from your videos or your phone" />
+  <meta property="og:description" content="Upload once and stay live around the clock, or stream from your phone with overlays and a stream that survives bad signal. No PC, no YouTube sign-in. Free to start." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://afk.live/" />
+  <meta property="og:image" content="https://afk.live/site/img/app-stream.webp" />
+  <meta name="theme-color" content="#f6f7fa" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23121722'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23f04438'/%3E%3C/svg%3E" />
+  <script type="module" src="./src/main.ts"></script>
+</head>
+<body>
+<header class="sticky top-0 z-30 border-b border-line/70 bg-bg/90 backdrop-blur">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+    <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
+      <span aria-hidden="true" class="grid h-7 w-7 place-items-center rounded bg-[#121722]"><span class="h-2.5 w-2.5 rounded-full bg-live"></span></span>
+      AFK Live
+    </a>
+    <nav aria-label="Main" class="hidden items-center gap-7 text-[15px] md:flex">
+      <a href="/#playlists" class="text-muted hover:text-ink">24/7 playlists</a>
+      <a href="/#phone" class="text-muted hover:text-ink">Phone streaming</a>
+      <a href="/pricing" class="text-muted hover:text-ink">Pricing</a>
+      <a href="/login" class="text-muted hover:text-ink">Sign in</a>
+      <a href="/register" class="btn-primary h-10">Start free</a>
+    </nav>
+    <button data-menu-toggle aria-expanded="false" aria-controls="mobile-menu" class="grid h-10 w-10 place-items-center rounded md:hidden" aria-label="Menu">
+      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+  <nav id="mobile-menu" data-menu aria-label="Main" class="hidden border-t border-line px-4 pb-4 md:hidden">
+    <a href="/#playlists" class="block py-3">24/7 playlists</a>
+    <a href="/#phone" class="block py-3">Phone streaming</a>
+    <a href="/pricing" class="block py-3">Pricing</a>
+    <a href="/login" class="block py-3">Sign in</a>
+    <a href="/register" class="btn-primary mt-2 w-full">Start free</a>
+  </nav>
+</header>
+<main>
+  <section class="mx-auto max-w-6xl px-4 pb-16 pt-14 sm:px-6 md:pt-20">
+    <div class="max-w-3xl">
+      <h1 class="text-[40px] font-semibold leading-[1.05] tracking-[-0.03em] sm:text-6xl">Your channel never goes&nbsp;offline.</h1>
+      <p class="mt-6 max-w-2xl text-lg text-muted sm:text-xl">Upload your videos once and stay live on YouTube around the clock. Or go live from your phone, with overlays added in the cloud and a stream that keeps running when your signal drops. No PC, no YouTube sign-in: just your stream key.</p>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a href="/register" class="btn-primary">Start free</a>
+        <a href="/pricing" class="btn-secondary">See pricing</a>
+      </div>
+      <p class="mt-4 text-sm text-muted">Free plan: 10 hours a month at 720p. No card needed.</p>
+    </div>
+
+    <figure class="relative mt-14">
+      <div class="overflow-hidden rounded-xl border border-[#2d3648] bg-[#121722] shadow-[0_30px_80px_-30px_rgba(18,23,34,0.55)]">
+        <img src="/site/img/app-stream.webp" width="1280" height="800" alt="The AFK Live studio showing a live stream: now playing, health and destinations" class="block w-full" fetchpriority="high" />
+      </div>
+      <figcaption class="mt-3 text-sm text-muted">The stream page: what's playing, what's next, and whether every destination is healthy, at a glance.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="who" class="border-y border-line bg-panel">
+    <div class="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <h2 id="who" class="text-sm font-medium text-muted">Made for channels that should always be on</h2>
+      <ul class="mt-4 grid gap-x-8 gap-y-3 text-[15px] sm:grid-cols-2 lg:grid-cols-4">
+        <li><strong class="font-semibold">Lofi and music channels</strong><br /><span class="text-muted">A playlist that loops without gaps, day and night.</span></li>
+        <li><strong class="font-semibold">Temples and prayer broadcasts</strong><br /><span class="text-muted">Aarti and bhajans on a daily schedule, unattended.</span></li>
+        <li><strong class="font-semibold">Mobile gamers</strong><br /><span class="text-muted">BGMI or Free Fire from your phone, with real overlays.</span></li>
+        <li><strong class="font-semibold">Podcasts and reruns</strong><br /><span class="text-muted">Past episodes keep your channel live between new ones.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="playlists" class="mx-auto grid max-w-6xl items-center gap-10 px-4 py-20 sm:px-6 lg:grid-cols-2">
+    <div>
+      <h2 class="text-3xl font-semibold tracking-tight sm:text-4xl">Your videos, live around the clock</h2>
+      <p class="mt-4 text-lg text-muted">Upload once. AFK Live plays your playlist back to back with no gaps, loops it forever, and sends it to YouTube from our servers. Your laptop can be closed.</p>
+      <ul class="mt-6 space-y-3 text-[15px]">
+        <li><strong class="font-semibold">Change it while live.</strong> Reorder, add or skip videos; changes apply after the current video, so viewers never see a drop.</li>
+        <li><strong class="font-semibold">Music under everything.</strong> Add a music playlist under your videos or replace their sound.</li>
+        <li><strong class="font-semibold">On a schedule.</strong> Go live every morning at 6, weekdays only, or once for a premiere. We start and stop it.</li>
+        <li><strong class="font-semibold">Large files, no stress.</strong> 10 GB uploads go up in parts and pick up where they left off if your connection drops.</li>
+      </ul>
+    </div>
+    <img src="/site/img/app-home.webp" width="1280" height="560" loading="lazy" alt="All streams with their live state, uptime and what's playing" class="w-full rounded-xl border border-[#2d3648] shadow-[0_24px_60px_-30px_rgba(18,23,34,0.5)]" />
+  </section>
+
+  <section id="phone" class="bg-[#121722] text-[#e6eaf0]">
+    <div class="mx-auto grid max-w-6xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_auto]">
+      <div>
+        <h2 class="text-3xl font-semibold tracking-tight sm:text-4xl">Stream from your phone like you have a studio</h2>
+        <p class="mt-4 max-w-xl text-lg text-[#a3acbd]">Your phone sends one clean video to AFK Live. We add your logo, ticker, clock and scenes in the cloud, then send it to YouTube. Your battery and data only pay for the camera.</p>
+        <dl class="mt-8 grid gap-6 sm:grid-cols-2">
+          <div><dt class="font-semibold">Never drops</dt><dd class="mt-1 text-[#a3acbd]">Signal gone in a tunnel? Viewers see your Be right back scene with music, and you're back the moment your phone reconnects.</dd></div>
+          <div><dt class="font-semibold">Set up with a QR code</dt><dd class="mt-1 text-[#a3acbd]">Scan it into Larix, PRISM or Streamlabs on your phone. No typing server addresses.</dd></div>
+          <div><dt class="font-semibold">Switch scenes from anywhere</dt><dd class="mt-1 text-[#a3acbd]">Starting soon, Live, BRB, Ending: one tap from the remote on a second phone.</dd></div>
+          <div><dt class="font-semibold">No 50-subscriber wait</dt><dd class="mt-1 text-[#a3acbd]">YouTube's own app needs 50 subscribers to go live from a phone. Streaming through an encoder, as AFK Live does, doesn't.</dd></div>
+        </dl>
+      </div>
+      <img src="/site/img/app-mobile.webp" width="390" height="780" loading="lazy" alt="The stream page on a phone, showing the phone's connection and scene buttons" class="mx-auto w-64 rounded-[28px] border-[6px] border-[#2d3648] sm:w-72" />
+    </div>
+  </section>
+
+  <section aria-labelledby="steps" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+    <h2 id="steps" class="text-3xl font-semibold tracking-tight sm:text-4xl">Live in five minutes</h2>
+    <ol class="mt-10 grid gap-8 md:grid-cols-3">
+      <li><span class="tnum text-sm font-semibold text-accent">1</span><h3 class="mt-2 text-lg font-semibold">Choose what you stream</h3><p class="mt-1 text-muted">Your videos on repeat, or your phone's camera.</p></li>
+      <li><span class="tnum text-sm font-semibold text-accent">2</span><h3 class="mt-2 text-lg font-semibold">Add your content</h3><p class="mt-1 text-muted">Upload videos, or scan the QR code into your phone app.</p></li>
+      <li><span class="tnum text-sm font-semibold text-accent">3</span><h3 class="mt-2 text-lg font-semibold">Paste your YouTube stream key</h3><p class="mt-1 text-muted">From YouTube Studio's Go live page. Press Go live and you're on.</p></li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="reliability" class="border-y border-line bg-panel">
+    <div class="mx-auto grid max-w-6xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.4fr]">
+      <h2 id="reliability" class="text-3xl font-semibold tracking-tight sm:text-4xl">Built to stay up when nobody's watching it</h2>
+      <dl class="grid gap-8 sm:grid-cols-2">
+        <div><dt class="font-semibold">Automatic recovery</dt><dd class="mt-1 text-muted">If a server fails, another one picks up your stream within a minute. If YouTube drops the connection, we reconnect on our own.</dd></div>
+        <div><dt class="font-semibold">Alerts that matter</dt><dd class="mt-1 text-muted">An email and an in-app alert if a stream is down for more than a minute, and another when it's back. Not one every minute.</dd></div>
+        <div><dt class="font-semibold">Health in plain words</dt><dd class="mt-1 text-muted">Green, amber or red for picture, sound and each destination, with what it means and what to do.</dd></div>
+        <div><dt class="font-semibold">YouTube-ready quality</dt><dd class="mt-1 text-muted">Encoded to YouTube's recommended settings so your stream isn't flagged for low bitrate.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="pricing" aria-labelledby="pricing-title" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+    <h2 id="pricing-title" class="text-center text-3xl font-semibold tracking-tight sm:text-4xl">Simple pricing</h2>
+    <p class="mx-auto mt-3 max-w-xl text-center text-lg text-muted">Start free. Upgrade when you want 1080p, unlimited hours or more channels.</p>
+    <div class="mt-10">
+<div data-pricing>
+  <div class="flex flex-wrap items-center justify-center gap-3">
+    <div class="inline-flex rounded border border-line bg-panel p-0.5" role="group" aria-label="Billing">
+      <button data-cycle="MONTHLY" aria-pressed="true" class="h-9 rounded-sm px-4 text-sm aria-pressed:bg-raised aria-pressed:font-medium">Monthly</button>
+      <button data-cycle="YEARLY" aria-pressed="false" class="h-9 rounded-sm px-4 text-sm aria-pressed:bg-raised aria-pressed:font-medium">Yearly, 2 months free</button>
+    </div>
+    <div class="inline-flex rounded border border-line bg-panel p-0.5" role="group" aria-label="Currency">
+      <button data-currency="INR" aria-pressed="true" class="h-9 rounded-sm px-4 text-sm aria-pressed:bg-raised aria-pressed:font-medium">₹ INR</button>
+      <button data-currency="USD" aria-pressed="false" class="h-9 rounded-sm px-4 text-sm aria-pressed:bg-raised aria-pressed:font-medium">$ USD</button>
+    </div>
+  </div>
+  <ul data-plans aria-busy="true" class="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+<li class="flex flex-col rounded-lg border border-line bg-panel p-6">
+  <h3 class="text-lg font-semibold">Free</h3>
+  <p class="mt-1 text-sm text-muted">Try it with a real stream.</p>
+  <p class="mt-5"><span class="tnum text-4xl font-semibold tracking-tight">Free</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 stream at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 720p at 30 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>10 hours a month</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 destination per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>2 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Small AFK Live mark on stream</li></ul>
+  <a href="/register?plan=FREE" class="btn-secondary mt-6">Start free</a>
+</li>
+<li class="flex flex-col rounded-lg border border-accent bg-panel shadow-[0_0_0_1px_rgb(var(--accent))] p-6">
+  <h3 class="text-lg font-semibold">Creator</h3>
+  <p class="mt-1 text-sm text-muted">One channel, live around the clock.</p>
+  <p class="mt-5"><span class="tnum text-4xl font-semibold tracking-tight">₹499</span><span class="text-muted"> / month</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 stream at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 1080p at 30 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>2 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>25 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=ESSENTIALS" class="btn-primary mt-6">Start with Creator</a>
+</li>
+<li class="flex flex-col rounded-lg border border-line bg-panel p-6">
+  <h3 class="text-lg font-semibold">Pro</h3>
+  <p class="mt-1 text-sm text-muted">Several channels, or 60 fps gaming.</p>
+  <p class="mt-5"><span class="tnum text-4xl font-semibold tracking-tight">₹1,499</span><span class="text-muted"> / month</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>3 streams at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 1080p at 60 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>5 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>100 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=PRO" class="btn-secondary mt-6">Start with Pro</a>
+</li>
+<li class="flex flex-col rounded-lg border border-line bg-panel p-6">
+  <h3 class="text-lg font-semibold">Agency</h3>
+  <p class="mt-1 text-sm text-muted">Run streams for clients.</p>
+  <p class="mt-5"><span class="tnum text-4xl font-semibold tracking-tight">₹3,999</span><span class="text-muted"> / month</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>10 streams at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 4K at 60 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>5 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>500 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=AGENCY" class="btn-secondary mt-6">Start with Agency</a>
+</li>
+  </ul>
+  <p class="mt-6 text-center text-sm text-muted">Priced by how many streams run at the same time. Indian prices include GST, with a GST invoice for every payment. Pay by UPI or card.</p>
+</div>
+    </div>
+  </section>
+</main>
+<footer class="border-t border-line">
+  <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <p>© <span data-year>2026</span> AFK Live. Made in India for creators everywhere.</p>
+    <nav aria-label="Footer" class="flex flex-wrap gap-6">
+      <a href="/pricing" class="hover:text-ink">Pricing</a>
+      <a href="/terms" class="hover:text-ink">Terms</a>
+      <a href="/privacy" class="hover:text-ink">Privacy</a>
+      <a href="mailto:support@afklive.in" class="hover:text-ink">support@afklive.in</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

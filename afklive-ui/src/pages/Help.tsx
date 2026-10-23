@@ -11,7 +11,7 @@ const FAQ: [string, string][] = [
 export function Help() {
   return (
     <>
-      <PageHeader title="Help" description="Answers to the common questions. Stuck? Email support@afklive.com and we reply within a day." />
+      <PageHeader title="Help" description="Answers to the common questions. Stuck? Email support@afklive.in and we reply within a day." />
       <Panel>
         <dl className="divide-y divide-line">
           {FAQ.map(([q, a]) => (
