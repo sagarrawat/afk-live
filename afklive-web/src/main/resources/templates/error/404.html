@@ -2,30 +2,26 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Not Found - AFK Live</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; background: #f9fafb; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Page not found: AFK Live</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="/site/assets/site.css">
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" href="/site/brand/favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#10122A">
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
-
-    <div class="text-center max-w-lg">
-        <h1 class="text-9xl font-extrabold text-gray-200 tracking-tighter">404</h1>
-
-        <h2 class="text-3xl font-bold text-gray-900 mt-8 mb-4">Page Not Found</h2>
-        <p class="text-gray-500 mb-8 leading-relaxed">
-            The page you are looking for doesn't exist or has been moved.
-            <br>Start streaming or check your dashboard.
-        </p>
-
-        <a href="/" class="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition shadow-lg shadow-blue-600/20 transform hover:-translate-y-1">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-            Go Home
-        </a>
+<body class="night flex min-h-screen flex-col">
+<header class="mx-auto flex w-full max-w-6xl items-center px-4 py-5 sm:px-6">
+    <a href="/"><img src="/site/brand/logo-on-dark.svg" alt="AFK Live" width="111" height="30" class="h-[30px] w-auto"></a>
+</header>
+<main class="mx-auto flex w-full max-w-6xl flex-1 flex-col items-start justify-center px-4 pb-24 sm:px-6">
+    <img src="/site/brand/mark.svg" alt="" width="96" height="96" class="h-24 w-24 opacity-90">
+    <h1 class="mt-8 text-[44px] font-extrabold leading-none tracking-[-0.035em] sm:text-[64px]">This page is off air.</h1>
+    <p class="mt-5 max-w-lg text-lg text-muted">There's nothing at this address. It may have moved, or the link has a typo.</p>
+    <div class="mt-8 flex flex-wrap gap-3">
+        <a href="/" class="btn-primary h-12 px-7">Go to the homepage</a>
+        <a href="/studio" class="btn-secondary h-12 px-7">Open your streams</a>
     </div>
-
+</main>
 </body>
 </html>

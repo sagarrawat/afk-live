@@ -68,6 +68,11 @@ class AppShellTest extends PostgresIntegrationTest {
         mvc.perform(get("/for/lofi")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/for-lofi.html")); // MK-3
         mvc.perform(get("/for/../../etc")).andExpect(status().is4xxClientError());
         mvc.perform(get("/for/nope")).andExpect(status().isNotFound());
+        // A person gets the site's 404 page; an API caller still gets JSON.
+        mvc.perform(get("/for/nope").accept(MediaType.TEXT_HTML)).andExpect(status().isNotFound())
+                .andExpect(content().string(containsString("This page is off air.")));
+        mvc.perform(get("/api/streams/999999").with(user(email).roles("USER")).accept(MediaType.TEXT_HTML, MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound()).andExpect(content().string(containsString("\"message\"")));
         mvc.perform(get("/sitemap.xml")).andExpect(status().isOk()).andExpect(content().string(containsString("https://afklive.in/for/lofi")));
         mvc.perform(get("/robots.txt")).andExpect(status().isOk());
         mvc.perform(get("/").with(user(email).roles("USER")))

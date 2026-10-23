@@ -110,10 +110,12 @@ class BillingServiceTest extends PostgresIntegrationTest {
         assertThat(inr).extracting(BillingService.PlanView::id).containsExactly("FREE", "ESSENTIALS", "PRO", "AGENCY");
         assertThat(inr.get(0).monthlyLabel()).isEqualTo("Free");
         assertThat(inr.get(1).monthly()).isEqualTo(49_900);
-        assertThat(inr.get(1).monthlyLabel()).isEqualTo("₹499.00");
+        assertThat(inr.get(1).monthlyLabel()).isEqualTo("₹499");
         assertThat(inr.get(0).watermark()).isTrue();
         assertThat(inr.get(0).monthlyHours()).isEqualTo(10);
-        assertThat(billing.catalog("USD").get(1).monthlyLabel()).isEqualTo("$9.00");
+        assertThat(billing.catalog("USD").get(1).monthlyLabel()).isEqualTo("$9");
+        assertThat(BillingService.priceLabel(750, "USD")).isEqualTo("$7.50"); // cents kept when there are any
+        assertThat(BillingService.priceLabel(399_900, "INR")).isEqualTo("₹3,999");
     }
 
     @Test
