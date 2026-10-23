@@ -235,6 +235,18 @@ export interface MediaItem {
   previewUrl: string;
   usedBy: string[];
   inLiveUse: boolean;
+  /** ML-8: the creator's tags on this file, by name. */
+  tags?: TagRef[];
+}
+
+export interface TagRef {
+  id: number;
+  name: string;
+}
+
+/** ML-8: a tag with how many files carry it. */
+export interface MediaTag extends TagRef {
+  fileCount: number;
 }
 
 export interface Page<T> {

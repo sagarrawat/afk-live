@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { clock } from '@/lib/format';
 import { useMedia } from '@/lib/queries';
 import type { MediaItem } from '@/lib/types';
+import { TagChips, TagFilter } from './MediaTags';
 import { Badge, Button, Dialog, Empty, Input, Spinner } from './ui';
 
 export function MediaThumb({ item, className }: { item: Pick<MediaItem, 'thumbnailUrl' | 'type'>; className?: string }) {
@@ -42,8 +43,9 @@ export function MediaPicker({
   exclude?: number[];
 }) {
   const [q, setQ] = useState('');
+  const [tag, setTag] = useState('');
   const [picked, setPicked] = useState<Map<number, MediaItem>>(new Map());
-  const { data, isLoading } = useMedia({ q, type: type === 'VIDEO_OR_IMAGE' ? undefined : type, sort: 'date', size: 60 });
+  const { data, isLoading } = useMedia({ q, tag, type: type === 'VIDEO_OR_IMAGE' ? undefined : type, sort: 'date', size: 60 });
   const items = (data?.content ?? []).filter((m) => (type === 'VIDEO_OR_IMAGE' ? m.type !== 'AUDIO' : true) && m.status !== 'FAILED' && !exclude.includes(m.id));
   const toggle = (m: MediaItem) => {
     const next = new Map(multiple ? picked : []);
@@ -73,16 +75,23 @@ export function MediaPicker({
         </>
       }
     >
-      <div className="relative mb-4">
-        <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted" aria-hidden />
-        <Input aria-label="Search the library" placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <div className="relative min-w-[180px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted" aria-hidden />
+          <Input aria-label="Search the library" placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+        </div>
+        <TagFilter value={tag} onChange={setTag} className="w-full sm:w-44" />
       </div>
       {isLoading ? (
         <Spinner />
       ) : items.length === 0 ? (
-        <Empty title={q ? 'Nothing matches that search' : 'Nothing here yet'} action={<Link to="/studio/library" className="text-accent hover:underline">Upload to your library</Link>}>
-          {q ? 'Try another name.' : 'Upload files to your library first, then add them here.'}
-        </Empty>
+        q || tag ? (
+          <Empty title="Nothing matches">{q ? 'Try another name or tag.' : 'No files with that tag here.'}</Empty>
+        ) : (
+          <Empty title="Nothing here yet" action={<Link to="/studio/library" className="text-accent hover:underline">Upload to your library</Link>}>
+            Upload files to your library first, then add them here.
+          </Empty>
+        )
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {items.map((m) => {
@@ -107,6 +116,7 @@ export function MediaPicker({
                       <span className="tnum">{m.type === 'IMAGE' ? `${m.width ?? '?'}×${m.height ?? '?'}` : clock(m.durationSeconds)}</span>
                       <StatusBadge item={m} />
                     </span>
+                    <TagChips tags={m.tags} max={2} className="mt-1" />
                   </span>
                 </button>
               </li>
