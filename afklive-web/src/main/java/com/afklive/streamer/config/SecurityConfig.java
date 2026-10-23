@@ -32,11 +32,46 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+
+import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.function.Consumer;
+import java.util.HexFormat;
+import java.util.List;
 
 @Configuration
+@Slf4j
 public class SecurityConfig {
+
+    private final String rememberMeKey;
+    private final List<String> allowedOrigins;
+
+    public SecurityConfig(@Value("${app.security.remember-me-key:}") String rememberMeKey,
+                          @Value("${app.base-url:http://localhost:8080}") String baseUrl,
+                          @Value("${app.cors.allowed-origins:}") String extraOrigins) {
+        if (rememberMeKey == null || rememberMeKey.isBlank()) {
+            log.warn("REMEMBER_ME_KEY is not set; using a random key, so remember-me logins end on restart.");
+            byte[] random = new byte[32];
+            new SecureRandom().nextBytes(random);
+            this.rememberMeKey = HexFormat.of().formatHex(random);
+        } else {
+            this.rememberMeKey = rememberMeKey;
+        }
+        List<String> origins = new ArrayList<>();
+        origins.add(stripTrailingSlash(baseUrl));
+        Arrays.stream(extraOrigins.split(","))
+                .map(String::trim)
+                .filter(o -> !o.isEmpty())
+                .map(SecurityConfig::stripTrailingSlash)
+                .forEach(origins::add);
+        this.allowedOrigins = List.copyOf(origins);
+    }
+
+    private static String stripTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -54,18 +89,19 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/api/payment/callback", "/api/payment/initiate")
+                        .ignoringRequestMatchers("/api/payment/callback")
                 )
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.FORWARD, jakarta.servlet.DispatcherType.ERROR).permitAll()
                         // 1. PUBLIC: Landing page, assets
-                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/api/mock/**", "/error").permitAll()
+                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/pricing", "/features", "/css/**", "/js/**", "/api/user-info", "/api/pricing", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
-                        .requestMatchers("/api/payment/callback", "/api/payment/initiate").permitAll()
+                        // Server-to-server payment notification; verified by signature in the controller.
+                        .requestMatchers("/api/payment/callback").permitAll()
 
-                        // 2. ADMIN
-                        .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
+                        // 2. ADMIN (raw FFmpeg logs include every user's streams)
+                        .requestMatchers("/admin/**", "/api/admin/**", "/api/logs").hasRole("ADMIN")
 
                         // 3. PROTECTED: The Studio URL and internal index file
                         .requestMatchers("/studio", "/app.html", "/app").hasRole("USER")
@@ -80,7 +116,7 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .rememberMe(remember -> remember
-                        .key("afkLiveSecretKey123")
+                        .key(rememberMeKey)
                         .tokenValiditySeconds(86400 * 30) // 30 days
                         .userDetailsService(userDetailsService)
                 )
@@ -106,7 +142,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5174", "http://localhost:8080")); // Allow React Frontend & Self
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

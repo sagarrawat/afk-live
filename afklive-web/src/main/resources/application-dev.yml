@@ -14,3 +14,7 @@ app:
 logging:
   level:
     com.afklive: DEBUG
+
+server:
+  error:
+    include-message: always

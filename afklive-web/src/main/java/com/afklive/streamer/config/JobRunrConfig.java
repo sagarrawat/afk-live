@@ -9,6 +9,7 @@ import org.jobrunr.server.JobActivator;
 import org.jobrunr.storage.StorageProvider;
 import org.jobrunr.storage.sql.common.SqlStorageProviderFactory;
 import org.jobrunr.utils.mapper.jackson.JacksonJsonMapper;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -47,7 +48,9 @@ public class JobRunrConfig {
         return backgroundJobServer;
     }
 
+    /** Off by default: the dashboard has no authentication. Enable with JOBRUNR_DASHBOARD_ENABLED=true locally. */
     @Bean
+    @ConditionalOnProperty(name = "app.jobrunr.dashboard-enabled", havingValue = "true")
     public JobRunrDashboardWebServer jobRunrDashboardWebServer(StorageProvider storageProvider) {
         JobRunrDashboardWebServer dashboard = new JobRunrDashboardWebServer(storageProvider, new JacksonJsonMapper());
         dashboard.start();

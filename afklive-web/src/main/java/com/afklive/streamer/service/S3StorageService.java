@@ -56,15 +56,35 @@ public class S3StorageService implements FileStorageService {
     }
 
     public String uploadFile(InputStream inputStream, String originalFilename, long contentLength) {
-        String key = UUID.randomUUID().toString() + "_" + originalFilename;
+        String key = UUID.randomUUID().toString() + "_" + com.afklive.streamer.util.SafePaths.sanitizeFilename(originalFilename);
 
         PutObjectRequest putOb = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(key)
                 .build();
 
-        s3Client.putObject(putOb, RequestBody.fromInputStream(inputStream, contentLength));
-        return key;
+        if (contentLength >= 0) {
+            s3Client.putObject(putOb, RequestBody.fromInputStream(inputStream, contentLength));
+            return key;
+        }
+        // Unknown length (e.g. a zip entry): spool to a temp file first, since S3 needs the size up front.
+        Path temp = null;
+        try {
+            temp = java.nio.file.Files.createTempFile("upload-", ".tmp");
+            java.nio.file.Files.copy(inputStream, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            s3Client.putObject(putOb, RequestBody.fromFile(temp));
+            return key;
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to store file", e);
+        } finally {
+            if (temp != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(temp);
+                } catch (java.io.IOException ignored) {
+                    // best effort
+                }
+            }
+        }
     }
 
     public InputStream downloadFile(String key) {

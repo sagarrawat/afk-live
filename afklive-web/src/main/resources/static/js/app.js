@@ -1294,6 +1294,17 @@ function openPaymentModal(id, title, price) {
     document.getElementById('paymentModal').classList.remove('hidden');
 }
 async function processPayment() {
-    try { await apiFetch('/api/pricing/upgrade', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ planId: selectedPlanId }) }); window.location.reload(); } catch(e){}
+    // Plans change only after a verified payment: send the user to checkout.
+    try {
+        const res = await apiFetch('/api/payment/initiate', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ planId: selectedPlanId }) });
+        const data = await res.json();
+        if (res.ok && data.redirectUrl) {
+            window.location.href = data.redirectUrl;
+        } else if (typeof showToast === 'function') {
+            showToast(data.message || 'Could not start the payment', 'error');
+        }
+    } catch(e) {
+        if (typeof showToast === 'function') showToast('Network error', 'error');
+    }
 }
 

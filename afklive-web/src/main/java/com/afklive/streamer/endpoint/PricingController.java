@@ -93,39 +93,8 @@ public class PricingController {
         return (bytes / (1024 * 1024)) + " MB";
     }
 
-    @PostMapping("/pricing/upgrade")
-    public ResponseEntity<?> upgradePlan(@RequestBody Map<String, String> body, Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).build();
-
-        String email = SecurityUtils.getEmail(principal);
-        String planId = body.get("planId");
-        log.info("Upgrade request for user {} to plan {}", email, planId);
-
-        if (planId == null) return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
-
-        try {
-            PlanType plan = PlanType.valueOf(planId);
-            userService.updatePlan(email, plan);
-            log.info("Plan updated successfully for {}", email);
-
-            // Send email
-            try {
-                 User user = userService.getOrCreateUser(email);
-                 emailService.sendUpgradeEmail(user.getUsername(), plan.getDisplayName());
-            } catch(Exception ex) {
-                log.error("Failed to send upgrade email", ex);
-                // log error but don't fail upgrade
-            }
-
-            return ResponseEntity.ok(Map.of("success", true, "message", "Plan upgraded to " + plan.getDisplayName()));
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid plan ID provided: {}", planId);
-            return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
-        } catch (Exception e) {
-            log.error("Upgrade failed for user " + email, e);
-            return ResponseEntity.internalServerError().body(Map.of("message", "Upgrade failed: " + e.getMessage()));
-        }
-    }
+    // Plans change only through a verified payment (PaymentController callback) or an admin.
+    // The old POST /api/pricing/upgrade changed the plan without any payment and was removed.
 
     @PostMapping("/pricing/cancel")
     public ResponseEntity<?> cancelPlan(Principal principal) {

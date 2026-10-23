@@ -17,7 +17,6 @@ public class StreamSchedulerService {
 
     private final ScheduledStreamRepository repository;
     private final StreamService streamService;
-    private final StreamManagerService streamManager;
 
     // Run via JobRunr
     public void processScheduledStreams() {
@@ -33,16 +32,7 @@ public class StreamSchedulerService {
     private void startScheduledStream(ScheduledStream stream) {
         log.info("Starting scheduled stream ID: {} for user: {}", stream.getId(), stream.getUsername());
 
-        // 1. Check concurrent limits
-        if (!streamManager.tryStartStream(stream.getUsername())) {
-            log.warn("User {} reached max concurrent streams. Marking failed.", stream.getUsername());
-            stream.setStatus(ScheduledStream.StreamStatus.FAILED);
-            stream.setErrorMessage("Max concurrent streams reached");
-            repository.save(stream);
-            return;
-        }
-
-        // 2. Start Stream
+        // Plan limits (concurrent streams, quality) are enforced inside startStream.
         try {
             // We pass watermarkFile as null for now (not supported in scheduling yet unless we store path)
             // If watermark was needed, we'd need to store the path in DB or S3 key.
@@ -74,8 +64,6 @@ public class StreamSchedulerService {
             log.error("Failed to start scheduled stream {}", stream.getId(), e);
             stream.setStatus(ScheduledStream.StreamStatus.FAILED);
             stream.setErrorMessage(e.getMessage());
-            // Release lock if failed immediately
-            streamManager.endStream(stream.getUsername());
         } finally {
             repository.save(stream);
         }

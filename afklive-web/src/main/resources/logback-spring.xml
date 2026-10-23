@@ -42,9 +42,19 @@
         </format>
     </appender>
 
-    <root level="info">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
-        <appender-ref ref="LOKI"/>
-    </root>
+    <!-- Ship logs to Loki only when the "loki" profile is active (production), so local runs and
+         tests don't depend on a Loki server. Example: SPRING_PROFILES_ACTIVE=loki -->
+    <springProfile name="loki">
+        <root level="info">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="LOKI"/>
+        </root>
+    </springProfile>
+    <springProfile name="!loki">
+        <root level="info">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
 </configuration>
