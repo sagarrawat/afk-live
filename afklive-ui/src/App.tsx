@@ -12,6 +12,7 @@ import { Destinations } from './pages/Destinations';
 import { Help } from './pages/Help';
 import { Home } from './pages/Home';
 import { Library } from './pages/Library';
+import { Schedule } from './pages/Schedule';
 import { Settings } from './pages/Settings';
 import { Setup } from './pages/Setup';
 import { StreamPage } from './pages/StreamPage';
@@ -57,6 +58,7 @@ function Routed({ qc }: { qc: QueryClient }) {
         <Route path="/studio/setup" element={<Setup />} />
         <Route path="/studio/streams/:id" element={<StreamPage />} />
         <Route path="/studio/streams/:id/:tab" element={<StreamPage />} />
+        <Route path="/studio/schedule" element={<Schedule />} />
         <Route path="/studio/library" element={<Library />} />
         <Route path="/studio/destinations" element={<Destinations />} />
         <Route path="/studio/settings" element={<Settings />} />

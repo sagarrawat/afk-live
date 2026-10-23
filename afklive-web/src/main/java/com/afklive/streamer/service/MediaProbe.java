@@ -124,6 +124,49 @@ public class MediaProbe {
         return v <= -69 ? null : v;
     }
 
+    /**
+     * The length of a file whose header doesn't say (browser and screen recordings in WebM/MKV, some
+     * phone apps): reads it through once without decoding (stream copy, fast) and takes the last
+     * timestamp FFmpeg reports. 0 when it can't be measured.
+     */
+    public double measureDuration(String file) {
+        List<String> command = List.of(com.afklive.streamer.service.FFmpegCommandBuilder.ffmpegBinary(), "-hide_banner", "-nostdin",
+                "-i", file, "-map", "0", "-c", "copy", "-f", "null", "-");
+        Path err = null;
+        try {
+            err = java.nio.file.Files.createTempFile("duration-", ".log");
+            Process process = new ProcessBuilder(command).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(err.toFile()).start();
+            if (!process.waitFor(5, TimeUnit.MINUTES)) {
+                process.destroyForcibly();
+                return 0;
+            }
+            return process.exitValue() == 0 ? parseLastTime(java.nio.file.Files.readString(err)) : 0;
+        } catch (IOException e) {
+            return 0;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return 0;
+        } finally {
+            if (err != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(err);
+                } catch (IOException ignored) {
+                    // temp file
+                }
+            }
+        }
+    }
+
+    /** The last "time=HH:MM:SS.xx" in FFmpeg's progress output, in seconds. */
+    static double parseLastTime(String log) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("time=(\\d+):(\\d{2}):(\\d{2}(?:\\.\\d+)?)").matcher(log);
+        double last = 0;
+        while (m.find()) {
+            last = Integer.parseInt(m.group(1)) * 3600 + Integer.parseInt(m.group(2)) * 60 + Double.parseDouble(m.group(3));
+        }
+        return last;
+    }
+
     static MediaInfo parse(byte[] ffprobeJson) throws IOException {
         JsonNode root = JSON.readTree(ffprobeJson);
         JsonNode streams = root.path("streams");

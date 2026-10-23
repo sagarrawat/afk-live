@@ -105,7 +105,8 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             }
         }
 
-        // Standard Login
+        // Standard Login. ON-6: it starts without the second step done (AccountGateFilter asks for the code).
+        request.getSession().removeAttribute(AccountGate.VERIFIED);
         Optional<User> userOpt = userRepository.findByEmail(email);
         User user;
         if (userOpt.isPresent()) {

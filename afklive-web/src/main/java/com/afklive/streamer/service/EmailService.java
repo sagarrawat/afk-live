@@ -79,7 +79,9 @@ public class EmailService {
                "<tr><td style='background-color: #f4f5f7; padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee;'>" +
                    "&copy; AFK Live. Stay live while you're away.<br>" +
                    "<a href='" + baseUrl + "/privacy' style='color: #999; text-decoration: underline;'>Privacy Policy</a> | " +
-                   "<a href='" + baseUrl + "/terms' style='color: #999; text-decoration: underline;'>Terms of Service</a>" +
+                   "<a href='" + baseUrl + "/terms' style='color: #999; text-decoration: underline;'>Terms of Service</a> | " +
+                   // RE-7: the public status page.
+                   "<a href='" + baseUrl + "/status' style='color: #999; text-decoration: underline;'>Service status</a>" +
                "</td></tr>" +
 
                "</table>" + // End Main Container
@@ -116,6 +118,17 @@ public class EmailService {
                          "<p style='font-size: 14px; color: #888;'>Or copy this link:<br><a href='" + link + "' style='color: #21245C;'>" + link + "</a></p>";
         String html = createBaseHtml("Reset Password", content);
         sendEmail(to, "Reset your password - AFK Live", html);
+    }
+
+    /** ON-7: the account will be deleted on {@code when}; signing in offers to keep it until then. */
+    public void sendDeletionScheduledEmail(String to, String when) {
+        String content = "<p>You asked us to delete your AFK Live account. Your streams are stopped and the account is closed.</p>"
+                + "<p>We'll delete your streams, videos and settings on <strong>" + escape(when) + "</strong>.</p>"
+                + "<p>Changed your mind? Sign in before then and choose <strong>Keep my account</strong>.</p>"
+                + "<p style='margin-top: 30px; text-align: center;'><a href='" + escape(baseUrl + "/login") + "' style='background: #21245C; "
+                + "color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Sign in</a></p>"
+                + "<p style='font-size:13px;color:#999'>Didn't ask for this? Sign in now to keep your account, then change your password.</p>";
+        sendEmail(to, "Your AFK Live account will be deleted on " + when, createBaseHtml("Your account is scheduled for deletion", content));
     }
 
     public void sendWelcomeEmail(String to) {
@@ -165,7 +178,8 @@ public class EmailService {
         String content = "<p>" + escape(body) + "</p>"
                 + (link == null ? "" : "<p><a href='" + escape(baseUrl + link) + "' style='display:inline-block;background:#21245C;"
                 + "color:#fff;padding:10px 22px;border-radius:999px;text-decoration:none;font-weight:600'>Open AFK Live</a></p>")
-                + "<p style='font-size:13px;color:#999'>You can turn alert emails off in Settings.</p>";
+                + "<p style='font-size:13px;color:#999'>Is it just you? <a href='" + escape(baseUrl + "/status")
+                + "' style='color:#999'>Check AFK Live's status</a>. You can turn alert emails off in Settings.</p>";
         return sendEmail(to, subject, createBaseHtml(escape(title), content));
     }
 

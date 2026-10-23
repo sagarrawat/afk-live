@@ -97,6 +97,14 @@ public class BillingService {
                            long monthly, long yearly, String monthlyLabel, String yearlyLabel) {
     }
 
+    /** "₹1,499" or "$9": whole amounts without ".00"; "$7.50" keeps its cents. */
+    public static String priceLabel(long minor, String currency) {
+        String symbol = "USD".equalsIgnoreCase(currency) ? "$" : "₹";
+        String amount = minor % 100 == 0 ? String.format(java.util.Locale.ENGLISH, "%,d", minor / 100)
+                : String.format(java.util.Locale.ENGLISH, "%,.2f", minor / 100.0);
+        return symbol + amount;
+    }
+
     public List<PlanView> catalog(String currency) {
         String cur = "USD".equalsIgnoreCase(currency) ? "USD" : "INR";
         List<PlanView> out = new ArrayList<>();
@@ -106,8 +114,7 @@ public class BillingService {
             long y = c.price(cur, true);
             out.add(new PlanView(t.name(), c.getDisplayName(), c.getMaxActiveStreams(), c.getMaxResolution(), c.getMaxFps(),
                     c.getMaxStorageBytes(), c.getMonthlyHours(), c.isWatermark(), c.getMaxDestinations(), cur, m, y,
-                    m == 0 ? "Free" : InvoiceService.money(m, cur).replace("Rs. ", "₹"),
-                    y == 0 ? "Free" : InvoiceService.money(y, cur).replace("Rs. ", "₹")));
+                    m == 0 ? "Free" : priceLabel(m, cur), y == 0 ? "Free" : priceLabel(y, cur)));
         }
         return out;
     }

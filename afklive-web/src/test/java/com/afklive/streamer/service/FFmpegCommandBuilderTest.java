@@ -116,4 +116,21 @@ class FFmpegCommandBuilderTest {
         assertThat(FFmpegCommandBuilder.safeVolume("1[x];amovie=/etc/passwd")).isEqualTo("1.00");
         assertThat(FFmpegCommandBuilder.safeVolume(null)).isEqualTo("1.00");
     }
+
+    @Test
+    void aStillPictureStillGoesOutAtTheTargetBitrate() throws Exception {
+        // Found on production: a meeting recording (little motion) went out at ~0.4 Mbps against a 4 Mbps
+        // target, and YouTube Studio warned "lower than the recommended bitrate".
+        org.junit.jupiter.api.Assumptions.assumeTrue(new ProcessBuilder("ffmpeg", "-version").start().waitFor() == 0, "ffmpeg");
+        java.nio.file.Path out = java.nio.file.Files.createTempDirectory("cbr").resolve("out.ts");
+        java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of("ffmpeg", "-y", "-v", "error",
+                "-f", "lavfi", "-i", "color=c=gray:s=1280x720:r=30", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "6"));
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(720, 30));
+        cmd.addAll(java.util.List.of("-f", "mpegts", out.toString()));
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        String log = new String(p.getInputStream().readAllBytes());
+        assertThat(p.waitFor()).as(log).isZero();
+        double kbps = java.nio.file.Files.size(out) * 8 / 6.0 / 1000;
+        assertThat(kbps).as("output bitrate of a still picture").isGreaterThan(3000);
+    }
 }

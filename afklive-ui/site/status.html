@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Status: AFK Live</title>
+  <meta name="description" content="Is AFK Live working? The website, stream servers and phone streaming right now, and the history of past incidents." />
+  <link rel="canonical" href="https://afklive.in/status" />
+  <meta property="og:title" content="Status: AFK Live" />
+  <meta property="og:description" content="The website, stream servers and phone streaming right now, and past incidents." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://afklive.in/status" />
+<!-- include:head -->
+  <script type="module" src="./src/main.ts"></script>
+</head>
+<body>
+<!-- include:header -->
+<main class="mx-auto max-w-3xl px-4 pb-20 pt-14 sm:px-6" data-status aria-busy="true">
+  <h1 class="text-[44px] font-extrabold leading-none tracking-[-0.035em] sm:text-[56px]">Status</h1>
+  <section aria-live="polite" class="mt-8" data-status-summary>
+    <p class="text-muted">Checking…</p>
+  </section>
+  <section aria-label="Ongoing incidents" class="mt-8 hidden space-y-4" data-status-open>
+  </section>
+  <section aria-labelledby="parts" class="mt-10">
+    <h2 id="parts" class="sr-only">Parts of AFK Live</h2>
+    <ul class="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel" data-status-components></ul>
+  </section>
+  <section aria-labelledby="history" class="mt-14">
+    <h2 id="history" class="text-2xl font-semibold tracking-tight">Past incidents</h2>
+    <div class="mt-4 space-y-4" data-status-past></div>
+  </section>
+  <p class="mt-14 text-sm text-muted">Something wrong with only your stream? Its page in the studio shows what’s happening, or email <a href="mailto:support@afklive.in" class="underline">support@afklive.in</a>.</p>
+</main>
+<!-- include:footer -->
+</body>
+</html>

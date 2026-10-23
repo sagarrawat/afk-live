@@ -25,6 +25,8 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, 'site/index.html'),
         pricing: resolve(__dirname, 'site/pricing.html'),
+        // RE-7: the public status page (served at /status).
+        status: resolve(__dirname, 'site/status.html'),
         // MK-3: the use-case pages (site/use-cases.py).
         ...Object.fromEntries(
           readdirSync(resolve(__dirname, 'site'))

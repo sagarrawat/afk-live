@@ -35,8 +35,21 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(NotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(NotFoundException e) {
+    public Object handleNotFound(NotFoundException e, jakarta.servlet.http.HttpServletRequest request) {
+        if (isPage(request)) {
+            // A person opened a page that doesn't exist: show the site's 404 page, not JSON.
+            org.springframework.web.servlet.ModelAndView page = new org.springframework.web.servlet.ModelAndView("error/404");
+            page.setStatus(HttpStatus.NOT_FOUND);
+            return page;
+        }
         return body(HttpStatus.NOT_FOUND, userFacing(e.getMessage()));
+    }
+
+    /** A browser page load (not an API call). */
+    static boolean isPage(jakarta.servlet.http.HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        String accept = request.getHeader("Accept");
+        return !uri.startsWith("/api/") && !uri.startsWith("/internal/") && accept != null && accept.contains("text/html");
     }
 
     /** Malformed or mistyped JSON: the client's mistake, not a server error. */
@@ -48,6 +61,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<Map<String, Object>> handleConflict(ConflictException e) {
         return body(HttpStatus.CONFLICT, userFacing(e.getMessage()));
+    }
+
+    @ExceptionHandler(TooManyAttemptsException.class)
+    public ResponseEntity<Map<String, Object>> handleTooMany(TooManyAttemptsException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(Math.max(1, e.retryAfterSeconds())))
+                .body(Map.of("success", false, "message", userFacing(e.getMessage())));
     }
 
     @ExceptionHandler({IllegalStateException.class, IllegalArgumentException.class})

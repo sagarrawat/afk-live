@@ -1,3 +1,4 @@
+import { Activity } from 'lucide-react';
 import { PageHeader, Panel } from '@/components/ui';
 
 const FAQ: [string, string][] = [
@@ -12,6 +13,14 @@ export function Help() {
   return (
     <>
       <PageHeader title="Help" description="Answers to the common questions. Stuck? Email support@afklive.in and we reply within a day." />
+      {/* RE-7: is it just me, or AFK Live? */}
+      <a href="/status" className="mb-4 flex items-center gap-3 rounded-md border border-line bg-panel px-4 py-3 hover:border-muted/60">
+        <Activity className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">Service status</span>
+          <span className="block text-sm text-muted">Check whether AFK Live is working right now, and see past incidents.</span>
+        </span>
+      </a>
       <Panel>
         <dl className="divide-y divide-line">
           {FAQ.map(([q, a]) => (

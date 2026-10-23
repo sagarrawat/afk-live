@@ -15,6 +15,10 @@ import com.afklive.streamer.repository.AdminActionRepository;
 import com.afklive.streamer.repository.InvoiceRepository;
 import com.afklive.streamer.repository.LiveStreamRepository;
 import com.afklive.streamer.repository.PaymentAuditRepository;
+import com.afklive.streamer.repository.QuotaAuditRepository;
+import com.afklive.streamer.repository.WorkerStatusRepository;
+import com.afklive.streamer.model.WorkerStatus;
+import org.springframework.beans.factory.annotation.Value;
 import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.SubscriptionRepository;
 import com.afklive.streamer.repository.UsageRepository;
@@ -58,11 +62,24 @@ public class AdminService {
     private final StreamService streamService;
     private final AdminActionRepository audit;
     private final NotificationService notifications;
+    private final WorkerStatusRepository workerStatus;
+    private final QuotaAuditRepository quota;
+    private final int dailyQuota;
+    private final Double monthlyServerCost;
+    private final String serverCostCurrency;
 
     public AdminService(StreamJobRepository jobs, LiveStreamRepository streams, UserRepository users,
                         SubscriptionRepository subscriptions, PaymentAuditRepository payments, InvoiceRepository invoices,
                         UsageRepository usage, PlanService plans, StreamService streamService, AdminActionRepository audit,
-                        NotificationService notifications) {
+                        NotificationService notifications, WorkerStatusRepository workerStatus, QuotaAuditRepository quota,
+                        @Value("${app.youtube.daily-quota:10000}") int dailyQuota,
+                        @Value("${app.admin.monthly-server-cost:}") String monthlyServerCost,
+                        @Value("${app.admin.server-cost-currency:INR}") String serverCostCurrency) {
+        this.workerStatus = workerStatus;
+        this.quota = quota;
+        this.dailyQuota = dailyQuota;
+        this.monthlyServerCost = parseCost(monthlyServerCost);
+        this.serverCostCurrency = serverCostCurrency == null || serverCostCurrency.isBlank() ? "INR" : serverCostCurrency.trim().toUpperCase(Locale.ROOT);
         this.jobs = jobs;
         this.streams = streams;
         this.users = users;
@@ -126,24 +143,94 @@ public class AdminService {
         return StreamHealth.RED.equals(h) ? 0 : StreamHealth.AMBER.equals(h) ? 1 : 2;
     }
 
-    public record WorkerRow(String worker, int streams, long lastHeartbeatAgeSeconds, boolean healthy) {
+    /**
+     * A worker as admins see it (AD-1, AD-2): streams it runs, when it last reported, and the machine's
+     * CPU and memory from its own report (null for a worker that hasn't sent one).
+     */
+    public record WorkerRow(String worker, int streams, long lastHeartbeatAgeSeconds, boolean healthy, Integer capacity,
+                            Double cpuPercent, Long memoryUsedBytes, Long memoryTotalBytes) {
     }
 
-    /** Workers seen through the jobs they run (a worker with no streams isn't listed). */
+    /** Workers that reported in the last hour, plus any worker named on a live stream. */
     public List<WorkerRow> workers() {
         ZonedDateTime now = now();
         Map<String, List<StreamJob>> byWorker = new HashMap<>();
         for (StreamJob j : jobs.findAllByIsLiveTrue()) {
             byWorker.computeIfAbsent(j.getWorkerId() == null ? "(unassigned)" : j.getWorkerId(), k -> new ArrayList<>()).add(j);
         }
+        Map<String, WorkerStatus> reports = new HashMap<>();
+        for (WorkerStatus w : workerStatus.findAllByHeartbeatAtAfterOrderByWorkerIdAsc(now.minusHours(1))) {
+            reports.put(w.getWorkerId(), w);
+            byWorker.computeIfAbsent(w.getWorkerId(), k -> new ArrayList<>());
+        }
+        long timeout = StreamService.HEARTBEAT_TIMEOUT.getSeconds();
         List<WorkerRow> out = new ArrayList<>();
         byWorker.forEach((w, list) -> {
-            long newest = list.stream().filter(j -> j.getHeartbeatAt() != null)
+            long jobAge = list.stream().filter(j -> j.getHeartbeatAt() != null)
                     .mapToLong(j -> Duration.between(j.getHeartbeatAt(), now).getSeconds()).min().orElse(-1);
-            out.add(new WorkerRow(w, list.size(), newest, newest >= 0 && newest < StreamService.HEARTBEAT_TIMEOUT.getSeconds()));
+            WorkerStatus r = reports.get(w);
+            long reportAge = r == null ? -1 : Math.max(0, Duration.between(r.getHeartbeatAt(), now).getSeconds());
+            long newest = jobAge < 0 ? reportAge : reportAge < 0 ? jobAge : Math.min(jobAge, reportAge);
+            // Streams' heartbeats are the truth while it runs any; an idle worker counts by its own report.
+            boolean healthy = list.isEmpty() ? reportAge >= 0 && reportAge < timeout : jobAge >= 0 && jobAge < timeout;
+            out.add(new WorkerRow(w, list.size(), newest, healthy, r == null ? null : r.getCapacity(),
+                    r == null ? null : r.getCpuPercent(), r == null ? null : r.getMemoryUsedBytes(), r == null ? null : r.getMemoryTotalBytes()));
         });
         out.sort(Comparator.comparing(WorkerRow::worker));
         return out;
+    }
+
+    // ------------------------------------------------------------------ AD-2: cost per stream hour
+
+    /**
+     * Server cost per stream hour: the monthly server bill (APP_MONTHLY_SERVER_COST; unset means unknown)
+     * over the stream hours of the last 30 days, all accounts together. Null when either is missing.
+     */
+    public record CostView(Double monthlyServerCost, String currency, double streamHours30d, Double costPerStreamHour) {
+    }
+
+    public CostView cost() {
+        ZonedDateTime now = now();
+        double hours = Math.round(jobs.streamSecondsBetween(now.minusDays(30), now) / 36.0) / 100.0;
+        Double perHour = monthlyServerCost == null || hours <= 0 ? null : Math.round(monthlyServerCost / hours * 100.0) / 100.0;
+        return new CostView(monthlyServerCost, serverCostCurrency, hours, perHour);
+    }
+
+    static Double parseCost(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            double v = Double.parseDouble(raw.trim());
+            return v > 0 && Double.isFinite(v) ? v : null;
+        } catch (NumberFormatException e) {
+            log.warn("APP_MONTHLY_SERVER_COST isn't a number; cost per stream hour is off");
+            return null;
+        }
+    }
+
+    // ------------------------------------------------------------------ YT-4: YouTube API quota
+
+    public record QuotaApi(String api, long units) {
+    }
+
+    /** Units spent today against the project's daily quota; YouTube resets it at midnight Pacific time. */
+    public record QuotaView(int usedToday, int dailyLimit, int percent, ZonedDateTime resetsAt, List<QuotaApi> breakdown) {
+    }
+
+    public QuotaView quota() {
+        ZonedDateTime dayStart = ZonedDateTime.now(ZoneId.of("America/Los_Angeles")).truncatedTo(java.time.temporal.ChronoUnit.DAYS);
+        // quota_audit stores the server's local time (LocalDateTime.now()).
+        java.time.LocalDateTime since = dayStart.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+        Integer used = quota.sumCostSince(since);
+        int u = used == null ? 0 : used;
+        List<QuotaApi> breakdown = new ArrayList<>();
+        for (Object[] row : quota.getUsageBreakdown(since)) {
+            breakdown.add(new QuotaApi(String.valueOf(row[0]), row[1] == null ? 0 : ((Number) row[1]).longValue()));
+        }
+        breakdown.sort(Comparator.comparingLong(QuotaApi::units).reversed());
+        int pct = dailyQuota <= 0 ? 0 : (int) Math.min(999, Math.round(u * 100.0 / dailyQuota));
+        return new QuotaView(u, dailyQuota, pct, dayStart.plusDays(1).withZoneSameInstant(ZoneId.of("UTC")), breakdown);
     }
 
     @Transactional
@@ -365,7 +452,7 @@ public class AdminService {
 
     // ------------------------------------------------------------------ helpers
 
-    private void record(String admin, String action, String type, Object id, String detail) {
+    void record(String admin, String action, String type, Object id, String detail) {
         AdminAction a = new AdminAction();
         a.setAdminEmail(admin);
         a.setAction(action);

@@ -33,3 +33,9 @@ databaseChangeLog:
       file: db/changelog/changes/016-alert-preferences.sql
   - include:
       file: db/changelog/changes/017-schedule-playlists.sql
+  - include:
+      file: db/changelog/changes/019-media-tags.sql
+  - include:
+      file: db/changelog/changes/021-status.sql
+  - include:
+      file: db/changelog/changes/020-account-security.sql

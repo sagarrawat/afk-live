@@ -18,10 +18,7 @@ public class AuthController {
 
     private final UserService userService;
 
-    @GetMapping("/login")
-    public String login() {
-        return "login";
-    }
+    // GET /login is in SignInStepController (it also offers to keep an account scheduled for deletion).
 
     @GetMapping("/register")
     public String register() {

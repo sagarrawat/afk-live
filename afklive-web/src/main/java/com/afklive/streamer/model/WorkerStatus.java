@@ -1,0 +1,33 @@
+package com.afklive.streamer.model;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.ZonedDateTime;
+
+/** AD-2 / RE-7: what a stream worker last reported about itself (written only by the worker). */
+@Entity
+@Table(name = "stream_workers")
+@Data
+@NoArgsConstructor
+public class WorkerStatus {
+    @Id
+    @Column(name = "worker_id", length = 100)
+    private String workerId;
+    @Column(name = "started_at", nullable = false)
+    private ZonedDateTime startedAt;
+    @Column(name = "heartbeat_at", nullable = false)
+    private ZonedDateTime heartbeatAt;
+    private int streams;
+    private int capacity;
+    @Column(name = "cpu_percent")
+    private Double cpuPercent;
+    @Column(name = "memory_used_bytes")
+    private Long memoryUsedBytes;
+    @Column(name = "memory_total_bytes")
+    private Long memoryTotalBytes;
+}

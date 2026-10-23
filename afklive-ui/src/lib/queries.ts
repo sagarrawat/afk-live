@@ -5,12 +5,14 @@ import type { Uptime,
   BillingProfile,
   Destination,
   MediaItem,
+  MediaTag,
   Me,
   NotificationFeed,
   Page,
   PlanView,
   QualityOption,
   RunView,
+  ScheduleCalendar,
   StorageView,
   StreamSummary,
   StreamView,
@@ -29,10 +31,12 @@ export const keys = {
   media: (q: Record<string, unknown>) => ['media', q] as const,
   storage: ['media', 'storage'] as const,
   uploads: ['media', 'uploads'] as const,
+  tags: ['media', 'tags'] as const,
   notifications: ['notifications'] as const,
   billing: ['billing'] as const,
   plans: (currency: string) => ['plans', currency] as const,
   profile: ['billing', 'profile'] as const,
+  calendar: (from: string, days: number) => ['schedules', 'calendar', from, days] as const,
 };
 
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => get<Me>('/api/me'), staleTime: 60_000 });
@@ -60,6 +64,8 @@ export interface MediaQuery {
   q?: string;
   type?: string;
   status?: string;
+  /** a tag id, or 'none' for files without tags (ML-8) */
+  tag?: string;
   sort?: string;
   dir?: string;
   page?: number;
@@ -83,6 +89,8 @@ export const useMedia = (p: MediaQuery) =>
     refetchInterval: (q) => (q.state.data?.content.some((m) => m.status === 'PROCESSING') ? 4_000 : false),
   });
 
+export const useMediaTags = () => useQuery({ queryKey: keys.tags, queryFn: () => get<MediaTag[]>('/api/media/tags') });
+
 export const useStorage = () => useQuery({ queryKey: keys.storage, queryFn: () => get<StorageView>('/api/media/storage') });
 export const useOpenUploads = () => useQuery({ queryKey: keys.uploads, queryFn: () => get<UploadView[]>('/api/media/uploads') });
 
@@ -93,6 +101,15 @@ export const useBilling = () => useQuery({ queryKey: keys.billing, queryFn: () =
 export const usePlans = (currency: string) =>
   useQuery({ queryKey: keys.plans(currency), queryFn: () => get<PlanView[]>(`/api/billing/plans?currency=${currency}`), staleTime: 300_000 });
 export const useBillingProfile = () => useQuery({ queryKey: keys.profile, queryFn: () => get<BillingProfile>('/api/billing/profile') });
+
+/** SC-3: every scheduled run across streams, refreshed each minute (runs start and end on their own). */
+export const useScheduleCalendar = (from: string, days: number) =>
+  useQuery({
+    queryKey: keys.calendar(from, days),
+    queryFn: () => get<ScheduleCalendar>(`/api/schedules/calendar?from=${from}&days=${days}`),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+  });
 
 export function useInvalidate() {
   const qc = useQueryClient();

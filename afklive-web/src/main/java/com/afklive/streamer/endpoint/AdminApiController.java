@@ -2,6 +2,7 @@ package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.AdminAction;
 import com.afklive.streamer.service.AdminService;
+import com.afklive.streamer.service.StatusService;
 import com.afklive.streamer.util.SecurityUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,15 +18,17 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 
-/** Admin console API (AD-1, AD-3). {@code /api/admin/**} is ADMIN-only in SecurityConfig. */
+/** Admin console API (AD-1, AD-2, AD-3, YT-4, RE-7 incidents). {@code /api/admin/**} is ADMIN-only in SecurityConfig. */
 @RestController
 @RequestMapping("/api/admin")
 public class AdminApiController {
 
     private final AdminService admin;
+    private final StatusService status;
 
-    public AdminApiController(AdminService admin) {
+    public AdminApiController(AdminService admin, StatusService status) {
         this.admin = admin;
+        this.status = status;
     }
 
     public record Reason(String reason) {
@@ -106,5 +109,40 @@ public class AdminApiController {
     @GetMapping("/audit")
     public Page<AdminAction> audit(@RequestParam(defaultValue = "0") int page) {
         return admin.auditLog(page);
+    }
+
+    /** YT-4: YouTube API units spent today against the daily quota. */
+    @GetMapping("/quota")
+    public AdminService.QuotaView quota() {
+        return admin.quota();
+    }
+
+    /** AD-2: server cost per stream hour over the last 30 days. */
+    @GetMapping("/cost")
+    public AdminService.CostView cost() {
+        return admin.cost();
+    }
+
+    // ------------------------------------------------------------------ RE-7: status page incidents
+
+    @GetMapping("/status/incidents")
+    public List<StatusService.IncidentWithAuthor> incidents() {
+        return status.incidentList();
+    }
+
+    public record NewIncident(String title, String status, String message) {
+    }
+
+    @PostMapping("/status/incidents")
+    public StatusService.Incident openIncident(@RequestBody NewIncident body, Principal p) {
+        return status.open(SecurityUtils.getEmail(p), body.title(), body.status(), body.message());
+    }
+
+    public record IncidentUpdate(String status, String message) {
+    }
+
+    @PostMapping("/status/incidents/{id}/updates")
+    public StatusService.Incident updateIncident(@PathVariable Long id, @RequestBody IncidentUpdate body, Principal p) {
+        return status.update(SecurityUtils.getEmail(p), id, body.status(), body.message());
     }
 }

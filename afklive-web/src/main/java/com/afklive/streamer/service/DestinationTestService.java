@@ -172,13 +172,15 @@ public class DestinationTestService {
     static List<String> ffmpegTest(String destination) {
         String url = FFmpegCommandBuilder.destinationUrl(destination);
         return List.of(FFmpegCommandBuilder.ffmpegBinary(), "-hide_banner", "-loglevel", "error",
-                "-rw_timeout", "10000000", // give up on a server that stops answering (10 s)
                 "-re", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30",
                 "-f", "lavfi", "-i", "sine=f=440:r=44100",
                 "-t", String.valueOf(TEST_SECONDS),
                 "-c:v", "libx264", "-preset", "veryfast", "-b:v", "3000k", "-maxrate", "3000k", "-bufsize", "6000k",
                 "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+                // An output option (placed before an input it broke every test: "Option rw_timeout not found"):
+                // give up on a server that stops answering (10 s).
+                "-rw_timeout", "10000000",
                 "-f", FFmpegCommandBuilder.formatFor(url), url);
     }
 

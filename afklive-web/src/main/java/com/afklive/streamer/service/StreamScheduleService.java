@@ -306,6 +306,38 @@ public class StreamScheduleService {
         return null;
     }
 
+    /**
+     * SC-3: every occurrence that overlaps [{@code from}, {@code to}), in start order. Recurring
+     * schedules look at one day per day in the range (plus the day before, for overnight windows),
+     * so the work is bounded by the length of the range. A one-time schedule without an end counts
+     * from its start.
+     */
+    public static List<Window> windowsBetween(StreamSchedule sc, ZonedDateTime from, ZonedDateTime to) {
+        if (!to.isAfter(from)) {
+            return List.of();
+        }
+        if (sc.getKind() == StreamSchedule.Kind.ONCE) {
+            ZonedDateTime start = sc.getStartAt();
+            if (start == null || !start.isBefore(to)) {
+                return List.of();
+            }
+            ZonedDateTime end = sc.getEndAt();
+            boolean overlaps = end == null ? !start.isBefore(from) : end.isAfter(from);
+            return overlaps ? List.of(new Window(start.withZoneSameInstant(zoneOf(sc)).toLocalDate(), start, end)) : List.of();
+        }
+        ZoneId zone = zoneOf(sc);
+        LocalDate first = from.withZoneSameInstant(zone).toLocalDate().minusDays(1);
+        LocalDate last = to.withZoneSameInstant(zone).toLocalDate();
+        List<Window> out = new ArrayList<>();
+        for (LocalDate d = first; !d.isAfter(last); d = d.plusDays(1)) {
+            Window w = windowOn(sc, d, zone);
+            if (w != null && w.start().isBefore(to) && w.end().isAfter(from)) {
+                out.add(w);
+            }
+        }
+        return out;
+    }
+
     private static Window windowOn(StreamSchedule sc, LocalDate date, ZoneId zone) {
         if (sc.getStartTime() == null || sc.getEndTime() == null) {
             return null;
@@ -352,8 +384,8 @@ public class StreamScheduleService {
      */
     private void startOccurrence(StreamSchedule sc, Window w, ZonedDateTime now) {
         Optional<LiveStream> stream = streams.findById(sc.getStreamId());
-        if (stream.isEmpty()) {
-            return;
+        if (stream.isEmpty() || stream.get().getUser().getDeletionScheduledFor() != null) {
+            return; // ON-7: closed accounts don't start on schedule (nothing is claimed, so keeping the account resumes)
         }
         String email = stream.get().getUser().getEmail();
         try {
