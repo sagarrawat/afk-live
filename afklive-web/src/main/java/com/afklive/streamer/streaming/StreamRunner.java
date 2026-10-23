@@ -64,6 +64,14 @@ public final class StreamRunner {
         default void ended(Process process) {
         }
 
+        /**
+         * Seamless mode: a normal exit means "launch me again from where I got to" (an endless playlist
+         * whose scheduled list ran out), not the end of the stream.
+         */
+        default boolean endless() {
+            return false;
+        }
+
         /** Why the program ended when the encoder exits normally (null: "Playlist finished"). */
         default String finishReason() {
             return null;
@@ -458,6 +466,11 @@ public final class StreamRunner {
                 }
                 if (stopping.get()) {
                     break;
+                }
+                if (code == 0 && exited.launcher.endless()) {
+                    lastExited = exited;
+                    stitcher.ended(exited.generation);
+                    continue; // relaunched straight away; the stitcher joins the two seamlessly
                 }
                 if (code == 0) {
                     String why = exited.launcher.finishReason();

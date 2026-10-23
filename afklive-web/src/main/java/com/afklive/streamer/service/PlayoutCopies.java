@@ -365,7 +365,7 @@ public class PlayoutCopies {
      * stream and can hand over to each other mid-stream. A file without sound gets silence, so every
      * copy has the same tracks. MPEG-TS, like the stream itself.
      */
-    static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
+    public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
                                        double gainDb, boolean hasAudio) {
         com.afklive.streamer.streaming.studio.Canvas canvas = new com.afklive.streamer.streaming.studio.Canvas(canvasWidth, canvasHeight, fps, 44100);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit parsed = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
