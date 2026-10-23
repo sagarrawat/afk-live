@@ -160,6 +160,33 @@
   }
 }
 
+/* Help articles (site/help.py): steps people follow with another window open. */
+.help-article h2 {
+  @apply mt-10 scroll-mt-20 text-xl font-bold tracking-tight;
+}
+.help-article p {
+  @apply mt-3 leading-7 text-ink/85;
+}
+.help-article ol,
+.help-article ul {
+  @apply mt-3 space-y-2.5 pl-6 leading-7 text-ink/85;
+}
+.help-article ol {
+  @apply list-decimal;
+}
+.help-article ul {
+  @apply list-disc;
+}
+.help-article li::marker {
+  @apply font-semibold text-muted;
+}
+.help-article a {
+  @apply text-accent underline underline-offset-2;
+}
+.help-article code {
+  @apply break-all rounded bg-raised px-1.5 py-0.5 text-[0.9em];
+}
+
 /* Legal pages (site/legal.py): readable long text. */
 .legal h2 {
   @apply mt-10 text-xl font-bold tracking-tight;

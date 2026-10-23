@@ -35,6 +35,16 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
 }
 
+/** A button's look, for links that act as buttons (e.g. "Open YouTube Studio"). */
+export function buttonClass(variant: Variant = 'secondary', size: 'sm' | 'md' = 'md', className?: string) {
+  return clsx(
+    'inline-flex items-center justify-center gap-2 rounded font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap',
+    size === 'sm' ? 'h-8 px-3 text-sm' : 'h-10 px-4',
+    variants[variant],
+    className,
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'secondary', size = 'md', busy, icon, className, children, disabled, ...rest },
   ref,
@@ -42,12 +52,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <button
       ref={ref}
-      className={clsx(
-        'inline-flex items-center justify-center gap-2 rounded font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap',
-        size === 'sm' ? 'h-8 px-3 text-sm' : 'h-10 px-4',
-        variants[variant],
-        className,
-      )}
+      className={buttonClass(variant, size, className)}
       disabled={disabled || busy}
       {...rest}
     >

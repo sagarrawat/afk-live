@@ -1125,7 +1125,7 @@ public class LiveStreamService {
         return list.stream().map(i -> {
             MediaAsset m = i.getMedia();
             return new MediaRef(m.getId(), m.getTitle(), m.getDurationSeconds(), m.getWidth(), m.getHeight(),
-                    m.getContentType().name(), m.getStatus().name(), i.getFit());
+                    m.getContentType().name(), m.getStatus().name(), i.getFit(), m.getFps());
         }).toList();
     }
 

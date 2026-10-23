@@ -8,6 +8,7 @@ import { clock, duration } from '@/lib/format';
 import type { MediaRef, StreamView } from '@/lib/types';
 import { SortableList } from './SortableList';
 import { useStreamUpdate } from './useStreamUpdate';
+import { resetVerticalHint, ShapeNotes, VerticalHint } from './VerticalHint';
 
 /** PL-1..PL-4: what plays, in what order, how many times. Changes apply live between videos. */
 export function PlaylistTab({ stream: s }: { stream: StreamView }) {
@@ -18,6 +19,7 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
   const source = kind === 'playlist' ? s.playlist : s.music;
   const [items, setItems] = useState<MediaRef[]>(source);
   const [picking, setPicking] = useState(false);
+  const [hintKey, setHintKey] = useState(0);
   const { busy, update } = useStreamUpdate(s.id);
   useEffect(() => setItems(source), [source]);
   const dirty = items.map((i) => i.id).join(',') !== source.map((i) => i.id).join(',');
@@ -29,6 +31,8 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
   const order = kind === 'playlist' ? s.playbackOrder : s.musicOrder;
   return (
     <div className="space-y-6">
+      {kind === 'playlist' && <VerticalHint key={hintKey} stream={s} />}
+      {kind === 'playlist' && <ShapeNotes stream={s} />}
       <Panel
         title={kind === 'playlist' ? 'Videos' : 'Music'}
         pad={false}
@@ -129,8 +133,13 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
         onPick={(picked) => {
           const next = [
             ...items,
-            ...picked.map((p) => ({ id: p.id, title: p.title, durationSeconds: p.durationSeconds, width: p.width, height: p.height, contentType: p.type, status: p.status })),
+            ...picked.map((p) => ({ id: p.id, title: p.title, durationSeconds: p.durationSeconds, width: p.width, height: p.height, contentType: p.type, status: p.status, fps: p.fps })),
           ];
+          if (kind === 'playlist' && items.length === 0) {
+            // ST-1: the first videos decide the shape; offer Vertical again if they're mostly vertical.
+            resetVerticalHint(s.id);
+            setHintKey((k) => k + 1);
+          }
           setItems(next);
           save(next);
         }}

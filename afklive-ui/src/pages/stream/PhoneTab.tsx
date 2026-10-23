@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CopyField } from '@/components/Copy';
+import { HelpLink } from '@/components/HelpLink';
+import { HELP } from '@/lib/help';
 import { Button, Dialog, ErrorNote, Field, Input, Panel, Segmented, Spinner, Toggle } from '@/components/ui';
 import { get, patch, post } from '@/lib/api';
 import { dateTime } from '@/lib/format';
@@ -37,7 +39,9 @@ export function PhoneTab({ stream: s }: { stream: StreamView }) {
             { value: 'srt', label: 'Other (SRT)' },
           ]}
         />
-        <p className="mt-4 max-w-prose">{d.guides[app]}</p>
+        <p className="mt-4 max-w-prose">
+          {d.guides[app]} <HelpLink to={HELP.phone}>Step by step</HelpLink>
+        </p>
         <div className="mt-5 flex flex-col gap-6 sm:flex-row">
           <img
             src={`/api/streams/${s.id}/ingest/qr.png?type=${qrType}&v=${qrVersion}`}

@@ -1,15 +1,20 @@
+import { useQueries } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { ListVideo, Smartphone, Upload as UploadIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { destinationUrl } from '@/components/AddDestination';
+import { destinationUrl, readKey } from '@/components/AddDestination';
+import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { MediaPicker } from '@/components/MediaPicker';
 import { GoLiveButton } from '@/components/live-actions';
-import { Button, Field, Input, Panel, useAction } from '@/components/ui';
-import { patch, post, put } from '@/lib/api';
+import { HelpLink } from '@/components/HelpLink';
+import { Button, Field, Input, Panel, Segmented, useAction } from '@/components/ui';
+import { get, patch, post, put } from '@/lib/api';
+import { HELP, YOUTUBE_STUDIO_LIVE } from '@/lib/help';
+import { fitNotes, frameRateNote, suggestedShape, VERTICAL_ON_YOUTUBE, type Orientation } from '@/lib/shape';
 import { browserTimeZone } from '@/lib/format';
 import { keys, useInvalidate, useMe, useStream } from '@/lib/queries';
-import type { Destination, StreamView } from '@/lib/types';
+import type { Destination, MediaItem, StreamView } from '@/lib/types';
 import { useUploads } from '@/lib/uploads-context';
 import { PhoneTab } from './stream/PhoneTab';
 
@@ -93,13 +98,84 @@ function Choice({ icon, title, children, onClick, disabled }: { icon: React.Reac
   );
 }
 
+/** Fresh uploads, re-read until they've been checked (probing gives their size and frame rate). */
+function useUploadedMedia(ids: number[]): MediaItem[] {
+  const results = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: ['media', 'item', id],
+      queryFn: () => get<MediaItem>(`/api/media/${id}`),
+      refetchInterval: (q: { state: { data?: MediaItem } }) => (q.state.data?.status === 'PROCESSING' ? 4_000 : false),
+    })),
+  });
+  return results.flatMap((r) => (r.data ? [r.data] : []));
+}
+
+/**
+ * ST-1: the stream's shape, preselected from the videos (Vertical when most are vertical), with what
+ * YouTube does with vertical lives, how videos of the other shape come out, and 60 fps clips.
+ */
+export function ShapeChoice({
+  videos,
+  value,
+  suggested,
+  onChange,
+  fit,
+  fps,
+  planMaxFps,
+  checking = false,
+}: {
+  videos: Parameters<typeof fitNotes>[0];
+  value: Orientation;
+  suggested: Orientation | null;
+  onChange: (v: Orientation) => void;
+  fit: StreamView['fit'];
+  fps: number;
+  planMaxFps?: number;
+  /** Videos still being checked: their shape isn't known yet. */
+  checking?: boolean;
+}) {
+  if (!suggested) return checking ? <p className="mt-4 text-sm text-muted">Checking your videos. We'll suggest the stream's shape in a moment.</p> : null;
+  const notes = [...fitNotes(videos, value, fit), frameRateNote(videos, fps, planMaxFps)].filter((n): n is string => !!n);
+  return (
+    <div className="mt-5 rounded-md border border-line p-4">
+      <p className="mb-2 text-sm font-medium">Stream shape</p>
+      <Segmented
+        label="Stream shape"
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: 'LANDSCAPE', label: 'Landscape 16:9' },
+          { value: 'VERTICAL', label: 'Vertical 9:16' },
+        ]}
+      />
+      {suggested === 'VERTICAL' && (
+        <p className="mt-3 text-sm">
+          Most of your videos are vertical, so we picked Vertical 9:16. <span className="text-muted">{VERTICAL_ON_YOUTUBE}</span>
+        </p>
+      )}
+      {notes.map((n) => (
+        <p key={n} className="mt-2 text-sm text-muted">
+          {n}
+        </p>
+      ))}
+      <p className="mt-2 text-sm">
+        <HelpLink to={HELP.shape}>Vertical or landscape?</HelpLink>
+      </p>
+    </div>
+  );
+}
+
 function Content({ streamId, onNext }: { streamId: number; onNext: () => void }) {
   const { data: s } = useStream(streamId);
+  const { data: me } = useMe();
   const uploads = useUploads();
   const input = useRef<HTMLInputElement>(null);
   const [picking, setPicking] = useState(false);
+  const [shape, setShape] = useState<Orientation | null>(null);
   const { busy, run } = useAction();
   const invalidate = useInvalidate();
+  const uploadedIds = uploads.entries.flatMap((e) => (e.progress.state === 'done' && e.progress.media ? [e.progress.media.id] : []));
+  const uploaded = useUploadedMedia(uploadedIds);
   if (!s) return null;
   if (s.source === 'PHONE') {
     return (
@@ -116,6 +192,9 @@ function Content({ streamId, onNext }: { streamId: number; onNext: () => void })
   const mine = uploads.entries.filter((e) => e.progress.state === 'done' && e.progress.media).map((e) => e.progress.media!);
   const ids = Array.from(new Set([...s.playlist.map((p) => p.id), ...mine.map((m) => m.id)]));
   const uploading = uploads.entries.some((e) => e.progress.state === 'uploading' || e.progress.state === 'finishing');
+  const videos = [...s.playlist, ...uploaded.filter((m) => !s.playlist.some((p) => p.id === m.id))];
+  const suggested = suggestedShape(videos);
+  const chosen = shape ?? suggested ?? s.orientation;
   return (
     <Panel title="Add your videos">
       <p className="text-muted">Upload a few videos, or choose ones already in your library. They play back to back and repeat.</p>
@@ -137,13 +216,18 @@ function Content({ streamId, onNext }: { streamId: number; onNext: () => void })
         </ul>
       )}
       {s.playlist.length > 0 && <p className="mt-4 text-sm">{s.playlist.length} video{s.playlist.length === 1 ? '' : 's'} in the playlist.</p>}
+      <ShapeChoice videos={videos} value={chosen} suggested={suggested} onChange={setShape} fit={s.fit ?? 'BLUR'} fps={s.fps} planMaxFps={me?.plan.maxFps} checking={uploaded.some((m) => m.status === 'PROCESSING')} />
       <div className="mt-6 flex justify-end">
         <Button
           variant="primary"
           busy={busy}
           disabled={uploading || ids.length === 0}
           onClick={async () => {
-            if (await run(() => put(`/api/streams/${s.id}/playlist`, { mediaIds: ids }))) {
+            const saved = await run(async () => {
+              if (chosen !== s.orientation) await patch(`/api/streams/${s.id}`, { orientation: chosen });
+              await put(`/api/streams/${s.id}/playlist`, { mediaIds: ids });
+            });
+            if (saved) {
               await invalidate([...keys.stream(s.id)]);
               onNext();
             }
@@ -167,17 +251,20 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
   const { data: s } = useStream(streamId);
   const { data: me } = useMe();
   const [key, setKey] = useState('');
-  const [added, setAdded] = useState(false);
+  const [added, setAdded] = useState<Destination | null>(null);
   const { busy, run } = useAction();
+  const { tests, test } = useDestinationTests();
   const invalidate = useInvalidate();
+  const { problem } = readKey('YOUTUBE', key);
   if (!s) return null;
   const save = () =>
     run(async () => {
       const d = await post<Destination>('/api/destinations', { name: 'YouTube', key: destinationUrl('YOUTUBE', key), type: 'RTMP', selected: true });
       await put(`/api/streams/${s.id}/destinations`, [{ destinationId: d.id, enabled: true }]);
       await invalidate([...keys.stream(s.id)], [...keys.destinations]);
-      setAdded(true);
-    }, 'YouTube connected.');
+      setAdded(d);
+      void test(d); // MS-6: check the key now, without holding up the next step
+    }, 'YouTube stream key saved.');
   return (
     <Panel title="Send it to YouTube">
       {!added ? (
@@ -185,23 +272,26 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
           <ol className="list-decimal space-y-1 pl-5 text-muted">
             <li>
               Open{' '}
-              <a href="https://studio.youtube.com/channel/UC/livestreaming" target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              <a href={YOUTUBE_STUDIO_LIVE} target="_blank" rel="noreferrer" className="text-accent hover:underline">
                 YouTube Studio's live dashboard
               </a>{' '}
               and choose Stream.
             </li>
             <li>Copy the stream key and paste it here. No Google sign-in needed.</li>
           </ol>
+          <p className="mt-2 text-sm">
+            <HelpLink to={HELP.streamKey}>Can't find it? Step by step, with the usual mix-ups</HelpLink>
+          </p>
           <div className="mt-4">
-            <Field label="YouTube stream key" htmlFor="yt-key">
-              <Input id="yt-key" value={key} autoComplete="off" spellCheck={false} placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" onChange={(e) => setKey(e.target.value)} />
+            <Field label="YouTube stream key" htmlFor="yt-key" error={problem}>
+              <Input id="yt-key" value={key} autoComplete="off" spellCheck={false} aria-invalid={!!problem} placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" onChange={(e) => setKey(e.target.value)} />
             </Field>
           </div>
           <div className="mt-6 flex flex-wrap justify-between gap-2">
             <Button variant="ghost" onClick={() => onFinish(`/studio/streams/${s.id}/destinations`)}>
               Use another platform
             </Button>
-            <Button variant="primary" busy={busy} disabled={!key.trim()} onClick={save}>
+            <Button variant="primary" busy={busy} disabled={!key.trim() || !!problem} onClick={save}>
               Connect YouTube
             </Button>
           </div>
@@ -213,6 +303,7 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
             {s.source === 'PHONE' ? 'Press Go live, then start streaming in your phone app. Until your phone connects, viewers see your Starting soon scene.' : 'Press Go live. Your playlist is usually on YouTube within 15 seconds.'}
             {me?.plan.id === 'FREE' && ' The Free plan includes 10 hours a month at 720p.'}
           </p>
+          <TestNote state={tests[added.id]} platform="YOUTUBE" className="mt-3" />
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <GoLiveButton stream={s} />
             <Button variant="ghost" onClick={() => onFinish(`/studio/streams/${s.id}`)}>

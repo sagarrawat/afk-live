@@ -20,6 +20,10 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     @Query("SELECT count(j) FROM StreamJob j WHERE j.user.email = :email AND j.isLive = true")
     long countByUserEmailAndIsLiveTrue(String email);
 
+    /** GL-6: every go-live is a job, so this is how many times the account has gone live (1 during the first). */
+    @Query("SELECT count(j) FROM StreamJob j WHERE j.user.id = :userId")
+    long countGoLives(@org.springframework.data.repository.query.Param("userId") Long userId);
+
     // Admin: Find ALL live jobs
     @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true")
     List<StreamJob> findAllByIsLiveTrue();
