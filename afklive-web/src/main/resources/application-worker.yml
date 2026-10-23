@@ -1,8 +1,9 @@
-# Stream worker process: SPRING_PROFILES_ACTIVE=worker (plus "loki" in production).
-# Runs streams only: no web server, no billing timers. Shares the database with the web app.
-spring:
-  main:
-    web-application-type: none
+# Stream worker process: SPRING_PROFILES_ACTIVE=worker. Runs streams only (no billing or schedule
+# timers). It shares the database with the web app. It keeps a small web server on localhost only,
+# because the app's security and OAuth configuration need a web context; nothing is served from it.
+server:
+  address: 127.0.0.1
+  port: ${WORKER_HTTP_PORT:8081}
 
 app:
   streaming:
