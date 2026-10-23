@@ -34,6 +34,15 @@ class MediaCacheTest {
         @Override public org.springframework.core.io.Resource loadFileAsResource(String key) { return null; }
         @Override public void deleteFile(String key) { }
         @Override public Optional<String> generatePresignedUrl(String key) { return Optional.empty(); }
+        @Override public String newKey(String filename) { return filename; }
+        @Override public String beginMultipart(String key) { throw new UnsupportedOperationException(); }
+        @Override public Optional<String> presignPart(String key, String id, int n, long len) { return Optional.empty(); }
+        @Override public String writePart(String key, String id, int n, InputStream in, long len) { throw new UnsupportedOperationException(); }
+        @Override public java.util.List<Part> listParts(String key, String id) { return java.util.List.of(); }
+        @Override public void completeMultipart(String key, String id, java.util.List<Part> parts) { }
+        @Override public void abortMultipart(String key, String id) { }
+        @Override public String readLocation(String key) { return key; }
+        @Override public long size(String key) { return 1024; }
     }
 
     @Test

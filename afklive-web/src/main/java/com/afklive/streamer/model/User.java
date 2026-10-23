@@ -23,6 +23,8 @@ public class User {
     @Enumerated(EnumType.STRING)
     private PlanType planType = PlanType.FREE;
 
+    /** Changed only by atomic updates (UserRepository.reserveStorage / addStorage), never by saving the entity. */
+    @Column(name = "used_storage_bytes", insertable = false, updatable = false)
     private long usedStorageBytes = 0;
 
     private String password;

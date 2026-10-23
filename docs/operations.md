@@ -124,3 +124,27 @@ Set these before taking payments:
 | `APP_BILLING_SELLER_GSTIN` | Your GSTIN (leave empty until registered; invoices then omit it) |
 | `APP_BILLING_SELLER_STATE` | Two-digit GST state code, e.g. `29` for Karnataka |
 | `APP_BILLING_SAC` | Service code, default `998439` |
+
+## Media library and uploads
+
+Uploads are resumable (ML-1): the browser asks `/api/media/uploads` for an upload, then sends 16 MB
+parts. With S3-compatible storage each part goes **straight to the bucket** with a presigned URL, so
+upload traffic never touches the web servers; with local storage (dev) parts come through
+`PUT /api/media/uploads/{id}/parts/{n}`. A page refresh resumes from the parts already stored. The
+file's size is reserved against the plan's storage when the upload starts; uploads untouched for 24 h
+are aborted and give the space back.
+
+The bucket needs a CORS rule so browsers can PUT parts and read the ETag:
+
+```json
+[{"AllowedOrigins": ["https://afklive.com"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"],
+  "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3600}]
+```
+
+Also add a lifecycle rule that aborts incomplete multipart uploads after 2 days, as a backstop.
+
+New files start as Processing. A web instance claims each one, probes it with ffprobe over a
+presigned URL (ranged reads, no full download), stores a thumbnail and marks it Ready or Failed with a
+plain reason. Files aren't re-encoded: the studio re-encodes at playout anyway. A claim older than
+10 minutes is taken over, so a restart never leaves a file stuck. Web instances therefore need
+`ffmpeg`/`ffprobe` on PATH, like workers.

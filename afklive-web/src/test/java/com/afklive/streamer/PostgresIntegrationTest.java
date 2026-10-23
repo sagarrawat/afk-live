@@ -41,5 +41,7 @@ public abstract class PostgresIntegrationTest {
         registry.add("app.ingest.public-host", () -> "ingest.test");
         registry.add("app.ingest.read-pass", () -> "test-read-pass");
         registry.add("app.ingest.auth-secret", () -> "test-auth-secret");
+        // Tests process library files explicitly (MediaProcessor.process / sweep).
+        registry.add("app.media.auto-process", () -> "false");
     }
 }

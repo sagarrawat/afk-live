@@ -39,7 +39,7 @@ public class UserService {
     public void checkStorageQuota(String email, long fileSize) {
         User user = getOrCreateUser(email);
         long limit = planService.getPlanConfig(user.getPlanType()).getMaxStorageBytes();
-        if (user.getUsedStorageBytes() + fileSize > limit) {
+        if (userRepository.usedStorage(user.getId()) + fileSize > limit) {
             throw new IllegalStateException("Storage quota exceeded. Limit: " + (limit / 1024 / 1024) + "MB.");
         }
     }
@@ -48,15 +48,13 @@ public class UserService {
     public long remainingStorageBytes(String email) {
         User user = getOrCreateUser(email);
         long limit = planService.getPlanConfig(user.getPlanType()).getMaxStorageBytes();
-        return Math.max(0, limit - user.getUsedStorageBytes());
+        return Math.max(0, limit - userRepository.usedStorage(user.getId()));
     }
 
     @Transactional
     public void updateStorageUsage(String email, long delta) {
         User user = getOrCreateUser(email);
-        long newUsage = user.getUsedStorageBytes() + delta;
-        user.setUsedStorageBytes(Math.max(0, newUsage)); // Prevent negative
-        userRepository.save(user);
+        userRepository.addStorage(user.getId(), delta); // atomic; never below zero
     }
 
     public void checkStreamQuota(String email, int currentActiveCount) {

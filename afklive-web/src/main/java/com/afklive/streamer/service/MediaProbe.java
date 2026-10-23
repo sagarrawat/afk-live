@@ -33,7 +33,12 @@ public class MediaProbe {
     }
 
     public MediaInfo probe(Path file) {
-        List<String> command = List.of(ffprobe(), "-v", "error", "-print_format", "json", "-show_streams", "-show_format", file.toString());
+        return probe(file.toString());
+    }
+
+    /** Probes a local path or an http(s) URL (ffprobe reads only what it needs, with range requests). */
+    public MediaInfo probe(String file) {
+        List<String> command = List.of(ffprobe(), "-v", "error", "-print_format", "json", "-show_streams", "-show_format", file);
         Path out = null;
         try {
             // Output goes to a file so a hung ffprobe can't block us before the timeout applies.

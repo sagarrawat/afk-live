@@ -41,4 +41,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT COALESCE(SUM(u.usedStorageBytes), 0) FROM User u")
     Long sumUsedStorageBytes();
+
+    /** Reserves storage only if it fits under the limit; 0 means it doesn't fit (ML-5). */
+    @org.springframework.transaction.annotation.Transactional
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE users SET used_storage_bytes = COALESCE(used_storage_bytes, 0) + :bytes "
+            + "WHERE id = :id AND COALESCE(used_storage_bytes, 0) + :bytes <= :limit", nativeQuery = true)
+    int reserveStorage(@Param("id") Long id, @Param("bytes") long bytes, @Param("limit") long limit);
+
+    /** Adds (or with a negative value, releases) storage without a read-modify-write race. */
+    @org.springframework.transaction.annotation.Transactional
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE users SET used_storage_bytes = GREATEST(0, COALESCE(used_storage_bytes, 0) + :bytes) WHERE id = :id",
+            nativeQuery = true)
+    int addStorage(@Param("id") Long id, @Param("bytes") long bytes);
+
+    @Query(value = "SELECT COALESCE(used_storage_bytes, 0) FROM users WHERE id = :id", nativeQuery = true)
+    long usedStorage(@Param("id") Long id);
 }
