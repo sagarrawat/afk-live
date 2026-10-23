@@ -45,9 +45,10 @@ public final class DecoderSource implements AutoCloseable {
      * @param live         real-time source: low-latency buffering, restart on exit
      * @param startSeconds start offset for files (resume, or seek)
      */
-    public record Options(List<String> input, boolean video, boolean audio, boolean live, double startSeconds, Fit fit) {
+    public record Options(List<String> input, boolean video, boolean audio, boolean live, double startSeconds, Fit fit,
+                          double gainDb) {
         public Options(List<String> input, boolean video, boolean audio, boolean live, double startSeconds) {
-            this(input, video, audio, live, startSeconds, Fit.FIT);
+            this(input, video, audio, live, startSeconds, Fit.FIT, 0);
         }
 
         public Options {
@@ -55,7 +56,12 @@ public final class DecoderSource implements AutoCloseable {
         }
 
         public Options withFit(Fit value) {
-            return new Options(input, video, audio, live, startSeconds, value);
+            return new Options(input, video, audio, live, startSeconds, value, gainDb);
+        }
+
+        /** AU-5: raise or lower the sound by this much so every file plays at the same loudness. */
+        public Options withGain(double db) {
+            return new Options(input, video, audio, live, startSeconds, fit, db);
         }
 
         public static Options file(Path path, boolean hasAudio, double startSeconds) {
@@ -479,7 +485,11 @@ public final class DecoderSource implements AutoCloseable {
         cmd.addAll(input);
         // Files start both streams at 0 so a late first audio packet becomes silence rather than drift.
         String startAt = options.live() ? "" : ":first_pts=0";
-        String audioChain = "aresample=" + canvas.sampleRate() + ":async=1000" + startAt + ","
+        // AU-5: loudness correction; a boost goes through a limiter so peaks never clip.
+        String gain = Math.abs(options.gainDb()) < 0.1 ? ""
+                : String.format(Locale.ROOT, "volume=%.1fdB,", options.gainDb())
+                        + (options.gainDb() > 0 ? "alimiter=limit=0.95:level=disabled," : "");
+        String audioChain = gain + "aresample=" + canvas.sampleRate() + ":async=1000" + startAt + ","
                 + "aformat=sample_fmts=s16:channel_layouts=stereo";
         if (options.video()) {
             StringBuilder graph = new StringBuilder();

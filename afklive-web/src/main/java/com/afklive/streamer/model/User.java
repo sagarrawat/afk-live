@@ -56,6 +56,10 @@ public class User {
     @Column(name = "email_alerts", nullable = false)
     private boolean emailAlerts = true;
 
+    /** NT-3: per kind of alert, email and push on or off (JSON, see AlertPreferences); null: all on. */
+    @Column(name = "alert_preferences", columnDefinition = "TEXT")
+    private String alertPreferences;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UserSettings settings;
 
@@ -292,5 +296,13 @@ public class User {
 
     public void setOnboardedAt(java.time.ZonedDateTime onboardedAt) {
         this.onboardedAt = onboardedAt;
+    }
+
+    public String getAlertPreferences() {
+        return alertPreferences;
+    }
+
+    public void setAlertPreferences(String alertPreferences) {
+        this.alertPreferences = alertPreferences;
     }
 }

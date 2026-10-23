@@ -204,6 +204,45 @@ class PlaylistFeedTest {
     }
 
     @Test
+    void loudnessCorrectionRaisesAQuietTrack() throws Exception {
+        // AU-5: +6 dB is twice the amplitude.
+        Path tone = StudioFixtures.audio(dir, "tone-gain", 1.5, 440);
+        double plain = rms(tone, 0);
+        double raised = rms(tone, 6);
+        assertThat(raised / plain).isBetween(1.8, 2.2);
+    }
+
+    private static double rms(Path file, double gainDb) throws Exception {
+        DecoderSource src = new DecoderSource(CANVAS, DecoderSource.Options.audioFile(file, 0).withGain(gainDb), dir, "ffmpeg", "gain-" + gainDb);
+        src.start();
+        Frame f = new Frame(CANVAS);
+        double sum = 0;
+        long n = 0;
+        try {
+            long deadline = System.nanoTime() + 20_000_000_000L;
+            int frames = 0;
+            while (frames < 20 && System.nanoTime() < deadline) {
+                if (!src.poll(f)) {
+                    Thread.sleep(5);
+                    continue;
+                }
+                if (frames++ < 5) {
+                    continue; // skip the start
+                }
+                for (int i = 0; i + 1 < f.audio.length; i += 2) {
+                    short v = (short) ((f.audio[i] & 0xff) | (f.audio[i + 1] << 8));
+                    sum += (double) v * v;
+                    n++;
+                }
+            }
+        } finally {
+            src.close();
+        }
+        assertThat(n).as("audio was decoded").isPositive();
+        return Math.sqrt(sum / n);
+    }
+
+    @Test
     void musicCrossfadesIntoTheNextTrack() throws Exception {
         // AU-3: with a 1 s crossfade two 2 s tracks overlap, so the list ends about a second sooner.
         PlaylistFeed.Item low = new PlaylistFeed.Item("lo", "Low", StudioFixtures.audio(dir, "lo", 2, 220), true, 2);

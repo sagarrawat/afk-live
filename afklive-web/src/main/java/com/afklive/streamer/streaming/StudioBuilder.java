@@ -108,9 +108,9 @@ public class StudioBuilder {
             String key = keyOf(item);
             cache.pin(key);
             DecoderSource source = new DecoderSource(canvas,
-                    audioOnly ? DecoderSource.Options.audioFile(item.path(), start)
+                    (audioOnly ? DecoderSource.Options.audioFile(item.path(), start)
                             : DecoderSource.Options.file(item.path(), item.hasAudio(), start)
-                                    .withFit(item.fit() != null ? item.fit() : streamFit.get()),
+                                    .withFit(item.fit() != null ? item.fit() : streamFit.get())).withGain(item.gainDb()),
                     workDir, ffmpeg, "job" + jobId + "-" + item.id());
             return source.resolveInputWith(() -> {
                         Path file = cache.fetch(key);
@@ -252,7 +252,7 @@ public class StudioBuilder {
             for (StudioSpec.Media m : media) {
                 // The path is a placeholder; the real file is resolved from the cache when the decoder starts.
                 items.add(new PlaylistFeed.Item(m.id() + "|" + m.key(), m.title(), Path.of(m.id()),
-                        m.hasAudio() == null || m.hasAudio(), m.duration(), DecoderSource.Fit.parse(m.fit())));
+                        m.hasAudio() == null || m.hasAudio(), m.duration(), DecoderSource.Fit.parse(m.fit()), m.gainDb()));
             }
         }
         return items;

@@ -126,6 +126,7 @@ public class MediaProcessor {
             for (Long id : assets.findProcessable(stale)) {
                 process(id);
             }
+            backfillLoudness();
         } catch (Exception e) {
             log.error("Media sweep failed", e);
         }
@@ -162,7 +163,28 @@ public class MediaProcessor {
             return false;
         }
         log.info("Media {} processed: {}{}", assetId, r.status, r.reason == null ? "" : " (" + r.reason + ")");
+        if (r.status == MediaStatus.READY && Boolean.TRUE.equals(r.hasAudio)) {
+            measureLoudness(assetId, a.getS3Key());
+        }
         return true;
+    }
+
+    /** AU-5: how loud the file is, so playout can bring every track to the same level. */
+    void measureLoudness(Long assetId, String key) {
+        Double lufs = null;
+        try {
+            lufs = probe.loudness(storage.readLocation(key));
+        } catch (Exception e) {
+            log.warn("Loudness of media {} couldn't be measured: {}", assetId, e.getMessage());
+        }
+        assets.setLoudness(assetId, lufs);
+    }
+
+    /** AU-5: files uploaded before loudness was measured, a couple per sweep. */
+    void backfillLoudness() {
+        for (Long id : assets.findNeedingLoudness(org.springframework.data.domain.PageRequest.of(0, 2))) {
+            assets.findById(id).ifPresent(a -> measureLoudness(id, a.getS3Key()));
+        }
     }
 
     record Result(MediaStatus status, String reason, Double duration, Integer width, Integer height, String codec,

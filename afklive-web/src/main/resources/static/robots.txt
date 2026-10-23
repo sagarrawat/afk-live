@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 Disallow: /studio
 Disallow: /app
+
+Sitemap: https://afklive.in/sitemap.xml
