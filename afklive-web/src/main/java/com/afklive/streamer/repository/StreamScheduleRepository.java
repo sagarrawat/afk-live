@@ -11,6 +11,9 @@ public interface StreamScheduleRepository extends JpaRepository<StreamSchedule, 
 
     List<StreamSchedule> findAllByEnabledTrue();
 
+    /** SC-3: every schedule of the given streams (one query for the calendar). */
+    List<StreamSchedule> findAllByStreamIdIn(java.util.Collection<Long> streamIds);
+
     /** Claims one occurrence: only one web instance (and only once) starts it. */
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional

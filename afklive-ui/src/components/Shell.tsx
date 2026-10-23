@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Logo } from './Logo';
-import { Bell, FolderOpen, Home, LifeBuoy, LogOut, Moon, Radio, Settings, Shield, Sun, Wrench } from 'lucide-react';
+import { Bell, CalendarDays, FolderOpen, Home, LifeBuoy, LogOut, Moon, Radio, Settings, Shield, Sun, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { csrfToken, post } from '@/lib/api';
@@ -10,6 +10,7 @@ import { keys, useInvalidate, useMe, useNotifications } from '@/lib/queries';
 
 const nav = [
   { to: '/studio', label: 'Streams', icon: Home, end: true },
+  { to: '/studio/schedule', label: 'Schedule', icon: CalendarDays },
   { to: '/studio/library', label: 'Library', icon: FolderOpen },
   { to: '/studio/destinations', label: 'Destinations', icon: Radio },
   { to: '/studio/settings', label: 'Settings', icon: Settings },
@@ -251,7 +252,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-24 pt-6 md:px-8 md:pb-12">{children}</main>
       </div>
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-panel pb-[env(safe-area-inset-bottom)] md:hidden">
-        {items.slice(0, 4).map(({ to, label, icon: Icon, end }) => (
+        {items.slice(0, 5).map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]', isActive ? 'text-ink' : 'text-muted')}>
             <Icon className="h-5 w-5" aria-hidden />
             {label}

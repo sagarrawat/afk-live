@@ -12,6 +12,7 @@ import type { Uptime,
   PlanView,
   QualityOption,
   RunView,
+  ScheduleCalendar,
   StorageView,
   StreamSummary,
   StreamView,
@@ -35,6 +36,7 @@ export const keys = {
   billing: ['billing'] as const,
   plans: (currency: string) => ['plans', currency] as const,
   profile: ['billing', 'profile'] as const,
+  calendar: (from: string, days: number) => ['schedules', 'calendar', from, days] as const,
 };
 
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => get<Me>('/api/me'), staleTime: 60_000 });
@@ -99,6 +101,15 @@ export const useBilling = () => useQuery({ queryKey: keys.billing, queryFn: () =
 export const usePlans = (currency: string) =>
   useQuery({ queryKey: keys.plans(currency), queryFn: () => get<PlanView[]>(`/api/billing/plans?currency=${currency}`), staleTime: 300_000 });
 export const useBillingProfile = () => useQuery({ queryKey: keys.profile, queryFn: () => get<BillingProfile>('/api/billing/profile') });
+
+/** SC-3: every scheduled run across streams, refreshed each minute (runs start and end on their own). */
+export const useScheduleCalendar = (from: string, days: number) =>
+  useQuery({
+    queryKey: keys.calendar(from, days),
+    queryFn: () => get<ScheduleCalendar>(`/api/schedules/calendar?from=${from}&days=${days}`),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000,
+  });
 
 export function useInvalidate() {
   const qc = useQueryClient();
