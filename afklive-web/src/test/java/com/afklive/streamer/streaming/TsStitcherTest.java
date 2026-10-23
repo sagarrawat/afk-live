@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** The stitcher on real FFmpeg output: two separately encoded programmes become one continuous one. */
-class TsStitcherTest {
+public class TsStitcherTest {
 
     @TempDir
     static Path dir;

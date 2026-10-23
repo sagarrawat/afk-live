@@ -179,7 +179,7 @@ public class PlayoutCopies {
         }
         long mediaId = ((Number) a.get("id")).longValue();
         List<Map<String, Object>> copies = jdbc.queryForList(
-                "SELECT status, storage_key FROM media_playout_copies WHERE media_id = ? AND canvas_width = ? AND canvas_height = ? AND fps = ?",
+                "SELECT status, storage_key FROM media_playout_copies WHERE media_id = ? AND kind = 'PLAYOUT' AND canvas_width = ? AND canvas_height = ? AND fps = ?",
                 mediaId, t.canvasWidth(), t.canvasHeight(), t.fps());
         if (copies.isEmpty()) {
             jdbc.update("INSERT INTO media_playout_copies (media_id, canvas_width, canvas_height, fps, status) VALUES (?, ?, ?, ?, 'PENDING') "
@@ -192,7 +192,7 @@ public class PlayoutCopies {
             return originalKey;
         }
         // Remembered for 10 minutes, so this write happens at most that often per stream and file.
-        jdbc.update("UPDATE media_playout_copies SET last_played_at = now() WHERE media_id = ? AND canvas_width = ? AND canvas_height = ? AND fps = ?",
+        jdbc.update("UPDATE media_playout_copies SET last_played_at = now() WHERE media_id = ? AND kind = 'PLAYOUT' AND canvas_width = ? AND canvas_height = ? AND fps = ?",
                 mediaId, t.canvasWidth(), t.canvasHeight(), t.fps());
         return (String) c.get("storage_key");
     }
@@ -210,14 +210,14 @@ public class PlayoutCopies {
                 "UPDATE media_playout_copies SET status = 'WORKING', claimed_at = ? WHERE id = ("
                         + " SELECT id FROM media_playout_copies WHERE status = 'PENDING' OR (status = 'WORKING' AND claimed_at < ?)"
                         + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)"
-                        + " RETURNING id, media_id, canvas_width, canvas_height, fps",
+                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths",
                 Timestamp.from(claimedAt), Timestamp.from(claimedAt.minus(STALE_CLAIM)));
         if (claimed.isEmpty()) {
             return false;
         }
         Map<String, Object> c = claimed.getFirst();
         long id = ((Number) c.get("id")).longValue();
-        List<Map<String, Object>> media = jdbc.queryForList("SELECT s3_key, fps FROM media_assets WHERE id = ?", c.get("media_id"));
+        List<Map<String, Object>> media = jdbc.queryForList("SELECT s3_key, fps, has_audio FROM media_assets WHERE id = ?", c.get("media_id"));
         if (media.isEmpty()) {
             jdbc.update("DELETE FROM media_playout_copies WHERE id = ?", id);
             return true;
@@ -227,21 +227,28 @@ public class PlayoutCopies {
         int w = ((Number) c.get("canvas_width")).intValue();
         int h = ((Number) c.get("canvas_height")).intValue();
         int fps = ((Number) c.get("fps")).intValue();
+        boolean profile = "PROFILE".equals(c.get("kind"));
+        String fit = (String) c.get("fit");
+        double gainDb = ((Number) c.get("gain_tenths")).intValue() / 10.0;
+        boolean hasAudio = !Boolean.FALSE.equals(media.getFirst().get("has_audio"));
 
         String key = null;
         String reason = null;
         long started = System.nanoTime();
         Path out = null;
         try {
-            out = Files.createTempFile("playout-", ".mp4");
-            List<String> cmd = command(storage.readLocation(original), out, w, h, fps, sourceFps);
+            out = Files.createTempFile("playout-", profile ? ".ts" : ".mp4");
+            List<String> cmd = profile
+                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio)
+                    : command(storage.readLocation(original), out, w, h, fps, sourceFps);
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             String log = new String(p.getInputStream().readAllBytes());
             if (p.waitFor() != 0 || Files.size(out) == 0) {
                 reason = log.isBlank() ? "FFmpeg exited with " + p.exitValue() : last(log, 500);
             } else {
                 try (InputStream in = Files.newInputStream(out)) {
-                    key = storage.uploadFile(in, "playout-" + w + "x" + h + "-" + fps + ".mp4", Files.size(out));
+                    key = storage.uploadFile(in, (profile ? "profile-" : "playout-") + w + "x" + h + "-" + fps
+                            + (profile ? ".ts" : ".mp4"), Files.size(out));
                 }
             }
         } catch (Exception e) {
@@ -261,7 +268,7 @@ public class PlayoutCopies {
         if (saved != 1 && key != null) {
             deleteQuietly(key); // deleted or taken over meanwhile
         }
-        log.info("Playout copy {} of media {} at {}x{} {} fps: {} in {} s{}", id, c.get("media_id"), w, h, fps,
+        log.info("{} copy {} of media {} at {}x{} {} fps: {} in {} s{}", profile ? "Profile" : "Playout", id, c.get("media_id"), w, h, fps,
                 key != null ? "ready" : "failed", (System.nanoTime() - started) / 1_000_000_000L, reason == null ? "" : " (" + reason + ")");
         return true;
     }
@@ -310,6 +317,78 @@ public class PlayoutCopies {
             log.info("Deleted {} playout copies nobody played for {} days", deleted, KEEP_UNPLAYED.toDays());
         }
         return deleted;
+    }
+
+    // ------------------------------------------------------------------ profile copies (FO-2)
+
+    /**
+     * The profile copy of a video for copy mode: the file encoded exactly as a stream on this canvas
+     * sends it, with the item's fit and loudness correction baked in. Returns its storage key when ready;
+     * otherwise null, after asking for it when {@code request} is set.
+     */
+    public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
+                                boolean request) {
+        List<Long> ids = jdbc.queryForList("SELECT id FROM media_assets WHERE s3_key = ? AND content_type = 'VIDEO' LIMIT 1",
+                Long.class, originalKey);
+        if (ids.isEmpty()) {
+            return null;
+        }
+        long mediaId = ids.getFirst();
+        String f = fit == null ? "FIT" : fit.toUpperCase(Locale.ROOT);
+        int gain = (int) Math.round(gainDb * 10);
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT status, storage_key FROM media_playout_copies WHERE media_id = ? "
+                + "AND kind = 'PROFILE' AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? AND gain_tenths = ?",
+                mediaId, canvasWidth, canvasHeight, fps, f, gain);
+        if (rows.isEmpty()) {
+            if (request) {
+                jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status) "
+                        + "VALUES (?, 'PROFILE', ?, ?, ?, ?, ?, 'PENDING') ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
+                        mediaId, canvasWidth, canvasHeight, fps, f, gain);
+                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({})", mediaId, canvasWidth, canvasHeight, fps, f);
+            }
+            return null;
+        }
+        Map<String, Object> c = rows.getFirst();
+        if (!"READY".equals(c.get("status")) || c.get("storage_key") == null) {
+            return null;
+        }
+        jdbc.update("UPDATE media_playout_copies SET last_played_at = now() WHERE media_id = ? AND kind = 'PROFILE' "
+                + "AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? AND gain_tenths = ? "
+                + "AND (last_played_at IS NULL OR last_played_at < now() - interval '10 minutes')",
+                mediaId, canvasWidth, canvasHeight, fps, f, gain);
+        return (String) c.get("storage_key");
+    }
+
+    /**
+     * The profile copy: decoded and placed on the canvas exactly as the studio does it (same filters),
+     * then encoded with the live encoder's settings, so copy mode and the studio send the same kind of
+     * stream and can hand over to each other mid-stream. A file without sound gets silence, so every
+     * copy has the same tracks. MPEG-TS, like the stream itself.
+     */
+    static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
+                                       double gainDb, boolean hasAudio) {
+        com.afklive.streamer.streaming.studio.Canvas canvas = new com.afklive.streamer.streaming.studio.Canvas(canvasWidth, canvasHeight, fps, 44100);
+        com.afklive.streamer.streaming.studio.DecoderSource.Fit parsed = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
+        com.afklive.streamer.streaming.studio.DecoderSource.Fit f = parsed == null ? com.afklive.streamer.streaming.studio.DecoderSource.Fit.FIT : parsed;
+        List<String> cmd = new ArrayList<>();
+        if (Files.isExecutable(Path.of("/usr/bin/nice"))) {
+            cmd.addAll(List.of("/usr/bin/nice", "-n", "19"));
+        }
+        cmd.addAll(List.of(FFmpegCommandBuilder.ffmpegBinary(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", input));
+        String graph = com.afklive.streamer.streaming.studio.DecoderSource.videoChain(canvas, f, false);
+        if (hasAudio) {
+            graph += ";[0:a:0]" + com.afklive.streamer.streaming.studio.DecoderSource.audioChain(canvas, gainDb, false) + "[a]";
+        } else {
+            cmd.addAll(List.of("-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"));
+            graph += ";[1:a]anull[a]";
+        }
+        cmd.addAll(List.of("-filter_complex", graph, "-map", "[v]", "-map", "[a]"));
+        if (!hasAudio) {
+            cmd.add("-shortest");
+        }
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvasWidth, canvasHeight), fps));
+        cmd.addAll(List.of("-threads", "1", "-f", "mpegts", "-mpegts_flags", "+resend_headers", "-muxdelay", "0", output.toString()));
+        return cmd;
     }
 
     /** Storage keys of a file's copies, to delete with it. */
