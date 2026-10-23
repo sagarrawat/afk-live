@@ -305,6 +305,25 @@ public class FFmpegCommandBuilder {
     }
 
     /**
+     * x264 + AAC settings for a live (studio) encode: constant-ish bitrate from the ladder by the
+     * picture's short side, keyframe exactly every 2 s at any frame rate, AAC 128k 44.1 kHz stereo.
+     * 60 fps gets 1.5x the 30 fps bitrate.
+     */
+    public static List<String> liveEncodeArgs(int shortSide, int fps) {
+        String[] rate = bitrateFor(shortSide);
+        if (fps > 30) {
+            for (int i = 0; i < rate.length; i++) {
+                rate[i] = (Integer.parseInt(rate[i].replace("k", "")) * 3 / 2) + "k";
+            }
+        }
+        int gop = fps * 2;
+        return List.of("-c:v", "libx264", "-preset", "veryfast",
+                "-b:v", rate[0], "-maxrate", rate[1], "-bufsize", rate[2],
+                "-pix_fmt", "yuv420p", "-g", String.valueOf(gop), "-keyint_min", String.valueOf(gop), "-sc_threshold", "0",
+                "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2");
+    }
+
+    /**
      * Builds the FFmpeg command for one destination.
      *
      * @param sourceHasAudio false when the video has no audio track (a silent track is then added,
@@ -389,7 +408,7 @@ public class FFmpegCommandBuilder {
         return url.regionMatches(true, 0, "srt://", 0, 6) ? "mpegts" : "flv";
     }
 
-    static String ffmpegBinary() {
+    public static String ffmpegBinary() {
         java.io.File local = new java.io.File("bin/ffmpeg");
         return local.exists() ? local.getAbsolutePath() : "ffmpeg";
     }
