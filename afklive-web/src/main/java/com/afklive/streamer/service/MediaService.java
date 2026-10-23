@@ -70,6 +70,7 @@ public class MediaService {
     private final FileStorageService storage;
     private final MediaProcessor processor;
     private final LiveStreamService streams;
+    private final com.afklive.streamer.repository.MediaTagRepository tags;
     private final TransactionTemplate tx;
     private final String role;
     private final long minPart;
@@ -82,7 +83,8 @@ public class MediaService {
     public MediaService(MediaAssetRepository assets, MediaUploadRepository uploads, ScheduledVideoRepository scheduledVideos,
                         com.afklive.streamer.repository.StreamItemRepository streamItems,
                         UserRepository users, PlanService plans, FileStorageService storage, MediaProcessor processor,
-                        LiveStreamService streams, PlatformTransactionManager txManager,
+                        LiveStreamService streams, com.afklive.streamer.repository.MediaTagRepository tags,
+                        PlatformTransactionManager txManager,
                         @Value("${app.streaming.role:all}") String role,
                         @Value("${app.media.min-part-bytes:16777216}") long minPart) {
         this.minPart = Math.max(64 * 1024, minPart);
@@ -95,6 +97,7 @@ public class MediaService {
         this.storage = storage;
         this.processor = processor;
         this.streams = streams;
+        this.tags = tags;
         this.tx = new TransactionTemplate(txManager);
         this.role = role;
     }
@@ -103,7 +106,12 @@ public class MediaService {
 
     public record MediaView(Long id, String title, String type, String status, String statusReason, long sizeBytes,
                             Double durationSeconds, Integer width, Integer height, Boolean hasAudio, Double fps,
-                            LocalDateTime createdAt, String thumbnailUrl, String previewUrl, List<String> usedBy, boolean inLiveUse) {
+                            LocalDateTime createdAt, String thumbnailUrl, String previewUrl, List<String> usedBy, boolean inLiveUse,
+                            List<TagRef> tags) {
+    }
+
+    /** ML-8: a tag on a file. */
+    public record TagRef(Long id, String name) {
     }
 
     public record StorageView(long usedBytes, long limitBytes, double percent, boolean warning, boolean full, String plan) {
@@ -124,8 +132,12 @@ public class MediaService {
 
     // ------------------------------------------------------------------ listing (ML-3, ML-4)
 
-    public Page<MediaView> list(String email, String q, String type, String status, String sort, String dir, int page, int size) {
+    /** {@code tag} is a tag id of this user's (ML-8), or {@code none} for files without tags. */
+    public Page<MediaView> list(String email, String q, String type, String status, String tag, String sort, String dir, int page, int size) {
         Specification<MediaAsset> spec = (root, query, cb) -> cb.equal(root.get("user").get("email"), email);
+        if (tag != null && !tag.isBlank()) {
+            spec = spec.and(tagFilter(email, tag.trim()));
+        }
         if (q != null && !q.isBlank()) {
             String like = "%" + q.trim().toLowerCase(Locale.ROOT).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
             spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("title")), like, '\\'));
@@ -151,23 +163,62 @@ public class MediaService {
         }
         Sort order = Sort.by(new Sort.Order(direction, field).nullsLast()).and(Sort.by(Sort.Direction.DESC, "id"));
         Page<MediaAsset> result = assets.findAll(spec, PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100), order));
-        Map<Long, List<LiveStreamService.MediaUse>> uses = streams.mediaUses(email, result.map(MediaAsset::getId).toList());
-        return result.map(a -> view(a, uses.getOrDefault(a.getId(), List.of())));
+        List<Long> ids = result.map(MediaAsset::getId).toList();
+        Map<Long, List<LiveStreamService.MediaUse>> uses = streams.mediaUses(email, ids);
+        Map<Long, List<TagRef>> tagged = tagsOf(ids);
+        return result.map(a -> view(a, uses.getOrDefault(a.getId(), List.of()), tagged.getOrDefault(a.getId(), List.of())));
+    }
+
+    private Specification<MediaAsset> tagFilter(String email, String tag) {
+        if ("none".equalsIgnoreCase(tag)) {
+            return (root, query, cb) -> {
+                var sub = query.subquery(Long.class);
+                var l = sub.from(com.afklive.streamer.model.MediaAssetTag.class);
+                sub.select(l.get("id").get("tagId")).where(cb.equal(l.get("id").get("mediaAssetId"), root.get("id")));
+                return cb.not(cb.exists(sub));
+            };
+        }
+        long tagId;
+        try {
+            tagId = Long.parseLong(tag);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Unknown tag: " + tag);
+        }
+        // Someone else's tag is "not found", the same as one that doesn't exist.
+        tags.findByIdAndUserId(tagId, user(email).getId()).orElseThrow(() -> new NotFoundException("Tag not found."));
+        return (root, query, cb) -> {
+            var sub = query.subquery(Long.class);
+            var l = sub.from(com.afklive.streamer.model.MediaAssetTag.class);
+            sub.select(l.get("id").get("tagId")).where(cb.equal(l.get("id").get("mediaAssetId"), root.get("id")),
+                    cb.equal(l.get("id").get("tagId"), tagId));
+            return cb.exists(sub);
+        };
+    }
+
+    private Map<Long, List<TagRef>> tagsOf(Collection<Long> ids) {
+        Map<Long, List<TagRef>> out = new java.util.HashMap<>();
+        if (ids.isEmpty()) {
+            return out;
+        }
+        for (Object[] r : tags.tagsOf(ids)) {
+            out.computeIfAbsent(((Number) r[0]).longValue(), k -> new ArrayList<>()).add(new TagRef(((Number) r[1]).longValue(), (String) r[2]));
+        }
+        return out;
     }
 
     public MediaView get(String email, Long id) {
         MediaAsset a = owned(email, id);
-        return view(a, streams.mediaUses(email, List.of(id)).getOrDefault(id, List.of()));
+        return view(a, streams.mediaUses(email, List.of(id)).getOrDefault(id, List.of()), tagsOf(List.of(id)).getOrDefault(id, List.of()));
     }
 
-    private MediaView view(MediaAsset a, List<LiveStreamService.MediaUse> uses) {
+    private MediaView view(MediaAsset a, List<LiveStreamService.MediaUse> uses, List<TagRef> tagRefs) {
         return new MediaView(a.getId(), a.getTitle(), a.getContentType().name(), a.getStatus().name(), a.getStatusReason(),
                 a.getFileSize() == null ? 0 : a.getFileSize(), a.getDurationSeconds(), a.getWidth(), a.getHeight(), a.getHasAudio(),
                 a.getFps(), a.getCreatedAt(),
                 a.getThumbnailKey() == null ? null : "/api/media/" + a.getId() + "/thumbnail",
                 "/api/media/" + a.getId() + "/file",
                 uses.stream().map(LiveStreamService.MediaUse::streamName).toList(),
-                uses.stream().anyMatch(LiveStreamService.MediaUse::live));
+                uses.stream().anyMatch(LiveStreamService.MediaUse::live), tagRefs);
     }
 
     public StorageView storage(String email) {

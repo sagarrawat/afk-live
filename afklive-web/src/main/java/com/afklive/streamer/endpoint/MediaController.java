@@ -57,11 +57,12 @@ public class MediaController {
                                              @RequestParam(required = false) String q,
                                              @RequestParam(required = false) String type,
                                              @RequestParam(required = false) String status,
+                                             @RequestParam(required = false) String tag,
                                              @RequestParam(required = false) String sort,
                                              @RequestParam(required = false) String dir,
                                              @RequestParam(defaultValue = "0") int page,
                                              @RequestParam(defaultValue = "24") int size) {
-        return media.list(email(principal), q, type, status, sort, dir, page, size);
+        return media.list(email(principal), q, type, status, tag, sort, dir, page, size);
     }
 
     @GetMapping("/storage")

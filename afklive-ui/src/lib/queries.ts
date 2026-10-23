@@ -5,6 +5,7 @@ import type { Uptime,
   BillingProfile,
   Destination,
   MediaItem,
+  MediaTag,
   Me,
   NotificationFeed,
   Page,
@@ -29,6 +30,7 @@ export const keys = {
   media: (q: Record<string, unknown>) => ['media', q] as const,
   storage: ['media', 'storage'] as const,
   uploads: ['media', 'uploads'] as const,
+  tags: ['media', 'tags'] as const,
   notifications: ['notifications'] as const,
   billing: ['billing'] as const,
   plans: (currency: string) => ['plans', currency] as const,
@@ -60,6 +62,8 @@ export interface MediaQuery {
   q?: string;
   type?: string;
   status?: string;
+  /** a tag id, or 'none' for files without tags (ML-8) */
+  tag?: string;
   sort?: string;
   dir?: string;
   page?: number;
@@ -82,6 +86,8 @@ export const useMedia = (p: MediaQuery) =>
     // Keep checking while anything is still being processed.
     refetchInterval: (q) => (q.state.data?.content.some((m) => m.status === 'PROCESSING') ? 4_000 : false),
   });
+
+export const useMediaTags = () => useQuery({ queryKey: keys.tags, queryFn: () => get<MediaTag[]>('/api/media/tags') });
 
 export const useStorage = () => useQuery({ queryKey: keys.storage, queryFn: () => get<StorageView>('/api/media/storage') });
 export const useOpenUploads = () => useQuery({ queryKey: keys.uploads, queryFn: () => get<UploadView[]>('/api/media/uploads') });

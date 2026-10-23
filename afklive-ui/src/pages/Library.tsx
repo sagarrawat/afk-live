@@ -1,8 +1,9 @@
 import clsx from 'clsx';
-import { AlertTriangle, CheckSquare, FolderOpen, Pencil, Search, Square, Trash2, Upload as UploadIcon, X } from 'lucide-react';
+import { AlertTriangle, CheckSquare, FolderOpen, Pencil, Search, Square, Tag as TagIcon, Tags, Trash2, Upload as UploadIcon, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MediaThumb, StatusBadge } from '@/components/MediaPicker';
+import { AddTagDialog, FileTags, ManageTagsDialog, TagChips, TagFilter } from '@/components/MediaTags';
 import { Badge, Button, Dialog, Empty, ErrorNote, Field, IconButton, Input, PageHeader, Segmented, Select, Spinner, useAction, useToast } from '@/components/ui';
 import { patch, post } from '@/lib/api';
 import { bytes, clock, date, duration } from '@/lib/format';
@@ -12,12 +13,13 @@ import { useUploads, type UploadEntry } from '@/lib/uploads-context';
 
 const ACCEPT = 'video/*,audio/*,image/jpeg,image/png,image/gif,image/bmp,.mkv,.flv,.ts,.mts';
 
-/** ML-1..ML-6: everything uploaded, its processing state, storage, and safe deletes. */
+/** ML-1..ML-6, ML-8: everything uploaded, its processing state, storage, and safe deletes. */
 export function Library() {
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
+  const [tag, setTag] = useState('');
   const [sort, setSort] = useState('date');
   const [page, setPage] = useState(0);
   const [view, setView] = useState<'grid' | 'list'>(() => {
@@ -30,6 +32,8 @@ export function Library() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<MediaItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tagging, setTagging] = useState(false);
+  const [managingTags, setManagingTags] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploads = useUploads();
@@ -50,7 +54,7 @@ export function Library() {
     }
   }, [view]);
 
-  const { data, isLoading, error } = useMedia({ q: debounced, type, status, sort, page, size: 24, dir: sort === 'name' ? 'asc' : 'desc' });
+  const { data, isLoading, error } = useMedia({ q: debounced, type, status, tag, sort, page, size: 24, dir: sort === 'name' ? 'asc' : 'desc' });
   const items = data?.content ?? [];
   const toggle = (id: number) => {
     const next = new Set(selected);
@@ -58,7 +62,9 @@ export function Library() {
     else next.add(id);
     setSelected(next);
   };
-  const filtered = !!(debounced || type || status);
+  const filtered = !!(debounced || type || status || tag);
+  // The open preview follows the list, so tag changes show straight away.
+  const previewed = preview ? items.find((i) => i.id === preview.id) ?? preview : null;
 
   return (
     <div
@@ -109,6 +115,7 @@ export function Library() {
           <option value="PROCESSING">Checking</option>
           <option value="FAILED">Can't play</option>
         </Select>
+        <TagFilter value={tag} onChange={(v) => (setTag(v), setPage(0))} className="w-40" />
         <Select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className="w-40">
           <option value="date">Newest first</option>
           <option value="name">Name</option>
@@ -124,6 +131,9 @@ export function Library() {
             { value: 'list', label: 'List' },
           ]}
         />
+        <Button variant="ghost" size="sm" icon={<Tags className="h-4 w-4" />} onClick={() => setManagingTags(true)}>
+          Tags
+        </Button>
       </div>
 
       {selected.size > 0 && (
@@ -134,9 +144,12 @@ export function Library() {
               Select page
             </button>
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Clear
+            </Button>
+            <Button size="sm" icon={<TagIcon className="h-4 w-4" />} onClick={() => setTagging(true)}>
+              Add tag
             </Button>
             <Button size="sm" variant="danger" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmDelete(true)}>
               Delete
@@ -172,6 +185,7 @@ export function Library() {
                     <StatusBadge item={m} />
                     {m.inLiveUse && <Badge tone="live">On air</Badge>}
                   </span>
+                  <TagChips tags={m.tags} max={2} className="mt-1" />
                 </span>
               </button>
               <button
@@ -211,6 +225,7 @@ export function Library() {
                       <MediaThumb item={m} className="h-8 w-14 shrink-0 rounded-sm" />
                       <span className="truncate">{m.title}</span>
                     </button>
+                    <TagChips tags={m.tags} max={3} className="mt-1 pl-[68px]" />
                   </td>
                   <td className="tnum px-3 py-2 text-muted">{m.type === 'IMAGE' ? '–' : clock(m.durationSeconds)}</td>
                   <td className="tnum hidden px-3 py-2 text-muted sm:table-cell">{bytes(m.sizeBytes)}</td>
@@ -246,7 +261,9 @@ export function Library() {
         </div>
       )}
 
-      {preview && <PreviewDialog item={preview} onClose={() => setPreview(null)} />}
+      {previewed && <PreviewDialog item={previewed} onClose={() => setPreview(null)} />}
+      {tagging && <AddTagDialog ids={[...selected]} onClose={() => setTagging(false)} />}
+      {managingTags && <ManageTagsDialog onClose={() => setManagingTags(false)} onDeleted={(id) => tag === String(id) && (setTag(''), setPage(0))} />}
       {confirmDelete && <DeleteDialog ids={[...selected]} onClose={() => setConfirmDelete(false)} onDone={(r) => setSelected(new Set(r.blocked.map((b) => b.id)))} />}
     </div>
   );
@@ -372,6 +389,7 @@ function PreviewDialog({ item: m, onClose }: { item: MediaItem; onClose: () => v
           <Fact label="Added" value={date(m.createdAt)} />
         </dl>
         {m.usedBy.length > 0 && <p className="text-sm text-muted">Used in {m.usedBy.join(', ')}.</p>}
+        <FileTags fileId={m.id} tags={m.tags} />
         {editing ? (
           <form
             className="flex items-end gap-2"
