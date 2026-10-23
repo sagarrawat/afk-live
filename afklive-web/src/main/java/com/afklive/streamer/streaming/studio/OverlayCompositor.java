@@ -138,8 +138,48 @@ public final class OverlayCompositor {
         return switch (o.type()) {
             case IMAGE -> renderImage(o);
             case TICKER -> renderTickerStrip(o, text);
-            default -> text == null || text.isBlank() ? null : renderText(text, o);
+            default -> text == null || text.isBlank() ? null
+                    : WATERMARK_ID.equals(o.id()) ? renderWatermark(text, o) : renderText(text, o);
         };
+    }
+
+    /** The id of the Free plan's mark (LiveStreamService adds it; BI-1). */
+    public static final String WATERMARK_ID = "afk-watermark";
+
+    /**
+     * The Free plan's mark: the AFK Live moon-and-dot (docs/brand.md) followed by the name, in a box.
+     * Same geometry as afklive-ui/brand/build.py, on its 64 grid.
+     */
+    private BufferedImage renderWatermark(String text, Overlay o) {
+        Font f = font(o);
+        FontMetrics fm = metrics(f);
+        float em = f.getSize2D();
+        int padX = Math.round(em * 0.45f);
+        int padY = Math.round(em * 0.22f);
+        int textH = fm.getAscent() + fm.getDescent();
+        double markSize = textH * 0.95;
+        int gap = Math.round(em * 0.3f);
+        int w = Math.min(canvas.width(), (int) Math.ceil(markSize) + gap + fm.stringWidth(text) + 2 * padX);
+        int h = textH + 2 * padY;
+        BufferedImage img = new BufferedImage(Math.max(2, w), Math.max(2, h), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(img, f);
+        if ((o.background() >>> 24) != 0) {
+            g.setColor(new Color(o.background(), true));
+            int arc = Math.round(em * 0.5f);
+            g.fillRoundRect(0, 0, w, h, arc, arc);
+        }
+        double s = markSize / 64.0;
+        double ox = padX, oy = (h - markSize) / 2.0;
+        java.awt.geom.Area moon = new java.awt.geom.Area(new java.awt.geom.Ellipse2D.Double(ox + (29 - 24) * s, oy + (35 - 24) * s, 48 * s, 48 * s));
+        moon.subtract(new java.awt.geom.Area(new java.awt.geom.Ellipse2D.Double(ox + (41 - 17) * s, oy + (23 - 17) * s, 34 * s, 34 * s)));
+        g.setColor(new Color(0xFFB627));
+        g.fill(moon);
+        g.setColor(new Color(0xFF4438));
+        g.fill(new java.awt.geom.Ellipse2D.Double(ox + (41 - 8) * s, oy + (23 - 8) * s, 16 * s, 16 * s));
+        g.setColor(new Color(o.color()));
+        g.drawString(text, (int) Math.round(padX + markSize + gap), padY + fm.getAscent());
+        g.dispose();
+        return img;
     }
 
     private BufferedImage renderImage(Overlay o) {

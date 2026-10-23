@@ -691,7 +691,7 @@ public class LiveStreamService {
         }
         if (planService.getPlanConfig(s.getUser().getPlanType()).isWatermark()) {
             // BI-1: the Free plan's small mark, added here so it can't be removed from the client.
-            overlays.add(new StudioSpec.OverlaySetting("afk-watermark", "TEXT", true, 0.83, 0.92, 0, 0.03, "AFK Live",
+            overlays.add(new StudioSpec.OverlaySetting(com.afklive.streamer.streaming.studio.OverlayCompositor.WATERMARK_ID, "TEXT", true, 0.8, 0.92, 0, 0.03, "AFK Live",
                     null, null, "#ffffff", "#66000000", 0.8, null, null, 0, null));
         }
         List<StudioSpec.SceneSetting> scenes = new ArrayList<>();

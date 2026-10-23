@@ -80,6 +80,14 @@ class AppShellTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void brandIconsAndTheAppManifestAreReachableSignedOut() throws Exception {
+        // Browsers fetch these without a session (tab icon, home-screen install, link previews).
+        mvc.perform(get("/favicon.ico")).andExpect(status().isOk());
+        mvc.perform(get("/site/brand/og.png")).andExpect(status().isOk());
+        mvc.perform(get("/login")).andExpect(content().string(containsString("/site/brand/favicon.svg")));
+    }
+
+    @Test
     void meReturnsThePlanAndSavesPreferences() throws Exception {
         mvc.perform(get("/api/me").with(user(email).roles("USER")))
                 .andExpect(status().isOk())

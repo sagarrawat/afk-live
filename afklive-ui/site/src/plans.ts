@@ -47,10 +47,10 @@ export function planCards(plans: PlanView[], cycle: 'MONTHLY' | 'YEARLY'): strin
     .map((p) => {
       const price = cycle === 'YEARLY' ? p.yearlyLabel : p.monthlyLabel;
       const featured = p.id === 'ESSENTIALS';
-      return `<li class="flex flex-col rounded-lg border ${featured ? 'border-accent bg-panel shadow-[0_0_0_1px_rgb(var(--accent))]' : 'border-line bg-panel'} p-6">
-  <h3 class="text-lg font-semibold">${esc(p.name)}</h3>
+      return `<li class="flex flex-col rounded-2xl border ${featured ? 'night border-transparent shadow-[0_30px_60px_-30px_rgba(16,18,42,0.7)]' : 'border-line bg-panel'} p-6">
+  <h3 class="text-xl font-bold tracking-tight">${esc(p.name)}${featured ? ' <span class="ml-1 align-middle rounded-full bg-sun/15 px-2 py-0.5 font-sans text-xs font-semibold text-sun">Most picked</span>' : ''}</h3>
   <p class="mt-1 text-sm text-muted">${esc(pitch[p.id] ?? '')}</p>
-  <p class="mt-5"><span class="tnum text-4xl font-semibold tracking-tight">${esc(price)}</span>${p.monthly > 0 ? `<span class="text-muted"> / ${cycle === 'YEARLY' ? 'year' : 'month'}</span>` : ''}</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">${esc(price)}</span>${p.monthly > 0 ? `<span class="text-muted"> / ${cycle === 'YEARLY' ? 'year' : 'month'}</span>` : ''}</p>
   <ul class="mt-6 flex-1 space-y-2 text-[15px]">${features(p)
     .map((f) => `<li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>${esc(f)}</li>`)
     .join('')}</ul>
