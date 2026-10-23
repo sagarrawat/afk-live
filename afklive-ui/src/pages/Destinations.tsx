@@ -1,45 +1,21 @@
-import { CheckCircle2, CircleAlert, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { AddDestinationDialog } from '@/components/AddDestination';
+import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { PlatformIcon } from '@/components/PlatformIcon';
 import { Button, Dialog, Empty, ErrorNote, IconButton, PageHeader, Spinner, useAction } from '@/components/ui';
-import { del, get, post } from '@/lib/api';
+import { del } from '@/lib/api';
 import { keys, useDestinations, useInvalidate } from '@/lib/queries';
 import type { Destination } from '@/lib/types';
-
-interface TestResult {
-  testId: number;
-  status: string;
-  ok: boolean;
-  message: string;
-}
 
 /** DS-1..DS-6: saved destinations, each testable without going live. */
 export function Destinations() {
   const { data, isLoading, error } = useDestinations();
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Destination | null>(null);
-  const [tests, setTests] = useState<Record<number, TestResult | 'running'>>({});
+  const { tests, test } = useDestinationTests();
   const { busy, run } = useAction();
   const invalidate = useInvalidate();
-
-  const test = async (d: Destination) => {
-    setTests((t) => ({ ...t, [d.id]: 'running' }));
-    try {
-      const started = await post<{ testId: number }>(`/api/destinations/${d.id}/test`);
-      for (let i = 0; i < 30; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        const r = await get<TestResult>(`/api/destinations/tests/${started.testId}`);
-        if (r.status !== 'PENDING' && r.status !== 'RUNNING') {
-          setTests((t) => ({ ...t, [d.id]: r }));
-          return;
-        }
-      }
-      setTests((t) => ({ ...t, [d.id]: { testId: 0, status: 'TIMEOUT', ok: false, message: 'The test is taking too long. Try again in a minute.' } }));
-    } catch (e) {
-      setTests((t) => ({ ...t, [d.id]: { testId: 0, status: 'ERROR', ok: false, message: e instanceof Error ? e.message : String(e) } }));
-    }
-  };
 
   return (
     <>
@@ -86,19 +62,17 @@ export function Destinations() {
                     <Trash2 className="h-4 w-4" />
                   </IconButton>
                 </div>
-                {t && t !== 'running' && (
-                  <p className={`mt-2 flex items-start gap-2 text-sm ${t.ok ? 'text-ok' : 'text-warn'}`}>
-                    {t.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />}
-                    {t.message}
-                  </p>
-                )}
+                <TestNote state={t} platform={d.platform} />
               </li>
             );
           })}
         </ul>
       )}
-      <p className="mt-4 max-w-prose text-sm text-muted">A test sends 10 seconds of a test picture to the platform, so you know the key works before you go live. On YouTube it shows as a short live preview only you can see in Studio.</p>
-      <AddDestinationDialog open={adding} onClose={() => setAdding(false)} />
+      <p className="mt-4 max-w-prose text-sm text-muted">
+        A test sends 10 seconds of a test picture to the platform, so you know the key works before you go live. New destinations are tested as soon as you add them. On YouTube it shows as a short live preview only you can see in Studio.
+      </p>
+      {/* MS-6: test a new key straight away, without holding up the save. */}
+      <AddDestinationDialog open={adding} onClose={() => setAdding(false)} onAdded={(d) => void test(d)} />
       <Dialog
         open={!!removing}
         onClose={() => setRemoving(null)}

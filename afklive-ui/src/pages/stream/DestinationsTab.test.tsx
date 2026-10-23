@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { makeQueryClient } from '@/App';
@@ -49,5 +49,42 @@ describe('DestinationsTab while live (DS-5)', () => {
     show(stream([1]));
     await userEvent.click(await screen.findByRole('switch', { name: 'Send to Facebook page' }));
     expect(puts).toEqual([[{ destinationId: 1, enabled: true }, { destinationId: 2, enabled: true }]]);
+  });
+});
+
+describe('DestinationsTab: a new destination is tested (MS-6)', () => {
+  let posts: string[] = [];
+  beforeEach(() => {
+    posts = [];
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true; };
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.open = false; };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (init?.method === 'POST') posts.push(path);
+      const body = path === '/api/me' ? me
+        : path === '/api/destinations' ? (init?.method === 'POST' ? dests[1] : dests)
+        : path.endsWith('/test') ? { testId: 3, status: 'PENDING' } : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const addFacebook = async (s: StreamView) => {
+    render(<QueryClientProvider client={makeQueryClient()}><MemoryRouter><DestinationsTab stream={s} /></MemoryRouter></QueryClientProvider>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add destination' }));
+    await userEvent.click(screen.getByRole('radio', { name: /Facebook/ }));
+    await userEvent.type(screen.getByLabelText('Stream key'), 'FB-123-0-Ab');
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add destination' }));
+  };
+
+  it('tests the key as soon as it is saved', async () => {
+    await addFacebook({ ...stream([1]), live: { state: 'DRAFT', uptimeSeconds: 0 } } as StreamView);
+    expect(await screen.findByText(/Checking the connection to Facebook/)).toBeInTheDocument();
+    expect(posts).toEqual(['/api/destinations', '/api/destinations/2/test']);
+  });
+
+  it("doesn't test a key the live stream starts sending to (the test would fight the stream)", async () => {
+    await addFacebook(stream([1]));
+    expect(posts).toEqual(['/api/destinations']);
   });
 });

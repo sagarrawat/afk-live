@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AddDestinationDialog } from '@/components/AddDestination';
+import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { PlatformIcon } from '@/components/PlatformIcon';
 import { isOnAir } from '@/components/status';
 import { Button, Empty, Panel, Spinner, Toggle } from '@/components/ui';
@@ -15,6 +16,7 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
   const { data: all, isLoading } = useDestinations();
   const { data: me } = useMe();
   const [adding, setAdding] = useState(false);
+  const { tests, test } = useDestinationTests();
   const { busy, update } = useStreamUpdate(s.id);
   const enabled = new Set(s.destinations.filter((d) => d.enabled).map((d) => d.destinationId));
   const limit = me?.plan.destinations ?? 1;
@@ -55,15 +57,18 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
               const full = !on && enabled.size >= limit;
               const last = on && onAir && enabled.size === 1; // a live stream needs somewhere to go
               return (
-                <li key={d.id} className="flex items-center gap-3 px-4 py-3">
-                  <PlatformIcon platform={d.platform} className="h-5 w-5 text-muted" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{d.name}</span>
-                    <span className="block truncate text-sm text-muted">
-                      {d.server} {d.keyHint}
+                <li key={d.id} className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <PlatformIcon platform={d.platform} className="h-5 w-5 text-muted" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{d.name}</span>
+                      <span className="block truncate text-sm text-muted">
+                        {d.server} {d.keyHint}
+                      </span>
                     </span>
-                  </span>
-                  <Toggle label={`Send to ${d.name}`} checked={on} disabled={busy || full || last} onChange={(v) => setEnabled(d.id, v)} />
+                    <Toggle label={`Send to ${d.name}`} checked={on} disabled={busy || full || last} onChange={(v) => setEnabled(d.id, v)} />
+                  </div>
+                  <TestNote state={tests[d.id]} platform={d.platform} />
                 </li>
               );
             })}
@@ -79,7 +84,14 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
           </p>
         </>
       )}
-      <AddDestinationDialog open={adding} onClose={() => setAdding(false)} onAdded={(d) => enabled.size < limit && setEnabled(d.id, true)} />
+      <AddDestinationDialog open={adding} onClose={() => setAdding(false)} onAdded={(d) => {
+          const sendNow = enabled.size < limit;
+          if (sendNow) setEnabled(d.id, true);
+          // MS-6: check the new key straight away; unless the live stream is already sending to it
+          // (a test on the same key would fight the stream, and its health shows the result anyway).
+          if (!(onAir && sendNow)) void test(d);
+        }}
+      />
     </Panel>
   );
 }
