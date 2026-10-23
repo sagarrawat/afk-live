@@ -44,6 +44,26 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 | `STREAMING_WORKER_ID` | host name + random suffix | Set a stable id (the systemd unit passes the host name) so a restarted worker resumes its streams at once instead of after takeover. Never give two running workers the same id |
 | `STREAMING_WORKER_MAX_STREAMS` | 20 | Streams this worker accepts. Size it to CPU: a re-encoded 1080p30 stream needs about 1 vCPU, a stream-copy one almost none (see the spec's cost section) |
 | `STREAMING_WORK_DIR` | `data/worker` | Where each stream's files are downloaded; cleaned up when it ends |
+| `APP_STREAMING_COPYMODE` | `false` | FO-2 copy mode (below). Set on workers; the web side always prepares the copies workers ask for |
+| `APP_STREAMING_WORKER_MAXCPUTOCLAIM` | `0.85` | Above this machine CPU (0–1) a worker leaves new streams to others for 45 s, then starts them anyway |
+
+## Copy mode (FO-2)
+
+**A playlist that needs nothing drawn or mixed live plays by stream copy: about 0.01 of a CPU instead
+of about 0.6.** A stream qualifies when it is a playlist with no overlays, no music bed, normal video
+volume, no phone input and is on its LIVE scene. For each video the web side prepares a *profile copy*
+once (`media_playout_copies`, kind `PROFILE`): the file encoded exactly as the stream sends it (canvas,
+frame rate, fit, loudness, bitrate), at the lowest priority.
+
+- A qualifying stream starts in copy mode when its copies are ready; otherwise it starts in the studio
+  and moves to copy mode within a minute of its copies being ready.
+- Any live change (skip, scene, overlay, playlist edit) moves it back to the studio first, at the
+  same playlist position. A few minutes later it may move to copy mode again.
+- Both moves happen without reconnecting any destination: the new producer starts next to the old one
+  and takes over at its first keyframe, and `TsStitcher` keeps the timestamps continuous. The same
+  mechanism restarts a crashed producer without dropping destinations.
+- Turn it on for a worker by setting `APP_STREAMING_COPYMODE=true` and restarting it; turn it off the
+  same way. Streams in copy mode show `"mode":"copy"` in their now-playing data.
 
 ## Egress firewall (required in production)
 

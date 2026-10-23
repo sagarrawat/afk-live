@@ -130,7 +130,7 @@ leaves new streams to others for 45 s. **Measured**: about 1.35 → 0.6 vCPU for
 worker's lookup), delete copies unplayed for 30 days in the web sweeper, and show copy storage in
 admin. Copies are made again on demand, so deletion is always safe.
 
-## 7. Copy-mode playout: FO-2 (next, large)
+## 7. Copy-mode playout: FO-2 (built: PR feature/copy-mode, off by default)
 
 **Approach.** For a playlist stream with no live overlay, scene or phone input, the studio's decode
 and encode are pure waste: prepare each file once at the exact stream profile (codec, resolution,
