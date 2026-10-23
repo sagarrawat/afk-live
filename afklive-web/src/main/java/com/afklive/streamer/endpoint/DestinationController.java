@@ -6,6 +6,7 @@ import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.StreamDestinationRepository;
 import com.afklive.streamer.service.UserService;
 import com.afklive.streamer.util.SecurityUtils;
+import com.afklive.streamer.util.StreamAddresses;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -44,6 +45,7 @@ public class DestinationController {
             return ResponseEntity.badRequest().body(ApiResponse.error("Name and Key are required"));
         }
         key = key.trim();
+        StreamAddresses.requireWellFormed(key);
         com.afklive.streamer.util.NetworkSafety.requireSafeStreamDestination(key);
 
         if (!destinationRepository.findByStreamKeyAndUser(key, user).isEmpty()) {
@@ -86,6 +88,7 @@ public class DestinationController {
                     if (body.containsKey("name")) dest.setName((String) body.get("name"));
                     if (body.containsKey("key")) {
                         String newKey = body.get("key") == null ? null : ((String) body.get("key")).trim();
+                        StreamAddresses.requireWellFormed(newKey);
                         com.afklive.streamer.util.NetworkSafety.requireSafeStreamDestination(newKey);
                         boolean exists = destinationRepository.findByStreamKeyAndUser(newKey, dest.getUser())
                                 .stream()

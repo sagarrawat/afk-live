@@ -23,7 +23,11 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,7 +47,56 @@ public class DestinationControllerTest {
 
     @BeforeEach
     public void setup() {
-        mockMvc = MockMvcBuilders.standaloneSetup(destinationController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(destinationController)
+                .setControllerAdvice(new com.afklive.streamer.exception.GlobalExceptionHandler()).build();
+    }
+
+    private static final String NESTED = "rtmp://a.rtmp.youtube.com/live2/rtmp://a.rtmp.youtube.com/live2";
+
+    @Test
+    public void createRefusesTheServerAddressPastedAsTheKey() throws Exception {
+        User user = new User();
+        user.setUsername("testuser");
+        when(userService.getOrCreateUser(anyString())).thenReturn(user);
+
+        mockMvc.perform(post("/api/destinations")
+                        .principal(() -> "testuser")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(new ObjectMapper().writeValueAsString(Map.of("name", "YouTube", "key", NESTED))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("second server address")));
+        verify(destinationRepository, never()).save(any());
+    }
+
+    @Test
+    public void createRefusesAYouTubeAddressWithoutAKey() throws Exception {
+        User user = new User();
+        user.setUsername("testuser");
+        when(userService.getOrCreateUser(anyString())).thenReturn(user);
+
+        mockMvc.perform(post("/api/destinations")
+                        .principal(() -> "testuser")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(new ObjectMapper().writeValueAsString(Map.of("name", "YouTube", "key", "rtmp://a.rtmp.youtube.com/live2/"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("YouTube stream key is missing")));
+        verify(destinationRepository, never()).save(any());
+    }
+
+    @Test
+    public void updateRefusesTheServerAddressPastedAsTheKey() throws Exception {
+        User user = new User();
+        user.setUsername("testuser");
+        StreamDestination dest = new StreamDestination("YouTube", "rtmp://a.rtmp.youtube.com/live2/abcd-efgh", "RTMP", user);
+        dest.setId(5L);
+        when(destinationRepository.findById(5L)).thenReturn(Optional.of(dest));
+
+        mockMvc.perform(put("/api/destinations/5")
+                        .principal(() -> "testuser")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(new ObjectMapper().writeValueAsString(Map.of("key", NESTED))))
+                .andExpect(status().isBadRequest());
+        verify(destinationRepository, never()).save(any());
     }
 
     @Test

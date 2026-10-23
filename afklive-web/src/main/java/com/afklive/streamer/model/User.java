@@ -35,6 +35,9 @@ public class User {
     /** ON-2: when the setup wizard was finished or skipped. */
     @Column(name = "onboarded_at")
     private java.time.ZonedDateTime onboardedAt;
+    /** GL-6: tips the creator has dismissed, comma-separated ids (see MeController.HINTS); null: none. */
+    @Column(name = "dismissed_hints", length = 500)
+    private String dismissedHints;
 
     private String password;
     private boolean enabled = true;
@@ -330,6 +333,14 @@ public class User {
 
     public void setOnboardedAt(java.time.ZonedDateTime onboardedAt) {
         this.onboardedAt = onboardedAt;
+    }
+
+    public String getDismissedHints() {
+        return dismissedHints;
+    }
+
+    public void setDismissedHints(String dismissedHints) {
+        this.dismissedHints = dismissedHints;
     }
 
     public String getAlertPreferences() {

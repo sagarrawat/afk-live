@@ -23,6 +23,10 @@ export interface Me {
   currency?: 'INR' | 'USD' | null;
   onboarded: boolean;
   emailAlerts: boolean;
+  /** GL-6: tips dismissed for this account (on every device). */
+  dismissedHints?: string[];
+  /** GL-6: how many times this account has gone live (1 during the first). */
+  goLives?: number;
 }
 
 export type Level = 'green' | 'amber' | 'red';
@@ -83,6 +87,8 @@ export interface MediaRef {
   status: 'READY' | 'PROCESSING' | 'FAILED';
   /** PL-6: this item's own fit; null follows the stream. */
   fit?: Fit | null;
+  /** Frames per second, from probing (ST-1: 60 fps videos on a 30 fps stream). */
+  fps?: number | null;
 }
 
 /** PL-6: FIT = whole picture with bars, FILL = fill and crop, BLUR = whole picture on a blurred copy. */

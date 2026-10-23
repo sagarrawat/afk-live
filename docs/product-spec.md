@@ -126,7 +126,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 
 ## User stories
 
-**There are 148 stories across 23 epics: 63 P0, 54 P1 and 31 P2. P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
+**There are 148 stories across 23 epics: 62 P0, 55 P1 and 31 P2. P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
 
 ### 1. Onboarding and account
 
@@ -198,7 +198,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | GL-3 | As a creator, I want to stop a stream now, at a set time, or after the playlist finishes so that it ends when I choose | Three stop options; scheduled stop shown on the stream and cancellable | P0 |
 | GL-4 | As a creator, I want a live preview of exactly what viewers see so that I can check overlays and audio | Low-latency preview of the encoded output, with audio toggle | P1 |
 | GL-5 | As a creator, I want to restart a stream with one click so that I recover from a platform glitch myself | Restart keeps settings and playlist position; destinations reconnect | P1 |
-| GL-6 | As a new creator, I want to know what YouTube's "Preparing" screen and Auto-start/Auto-stop mean so that I don't think the stream is broken | Card on the first go-live and for the first 2 minutes of a run; recommends Auto-start on and Auto-stop off for 24/7; explains how to unstick "Preparing"; dismissible per account; same content as a help article | P0 |
+| GL-6 | As a new creator, I want to know what YouTube will show when I go live so that I don't think the stream is broken | On the account's first go-live, and in the first 2 minutes of any run, the stream's Overview explains: Preparing is normal for up to ~30 s; for 24/7 turn YouTube's Auto-start on and Auto-stop off; if stuck on Preparing, end that live in YouTube Studio and start a fresh one with the same key; links to YouTube Studio and the help article. Dismissible, remembered for the account (not the browser) | P1 |
 
 ### 7. Reliability and health
 
@@ -399,7 +399,7 @@ Stories that fix today's code (the free upgrade endpoint, seeded admin, broken s
 
 1. **Phase 0, Fix the foundation** (before any new feature): close the security holes; working dev build, PR checks; streams move to workers with a supervisor and auto-restart. *Gate: no critical security issues; running streams survive a deploy.*
 2. **MVP, launch** (53 P0 stories): phone ingest with never-drop, scenes and overlays; 24/7 playlists; Go Live states, recurring schedules, YouTube and custom RTMP; down alerts, INR billing with UPI and GST invoices, redesigned site. *Gate: 99.5% uptime for 2 weeks with 20 beta creators.*
-3. **v1, competitive** (46 P1 stories): multistream presets on one encode, live playlist edits, crossfade; overlays, AI titles, health and uptime views; schedule calendar, USD checkout, teams, installable app with push. *Gate: 5% of free accounts upgrade within 30 days.*
+3. **v1, competitive** (47 P1 stories): multistream presets on one encode, live playlist edits, crossfade; overlays, AI titles, health and uptime views; schedule calendar, USD checkout, teams, installable app with push. *Gate: 5% of free accounts upgrade within 30 days.*
 3a. **Trust** (after the first real users, October 2026): "Live" means live on the platform (RE-8, DS-8, GL-1, GL-6, ON-8), deploys never interrupt anyone (OPS-3, OPS-4), email and support work (OPS-1, OPS-2, AD-6), and a stream costs half the CPU (FO-1). Order, sizes and evidence: `docs/roadmap.md`. *Gate: zero interrupted streams across three worker deploys; activation measured as "first live confirmed".*
 4. **v2, pull ahead** (28 P2 stories): overlay templates and visualizer, multichat, client reports; public API, webhooks, MCP server, backup streams; Hindi UI, music library, stings.
 

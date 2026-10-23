@@ -29,10 +29,10 @@ export default defineConfig({
         terms: resolve(__dirname, 'site/terms.html'),
         // RE-7: the public status page (served at /status).
         status: resolve(__dirname, 'site/status.html'),
-        // MK-3: the use-case pages (site/use-cases.py).
+        // MK-3: the use-case pages (site/use-cases.py); MK-4: the help centre (site/help.py).
         ...Object.fromEntries(
           readdirSync(resolve(__dirname, 'site'))
-            .filter((f) => /^for-[a-z-]+\.html$/.test(f))
+            .filter((f) => /^(for|help)-[a-z-]+\.html$/.test(f) || f === 'help.html')
             .map((f) => [f.replace('.html', ''), resolve(__dirname, 'site', f)]),
         ),
       },

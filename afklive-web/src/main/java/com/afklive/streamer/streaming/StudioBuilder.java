@@ -36,6 +36,8 @@ public class StudioBuilder {
     private final MediaCache cache;
     private final IngestReader ingestReader;
     private final com.afklive.streamer.service.MediaProbe probe;
+    /** Smaller copies of library videos, prepared once at this stream's size and frame rate. */
+    private final com.afklive.streamer.service.PlayoutCopies playoutCopies;
     /** Whether each file has an audio track, when the library knows (from upload) or a probe found out. */
     /**
      * A built studio plus what's needed to change it while live: the factory and canvas for new
@@ -85,7 +87,7 @@ public class StudioBuilder {
             if (!media.isEmpty()) {
                 cache.prefetch(media.getFirst().key());
             }
-            PlaylistFeed feed = new PlaylistFeed(canvas, items(media), order(musicOrder), 0, null, prefetching(factory, musicRefs), true, random);
+            PlaylistFeed feed = new PlaylistFeed(canvas, items(media), order(musicOrder), 0, null, prefetching(canvas, factory, musicRefs), true, random);
             feed.setCrossfadeSeconds(crossfadeSeconds);
             return feed;
         }
@@ -112,8 +114,20 @@ public class StudioBuilder {
                             : DecoderSource.Options.file(item.path(), item.hasAudio(), start)
                                     .withFit(item.fit() != null ? item.fit() : streamFit.get())).withGain(item.gainDb()),
                     workDir, ffmpeg, "job" + jobId + "-" + item.id());
+            java.util.concurrent.atomic.AtomicReference<String> copyPinned = new java.util.concurrent.atomic.AtomicReference<>();
             return source.resolveInputWith(() -> {
-                        Path file = cache.fetch(key);
+                        // Videos play from a playout copy at this canvas when one is ready (asked for otherwise).
+                        String play = audioOnly ? key : playoutCopies.keyFor(key, canvas.width(), canvas.height(), canvas.fps());
+                        Path file;
+                        if (play.equals(key)) {
+                            file = cache.fetch(key);
+                        } else {
+                            String before = copyPinned.getAndSet(play);
+                            if (before == null) {
+                                cache.pin(play);
+                            }
+                            file = fetchCopyOrOriginal(play, key);
+                        }
                         Boolean hasAudio = audioOnly ? Boolean.TRUE : audioKnown.get(key);
                         Double duration = item.durationSeconds() > 0 ? null : durationKnown.get(key);
                         if (hasAudio == null || (item.durationSeconds() <= 0 && duration == null)) {
@@ -132,7 +146,13 @@ public class StudioBuilder {
                         }
                         return new DecoderSource.Resolved(List.of("-i", file.toString()), hasAudio, duration);
                     })
-                    .whenClosed(() -> cache.release(key));
+                    .whenClosed(() -> {
+                        cache.release(key);
+                        String copy = copyPinned.get();
+                        if (copy != null) {
+                            cache.release(copy);
+                        }
+                    });
         };
 
         for (List<StudioSpec.Media> list : java.util.Arrays.asList(spec.videos(), spec.music())) {
@@ -152,7 +172,7 @@ public class StudioBuilder {
                 cache.prefetch(spec.videos().get(i).key());
             }
             playlist = new PlaylistFeed(canvas, items(spec.videos()), order(spec.order()), spec.loops(), position(resume),
-                    prefetching(factory, videoRefs), false, random);
+                    prefetching(canvas, factory, videoRefs), false, random);
             if (spec.finishAfterPass()) {
                 playlist.endAfterThisPass(); // asked for before a restart or takeover: still applies
             }
@@ -164,7 +184,7 @@ public class StudioBuilder {
         if (musicOn) {
             cache.prefetch(spec.music().getFirst().key());
             music = new PlaylistFeed(canvas, items(spec.music()), order(spec.musicOrder()), 0, null,
-                    prefetching(factory, musicRefs), true, random);
+                    prefetching(canvas, factory, musicRefs), true, random);
         }
         double videoVolume = "MUTE".equals(spec.audioMode()) ? 0 : clampVolume(spec.videoVolume());
         double musicVolume = clampVolume(spec.musicVolume());
@@ -283,16 +303,28 @@ public class StudioBuilder {
         return "SHUFFLE".equals(order) ? PlaylistFeed.Order.SHUFFLE : PlaylistFeed.Order.IN_ORDER;
     }
 
+    /** A ready playout copy from the cache; the original if the copy can't be fetched (deleted meanwhile). */
+    private Path fetchCopyOrOriginal(String copy, String original) throws IOException {
+        try {
+            return cache.fetch(copy);
+        } catch (IOException | RuntimeException e) {
+            log.warn("Playout copy {} unavailable, playing the original: {}", copy, e.getMessage());
+            return cache.fetch(original);
+        }
+    }
+
     /** When an item starts, fetch the two after it so they're on disk before they're needed. */
-    private PlaylistFeed.SourceFactory prefetching(PlaylistFeed.SourceFactory inner,
+    private PlaylistFeed.SourceFactory prefetching(Canvas canvas, PlaylistFeed.SourceFactory inner,
                                                    java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> refs) {
+        java.util.function.UnaryOperator<String> playoutKey =
+                k -> playoutCopies.knownKeyFor(k, canvas.width(), canvas.height(), canvas.fps());
         return (item, start, audioOnly) -> {
             String key = keyOf(item);
             List<StudioSpec.Media> media = refs.get();
             for (int i = 0; i < media.size(); i++) {
                 if (media.get(i).key().equals(key)) {
-                    cache.prefetch(media.get((i + 1) % media.size()).key());
-                    cache.prefetch(media.get((i + 2) % media.size()).key());
+                    cache.prefetch(playoutKey.apply(media.get((i + 1) % media.size()).key()));
+                    cache.prefetch(playoutKey.apply(media.get((i + 2) % media.size()).key()));
                     break;
                 }
             }

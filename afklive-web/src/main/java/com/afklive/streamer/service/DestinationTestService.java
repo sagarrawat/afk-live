@@ -62,6 +62,7 @@ public class DestinationTestService {
     /** Records a test for a worker to run; the caller polls {@link #result}. */
     public DestinationTest request(User user, StreamDestination d) {
         String key = d.getStreamKey();
+        com.afklive.streamer.util.StreamAddresses.requireWellFormed(key);
         NetworkSafety.requireSafeStreamDestination(key);
         for (StreamJob j : jobs.findAllByUserEmailAndIsLiveTrue(user.getEmail())) {
             try {
