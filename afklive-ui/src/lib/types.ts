@@ -203,7 +203,7 @@ export interface Destination {
   id: number;
   name: string;
   type: string;
-  platform: 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TWITCH' | 'KICK' | 'CUSTOM';
+  platform: 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TWITCH' | 'KICK' | 'TIKTOK' | 'RUMBLE' | 'CUSTOM';
   server: string;
   keyHint: string;
   selected: boolean;
