@@ -1,0 +1,16 @@
+# Local PostgreSQL for development. Start with:
+#   docker compose -f docker-compose.dev.yml up -d
+# Then run the app with the dev profile (see README_DEV.md).
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: afkdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - afklive-pg:/var/lib/postgresql/data
+volumes:
+  afklive-pg:

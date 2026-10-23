@@ -12,79 +12,29 @@ Spring Boot application for AFK Live streaming capabilities.
 
 ## Prerequisites
 
-- Java 21 JDK
-- Maven 3.6.3+
-- FFmpeg 6.0+
-- PostgreSQL (or compatible database for production)
+- Java 21 JDK, Maven 3.9+
+- FFmpeg 6.0+ on PATH
+- PostgreSQL 16 (or Docker, to run `docker-compose.dev.yml`)
 
-## Installation
-
-### 1. Install FFmpeg
-
-**Ubuntu/Debian:**
+## Run locally
 
 ```sh
-sudo apt-get install ffmpeg
+docker compose -f docker-compose.dev.yml up -d
+SPRING_PROFILES_ACTIVE=dev mvn -pl afklive-web spring-boot:run
 ```
 
-**macOS (Homebrew):**
+Open http://localhost:8080 and sign in with `dev@afklive.local` / `devpassword` (dev profile only).
+No Google, payment, AI or cloud-storage secrets are needed for local development.
+
+## Test
 
 ```sh
-brew install ffmpeg
+mvn -B verify
 ```
 
-**Windows (Chocolatey):**
+Integration tests use an embedded PostgreSQL, so no database or Docker is needed to run them.
 
-```sh
-choco install ffmpeg
-```
-
-### 2. Build and Run
-
-```sh
-mvn clean install
-mvn spring-boot:run
-```
-
-## Configuration
-
-Create `src/main/resources/application.properties`:
-
-```properties
-# Server configuration
-server.port=8080
-# H2 Database (development)
-spring.datasource.url=jdbc:h2:mem:afklive
-spring.datasource.driverClassName=org.h2.Driver
-spring.datasource.username=sa
-spring.datasource.password=
-spring.h2.console.enabled=true
-spring.h2.console.path=/h2-console
-# Session management
-spring.session.store-type=jdbc
-# Security (configure OAuth2 client)
-spring.security.oauth2.client.registration.[provider].client-id=
-spring.security.oauth2.client.registration.[provider].client-secret=
-```
-
-## Usage
-
-After starting the application:
-
-- Access H2 console at: http://localhost:8080/h2-console
-- API endpoints available at: http://localhost:8080/api/
-
-```sh
-# Verify FFmpeg integration
-ffmpeg -version
-```
-
-## Development Notes
-
-- The H2 database is configured for development purposes
-- Switch to PostgreSQL in production by updating datasource properties
-- Session data persists in database via spring-session-jdbc
-- Security configuration requires OAuth2 provider setup
+See `CLAUDE.md` for project rules and `docs/product-spec.md` for the product spec.
 
 ## Contributing
 
