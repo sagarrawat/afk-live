@@ -196,7 +196,7 @@ public class MediaProcessor {
 
     private Result video(MediaAsset a) {
         String where = storage.readLocation(a.getS3Key());
-        MediaProbe.MediaInfo info = probe.probe(where);
+        MediaProbe.MediaInfo info = withMeasuredDuration(probe.probe(where), where);
         String problem = videoProblem(info);
         if (problem != null) {
             return Result.failed(problem);
@@ -235,8 +235,19 @@ public class MediaProcessor {
         return null;
     }
 
+    /** Recordings from browsers and some apps don't write their length in the header: measure it. */
+    private MediaProbe.MediaInfo withMeasuredDuration(MediaProbe.MediaInfo info, String where) {
+        if (info == MediaProbe.MediaInfo.UNKNOWN || info.durationSeconds() > 0.2) {
+            return info;
+        }
+        double measured = probe.measureDuration(where);
+        return measured <= 0 ? info : new MediaProbe.MediaInfo(info.videoCodec(), info.width(), info.height(), info.fps(),
+                info.hasAudio(), measured);
+    }
+
     private Result audio(MediaAsset a) {
-        MediaProbe.MediaInfo info = probe.probe(storage.readLocation(a.getS3Key()));
+        String where = storage.readLocation(a.getS3Key());
+        MediaProbe.MediaInfo info = withMeasuredDuration(probe.probe(where), where);
         if (info == MediaProbe.MediaInfo.UNKNOWN || !Boolean.TRUE.equals(info.hasAudio())) {
             return Result.failed("This file has no sound we can read. MP3, M4A, WAV, OGG and FLAC work.");
         }

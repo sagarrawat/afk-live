@@ -206,6 +206,22 @@ class MediaLibraryTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void aRecordingWithoutItsLengthInTheHeaderIsMeasuredAndPlays() throws Exception {
+        // Found on production: a browser screen recording (WebM written as a stream) has no duration in
+        // its header, and was refused as "empty or too short".
+        Path dir = Files.createTempDirectory("rec");
+        Path rec = dir.resolve("rec.webm");
+        Process p = new ProcessBuilder("sh", "-c", "ffmpeg -v error -f lavfi -i testsrc2=size=320x240:rate=25 -f lavfi -i sine=f=440 -t 3 "
+                + "-c:v libvpx -b:v 300k -c:a libopus -f webm pipe:1 > " + rec).start();
+        org.junit.jupiter.api.Assumptions.assumeTrue(p.waitFor() == 0 && Files.size(rec) > 0, "ffmpeg with libvpx");
+        long id = upload("Screen recording.webm", Files.readAllBytes(rec));
+        assertThat(processor.process(id)).isTrue();
+        MediaAsset a = assets.findById(id).orElseThrow();
+        assertThat(a.getStatus()).as(a.getStatusReason()).isEqualTo(MediaStatus.READY);
+        assertThat(a.getDurationSeconds()).isBetween(2.5, 3.5);
+    }
+
+    @Test
     void anInterruptedUploadResumesFromThePartsAlreadyStored() throws Exception {
         MediaService.UploadView up = media.startUpload(email, "long.mp4", video.length);
         assertThat(up.partCount()).isGreaterThan(1);

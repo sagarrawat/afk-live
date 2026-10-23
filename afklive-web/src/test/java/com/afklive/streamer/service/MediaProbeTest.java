@@ -66,4 +66,10 @@ class MediaProbeTest {
         assertThat(q).isNotNull();
         assertThat(l - q).as("10x the amplitude is 20 dB louder").isBetween(19.0, 21.0);
     }
+
+    @Test
+    void readsTheLastTimestampFromProgress() {
+        assertThat(MediaProbe.parseLastTime("frame= 10 time=00:00:01.50 bitrate\nframe= 75 time=00:01:02.04 bitrate")).isEqualTo(62.04);
+        assertThat(MediaProbe.parseLastTime("nothing")).isZero();
+    }
 }
