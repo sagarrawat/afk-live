@@ -29,8 +29,13 @@ public final class StreamDtos {
         }
     }
 
+    /** {@code fit}: the item's own fit (PL-6), null when it follows the stream. */
     public record MediaRef(Long id, String title, Double durationSeconds, Integer width, Integer height,
-                           String contentType, String status) {
+                           String contentType, String status, String fit) {
+    }
+
+    /** PL-6 / AU-3: how pictures fill the frame, and the music crossfade. Either may be left out. */
+    public record Presentation(String fit, Integer crossfadeSeconds) {
     }
 
     public record TargetView(Long destinationId, String name, String type, boolean enabled) {
@@ -74,7 +79,7 @@ public final class StreamDtos {
                              List<StudioSpec.OverlaySetting> overlays, List<StudioSpec.SceneSetting> scenes,
                              List<MediaRef> playlist, List<MediaRef> music, double totalRuntimeSeconds,
                              List<TargetView> destinations, List<ScheduleView> schedules, LiveState live,
-                             PhoneSettings phone) {
+                             PhoneSettings phone, String fit, int crossfadeSeconds) {
     }
 
     /** Phone streams: what happens when the signal drops, and the SRT buffer. */

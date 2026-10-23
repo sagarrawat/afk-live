@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Panel, Segmented } from '@/components/ui';
-import { patch } from '@/lib/api';
+import { patch, put } from '@/lib/api';
 import type { StreamView } from '@/lib/types';
 import { ItemsEditor } from './PlaylistTab';
 import { useStreamUpdate } from './useStreamUpdate';
@@ -34,8 +34,37 @@ export function AudioTab({ stream: s }: { stream: StreamView }) {
           <Level label="Music volume" value={s.musicVolume} onCommit={(v) => update(() => patch(`/api/streams/${s.id}`, { musicVolume: v }))} />
         </Panel>
       )}
+      {s.music.length > 1 && <Crossfade stream={s} />}
       <ItemsEditor stream={s} kind="music" />
     </div>
+  );
+}
+
+/** AU-3: tracks overlap instead of cutting. */
+function Crossfade({ stream: s }: { stream: StreamView }) {
+  const { update } = useStreamUpdate(s.id);
+  const [v, setV] = useState(s.crossfadeSeconds);
+  useEffect(() => setV(s.crossfadeSeconds), [s.crossfadeSeconds]);
+  return (
+    <Panel title="Between tracks">
+      <label htmlFor="crossfade" className="flex justify-between text-sm font-medium">
+        Crossfade
+        <span className="tnum text-muted">{v === 0 ? 'Off' : `${v} s`}</span>
+      </label>
+      <input
+        id="crossfade"
+        type="range"
+        min={0}
+        max={20}
+        step={1}
+        value={v}
+        onChange={(e) => setV(Number(e.target.value))}
+        onPointerUp={() => v !== s.crossfadeSeconds && update(() => put(`/api/streams/${s.id}/presentation`, { crossfadeSeconds: v }), 'Saved. It applies from the next track.')}
+        onKeyUp={() => v !== s.crossfadeSeconds && update(() => put(`/api/streams/${s.id}/presentation`, { crossfadeSeconds: v }))}
+        className="mt-2 w-full max-w-sm accent-[rgb(var(--accent))]"
+      />
+      <p className="mt-2 text-sm text-muted">The next track fades in while the last one fades out, so the music never stops abruptly.</p>
+    </Panel>
   );
 }
 

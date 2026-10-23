@@ -119,7 +119,47 @@ public class LiveStreamService {
                 tv, scheduleViews(s), liveState(s),
                 s.getSource() == LiveStream.Source.PHONE
                         ? new PhoneSettings(s.isEndOnInputLoss(), s.getInputGraceSeconds(), s.getSrtLatencyMs(), s.getIngestLastPublishAt())
-                        : null);
+                        : null,
+                s.getFit(), s.getCrossfadeSeconds());
+    }
+
+    static final int MAX_CROSSFADE_SECONDS = 20;
+
+    /** PL-6 / AU-3: live changes apply from the next item or track, without a drop. */
+    @Transactional
+    public void setPresentation(String email, Long id, com.afklive.streamer.dto.StreamDtos.Presentation req) {
+        LiveStream s = get(email, id);
+        if (req.fit() != null) {
+            s.setFit(fitName(req.fit()));
+        }
+        if (req.crossfadeSeconds() != null) {
+            if (req.crossfadeSeconds() < 0 || req.crossfadeSeconds() > MAX_CROSSFADE_SECONDS) {
+                throw new IllegalArgumentException("Crossfade is 0 to " + MAX_CROSSFADE_SECONDS + " seconds.");
+            }
+            s.setCrossfadeSeconds(req.crossfadeSeconds());
+        }
+        streams.save(s);
+        reloadIfLive(s);
+    }
+
+    /** PL-6: one playlist item's own fit; null or "" follows the stream. */
+    @Transactional
+    public void setItemFit(String email, Long id, int position, String fit) {
+        LiveStream s = get(email, id);
+        StreamItem item = items.findAllByStreamIdAndKindOrderByPositionAsc(id, StreamItem.Kind.VIDEO).stream()
+                .filter(i -> i.getPosition() == position).findFirst()
+                .orElseThrow(() -> new com.afklive.streamer.exception.NotFoundException("That video isn't in the playlist."));
+        item.setFit(fit == null || fit.isBlank() ? null : fitName(fit));
+        items.save(item);
+        reloadIfLive(s);
+    }
+
+    private static String fitName(String fit) {
+        var f = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
+        if (f == null) {
+            throw new IllegalArgumentException("Fit is FIT, FILL or BLUR.");
+        }
+        return f.name();
     }
 
     @Transactional
@@ -214,10 +254,14 @@ public class LiveStreamService {
         copy.setEndOnInputLoss(src.isEndOnInputLoss());
         copy.setInputGraceSeconds(src.getInputGraceSeconds());
         copy.setSrtLatencyMs(src.getSrtLatencyMs());
+        copy.setFit(src.getFit());
+        copy.setCrossfadeSeconds(src.getCrossfadeSeconds());
         copy = streams.save(copy);
         for (StreamItem.Kind kind : StreamItem.Kind.values()) {
             for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(src.getId(), kind)) {
-                items.save(new StreamItem(copy.getId(), kind, i.getPosition(), i.getMedia()));
+                StreamItem c = new StreamItem(copy.getId(), kind, i.getPosition(), i.getMedia());
+                c.setFit(i.getFit());
+                items.save(c);
             }
         }
         for (StreamTarget t : targets.findAllByStreamId(src.getId())) {
@@ -253,6 +297,11 @@ public class LiveStreamService {
         }
         MediaAsset.ContentType wanted = kind == StreamItem.Kind.VIDEO ? MediaAsset.ContentType.VIDEO : MediaAsset.ContentType.AUDIO;
         List<StreamItem> next = new ArrayList<>();
+        // PL-6: an item keeps its own fit through reorders and additions.
+        Map<Long, java.util.Deque<String>> fits = new HashMap<>();
+        for (StreamItem old : items.findAllByStreamIdAndKindOrderByPositionAsc(id, kind)) {
+            fits.computeIfAbsent(old.getMedia().getId(), k -> new java.util.ArrayDeque<>()).add(old.getFit() == null ? "" : old.getFit());
+        }
         int pos = 0;
         for (Long mid : mediaIds) {
             MediaAsset m = owned.get(mid);
@@ -263,7 +312,11 @@ public class LiveStreamService {
                 throw new IllegalArgumentException("\"" + m.getTitle() + "\" is " + m.getContentType().name().toLowerCase()
                         + "; this list takes " + wanted.name().toLowerCase() + " files.");
             }
-            next.add(new StreamItem(id, kind, pos++, m));
+            StreamItem item = new StreamItem(id, kind, pos++, m);
+            java.util.Deque<String> kept = fits.get(mid);
+            String fit = kept == null ? null : kept.poll();
+            item.setFit(fit == null || fit.isEmpty() ? null : fit);
+            next.add(item);
         }
         items.deleteAll(items.findAllByStreamIdAndKindOrderByPositionAsc(id, kind));
         items.flush();
@@ -805,7 +858,7 @@ public class LiveStreamService {
         List<StudioSpec.Media> videos = new ArrayList<>();
         for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(s.getId(), StreamItem.Kind.VIDEO)) {
             if (i.getMedia().getStatus() == MediaStatus.READY) {
-                videos.add(mediaOf(i.getMedia()));
+                videos.add(mediaOf(i.getMedia(), i.getFit()));
             }
         }
         List<StudioSpec.Media> music = new ArrayList<>();
@@ -853,7 +906,8 @@ public class LiveStreamService {
         return new StudioSpec(s.getQualityHeight(), s.getOrientation() == LiveStream.Orientation.VERTICAL, s.getFps(),
                 s.getSource().name(), videos, s.getPlaybackOrder().name(), s.getLoopCount(), music,
                 s.getMusicOrder().name(), s.getAudioMode().name(), s.getVideoVolume(), s.getMusicVolume(),
-                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, phone(s), false);
+                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, phone(s), false,
+                s.getFit(), s.getCrossfadeSeconds());
     }
 
     private StudioSpec.Phone phone(LiveStream s) {
@@ -865,8 +919,12 @@ public class LiveStreamService {
     }
 
     private static StudioSpec.Media mediaOf(MediaAsset m) {
+        return mediaOf(m, null);
+    }
+
+    private static StudioSpec.Media mediaOf(MediaAsset m, String fit) {
         return new StudioSpec.Media(String.valueOf(m.getId()), m.getS3Key(), m.getTitle(),
-                m.getDurationSeconds() == null ? 0 : m.getDurationSeconds(), m.getHasAudio());
+                m.getDurationSeconds() == null ? 0 : m.getDurationSeconds(), m.getHasAudio(), fit);
     }
 
     /** Edits made while live reach the running studio without restarting anything. */
@@ -1006,7 +1064,7 @@ public class LiveStreamService {
         return list.stream().map(i -> {
             MediaAsset m = i.getMedia();
             return new MediaRef(m.getId(), m.getTitle(), m.getDurationSeconds(), m.getWidth(), m.getHeight(),
-                    m.getContentType().name(), m.getStatus().name());
+                    m.getContentType().name(), m.getStatus().name(), i.getFit());
         }).toList();
     }
 

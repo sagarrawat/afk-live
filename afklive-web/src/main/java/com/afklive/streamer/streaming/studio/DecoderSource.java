@@ -45,7 +45,19 @@ public final class DecoderSource implements AutoCloseable {
      * @param live         real-time source: low-latency buffering, restart on exit
      * @param startSeconds start offset for files (resume, or seek)
      */
-    public record Options(List<String> input, boolean video, boolean audio, boolean live, double startSeconds) {
+    public record Options(List<String> input, boolean video, boolean audio, boolean live, double startSeconds, Fit fit) {
+        public Options(List<String> input, boolean video, boolean audio, boolean live, double startSeconds) {
+            this(input, video, audio, live, startSeconds, Fit.FIT);
+        }
+
+        public Options {
+            fit = fit == null ? Fit.FIT : fit;
+        }
+
+        public Options withFit(Fit value) {
+            return new Options(input, video, audio, live, startSeconds, value);
+        }
+
         public static Options file(Path path, boolean hasAudio, double startSeconds) {
             return new Options(List.of("-i", path.toString()), true, hasAudio, false, startSeconds);
         }
@@ -57,6 +69,54 @@ public final class DecoderSource implements AutoCloseable {
         public static Options live(String url) {
             return new Options(List.of("-i", url), true, true, true, 0);
         }
+    }
+
+    /**
+     * PL-6 / MS-10: how a picture that isn't the canvas's shape fills it. FIT: whole picture, black
+     * bars. FILL: fills the frame, edges cropped. BLUR: whole picture over a blurred, zoomed copy of
+     * itself (a vertical phone video on a landscape stream, without black bars).
+     */
+    public enum Fit {
+        FIT, FILL, BLUR;
+
+        public static Fit parse(String value) {
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            try {
+                return Fit.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * The filter that turns the input picture into a canvas-sized one ([0:v:0] in, [fit] out). Scaled
+     * sizes stay even: so chroma lines up cleanly in 4:2:0 video.
+     */
+    static String fitGraph(Canvas canvas, Fit fit) {
+        int w = canvas.width();
+        int h = canvas.height();
+        return switch (fit) {
+            case FILL -> "[0:v:0]scale=" + w + ":" + h + ":force_original_aspect_ratio=increase:force_divisible_by=2,crop=" + w + ":" + h + "[fit]";
+            case BLUR -> {
+                // Blur a small copy (cheap), then scale it up: the background costs a fraction of a frame.
+                int bw = even(w / 8);
+                int bh = even(h / 8);
+                yield "[0:v:0]split=2[bgsrc][fgsrc];"
+                        + "[bgsrc]scale=" + bw + ":" + bh + ":force_original_aspect_ratio=increase:force_divisible_by=2,crop=" + bw + ":" + bh
+                        + ",boxblur=luma_radius='min(w,h)/6':luma_power=2:chroma_radius='min(cw,ch)/6',eq=brightness=-0.08,scale=" + w + ":" + h + "[bg];"
+                        + "[fgsrc]scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease:force_divisible_by=2[fg];"
+                        + "[bg][fg]overlay=(W-w)/2:(H-h)/2[fit]";
+            }
+            case FIT -> "[0:v:0]scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease:force_divisible_by=2,pad=" + w + ":" + h
+                    + ":(ow-iw)/2:(oh-ih)/2:color=black[fit]";
+        };
+    }
+
+    private static int even(int v) {
+        return Math.max(2, v - (v % 2));
     }
 
     /** Produces FFmpeg input arguments; may block (runs on the decoder's own thread). */
@@ -423,9 +483,7 @@ public final class DecoderSource implements AutoCloseable {
                 + "aformat=sample_fmts=s16:channel_layouts=stereo";
         if (options.video()) {
             StringBuilder graph = new StringBuilder();
-            graph.append("[0:v:0]scale=").append(canvas.width()).append(':').append(canvas.height())
-                    .append(":force_original_aspect_ratio=decrease,pad=").append(canvas.width()).append(':').append(canvas.height())
-                    .append(":(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=").append(canvas.fps())
+            graph.append(fitGraph(canvas, options.fit())).append(";[fit]setsar=1,fps=").append(canvas.fps())
                     .append(options.live() ? "" : ":start_time=0").append(",format=yuv420p[v]");
             if (audio) {
                 graph.append(";[0:a:0]").append(audioChain).append("[a]");

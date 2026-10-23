@@ -159,6 +159,80 @@ class PlaylistFeedTest {
         assertThat(Studio.displayTitle("notes.v2")).isEqualTo("notes.v2");
     }
 
+    /** The first decoded frame of a file with this fit. */
+    private static Frame firstFrame(Path file, DecoderSource.Fit fit) throws Exception {
+        DecoderSource src = new DecoderSource(CANVAS, DecoderSource.Options.file(file, false, 0).withFit(fit), dir, "ffmpeg", "fit-" + fit);
+        src.start();
+        Frame f = new Frame(CANVAS);
+        try {
+            long deadline = System.nanoTime() + 20_000_000_000L;
+            while (!src.poll(f)) {
+                assertThat(System.nanoTime()).as("a frame within 20 s: " + src.state() + " " + src.lastError()).isLessThan(deadline);
+                Thread.sleep(10);
+            }
+            return f;
+        } finally {
+            src.close();
+        }
+    }
+
+    /** Mean luma of a column band (x0..x1) of the frame. */
+    private static double luma(Frame f, int x0, int x1) {
+        long sum = 0;
+        int n = 0;
+        for (int y = 0; y < CANVAS.height(); y++) {
+            for (int x = x0; x < x1; x++) {
+                sum += f.video[y * CANVAS.width() + x] & 0xff;
+                n++;
+            }
+        }
+        return (double) sum / n;
+    }
+
+    @Test
+    void aVerticalVideoFillsALandscapeFrameTheWayTheCreatorChose() throws Exception {
+        // PL-6 / MS-10: a phone video (9:16) on a 16:9 stream.
+        Path vertical = StudioFixtures.clip(dir, "vertical", 180, 320, 1, 0);
+        Frame fit = firstFrame(vertical, DecoderSource.Fit.FIT);
+        Frame fill = firstFrame(vertical, DecoderSource.Fit.FILL);
+        Frame blur = firstFrame(vertical, DecoderSource.Fit.BLUR);
+        assertThat(luma(fit, 0, 40)).as("bars").isLessThan(20);
+        assertThat(luma(fill, 0, 40)).as("cropped to fill").isGreaterThan(30);
+        assertThat(luma(blur, 0, 40)).as("blurred background").isGreaterThan(20);
+        // The middle of BLUR is the whole picture, as in FIT.
+        assertThat(Math.abs(luma(blur, 150, 170) - luma(fit, 150, 170))).isLessThan(12);
+    }
+
+    @Test
+    void musicCrossfadesIntoTheNextTrack() throws Exception {
+        // AU-3: with a 1 s crossfade two 2 s tracks overlap, so the list ends about a second sooner.
+        PlaylistFeed.Item low = new PlaylistFeed.Item("lo", "Low", StudioFixtures.audio(dir, "lo", 2, 220), true, 2);
+        PlaylistFeed.Item high = new PlaylistFeed.Item("hi", "High", StudioFixtures.audio(dir, "hi", 2, 880), true, 2);
+        int plain = ticksToFinish(List.of(low, high), 0);
+        int faded = ticksToFinish(List.of(low, high), 1);
+        assertThat(plain).isBetween(110, 135);
+        assertThat(plain - faded).isBetween(20, 40);
+    }
+
+    private static int ticksToFinish(List<PlaylistFeed.Item> items, double crossfade) throws Exception {
+        try (PlaylistFeed music = new PlaylistFeed(CANVAS, items, PlaylistFeed.Order.IN_ORDER, 1,
+                null, StudioFixtures.factory(dir), true, new Random(1))) {
+            music.setCrossfadeSeconds(crossfade);
+            Frame f = new Frame(CANVAS);
+            int ticks = 0;
+            long deadline = System.nanoTime() + 60_000_000_000L;
+            while (!music.finished() && System.nanoTime() < deadline) {
+                long before = music.framesPlayed();
+                music.next(f);
+                if (music.framesPlayed() > before) {
+                    ticks++; // count only ticks that played sound, not decoder start-up waits
+                }
+                Thread.sleep(1);
+            }
+            return ticks;
+        }
+    }
+
     @Test
     void audioOnlyPlaylistMakesMusic() throws Exception {
         PlaylistFeed.Item song = new PlaylistFeed.Item("s", "Song", StudioFixtures.audio(dir, "song", 1.5, 330), true, 1.5);

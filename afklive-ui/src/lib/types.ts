@@ -81,7 +81,12 @@ export interface MediaRef {
   height?: number | null;
   contentType: 'VIDEO' | 'AUDIO' | 'IMAGE';
   status: 'READY' | 'PROCESSING' | 'FAILED';
+  /** PL-6: this item's own fit; null follows the stream. */
+  fit?: Fit | null;
 }
+
+/** PL-6: FIT = whole picture with bars, FILL = fill and crop, BLUR = whole picture on a blurred copy. */
+export type Fit = 'FIT' | 'FILL' | 'BLUR';
 
 export interface TargetView {
   destinationId: number;
@@ -157,6 +162,8 @@ export interface StreamView {
   schedules: ScheduleView[];
   live: LiveState;
   phone?: { endOnInputLoss: boolean; inputGraceSeconds: number; srtLatencyMs: number; lastConnectedAt?: string | null } | null;
+  fit: Fit;
+  crossfadeSeconds: number;
 }
 
 export interface Check {
