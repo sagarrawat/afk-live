@@ -1,8 +1,10 @@
 import { CheckCircle2, CircleAlert, Loader2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { get, post } from '@/lib/api';
+import { HELP, helpForProblem } from '@/lib/help';
 import type { Destination } from '@/lib/types';
 import { PLATFORM_NAMES, type Platform } from './AddDestination';
+import { HelpLink } from './HelpLink';
 
 export interface TestResult {
   testId: number;
@@ -59,7 +61,22 @@ export function TestNote({ state, platform, className = 'mt-2' }: { state?: Test
   return (
     <p role="status" className={`${className} flex items-start gap-2 text-sm ${state.ok ? 'text-ok' : 'text-warn'}`}>
       {state.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
-      <span>{state.ok ? `Connected to ${where}. The stream key works.` : state.message}</span>
+      <span>
+        {state.ok ? `Connected to ${where}. The stream key works.` : state.message}
+        {!state.ok && <TestHelp message={state.message} platform={platform} />}
+      </span>
     </p>
+  );
+}
+
+/** MK-4: a failed test links to the article that fixes it. */
+function TestHelp({ message, platform }: { message: string; platform: Platform }) {
+  const to = helpForProblem(message, platform);
+  if (!to) return null;
+  return (
+    <>
+      {' '}
+      <HelpLink to={to}>{to === HELP.streamKey ? 'Where to find your YouTube stream key' : 'What to check'}</HelpLink>
+    </>
   );
 }

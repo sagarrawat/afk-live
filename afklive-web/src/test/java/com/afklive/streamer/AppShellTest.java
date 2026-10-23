@@ -3,7 +3,9 @@ package com.afklive.streamer;
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.StreamDestination;
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.model.StreamJob;
 import com.afklive.streamer.repository.StreamDestinationRepository;
+import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,7 @@ class AppShellTest extends PostgresIntegrationTest {
     @Autowired WebApplicationContext context;
     @Autowired UserRepository users;
     @Autowired StreamDestinationRepository destinations;
+    @Autowired StreamJobRepository jobs;
 
     MockMvc mvc;
     String email;
@@ -93,6 +96,49 @@ class AppShellTest extends PostgresIntegrationTest {
         }
         mvc.perform(get("/login").param("error", ""))
                 .andExpect(content().string(containsString("match. Try again")));
+    }
+
+    @Test
+    void helpCentreIsPublicAndEveryArticleIsInTheSitemap() throws Exception {
+        // MK-4: /help and each article, signed out; unknown or odd slugs are a 404.
+        mvc.perform(get("/help")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/help.html"));
+        mvc.perform(get("/help/youtube-stream-key")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/help-youtube-stream-key.html"));
+        mvc.perform(get("/help/nope")).andExpect(status().isNotFound());
+        mvc.perform(get("/help/..%2F..%2Fetc")).andExpect(status().is4xxClientError());
+        String sitemap = mvc.perform(get("/sitemap.xml")).andReturn().getResponse().getContentAsString();
+        java.util.Set<String> listed = new java.util.HashSet<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("https://afklive\\.in/help/([a-z0-9-]+)<").matcher(sitemap);
+        while (m.find()) {
+            listed.add(m.group(1));
+        }
+        org.assertj.core.api.Assertions.assertThat(listed).isEqualTo(com.afklive.streamer.endpoint.HomeController.HELP_ARTICLES);
+        org.assertj.core.api.Assertions.assertThat(sitemap).contains("https://afklive.in/help<");
+        for (String slug : listed) {
+            mvc.perform(get("/help/" + slug)).andExpect(status().isOk()).andExpect(forwardedUrl("/site/help-" + slug + ".html"));
+        }
+    }
+
+    @Test
+    void tipsAreDismissedForTheAccountAndGoLivesAreCounted() throws Exception {
+        // GL-6: "What you'll see on YouTube" is dismissed once for every device, not per browser.
+        mvc.perform(get("/api/me").with(user(email).roles("USER")))
+                .andExpect(jsonPath("$.dismissedHints").isEmpty())
+                .andExpect(jsonPath("$.goLives").value(0));
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(patch("/api/me").with(user(email).roles("USER")).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"dismissHint\":\"youtube-side\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.dismissedHints.length()").value(1))
+                    .andExpect(jsonPath("$.dismissedHints[0]").value("youtube-side"));
+        }
+        mvc.perform(patch("/api/me").with(user(email).roles("USER")).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dismissHint\":\"anything-else\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/me").with(user(email).roles("USER"))).andExpect(jsonPath("$.dismissedHints[0]").value("youtube-side"));
+        // The card also shows for the whole of a first go-live: every go-live is a job.
+        User u = users.findByEmail(email).orElseThrow();
+        jobs.save(new StreamJob(u, "k", null, null, null, false, 0, "First", null, null, java.time.ZonedDateTime.now(), "YouTube", false));
+        mvc.perform(get("/api/me").with(user(email).roles("USER"))).andExpect(jsonPath("$.goLives").value(1));
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.exception.NotFoundException;
 import com.afklive.streamer.model.PlanConfig;
 import com.afklive.streamer.model.User;
+import com.afklive.streamer.repository.StreamJobRepository;
 import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.service.PlanService;
 import com.afklive.streamer.util.SecurityUtils;
@@ -18,19 +19,28 @@ import org.springframework.web.bind.annotation.RestController;
 import java.security.Principal;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** The signed-in account for the app (ON-2, ON-3): who they are, their plan, and their preferences. */
 @RestController
 @RequestMapping("/api/me")
 public class MeController {
 
+    /** GL-6: tips a creator can dismiss for good (on every device). */
+    public static final Set<String> HINTS = Set.of("youtube-side");
+
     private final UserRepository users;
     private final PlanService plans;
+    private final StreamJobRepository jobs;
 
-    public MeController(UserRepository users, PlanService plans) {
+    public MeController(UserRepository users, PlanService plans, StreamJobRepository jobs) {
         this.users = users;
         this.plans = plans;
+        this.jobs = jobs;
     }
 
     public record Plan(String id, String name, int streams, int maxHeight, int maxFps, long storageBytes, int monthlyHours,
@@ -38,11 +48,15 @@ public class MeController {
     }
 
     public record Me(Long id, String email, String name, String picture, boolean admin, Plan plan, String timeZone,
-                     String currency, boolean onboarded, boolean emailAlerts) {
+                     String currency, boolean onboarded, boolean emailAlerts, List<String> dismissedHints, long goLives) {
     }
 
-    /** Fields are optional; {@code onboarded: true} marks the setup wizard done. */
-    public record Update(String name, String timeZone, String currency, Boolean onboarded, Boolean emailAlerts) {
+    /**
+     * Fields are optional; {@code onboarded: true} marks the setup wizard done; {@code dismissHint} adds one
+     * of {@link #HINTS} to the dismissed tips.
+     */
+    public record Update(String name, String timeZone, String currency, Boolean onboarded, Boolean emailAlerts,
+                         String dismissHint) {
     }
 
     @GetMapping
@@ -81,6 +95,15 @@ public class MeController {
         if (body.emailAlerts() != null) {
             u.setEmailAlerts(body.emailAlerts());
         }
+        if (body.dismissHint() != null) {
+            String hint = body.dismissHint().trim();
+            if (!HINTS.contains(hint)) {
+                throw new IllegalArgumentException("Unknown tip: " + hint);
+            }
+            Set<String> dismissed = new LinkedHashSet<>(dismissed(u));
+            dismissed.add(hint);
+            u.setDismissedHints(String.join(",", dismissed));
+        }
         users.save(u);
         return view(u, auth);
     }
@@ -102,6 +125,12 @@ public class MeController {
                 "ROLE_ADMIN".equals(u.getRole()),
                 new Plan(u.getPlanType().name(), c.getDisplayName(), c.getMaxActiveStreams(), c.getMaxResolution(), c.getMaxFps(),
                         c.getMaxStorageBytes(), c.getMonthlyHours(), c.getMaxDestinations(), c.isWatermark()),
-                u.getTimeZone(), u.getCurrency(), u.getOnboardedAt() != null, u.isEmailAlerts());
+                u.getTimeZone(), u.getCurrency(), u.getOnboardedAt() != null, u.isEmailAlerts(), dismissed(u),
+                jobs.countGoLives(u.getId()));
+    }
+
+    private static List<String> dismissed(User u) {
+        String d = u.getDismissedHints();
+        return d == null || d.isBlank() ? List.of() : Arrays.stream(d.split(",")).map(String::trim).filter(HINTS::contains).toList();
     }
 }
