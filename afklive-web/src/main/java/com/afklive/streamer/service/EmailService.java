@@ -79,7 +79,9 @@ public class EmailService {
                "<tr><td style='background-color: #f4f5f7; padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee;'>" +
                    "&copy; AFK Live. Stay live while you're away.<br>" +
                    "<a href='" + baseUrl + "/privacy' style='color: #999; text-decoration: underline;'>Privacy Policy</a> | " +
-                   "<a href='" + baseUrl + "/terms' style='color: #999; text-decoration: underline;'>Terms of Service</a>" +
+                   "<a href='" + baseUrl + "/terms' style='color: #999; text-decoration: underline;'>Terms of Service</a> | " +
+                   // RE-7: the public status page.
+                   "<a href='" + baseUrl + "/status' style='color: #999; text-decoration: underline;'>Service status</a>" +
                "</td></tr>" +
 
                "</table>" + // End Main Container
@@ -165,7 +167,8 @@ public class EmailService {
         String content = "<p>" + escape(body) + "</p>"
                 + (link == null ? "" : "<p><a href='" + escape(baseUrl + link) + "' style='display:inline-block;background:#21245C;"
                 + "color:#fff;padding:10px 22px;border-radius:999px;text-decoration:none;font-weight:600'>Open AFK Live</a></p>")
-                + "<p style='font-size:13px;color:#999'>You can turn alert emails off in Settings.</p>";
+                + "<p style='font-size:13px;color:#999'>Is it just you? <a href='" + escape(baseUrl + "/status")
+                + "' style='color:#999'>Check AFK Live's status</a>. You can turn alert emails off in Settings.</p>";
         return sendEmail(to, subject, createBaseHtml(escape(title), content));
     }
 

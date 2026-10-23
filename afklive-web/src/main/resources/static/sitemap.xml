@@ -11,6 +11,11 @@
       <priority>0.8</priority>
    </url>
    <url>
+      <loc>https://afklive.in/status</loc>
+      <changefreq>daily</changefreq>
+      <priority>0.3</priority>
+   </url>
+   <url>
       <loc>https://afklive.in/for/lofi</loc>
       <changefreq>monthly</changefreq>
       <priority>0.7</priority>

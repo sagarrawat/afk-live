@@ -32,6 +32,32 @@ interface WorkerRow {
   streams: number;
   lastHeartbeatAgeSeconds: number;
   healthy: boolean;
+  capacity?: number | null;
+  cpuPercent?: number | null;
+  memoryUsedBytes?: number | null;
+  memoryTotalBytes?: number | null;
+}
+export interface CostView {
+  monthlyServerCost?: number | null;
+  currency: string;
+  streamHours30d: number;
+  costPerStreamHour?: number | null;
+}
+export interface QuotaView {
+  usedToday: number;
+  dailyLimit: number;
+  percent: number;
+  resetsAt: string;
+  breakdown: { api: string; units: number }[];
+}
+type IncidentStage = 'investigating' | 'identified' | 'monitoring' | 'resolved';
+interface StatusIncident {
+  id: number;
+  title: string;
+  status: IncidentStage;
+  startedAt: string;
+  resolvedAt?: string | null;
+  updates: { status: IncidentStage; message: string; at: string }[];
 }
 interface UserRow {
   id: number;
@@ -77,16 +103,17 @@ export function Admin() {
   return (
     <>
       <PageHeader title="Admin" description="Every action asks for a reason and is written to the audit log." />
-      <nav className="mb-6 flex gap-1 border-b border-line">
+      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
         {[
           ['live', 'Live streams'],
           ['users', 'Users'],
+          ['platform', 'Platform'],
           ['audit', 'Audit log'],
         ].map(([s, label]) => (
           <NavLink
             key={s}
             to={`/studio/admin/${s}`}
-            className={() => clsx('-mb-px border-b-2 px-3 py-2.5 text-sm', section === s ? 'border-accent font-medium' : 'border-transparent text-muted hover:text-ink')}
+            className={() => clsx('-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-sm', section === s ? 'border-accent font-medium' : 'border-transparent text-muted hover:text-ink')}
           >
             {label}
           </NavLink>
@@ -94,6 +121,7 @@ export function Admin() {
       </nav>
       {section === 'live' && <LiveStreams />}
       {section === 'users' && (id ? <UserPage id={Number(id)} /> : <Users />)}
+      {section === 'platform' && <Platform />}
       {section === 'audit' && <Audit />}
     </>
   );
@@ -133,24 +161,22 @@ function LiveStreams() {
   const [health, setHealth] = useState('');
   const live = useQuery({ queryKey: ['admin', 'live', q, health], queryFn: () => get<LiveRow[]>(`/api/admin/live?q=${encodeURIComponent(q)}&health=${health}`), refetchInterval: 5000 });
   const workers = useQuery({ queryKey: ['admin', 'workers'], queryFn: () => get<WorkerRow[]>('/api/admin/workers'), refetchInterval: 10000 });
+  const cost = useQuery({ queryKey: ['admin', 'cost'], queryFn: () => get<CostView>('/api/admin/cost'), refetchInterval: 300000 });
   const [act, setAct] = useState<{ row: LiveRow; kind: 'stop' | 'move' } | null>(null);
   return (
     <div className="space-y-6">
       <Panel title="Workers" pad={false}>
-        <ul className="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3">
           {(workers.data ?? []).map((w) => (
-            <li key={w.worker} className="bg-panel px-4 py-3">
-              <span className="flex items-center gap-2 font-medium">
-                <HealthDot level={w.healthy ? 'green' : 'red'} />
-                <span className="truncate">{w.worker}</span>
-              </span>
-              <span className="tnum text-sm text-muted">
-                {w.streams} stream{w.streams === 1 ? '' : 's'}, last report {w.lastHeartbeatAgeSeconds < 0 ? 'never' : `${w.lastHeartbeatAgeSeconds}s ago`}
-              </span>
-            </li>
+            <WorkerCard key={w.worker} w={w} />
           ))}
-          {workers.data?.length === 0 && <li className="bg-panel px-4 py-3 text-muted">No streams running.</li>}
+          {workers.data?.length === 0 && <li className="bg-panel px-4 py-3 text-muted">No workers have reported in the last hour.</li>}
         </ul>
+        {cost.data && (
+          <div className="border-t border-line px-4 py-2.5 text-sm">
+            <CostLine cost={cost.data} />
+          </div>
+        )}
       </Panel>
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1">
@@ -239,6 +265,237 @@ function LiveStreams() {
         </ReasonDialog>
       )}
     </div>
+  );
+}
+
+/** Health colour for a load percentage: green below 75, amber to 90, red above. */
+export function loadLevel(pct: number | null | undefined): Level {
+  if (pct == null) return 'green';
+  return pct >= 90 ? 'red' : pct >= 75 ? 'amber' : 'green';
+}
+
+function Meter({ label, pct, text }: { label: string; pct: number | null | undefined; text: string }) {
+  const level = loadLevel(pct);
+  return (
+    <div>
+      <div className="flex justify-between gap-2 text-xs">
+        <span className="text-muted">{label}</span>
+        <span className={clsx('tnum', level === 'red' ? 'text-bad' : level === 'amber' ? 'text-warn' : 'text-muted')}>{text}</span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-raised" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
+        {pct != null && <div className={clsx('h-full rounded-full', level === 'red' ? 'bg-bad' : level === 'amber' ? 'bg-warn' : 'bg-ok')} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />}
+      </div>
+    </div>
+  );
+}
+
+function WorkerCard({ w }: { w: WorkerRow }) {
+  const memPct = w.memoryUsedBytes != null && w.memoryTotalBytes ? Math.round((w.memoryUsedBytes / w.memoryTotalBytes) * 100) : null;
+  return (
+    <li className="min-w-0 bg-panel px-4 py-3">
+      <span className="flex items-center gap-2 font-medium">
+        <HealthDot level={w.healthy ? 'green' : 'red'} />
+        <span className="truncate">{w.worker}</span>
+      </span>
+      <span className="tnum block text-sm text-muted">
+        {w.streams}
+        {w.capacity ? ` of ${w.capacity}` : ''} stream{w.streams === 1 && !w.capacity ? '' : 's'}, last report {w.lastHeartbeatAgeSeconds < 0 ? 'never' : `${w.lastHeartbeatAgeSeconds}s ago`}
+      </span>
+      {w.cpuPercent != null || memPct != null ? (
+        <div className="mt-2.5 space-y-2">
+          <Meter label="CPU" pct={w.cpuPercent} text={w.cpuPercent == null ? '–' : `${Math.round(w.cpuPercent)}%`} />
+          <Meter label="Memory" pct={memPct} text={memPct == null ? '–' : `${bytes(w.memoryUsedBytes)} of ${bytes(w.memoryTotalBytes)}`} />
+        </div>
+      ) : (
+        <span className="mt-1 block text-xs text-muted">No CPU or memory report yet.</span>
+      )}
+    </li>
+  );
+}
+
+function major(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+
+/** AD-2: the monthly server bill over the last 30 days' stream hours. */
+export function CostLine({ cost }: { cost: CostView }) {
+  const hours = `${cost.streamHours30d.toLocaleString(undefined, { maximumFractionDigits: 1 })} stream hours in the last 30 days`;
+  if (cost.monthlyServerCost == null) {
+    return (
+      <span className="text-muted">
+        {hours}. Set <code>APP_MONTHLY_SERVER_COST</code> to see the server cost per stream hour.
+      </span>
+    );
+  }
+  return (
+    <span className="text-muted">
+      <span className="tnum font-medium text-ink">{cost.costPerStreamHour == null ? '–' : major(cost.costPerStreamHour, cost.currency)}</span> per stream hour: {major(cost.monthlyServerCost, cost.currency)} a month over {hours}.
+    </span>
+  );
+}
+
+function Platform() {
+  return (
+    <div className="space-y-6">
+      <Quota />
+      <Incidents />
+    </div>
+  );
+}
+
+/** YT-4: YouTube Data API units spent today. */
+export function Quota() {
+  const q = useQuery({ queryKey: ['admin', 'quota'], queryFn: () => get<QuotaView>('/api/admin/quota'), refetchInterval: 60000 });
+  if (q.isLoading) return <Spinner />;
+  if (!q.data) return <ErrorNote error={q.error} />;
+  const d = q.data;
+  const level = loadLevel(d.percent);
+  const resetsIn = Math.max(0, (new Date(d.resetsAt).getTime() - Date.now()) / 1000);
+  return (
+    <Panel title="YouTube API quota today">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <p>
+          <span className="tnum text-2xl font-semibold">{d.usedToday.toLocaleString()}</span>
+          <span className="tnum text-muted"> of {d.dailyLimit.toLocaleString()} units</span>
+        </p>
+        <p className={clsx('tnum text-sm', level === 'red' ? 'text-bad' : level === 'amber' ? 'text-warn' : 'text-muted')}>
+          {d.percent}% used{level === 'red' ? ': uploads and live comment tools may start failing' : ''}
+        </p>
+      </div>
+      <div className="mt-3">
+        <Meter label="Quota used" pct={d.percent} text={`resets in ${duration(resetsIn)} (midnight Pacific)`} />
+      </div>
+      {d.breakdown.length > 0 ? (
+        <ul className="mt-4 divide-y divide-line text-sm">
+          {d.breakdown.map((b) => (
+            <li key={b.api} className="flex justify-between gap-3 py-2">
+              <span className="truncate">{b.api}</span>
+              <span className="tnum text-muted">{b.units.toLocaleString()}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 text-sm text-muted">No YouTube API calls yet today.</p>
+      )}
+    </Panel>
+  );
+}
+
+const STAGES: [IncidentStage, string][] = [
+  ['investigating', 'Investigating'],
+  ['identified', 'Cause found'],
+  ['monitoring', 'Fix in place, watching'],
+  ['resolved', 'Resolved'],
+];
+const stageLabel = (s: IncidentStage) => STAGES.find(([v]) => v === s)?.[1] ?? s;
+
+/** RE-7: incidents on the public status page. */
+function Incidents() {
+  const list = useQuery({ queryKey: ['admin', 'incidents'], queryFn: () => get<{ incident: StatusIncident; createdBy: string }[]>('/api/admin/status/incidents') });
+  const [dialog, setDialog] = useState<{ incident?: StatusIncident } | null>(null);
+  return (
+    <Panel
+      title="Status page incidents"
+      pad={false}
+      action={
+        <Button size="sm" variant="primary" onClick={() => setDialog({})}>
+          Post an incident
+        </Button>
+      }
+    >
+      <p className="border-b border-line px-4 py-2.5 text-sm text-muted">
+        Shown publicly at{' '}
+        <a href="/status" target="_blank" rel="noreferrer" className="underline">
+          /status
+        </a>
+        . Never name customers or their streams.
+      </p>
+      <ErrorNote error={list.error} />
+      <ul className="divide-y divide-line">
+        {(list.data ?? []).map(({ incident: i, createdBy }) => (
+          <li key={i.id} className="px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 flex-1 font-medium">{i.title}</span>
+              <Badge tone={i.resolvedAt ? 'ok' : 'warn'}>{stageLabel(i.status)}</Badge>
+              {!i.resolvedAt && (
+                <Button size="sm" onClick={() => setDialog({ incident: i })}>
+                  Post update
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted">
+              Started {dateTime(i.startedAt)} by {createdBy}
+              {i.resolvedAt ? `, resolved ${dateTime(i.resolvedAt)}` : ''}
+            </p>
+            <ol className="mt-2 space-y-1.5 border-l border-line pl-3 text-sm">
+              {i.updates.map((u, n) => (
+                <li key={n}>
+                  <span className="font-medium">{stageLabel(u.status)}</span> <span className="text-muted">{dateTime(u.at)}</span>
+                  <span className="block whitespace-pre-line text-muted">{u.message}</span>
+                </li>
+              ))}
+            </ol>
+          </li>
+        ))}
+        {list.data?.length === 0 && <li className="px-4 py-3 text-muted">No incidents in the last 90 days.</li>}
+      </ul>
+      {dialog && <IncidentDialog incident={dialog.incident} onClose={() => setDialog(null)} onDone={() => list.refetch()} />}
+    </Panel>
+  );
+}
+
+function IncidentDialog({ incident, onClose, onDone }: { incident?: StatusIncident; onClose: () => void; onDone: () => void }) {
+  const [title, setTitle] = useState('');
+  const [stage, setStage] = useState<IncidentStage>(incident ? incident.status : 'investigating');
+  const [message, setMessage] = useState('');
+  const { busy, run } = useAction();
+  const ok = message.trim().length > 0 && (incident || title.trim().length >= 3);
+  const submit = () =>
+    run(
+      () =>
+        (incident ? post(`/api/admin/status/incidents/${incident.id}/updates`, { status: stage, message: message.trim() }) : post('/api/admin/status/incidents', { title: title.trim(), status: stage, message: message.trim() })).then(onDone),
+      'Posted to the status page.',
+    );
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={incident ? `Update: ${incident.title}` : 'Post an incident'}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" busy={busy} disabled={!ok} onClick={async () => (await submit()) && onClose()}>
+            {incident ? 'Post update' : 'Post incident'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {!incident && (
+          <Field label="Title" htmlFor="it" hint="What viewers of the status page notice, e.g. “Streams reconnecting in India”.">
+            <Input id="it" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          </Field>
+        )}
+        <Field label="Stage" htmlFor="is">
+          <Select id="is" value={stage} onChange={(e) => setStage(e.target.value as IncidentStage)}>
+            {STAGES.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Update" htmlFor="im" hint="Public. Plain words, no customer or stream names.">
+          <Textarea id="im" value={message} maxLength={2000} onChange={(e) => setMessage(e.target.value)} autoFocus={!!incident} />
+        </Field>
+      </div>
+    </Dialog>
   );
 }
 

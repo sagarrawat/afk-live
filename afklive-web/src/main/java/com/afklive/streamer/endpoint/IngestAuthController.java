@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class IngestAuthController {
 
     private final IngestService ingest;
+    private final com.afklive.streamer.service.StatusService status;
 
     @PostMapping("/internal/ingest/auth")
     public ResponseEntity<Void> auth(@RequestParam(name = "secret", required = false) String secret,
@@ -26,6 +27,8 @@ public class IngestAuthController {
         if (!ingest.authCallerOk(secret)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
+        // RE-7: the ingest server is up and reaching us (the status page's phone streaming signal).
+        status.ingestSeen();
         return ingest.authorize(req) ? ResponseEntity.ok().build() : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 }

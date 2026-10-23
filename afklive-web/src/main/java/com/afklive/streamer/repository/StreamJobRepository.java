@@ -208,4 +208,23 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
                   @org.springframework.data.repository.query.Param("speed") Double speed,
                   @org.springframework.data.repository.query.Param("drops") Long drops,
                   @org.springframework.data.repository.query.Param("error") String error);
+
+    /**
+     * RE-7: streams that should be running but no worker is looking after: assigned to a worker that
+     * stopped reporting, or waiting for a worker since before {@code waitingSince}.
+     */
+    @Query("SELECT count(j) FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'RUN' AND ("
+            + "(j.workerId IS NOT NULL AND (j.heartbeatAt IS NULL OR j.heartbeatAt < :staleBefore)) "
+            + "OR (j.workerId IS NULL AND j.startTime < :waitingSince AND (j.moveRequestedAt IS NULL OR j.moveRequestedAt < :waitingSince)))")
+    long countUnattended(@org.springframework.data.repository.query.Param("staleBefore") java.time.ZonedDateTime staleBefore,
+                         @org.springframework.data.repository.query.Param("waitingSince") java.time.ZonedDateTime waitingSince);
+
+    /** RE-7: whether a worker is receiving a phone's feed from the ingest server right now. */
+    boolean existsByIsLiveTrueAndInputLiveTrueAndHeartbeatAtAfter(java.time.ZonedDateTime since);
+
+    /** AD-2: streaming seconds inside [from, to) across every run (for cost per stream hour). */
+    @Query(value = "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (LEAST(COALESCE(end_time, :to), :to) - GREATEST(start_time, :from)))), 0) "
+            + "FROM stream_jobs WHERE start_time IS NOT NULL AND start_time < :to AND (end_time IS NULL OR end_time > :from)", nativeQuery = true)
+    double streamSecondsBetween(@org.springframework.data.repository.query.Param("from") java.time.ZonedDateTime from,
+                                @org.springframework.data.repository.query.Param("to") java.time.ZonedDateTime to);
 }

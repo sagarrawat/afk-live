@@ -19,6 +19,8 @@ public class MvcConfig implements WebMvcConfigurer {
         registry.addViewController("/classic").setViewName("forward:/classic.html");
         // The public site (afklive-ui/site, built into static/site/).
         registry.addViewController("/pricing").setViewName("forward:/site/pricing.html");
+        // RE-7: the public status page (data from /api/public/status).
+        registry.addViewController("/status").setViewName("forward:/site/status.html");
         registry.addRedirectViewController("/features", "/#playlists");
         registry.addViewController("/login").setViewName("login");
         registry.addViewController("/register").setViewName("register");

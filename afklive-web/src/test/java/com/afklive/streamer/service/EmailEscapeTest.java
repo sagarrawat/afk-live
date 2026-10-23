@@ -21,4 +21,11 @@ class EmailEscapeTest {
         assertThat(html).contains("https://afklive.in/site/brand/logo-email.png").contains("alt='AFK Live'")
                 .doesNotContain("#667eea").doesNotContain("<svg");
     }
+
+    @Test
+    void emailFootersLinkTheStatusPage() {
+        EmailService email = new EmailService(null);
+        ReflectionTestUtils.setField(email, "baseUrl", "https://afklive.in");
+        assertThat(email.createBaseHtml("Hi", "<p>Body</p>")).contains("href='https://afklive.in/status'");
+    }
 }
