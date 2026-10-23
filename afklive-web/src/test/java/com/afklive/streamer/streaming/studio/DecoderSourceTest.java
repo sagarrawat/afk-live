@@ -75,4 +75,13 @@ class DecoderSourceTest {
         assertThat(s.poll(f)).isTrue();
         assertThat(f.audio[0]).isEqualTo((byte) 101);
     }
+
+    @Test
+    void framesAreDroppedToTheStreamRateBeforeScaling() {
+        // A 60 fps source on a 30 fps stream: scaling half the frames is half the work.
+        DecoderSource file = new DecoderSource(CANVAS, DecoderSource.Options.file(Path.of("x.mp4"), true, 0), dir, "ffmpeg", "t");
+        String graph = file.command(dir.resolve("a.pcm")).get(file.command(dir.resolve("a.pcm")).indexOf("-filter_complex") + 1);
+        assertThat(graph).startsWith("[0:v:0]fps=30:start_time=0[rated];[rated]scale=");
+        assertThat(graph.indexOf("fps=")).isLessThan(graph.indexOf("scale="));
+    }
 }

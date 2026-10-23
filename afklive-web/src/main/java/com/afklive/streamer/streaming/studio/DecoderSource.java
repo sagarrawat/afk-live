@@ -102,21 +102,25 @@ public final class DecoderSource implements AutoCloseable {
      * sizes stay even: so chroma lines up cleanly in 4:2:0 video.
      */
     static String fitGraph(Canvas canvas, Fit fit) {
+        return fitGraph(canvas, fit, "[0:v:0]");
+    }
+
+    static String fitGraph(Canvas canvas, Fit fit, String input) {
         int w = canvas.width();
         int h = canvas.height();
         return switch (fit) {
-            case FILL -> "[0:v:0]scale=" + w + ":" + h + ":force_original_aspect_ratio=increase:force_divisible_by=2,crop=" + w + ":" + h + "[fit]";
+            case FILL -> input + "scale=" + w + ":" + h + ":force_original_aspect_ratio=increase:force_divisible_by=2,crop=" + w + ":" + h + "[fit]";
             case BLUR -> {
                 // Blur a small copy (cheap), then scale it up: the background costs a fraction of a frame.
                 int bw = even(w / 8);
                 int bh = even(h / 8);
-                yield "[0:v:0]split=2[bgsrc][fgsrc];"
+                yield input + "split=2[bgsrc][fgsrc];"
                         + "[bgsrc]scale=" + bw + ":" + bh + ":force_original_aspect_ratio=increase:force_divisible_by=2,crop=" + bw + ":" + bh
                         + ",boxblur=luma_radius='min(w,h)/6':luma_power=2:chroma_radius='min(cw,ch)/6',eq=brightness=-0.08,scale=" + w + ":" + h + "[bg];"
                         + "[fgsrc]scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease:force_divisible_by=2[fg];"
                         + "[bg][fg]overlay=(W-w)/2:(H-h)/2[fit]";
             }
-            case FIT -> "[0:v:0]scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease:force_divisible_by=2,pad=" + w + ":" + h
+            case FIT -> input + "scale=" + w + ":" + h + ":force_original_aspect_ratio=decrease:force_divisible_by=2,pad=" + w + ":" + h
                     + ":(ow-iw)/2:(oh-ih)/2:color=black[fit]";
         };
     }
@@ -493,8 +497,9 @@ public final class DecoderSource implements AutoCloseable {
                 + "aformat=sample_fmts=s16:channel_layouts=stereo";
         if (options.video()) {
             StringBuilder graph = new StringBuilder();
-            graph.append(fitGraph(canvas, options.fit())).append(";[fit]setsar=1,fps=").append(canvas.fps())
-                    .append(options.live() ? "" : ":start_time=0").append(",format=yuv420p[v]");
+            // Drop to the stream's frame rate first: a 60 fps source is scaled half as often.
+            graph.append("[0:v:0]fps=").append(canvas.fps()).append(options.live() ? "" : ":start_time=0").append("[rated];")
+                    .append(fitGraph(canvas, options.fit(), "[rated]")).append(";[fit]setsar=1,format=yuv420p[v]");
             if (audio) {
                 graph.append(";[0:a:0]").append(audioChain).append("[a]");
             }

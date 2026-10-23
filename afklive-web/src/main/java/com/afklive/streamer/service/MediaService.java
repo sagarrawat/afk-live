@@ -72,6 +72,7 @@ public class MediaService {
     private final LiveStreamService streams;
     private final com.afklive.streamer.repository.MediaTagRepository tags;
     private final TransactionTemplate tx;
+    private final PlayoutCopies playoutCopies;
     private final String role;
     private final long minPart;
     private final ScheduledExecutorService janitor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -84,7 +85,7 @@ public class MediaService {
                         com.afklive.streamer.repository.StreamItemRepository streamItems,
                         UserRepository users, PlanService plans, FileStorageService storage, MediaProcessor processor,
                         LiveStreamService streams, com.afklive.streamer.repository.MediaTagRepository tags,
-                        PlatformTransactionManager txManager,
+                        PlatformTransactionManager txManager, PlayoutCopies playoutCopies,
                         @Value("${app.streaming.role:all}") String role,
                         @Value("${app.media.min-part-bytes:16777216}") long minPart) {
         this.minPart = Math.max(64 * 1024, minPart);
@@ -98,6 +99,7 @@ public class MediaService {
         this.processor = processor;
         this.streams = streams;
         this.tags = tags;
+        this.playoutCopies = playoutCopies;
         this.tx = new TransactionTemplate(txManager);
         this.role = role;
     }
@@ -505,6 +507,7 @@ public class MediaService {
         List<Blocked> blocked = new ArrayList<>();
         long freed = 0;
         List<String> keys = new ArrayList<>();
+        List<String> copyKeys = new java.util.concurrent.CopyOnWriteArrayList<>();
         for (MediaAsset a : found) {
             List<String> live = uses.getOrDefault(a.getId(), List.of()).stream().filter(LiveStreamService.MediaUse::live)
                     .map(LiveStreamService.MediaUse::streamName).toList();
@@ -540,6 +543,7 @@ public class MediaService {
                 scheduledVideos.clearMedia(fresh.getId());
                 scheduledVideos.clearThumbnail(fresh.getId());
                 streamItems.deleteByMediaId(fresh.getId());
+                copyKeys.addAll(playoutCopies.keysOf(fresh.getId())); // their rows go with the file
                 assets.deleteById(fresh.getId());
                 assets.flush();
                 long size = fresh.getFileSize() == null ? 0 : fresh.getFileSize();
@@ -560,6 +564,7 @@ public class MediaService {
                 keys.add(a.getThumbnailKey());
             }
         }
+        keys.addAll(copyKeys);
         for (String key : keys) {
             try {
                 storage.deleteFile(key);

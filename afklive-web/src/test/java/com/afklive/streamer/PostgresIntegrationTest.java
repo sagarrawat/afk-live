@@ -37,6 +37,8 @@ public abstract class PostgresIntegrationTest {
         registry.add("spring.datasource.password", () -> "postgres");
         // Tests drive the stream worker explicitly (StreamWorker.tick) instead of a background loop.
         registry.add("app.streaming.worker.auto-start", () -> "false");
+        // Test machines are busy; the CPU check has its own test.
+        registry.add("app.streaming.worker.max-cpu-to-claim", () -> "1.01");
         registry.add("app.encryption-key", () -> "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdCE=");
         registry.add("app.ingest.public-host", () -> "ingest.test");
         registry.add("app.ingest.read-pass", () -> "test-read-pass");
