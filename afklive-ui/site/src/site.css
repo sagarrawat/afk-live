@@ -159,3 +159,14 @@
     transform: scale(2.4);
   }
 }
+
+/* Legal pages (site/legal.py): readable long text. */
+.legal h2 {
+  @apply mt-10 text-xl font-bold tracking-tight;
+}
+.legal p {
+  @apply mt-3 text-[16px] leading-7 text-ink/85;
+}
+.legal a {
+  @apply text-accent underline underline-offset-2;
+}

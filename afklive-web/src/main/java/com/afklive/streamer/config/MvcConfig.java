@@ -15,8 +15,13 @@ public class MvcConfig implements WebMvcConfigurer {
         registry.addViewController("/studio").setViewName("forward:/app/index.html");
         registry.addViewController("/studio/**").setViewName("forward:/app/index.html");
         registry.addRedirectViewController("/app", "/studio");
-        // The previous Alpine app, kept for the YouTube upload and comment tools until they move over.
-        registry.addViewController("/classic").setViewName("forward:/classic.html");
+        // The old Alpine app is retired: one product, one app. Old links land in the app.
+        registry.addRedirectViewController("/classic", "/studio");
+        registry.addRedirectViewController("/classic.html", "/studio");
+        registry.addRedirectViewController("/home.html", "/");
+        registry.addRedirectViewController("/pricing.html", "/pricing");
+        registry.addRedirectViewController("/privacy.html", "/privacy");
+        registry.addRedirectViewController("/terms.html", "/terms");
         // The public site (afklive-ui/site, built into static/site/).
         registry.addViewController("/pricing").setViewName("forward:/site/pricing.html");
         // RE-7: the public status page (data from /api/public/status).
