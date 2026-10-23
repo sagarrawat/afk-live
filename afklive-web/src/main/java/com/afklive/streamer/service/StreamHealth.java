@@ -84,6 +84,9 @@ public final class StreamHealth {
         List<DestinationHealth> dests = new ArrayList<>();
         for (StreamJobDestination d : j.getDestinations()) {
             String status = d.getStatus() == null ? "CONNECTING" : d.getStatus();
+            if ("OFF".equals(status)) {
+                continue; // turned off by the creator while live (DS-5)
+            }
             String level = switch (status) {
                 case "LIVE" -> GREEN;
                 case "CONNECTING", "RECONNECTING" -> AMBER;

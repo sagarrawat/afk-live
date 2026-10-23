@@ -127,6 +127,9 @@ public class StudioRuns {
                 }
             }
             case RELOAD -> reload(h, StudioSpec.parse(c.getPayload(), StudioSpec.class));
+            case TARGETS -> {
+                // destinations belong to the runner, not the studio: StreamWorker applies these
+            }
         }
     }
 

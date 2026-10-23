@@ -25,7 +25,9 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
     if (on) next.add(id);
     else next.delete(id);
     const body = (all ?? []).filter((d) => next.has(d.id) || s.destinations.some((t) => t.destinationId === d.id)).map((d) => ({ destinationId: d.id, enabled: next.has(d.id) }));
-    update(() => put(`/api/streams/${s.id}/destinations`, body), onAir ? 'Saved. It applies the next time the stream starts.' : undefined);
+    // DS-5: while live the change is on air within seconds, and the other destinations stay connected.
+    const name = all?.find((d) => d.id === id)?.name ?? 'it';
+    update(() => put(`/api/streams/${s.id}/destinations`, body), onAir ? (on ? `Sending to ${name} now.` : `Stopped sending to ${name}.`) : undefined);
   };
 
   if (isLoading) return <Spinner />;
@@ -51,6 +53,7 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
             {all.map((d) => {
               const on = enabled.has(d.id);
               const full = !on && enabled.size >= limit;
+              const last = on && onAir && enabled.size === 1; // a live stream needs somewhere to go
               return (
                 <li key={d.id} className="flex items-center gap-3 px-4 py-3">
                   <PlatformIcon platform={d.platform} className="h-5 w-5 text-muted" />
@@ -60,12 +63,13 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
                       {d.server} {d.keyHint}
                     </span>
                   </span>
-                  <Toggle label={`Send to ${d.name}`} checked={on} disabled={busy || full} onChange={(v) => setEnabled(d.id, v)} />
+                  <Toggle label={`Send to ${d.name}`} checked={on} disabled={busy || full || last} onChange={(v) => setEnabled(d.id, v)} />
                 </li>
               );
             })}
           </ul>
           <p className="border-t border-line px-4 py-3 text-sm text-muted">
+            {onAir && 'Changes reach the live stream in a few seconds; the other destinations stay connected. '}
             Your {me?.plan.name} plan sends each stream to {limit} destination{limit === 1 ? '' : 's'} at once.{' '}
             {limit < 5 && (
               <Link to="/studio/settings/billing" className="text-accent hover:underline">

@@ -144,7 +144,7 @@ public class AlertMonitor {
             if (!starting && !down) {
                 for (StreamJobDestination d : job.getDestinations()) {
                     String status = d.getStatus() == null ? "CONNECTING" : d.getStatus();
-                    boolean bad = !"LIVE".equals(status) && !"STOPPED".equals(status);
+                    boolean bad = !"LIVE".equals(status) && !"STOPPED".equals(status) && !"OFF".equals(status);
                     String dn = d.getName() == null ? "a destination" : d.getName();
                     condition(seen, job, DEST, String.valueOf(d.getPosition()), bad, now, DOWN_AFTER,
                             () -> notifier.notify(email, alert(NotificationService.Types.DESTINATION_DOWN, Notification.Level.ERROR, streamId,

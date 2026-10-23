@@ -13,7 +13,8 @@ import java.time.ZonedDateTime;
 @NoArgsConstructor
 public class StreamCommand {
 
-    public enum Type { SCENE, OVERLAY, SKIP, RELOAD, FINISH_PASS }
+    /** TARGETS: the run's destination list changed (payload: the spec's destinations); applied by the worker's runner. */
+    public enum Type { SCENE, OVERLAY, SKIP, RELOAD, FINISH_PASS, TARGETS }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -154,6 +154,30 @@ class StreamRunnerTest {
         assertThat(probe(out)).contains("h264");
     }
 
+    @Test
+    void destinationsCanBeAddedAndRemovedWhileLiveWithoutTouchingTheOthers() throws Exception {
+        // DS-5: one encoder throughout; the first destination keeps its connection while a second joins and leaves.
+        Path a = dir.resolve("live-a.flv");
+        Path b = dir.resolve("live-b.flv");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(6, () -> realtimeEncoder(-1), List.of(relayTo(a)), rec, FAST);
+        runner.start();
+        TimeUnit.SECONDS.sleep(2);
+        runner.setRelays(java.util.Arrays.asList(relayTo(a), relayTo(b)));
+        TimeUnit.SECONDS.sleep(4);
+        runner.setRelays(java.util.Arrays.asList(relayTo(a), null));
+        TimeUnit.SECONDS.sleep(2);
+        assertThat(rec.lastStatus.get(1)).isEqualTo("OFF");
+        assertThat(rec.lastStatus.get(0)).isEqualTo("LIVE");
+        runner.stop("Stopped by user");
+        assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+
+        assertThat(rec.events).containsExactly("encoder-started-0");
+        assertThat(rec.restarts.getOrDefault(0, 0)).as("first destination never reconnected").isZero();
+        assertThat(probe(a)).contains("h264");
+        assertThat(probe(b)).contains("h264");
+    }
+
     private static String probe(Path file) throws Exception {
         Process p = new ProcessBuilder("ffprobe", "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0",
                 file.toString()).redirectErrorStream(true).start();

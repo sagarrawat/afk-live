@@ -242,6 +242,37 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void destinationsTurnedOnAndOffWhileLiveReachTheWorkerWithoutMovingTheOthers() {
+        // DS-5: before, the change was saved but the running stream kept its old destinations.
+        String email = newUser(PlanType.PRO);
+        LiveStream s = ready(email);
+        StreamDestination yt = destinations.findAll().stream()
+                .filter(d -> d.getUser().getEmail().equals(email)).findFirst().orElseThrow();
+        StreamJob job = service.goLive(email, s.getId(), null);
+        StreamDestination fb = destination(email, "rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
+
+        service.setTargets(email, s.getId(), List.of(new TargetRequest(yt.getId(), true), new TargetRequest(fb.getId(), true)));
+        List<StreamSpec.Destination> after = StreamSpec.fromJson(jobs.findById(job.getId()).orElseThrow().getSpec()).destinations();
+        assertThat(after).extracting(StreamSpec.Destination::off).containsExactly(false, false);
+        assertThat(after.get(1).url()).endsWith("fb-key");
+
+        service.setTargets(email, s.getId(), List.of(new TargetRequest(yt.getId(), false), new TargetRequest(fb.getId(), true)));
+        after = StreamSpec.fromJson(jobs.findById(job.getId()).orElseThrow().getSpec()).destinations();
+        assertThat(after).extracting(StreamSpec.Destination::off).containsExactly(true, false); // positions kept
+
+        List<StreamCommand> sent = commands.findNew(List.of(job.getId()), 0).stream()
+                .filter(c -> c.getType() == StreamCommand.Type.TARGETS).toList();
+        assertThat(sent).hasSize(2);
+        assertThat(StreamSpec.destinationsFromJson(sent.get(1).getPayload())).extracting(StreamSpec.Destination::off)
+                .containsExactly(true, false);
+        // The turned-off destination drops out of health instead of showing as broken.
+        assertThat(service.view(email, s.getId()).live().health().destinations()).hasSize(1);
+
+        assertThatThrownBy(() -> service.setTargets(email, s.getId(), List.of(new TargetRequest(fb.getId(), false))))
+                .hasMessageContaining("at least one destination");
+    }
+
+    @Test
     void stopAtUsesTheCreatorsTimeZone() {
         String email = newUser(PlanType.ESSENTIALS);
         LiveStream s = ready(email);

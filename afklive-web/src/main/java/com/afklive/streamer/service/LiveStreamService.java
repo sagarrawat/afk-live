@@ -53,6 +53,7 @@ public class LiveStreamService {
     private final UserRepository users;
     private final IngestService ingest;
     private final NotificationService notifications;
+    private final com.afklive.streamer.repository.StreamJobDestinationRepository jobDestinations;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -254,9 +255,62 @@ public class LiveStreamService {
             throw new IllegalArgumentException("Your " + plan.getDisplayName() + " plan sends a stream to " + plan.getMaxDestinations()
                     + " destination" + (plan.getMaxDestinations() == 1 ? "" : "s") + " at once. Upgrade to add more.");
         }
+        Optional<StreamJob> live = currentJob(s);
+        if (live.isPresent() && enabled == 0) {
+            throw new IllegalArgumentException("A live stream needs at least one destination. Stop the stream to turn off the last one.");
+        }
         targets.deleteAll(targets.findAllByStreamId(id));
         targets.flush();
         targets.saveAll(next);
+        live.ifPresent(job -> applyTargetsLive(job, s));
+    }
+
+    /**
+     * DS-5: destinations turned on or off while live reach the running stream without touching the
+     * others. Positions in the run's list never change (destination health is keyed by them): a
+     * destination turned off stays in the list marked off; a new one is added at the end.
+     */
+    private void applyTargetsLive(StreamJob job, LiveStream s) {
+        StreamSpec spec = StreamSpec.fromJson(job.getSpec());
+        List<StreamSpec.Destination> current = spec.destinations() == null ? List.of() : spec.destinations();
+        List<StreamSpec.Destination> next = new ArrayList<>();
+        boolean[] wanted = new boolean[current.size()];
+        List<StreamDestination> added = new ArrayList<>();
+        for (StreamDestination d : enabledDestinations(s)) {
+            int match = -1;
+            for (int i = 0; i < current.size(); i++) {
+                if (!wanted[i] && java.util.Objects.equals(current.get(i).url(), d.getStreamKey())) {
+                    match = i;
+                    break;
+                }
+            }
+            if (match >= 0) {
+                wanted[match] = true;
+            } else {
+                added.add(d);
+            }
+        }
+        for (int i = 0; i < current.size(); i++) {
+            next.add(current.get(i).withOff(!wanted[i]));
+        }
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        for (StreamDestination d : added) {
+            String name = d.getName() == null ? "Destination" : d.getName();
+            next.add(new StreamSpec.Destination(name, d.getStreamKey()));
+            StreamJobDestination row = new StreamJobDestination(job, next.size() - 1, name);
+            row.setUpdatedAt(now);
+            jobDestinations.save(row);
+        }
+        if (next.equals(current)) {
+            return;
+        }
+        for (int i = 0; i < current.size(); i++) {
+            if (next.get(i).off() != current.get(i).off()) {
+                jobDestinations.updateState(job.getId(), i, next.get(i).off() ? "OFF" : "CONNECTING", 0, null, now);
+            }
+        }
+        jobs.updateSpec(job.getId(), spec.withDestinations(next).toJson());
+        command(job, StreamCommand.Type.TARGETS, StreamSpec.destinationsJson(next));
     }
 
     // ------------------------------------------------------------------ overlays and scenes

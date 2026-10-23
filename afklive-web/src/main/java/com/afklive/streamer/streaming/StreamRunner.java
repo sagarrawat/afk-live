@@ -96,7 +96,8 @@ public final class StreamRunner {
 
     private final long jobId;
     private final EncoderLauncher launcher;
-    private final List<List<String>> relayCommands;
+    /** One relay command per destination position; null where the destination is turned off (DS-5). */
+    private volatile List<List<String>> relayCommands;
     private final Listener listener;
     private final Settings settings;
     private final AtomicBoolean stopping = new AtomicBoolean();
@@ -117,7 +118,7 @@ public final class StreamRunner {
                         Listener listener, Settings settings) {
         this.jobId = jobId;
         this.launcher = launcher;
-        this.relayCommands = List.copyOf(relayCommands);
+        this.relayCommands = java.util.Collections.unmodifiableList(new ArrayList<>(relayCommands));
         this.listener = listener;
         this.settings = settings;
     }
@@ -138,6 +139,39 @@ public final class StreamRunner {
         stopSignal.countDown();
         terminate(encoder);
         relays.forEach(Relay::shutdown);
+    }
+
+    /**
+     * Changes where the stream goes while it runs (DS-5): position i gets {@code commands.get(i)}, or
+     * nothing when that entry is null. Destinations whose command didn't change keep their connection;
+     * only the ones turned on start and only the ones turned off stop. The encoder never restarts.
+     */
+    public synchronized void setRelays(List<List<String>> commands) {
+        relayCommands = java.util.Collections.unmodifiableList(new ArrayList<>(commands));
+        if (stopping.get() || finished.get()) {
+            return;
+        }
+        List<Relay> current = relays;
+        List<Relay> next = new ArrayList<>();
+        for (Relay r : current) {
+            List<String> wanted = r.position < commands.size() ? commands.get(r.position) : null;
+            if (wanted != null && wanted.equals(r.command)) {
+                next.add(r);
+            } else {
+                r.removed = true;
+                r.shutdown();
+            }
+        }
+        for (int i = 0; i < commands.size(); i++) {
+            List<String> cmd = commands.get(i);
+            int pos = i;
+            if (cmd != null && next.stream().noneMatch(r -> r.position == pos)) {
+                Relay r = new Relay(i, cmd);
+                next.add(r);
+                r.start();
+            }
+        }
+        relays = List.copyOf(next);
     }
 
     public boolean isRunning() {
@@ -212,15 +246,21 @@ public final class StreamRunner {
         Deque<String> errorLines = new ArrayDeque<>();
         Thread stderr = platformThread("encoder-err-" + jobId, () -> readEncoderStderr(p.getErrorStream(), errorLines));
 
-        List<Relay> generation = new ArrayList<>();
-        for (int i = 0; i < relayCommands.size(); i++) {
-            generation.add(new Relay(i, relayCommands.get(i)));
+        synchronized (this) {
+            relays.forEach(Relay::shutdown); // any started by setRelays between two encoder runs
+            List<Relay> generation = new ArrayList<>();
+            List<List<String>> commands = relayCommands;
+            for (int i = 0; i < commands.size(); i++) {
+                if (commands.get(i) != null) {
+                    generation.add(new Relay(i, commands.get(i)));
+                }
+            }
+            relays = List.copyOf(generation);
+            if (stopping.get()) {
+                generation.forEach(Relay::shutdown);
+            }
+            generation.forEach(Relay::start);
         }
-        relays = generation;
-        if (stopping.get()) {
-            generation.forEach(Relay::shutdown);
-        }
-        generation.forEach(Relay::start);
         listener.onEncoderStarted(restarts);
 
         int code = -1;
@@ -231,7 +271,7 @@ public final class StreamRunner {
                 int n;
                 while ((n = out.read(buf)) > 0) {
                     byte[] chunk = java.util.Arrays.copyOf(buf, n);
-                    for (Relay r : generation) {
+                    for (Relay r : relays) { // read each time: destinations can change while live
                         r.offer(chunk);
                     }
                 }
@@ -243,6 +283,7 @@ public final class StreamRunner {
             code = waitOrKill(p);
         } finally {
             // Always: let relays finish (drain on a normal end), then make sure no process outlives this run.
+            List<Relay> generation = relays;
             if (code == 0 && !stopping.get()) {
                 generation.forEach(Relay::drainAndClose);
             } else {
@@ -347,6 +388,8 @@ public final class StreamRunner {
         private volatile boolean draining;
         private volatile Process process;
         private volatile boolean restartRequested;
+        /** Turned off while live: report OFF, not STOPPED. */
+        volatile boolean removed;
 
         Relay(int position, List<String> command) {
             this.position = position;
@@ -469,7 +512,7 @@ public final class StreamRunner {
                 if (p != null && p.isAlive()) {
                     waitOrKill(p);
                 }
-                listener.onDestination(position, "STOPPED", restarts, null);
+                listener.onDestination(position, removed ? "OFF" : "STOPPED", restarts, null);
                 done.countDown();
             }
         }

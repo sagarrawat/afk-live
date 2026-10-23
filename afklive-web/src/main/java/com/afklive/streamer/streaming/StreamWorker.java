@@ -307,10 +307,7 @@ public class StreamWorker {
                     }
                 });
                 r.studio = h;
-                List<List<String>> relays = spec.destinations().stream()
-                        .map(d -> com.afklive.streamer.service.FFmpegCommandBuilder.buildRelayCommand(d.url()))
-                        .toList();
-                StreamRunner runner = new StreamRunner(id, h.studio(), relays, r, settings);
+                StreamRunner runner = new StreamRunner(id, h.studio(), relayCommands(spec.destinations()), r, settings);
                 synchronized (r) {
                     if (r.lost) {
                         cleanup(r, false);
@@ -355,11 +352,27 @@ public class StreamWorker {
             }
             r.maxAppliedCommand = Math.max(r.maxAppliedCommand, c.getId());
             try {
-                studioRuns.apply(r.studio, c);
+                if (c.getType() == com.afklive.streamer.model.StreamCommand.Type.TARGETS) {
+                    StreamRunner runner = r.runner;
+                    if (runner != null) {
+                        runner.setRelays(relayCommands(StreamSpec.destinationsFromJson(c.getPayload())));
+                    }
+                } else {
+                    studioRuns.apply(r.studio, c);
+                }
             } catch (Exception e) {
                 log.warn("Command {} for job {} failed: {}", c.getType(), c.getJobId(), e.getMessage());
             }
         }
+    }
+
+    /** A relay command per destination position; null for one turned off while live (DS-5). */
+    static List<List<String>> relayCommands(List<StreamSpec.Destination> destinations) {
+        List<List<String>> out = new java.util.ArrayList<>();
+        for (StreamSpec.Destination d : destinations) {
+            out.add(d.off() ? null : com.afklive.streamer.service.FFmpegCommandBuilder.buildRelayCommand(d.url()));
+        }
+        return out;
     }
 
     private void updateOverlay(StreamSpec spec, StreamPreparer.Prepared prepared) {
