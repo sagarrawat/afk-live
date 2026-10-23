@@ -167,15 +167,43 @@ public class AdminController {
     @PostMapping("/plans/update")
     public String updatePlan(@RequestParam PlanType planType,
                              @RequestParam String displayName,
-                             @RequestParam String price,
-                             @RequestParam String billingCycle,
+                             @RequestParam(required = false) String price,
+                             @RequestParam(required = false) String billingCycle,
                              @RequestParam double maxStorageGB,
                              @RequestParam int maxScheduledPosts,
                              @RequestParam int maxActiveStreams,
                              @RequestParam int maxChannels,
-                             @RequestParam int maxResolution) {
-        long maxStorageBytes = (long) (maxStorageGB * 1024 * 1024 * 1024);
-        PlanConfig config = new PlanConfig(planType, displayName, price, billingCycle, maxStorageBytes, maxScheduledPosts, maxActiveStreams, maxChannels, maxResolution);
+                             @RequestParam int maxResolution,
+                             @RequestParam(required = false) Integer maxFps,
+                             @RequestParam(required = false) Integer monthlyHours,
+                             @RequestParam(required = false) Boolean watermark,
+                             @RequestParam(required = false) Integer maxDestinations,
+                             @RequestParam(required = false) Double priceInrMonth,
+                             @RequestParam(required = false) Double priceInrYear,
+                             @RequestParam(required = false) Double priceUsdMonth,
+                             @RequestParam(required = false) Double priceUsdYear) {
+        PlanConfig config = planService.getPlanConfig(planType);
+        config.setDisplayName(displayName);
+        if (price != null) {
+            config.setPrice(price);
+        }
+        if (billingCycle != null) {
+            config.setBillingCycle(billingCycle);
+        }
+        config.setMaxStorageBytes((long) (maxStorageGB * 1024 * 1024 * 1024));
+        config.setMaxScheduledPosts(maxScheduledPosts);
+        config.setMaxActiveStreams(maxActiveStreams);
+        config.setMaxChannels(maxChannels);
+        config.setMaxResolution(maxResolution);
+        if (maxFps != null) config.setMaxFps(maxFps);
+        if (monthlyHours != null) config.setMonthlyHours(monthlyHours);
+        if (watermark != null) config.setWatermark(watermark);
+        if (maxDestinations != null) config.setMaxDestinations(maxDestinations);
+        // Prices are entered in rupees / dollars and stored in paise / cents (GST-inclusive).
+        if (priceInrMonth != null) config.setPriceInrMonth(Math.round(priceInrMonth * 100));
+        if (priceInrYear != null) config.setPriceInrYear(Math.round(priceInrYear * 100));
+        if (priceUsdMonth != null) config.setPriceUsdMonth(Math.round(priceUsdMonth * 100));
+        if (priceUsdYear != null) config.setPriceUsdYear(Math.round(priceUsdYear * 100));
         planService.updatePlan(config);
         return "redirect:/admin?tab=plans";
     }

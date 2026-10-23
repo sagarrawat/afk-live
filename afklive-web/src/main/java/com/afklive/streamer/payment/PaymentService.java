@@ -24,8 +24,6 @@ import java.util.UUID;
 public class PaymentService {
 
     public static final String BALANCE_CLEAR = "BALANCE_CLEAR";
-    /** Essentials price in paise. Keep in sync with the plan's displayed price. */
-    static final long ESSENTIALS_PRICE_PAISE = 19900;
 
     static final String INITIATED = "INITIATED";
     static final String COMPLETED = "COMPLETED";
@@ -34,6 +32,7 @@ public class PaymentService {
     private final PaymentGateway gateway;
     private final PaymentAuditRepository audits;
     private final UserService userService;
+    private final com.afklive.streamer.service.BillingService billing;
 
     @Value("${app.base-url:http://localhost:8080}")
     private String baseUrl;
@@ -41,8 +40,11 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.afklive.streamer.service.NotificationService notifications;
 
-    /** Creates an order for the user and returns the provider checkout URL. */
+    /** Creates an order for the user and returns the provider checkout URL. Plans go through billing (proration etc.). */
     public String startCheckout(String email, String planId) {
+        if (!BALANCE_CLEAR.equals(planId)) {
+            return billing.checkout(email, planId, "MONTHLY").checkoutUrl();
+        }
         User user = userService.getOrCreateUser(email);
         long amount = amountFor(user, planId);
 
@@ -58,23 +60,11 @@ public class PaymentService {
     }
 
     private long amountFor(User user, String planId) {
-        if (BALANCE_CLEAR.equals(planId)) {
-            long amount = Math.round(user.getUnpaidBalance() * 100);
-            if (amount <= 0) {
-                throw new IllegalArgumentException("You have no outstanding balance.");
-            }
-            return amount;
+        long amount = Math.round(user.getUnpaidBalance() * 100);
+        if (amount <= 0) {
+            throw new IllegalArgumentException("You have no outstanding balance.");
         }
-        PlanType plan;
-        try {
-            plan = PlanType.valueOf(planId);
-        } catch (IllegalArgumentException | NullPointerException e) {
-            throw new IllegalArgumentException("Invalid plan.");
-        }
-        if (plan != PlanType.ESSENTIALS) {
-            throw new IllegalArgumentException("This plan can't be purchased.");
-        }
-        return ESSENTIALS_PRICE_PAISE;
+        return amount;
     }
 
     /**
@@ -135,7 +125,7 @@ public class PaymentService {
         if (BALANCE_CLEAR.equals(audit.getPlanId())) {
             userService.clearUnpaidBalance(email, audit.getAmount() / 100.0);
         } else {
-            userService.updatePlan(email, PlanType.valueOf(audit.getPlanId()));
+            billing.applyPaid(audit); // subscription, period, invoice
         }
     }
 }

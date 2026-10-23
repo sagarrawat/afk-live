@@ -39,6 +39,17 @@ public class PaymentAudit {
 
     private String planId;
 
+    /** NEW, UPGRADE, RENEW or BALANCE (009-billing). */
+    @Column(length = 20)
+    private String kind;
+    @Column(name = "billing_cycle", length = 10)
+    private String billingCycle;
+    @Column(length = 3)
+    private String currency;
+    /** Proration credit (minor units) taken off this payment for an upgrade. */
+    @Column(nullable = false)
+    private long credit;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

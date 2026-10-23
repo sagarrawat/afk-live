@@ -114,6 +114,13 @@ app:
   encryption-key: ${APP_ENCRYPTION_KEY:}
   encryption-old-keys: ${APP_ENCRYPTION_OLD_KEYS:}
   # Phone streaming (MS-1): the ingest server (MediaMTX) phones publish to. Empty host: phone streams are off.
+  billing:
+    # Shown on GST invoices (BI-3). seller-state is the two-digit GST state code of seller-gstin.
+    seller-name: ${APP_BILLING_SELLER_NAME:AFK Live}
+    seller-address: ${APP_BILLING_SELLER_ADDRESS:}
+    seller-gstin: ${APP_BILLING_SELLER_GSTIN:}
+    seller-state: ${APP_BILLING_SELLER_STATE:}
+    sac: ${APP_BILLING_SAC:998439}
   ingest:
     # What creators type into their phone app, e.g. ingest.afklive.com
     public-host: ${INGEST_PUBLIC_HOST:}

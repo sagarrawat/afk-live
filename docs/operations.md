@@ -95,3 +95,32 @@ key from `APP_ENCRYPTION_OLD_KEYS` after that.
 
 "Test" on a destination runs on a stream worker (behind its egress firewall), at most two at a time
 per worker; a test no worker picks up fails after two minutes with an explanation.
+
+## Billing
+
+Plans are priced per concurrent stream (Free, Creator, Pro, Agency). Defaults live in `PlanType`; the
+live values, prices included, are rows in `plan_configs` that an admin edits at `/admin` without a
+deploy. When a release changes the defaults, bump `PlanConfig.CURRENT_DEFAULTS` and the rows are
+refreshed at startup.
+
+- Payments are one-off checkouts (UPI, cards) through the payment gateway. A subscription is a period
+  (monthly or yearly); renewal is manual: a reminder 3 days before the end, then 3 days' grace
+  (`PAST_DUE`), then the account moves to Free. Upgrades start now and credit the unused part of the
+  current period; downgrades and cancellations take effect at the period end.
+- Every payment issues a GST invoice, numbered `AFK/<financial year>/<n>` with no gaps. Prices include
+  18 % GST, split CGST + SGST when the customer's state (from their GSTIN or billing profile) equals the
+  seller's, IGST otherwise; USD invoices are zero-rated exports.
+- Streamed time is metered per user per month (`usage_months`); the Free plan's monthly hours stop its
+  streams when used up. Free streams carry a small "AFK Live" mark added on the server.
+- The period check runs hourly on web instances (`app.streaming.role` other than `worker`); each
+  subscription is handled under a row lock, so several web instances are safe.
+
+Set these before taking payments:
+
+| Variable | What |
+|---|---|
+| `APP_BILLING_SELLER_NAME` | Legal name on invoices |
+| `APP_BILLING_SELLER_ADDRESS` | Registered address |
+| `APP_BILLING_SELLER_GSTIN` | Your GSTIN (leave empty until registered; invoices then omit it) |
+| `APP_BILLING_SELLER_STATE` | Two-digit GST state code, e.g. `29` for Karnataka |
+| `APP_BILLING_SAC` | Service code, default `998439` |

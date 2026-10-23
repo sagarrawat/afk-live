@@ -16,6 +16,7 @@ non-functional requirements (continuity, quality, latency, cost). Reference stor
   - Saved streams (`LiveStream`, `/api/streams`, `LiveStreamService`, `StreamScheduleService`): a stream is a draft until it goes live; each go-live is a `StreamJob` whose spec carries a `StudioSpec`. Live edits become `stream_commands` that the worker applies between frames (`StudioRuns`). Library files reach workers through `MediaCache`
   - Phone streams: `IngestService` (per-stream ingest key, app links/QR, MediaMTX auth hook at `/internal/ingest/auth`); config in `afklive-scripts/mediamtx.yml`. Secrets at rest go through `util/SecretBox` (`EncryptedStringConverter`); `static/remote.html` is the phone-friendly remote control
   - Alerts: `NotificationService` (in-app list + email, dedupe windows), `AlertMonitor` (web side, every 30 s: outages that last ≥ 60 s open a `stream_incidents` row once across instances, recovery closes it)
+  - Billing: `BillingService` (quotes, checkout, upgrades with credit, period ends, grace, downgrade/cancel), `InvoiceService` (GST invoices + PDF), usage metering in `StreamService` (`usage_months`); plans in `PlanType` / `plan_configs`. See `docs/operations.md#billing`
   - `src/main/resources/db/changelog/`: Liquibase migrations (the only way to change the schema)
   - `src/main/resources/static/`: current frontend (Alpine + Tailwind CDN); to be replaced per the design direction
 - `afklive-optimizer/`: AWS Lambda that normalizes uploaded videos with FFmpeg.
