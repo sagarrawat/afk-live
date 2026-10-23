@@ -4,7 +4,7 @@ Cloud 24/7 live streaming for small creators: upload once, stay live on YouTube 
 without a PC, plus a cloud studio for creators who stream from their phone.
 
 **Read `docs/product-spec.md` before any feature work.** It holds the vision, personas, design
-direction, 127 user stories with IDs (ON-1, PL-3, MS-2, ...), the release plan and the
+direction, 148 user stories with IDs (ON-1, PL-3, FO-1, ...), the release plan and the
 non-functional requirements (continuity, quality, latency, cost). Reference story IDs in PRs.
 
 ## Repository layout
@@ -25,6 +25,7 @@ non-functional requirements (continuity, quality, latency, cost). Reference stor
 - `afklive-ui/`: the app (React 18, Vite, TypeScript, Tailwind, TanStack Query, dnd-kit, Lucide). Built by Maven into `static/app/`; Spring serves every `/studio/**` route with `app/index.html`. Design tokens are CSS variables in `src/index.css` (dark-first; marigold for actions and the brand; red only for on air; green/amber/red only for health). Brand rules and the logo/icon generator: `docs/brand.md`, `afklive-ui/brand/build.py`; use `components/Logo.tsx`, never redraw the mark. `src/lib/api.ts` (fetch + CSRF), `src/lib/upload.ts` (resumable uploads), `src/pages/` (screens), `src/components/ui.tsx` (shared kit). `site/` is the public site (`/`, `/pricing`; light theme, plain HTML + a little TS, built by `vite.site.config.ts` into `static/site/`); its `assets/site.css` also styles the Thymeleaf sign-in pages
 - `afklive-optimizer/`: AWS Lambda that normalizes uploaded videos with FFmpeg.
 - `docs/product-spec.md`: product spec (source of truth for scope and priorities).
+- `docs/roadmap.md`: the next phase: order, sizes, evidence, zero-downtime deploy design and FinOps rules.
 - `docs/brand.md`: logo, colours, type, imagery.
 - `docs/operations.md`: how web and worker processes run, deploy, and the worker egress firewall.
 

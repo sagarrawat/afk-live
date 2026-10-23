@@ -126,7 +126,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 
 ## User stories
 
-**There are 127 stories across 22 epics: 53 P0, 46 P1 and 28 P2. P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
+**There are 148 stories across 23 epics: 63 P0, 54 P1 and 31 P2. P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
 
 ### 1. Onboarding and account
 
@@ -139,6 +139,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | ON-5 | As a creator, I want a sample video and music track available on day one so that I can test without uploading | Demo media in every new library, clearly labelled, deletable | P1 |
 | ON-6 | As a creator, I want to secure my account with two-factor authentication so that my channels can't be hijacked | TOTP 2FA; recovery codes; enforced for agency owners if they choose | P1 |
 | ON-7 | As a creator, I want to delete my account and export my data so that I stay in control | Self-serve export (zip of metadata + media links) and deletion with 7-day grace | P1 |
+| ON-8 | As a new creator, I want setup to end with proof that YouTube is receiving my stream so that I know I am done | Setup tests the destination automatically; after Go live it waits for RE-8 "On YouTube" and shows success with a link to YouTube Studio, or the fix; "first live confirmed" is recorded and is the activation metric | P0 |
 
 ### 2. Media library
 
@@ -163,6 +164,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | ST-3 | As an agency manager, I want to run many streams at once so that I serve many clients | Concurrent stream count limited only by plan; overview lists all with status | P0 |
 | ST-4 | As a creator, I want to duplicate a stream so that I set up a similar channel quickly | Copies playlist, audio, overlays, settings; not destinations' keys | P1 |
 | ST-5 | As a creator, I want to archive a stream so that old setups don't clutter my home | Archive and restore; archived streams don't count against plan limits | P2 |
+| ST-6 | As a creator, I want the stream's shape suggested from my videos so that a vertical phone clip fills the screen | Mostly 9:16 uploads preselect Vertical in setup and on an empty playlist; a landscape stream with a vertical video shows a one-tap switch (off air); mixed shapes show the fit used in plain words | P1 |
 
 ### 4. Playlist and playback
 
@@ -196,6 +198,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | GL-3 | As a creator, I want to stop a stream now, at a set time, or after the playlist finishes so that it ends when I choose | Three stop options; scheduled stop shown on the stream and cancellable | P0 |
 | GL-4 | As a creator, I want a live preview of exactly what viewers see so that I can check overlays and audio | Low-latency preview of the encoded output, with audio toggle | P1 |
 | GL-5 | As a creator, I want to restart a stream with one click so that I recover from a platform glitch myself | Restart keeps settings and playlist position; destinations reconnect | P1 |
+| GL-6 | As a new creator, I want to know what YouTube's "Preparing" screen and Auto-start/Auto-stop mean so that I don't think the stream is broken | Card on the first go-live and for the first 2 minutes of a run; recommends Auto-start on and Auto-stop off for 24/7; explains how to unstick "Preparing"; dismissible per account; same content as a help article | P0 |
 
 ### 7. Reliability and health
 
@@ -208,6 +211,8 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | RE-5 | As a creator, I want long YouTube broadcasts rolled over before 12 hours so that every part is saved as a video on my channel | Optional; new broadcast created and switched with a gap of a few seconds at most; titles numbered | P1 |
 | RE-6 | As Nisha, I want a backup stream feeding YouTube's backup ingest so that a server failure doesn't drop a client's stream | Runs on a second worker; counts as a stream against the plan | P2 |
 | RE-7 | As a creator, I want a public status page so that I can check whether a problem is mine or AFK Live's | Status page with incident history; linked from the app footer and alerts | P1 |
+| RE-8 | As a creator, I want "Live" to mean the platform is actually receiving my stream so that I never find out from a viewer | A destination is "On <platform>" only after it has been sending steadily for 10 s; otherwise "Not reaching <platform>" with the reason in plain words; stream badge Live / Live with problems / Not reaching anyone; all destinations down for 60 s opens an incident and alerts | P0 |
+| RE-9 | As a creator, I want each destination reconnect and failure on my stream's timeline so that I can see what happened and that it recovered | Reconnects, give-ups and recoveries are timeline events with the reason; a destination down for 5 minutes alerts on its own (deduplicated) | P1 |
 
 ### 8. Scheduling
 
@@ -230,6 +235,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | DS-5 | As a creator, I want per-destination status and on/off while live so that one failing platform doesn't affect the others | Each destination shows Connected / Reconnecting / Failed; toggling one doesn't interrupt the rest | P1 |
 | DS-6 | As a creator, I want platform time limits handled for me so that Instagram or Facebook don't cut me off mid-show | Stops or reconnects before known platform limits, with a note on the timeline | P2 |
 | DS-7 | As a creator, I want to test a destination before going live so that a wrong key is caught early | "Test" sends a short test stream and reports success or the error | P1 |
+| DS-8 | As a creator, I want the app to stop me saving a server address as my stream key so that I don't stream into nothing | Key field refuses addresses and explains where the key is; server+key pasted together keeps the key; the server refuses nested or keyless addresses; every new or changed destination is tested automatically on save | P0 |
 
 ### 10. YouTube integration
 
@@ -324,6 +330,13 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | AD-3 | As an admin, I want to look up a user, their plan, payments and streams so that I resolve support tickets fast | User page with plan change, refund and credit actions, all audited | P0 |
 | AD-4 | As an admin, I want feature flags so that I release features to a few users first | Flags per user, plan or percentage | P1 |
 | AD-5 | As an admin, I want no default accounts, secrets or open dashboards in production so that the platform is safe | Seed data only in dev; admin dashboards behind admin login; secrets only from the environment | P0 |
+| AD-6 | As an admin, I want a support view of a stream so that I fix tickets without a server console | Source media, output profile, each destination with host, masked key and a key-format check, last platform error, restarts, RE-8 status; last 200 lines of FFmpeg output per process with keys redacted; "Send a test" on the user's destination, audited with a reason | P0 |
+| OPS-1 | As a user, I want email (verification, password reset, alerts) to work, or the app to say plainly that it doesn't, so that I'm never locked out | Startup warning and admin banner when email is off; password sign-ups verified automatically while it's off; "Forgot password" never claims a link was sent when none was; every send recorded and visible per user; admin "send test email" | P0 |
+| OPS-2 | As a user, I want an expired form to say "this page expired, try again" so that a deploy doesn't look like an outage | Expired session or form re-renders with that message; the app retries once on an expired token; "something went wrong on our side" only for real server errors, with a request id admins can search | P0 |
+| OPS-3 | As a creator, I want my stream to keep going when AFK Live updates its stream servers so that releases never take me offline | Worker deploys hand each stream to the new version one at a time; YouTube destinations switch via the backup ingest with no gap; other platforms reconnect within about 2 s; a failed handover leaves the old run live; no extra servers | P0 |
+| OPS-4 | As a user, I want the website and app to stay up during updates so that I never see errors because of a release | Blue/green on the same server behind Caddy with a readiness check and graceful shutdown; migrations are expand-then-contract; zero 502s during a deploy | P0 |
+| OPS-5 | As an admin, I want a staging copy of the app so that I try a release before creators get it | Staging runs on the production droplet on its own port, database and worker slot with a stream limit of 1; deploys there first; costs no new server | P1 |
+| OPS-6 | As an admin, I want a nightly soak test so that leaks and drift show up before release | A 6-hour run each night (72 hours before major releases) checking memory, timestamps, A/V drift under 40 ms and reconnects; results posted to the PR checks | P1 |
 
 ### 20. Marketing site and help
 
@@ -367,6 +380,19 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 
 Stories that fix today's code (the free upgrade endpoint, seeded admin, broken scheduling, the mock "stop at") are covered by BI-8, AD-5, SC-1 and GL-3; they block launch regardless of priority labels elsewhere.
 
+### 23. Cost and efficiency (FinOps)
+
+| ID | Story | Acceptance criteria | Priority |
+| --- | --- | --- | --- |
+| FO-1 | As the operator, I want each library video prepared once at the size and frame rate a stream uses so that live streams don't shrink a 1080p60 file every second | A copy is requested when a stream plays a bigger or faster video and made in the background at the lowest priority; playout switches at the next item without a restart; copies are deleted with their file and don't count toward the creator's storage; decoding drops frames before scaling | P0 |
+| FO-2 | As the operator, I want playlists without live overlays to stream by copy, not re-encode, so that a 24/7 stream costs almost no CPU | Prepared files at the stream profile are concatenated with stream copy when no live overlay, scene or phone input is in use; switching to a feature that needs encoding moves the stream to the studio at the next item without a disconnect | P1 |
+| FO-3 | As an admin, I want cost per stream-hour including bandwidth so that prices follow real cost | Admin shows server cost and traffic cost per stream-hour per plan and resolution, from measured CPU and bytes sent; monthly projection | P1 |
+| FO-4 | As the operator, I want each profile to send no more bits than YouTube needs so that traffic costs stay low without hurting quality | Bitrate per profile set from YouTube's recommended range and a measured quality check; a change shows its traffic saving in FO-3 | P1 |
+| FO-5 | As an admin, I want a traffic budget with alerts so that a bandwidth overage never surprises us | Outbound traffic per worker and per account tracked monthly against the included transfer; alert at 70% and 90% | P1 |
+| FO-6 | As the operator, I want playout copies nobody plays deleted so that storage doesn't grow forever | Copies not played for 30 days are deleted and made again when needed; storage per account and for copies shown in admin | P2 |
+| FO-7 | As the operator, I want workers added and removed with load so that we pay for capacity only when streams need it | A scheduler adds a worker above 75% of fleet capacity and drains one (OPS-3) below 40%; never below one; every change logged with its cost | P2 |
+| FO-8 | As the operator, I want 24/7 playout on servers whose traffic is included so that bandwidth stops being the main cost | A second worker pool in a region with included traffic; 24/7 playlist streams placed there, phone streams stay near India; placement shown in admin | P2 |
+
 ## Release plan
 
 **Ship in four phases, and only move on when the gate before the next phase is met.** Phase 0 is not optional: today's code lets anyone upgrade for free and can lose every running stream on a deploy, so nothing new launches on top of it.
@@ -374,6 +400,7 @@ Stories that fix today's code (the free upgrade endpoint, seeded admin, broken s
 1. **Phase 0, Fix the foundation** (before any new feature): close the security holes; working dev build, PR checks; streams move to workers with a supervisor and auto-restart. *Gate: no critical security issues; running streams survive a deploy.*
 2. **MVP, launch** (53 P0 stories): phone ingest with never-drop, scenes and overlays; 24/7 playlists; Go Live states, recurring schedules, YouTube and custom RTMP; down alerts, INR billing with UPI and GST invoices, redesigned site. *Gate: 99.5% uptime for 2 weeks with 20 beta creators.*
 3. **v1, competitive** (46 P1 stories): multistream presets on one encode, live playlist edits, crossfade; overlays, AI titles, health and uptime views; schedule calendar, USD checkout, teams, installable app with push. *Gate: 5% of free accounts upgrade within 30 days.*
+3a. **Trust** (after the first real users, October 2026): "Live" means live on the platform (RE-8, DS-8, GL-1, GL-6, ON-8), deploys never interrupt anyone (OPS-3, OPS-4), email and support work (OPS-1, OPS-2, AD-6), and a stream costs half the CPU (FO-1). Order, sizes and evidence: `docs/roadmap.md`. *Gate: zero interrupted streams across three worker deploys; activation measured as "first live confirmed".*
 4. **v2, pull ahead** (28 P2 stories): overlay templates and visualizer, multichat, client reports; public API, webhooks, MCP server, backup streams; Hindi UI, music library, stings.
 
 The MVP is the highlighted phase: everything a music channel or temple broadcaster needs to stay live unattended. Gate numbers are proposed and should be set against real data from the beta.
