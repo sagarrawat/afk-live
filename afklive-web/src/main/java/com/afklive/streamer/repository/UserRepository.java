@@ -26,7 +26,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.channels LEFT JOIN FETCH u.settings s WHERE s.autoReplyEnabled = true")
     Slice<User> findByAutoReplyEnabledTrue(Pageable pageable);
 
-    Page<User> findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(String email, String fullName, Pageable pageable);
 
     @Modifying
     @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance + :amount WHERE u.email = :email")
@@ -36,8 +35,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("UPDATE User u SET u.unpaidBalance = u.unpaidBalance - :amount WHERE u.email = :email")
     void deductUnpaidBalance(@Param("email") String email, @Param("amount") double amount);
 
-    @Query("SELECT COALESCE(SUM(u.unpaidBalance), 0) FROM User u")
-    Double sumUnpaidBalance();
 
     @Query("SELECT COALESCE(SUM(u.usedStorageBytes), 0) FROM User u")
     Long sumUsedStorageBytes();

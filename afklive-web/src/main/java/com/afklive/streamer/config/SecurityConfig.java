@@ -106,7 +106,8 @@ public class SecurityConfig {
                         // Ingest server (MediaMTX) auth hook; verified by a shared secret in the controller.
                         .requestMatchers("/internal/ingest/auth").permitAll()
 
-                        // 2. ADMIN (raw FFmpeg logs include every user's streams)
+                        // 2. ADMIN (raw FFmpeg logs include every user's streams). /admin/** only redirects
+                        //    old bookmarks to the app's admin console (/studio/admin, which checks the role too).
                         .requestMatchers("/admin/**", "/api/admin/**", "/api/logs").hasRole("ADMIN")
 
                         // 3. PROTECTED: The Studio URL and internal index file

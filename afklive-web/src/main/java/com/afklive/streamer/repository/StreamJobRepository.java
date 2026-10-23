@@ -24,9 +24,6 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true")
     List<StreamJob> findAllByIsLiveTrue();
 
-    @Query(value = "SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true",
-           countQuery = "SELECT count(j) FROM StreamJob j WHERE j.isLive = true")
-    Page<StreamJob> findAllByIsLiveTrue(Pageable pageable);
 
     long countByIsLiveTrue();
 

@@ -19,8 +19,10 @@ public interface PaymentAuditRepository extends JpaRepository<PaymentAudit, Long
     @Query("SELECT p FROM PaymentAudit p WHERE p.transactionId = :transactionId")
     Optional<PaymentAudit> findForUpdateByTransactionId(@Param("transactionId") String transactionId);
 
-    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM PaymentAudit p WHERE p.status = :status")
-    Long sumAmountByStatus(String status);
-
     java.util.List<PaymentAudit> findTop50ByMerchantUserIdOrderByCreatedAtDesc(String merchantUserId);
+
+    /** Completed payments since a time, per currency: rows of [currency (null = INR), sum of amounts]. */
+    @Query("SELECT p.currency, COALESCE(SUM(p.amount), 0) FROM PaymentAudit p WHERE p.status IN ('COMPLETED', 'SUCCESS')"
+            + " AND p.createdAt >= :since GROUP BY p.currency")
+    java.util.List<Object[]> sumCompletedByCurrencySince(@Param("since") java.time.LocalDateTime since);
 }
