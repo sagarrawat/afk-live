@@ -172,6 +172,11 @@ anything, encode representative footage (gameplay, music still, talking head) at
 default. A 25% lower rate is 25% less traffic for every stream, forever. 1080p stays at YouTube's
 5 Mbps minimum or above (repo rule).
 
+The tool is `afklive-scripts/bitrate-study.sh` (run it on staging with real footage, never on a
+streaming server). A first run on synthetic worst-case footage (noisy 1080p60 motion at 720x1280) gave
+SSIM 0.952 at 2.5 Mbps, 0.955 at 3.5 and 0.955 at 4: already within 0.005, which suggests 3 Mbps or
+less is enough for most content. Confirm on real gameplay and music footage before changing the default.
+
 ## 10. Staging and soak: OPS-5, OPS-6 (next)
 
 - **Staging (OPS-5)** runs on the production droplet as a third web slot and a worker slot with a
