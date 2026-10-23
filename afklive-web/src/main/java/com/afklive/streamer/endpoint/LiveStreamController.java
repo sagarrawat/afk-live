@@ -64,6 +64,12 @@ public class LiveStreamController {
         return service.view(email(principal), id);
     }
 
+    /** RE-4. */
+    @GetMapping("/{id}/uptime")
+    public com.afklive.streamer.dto.StreamDtos.Uptime uptime(@PathVariable Long id, Principal principal) {
+        return service.uptime(email(principal), id, java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
+    }
+
     /** ST-4. */
     @PostMapping("/{id}/duplicate")
     public ResponseEntity<StreamView> duplicate(@PathVariable Long id, Principal principal) {

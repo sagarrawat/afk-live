@@ -343,3 +343,9 @@ export interface BillingProfile {
   stateCode?: string | null;
   gstin?: string | null;
 }
+
+/** RE-4: share of on-air time without an outage; percent is null when the stream wasn't on air in that window. */
+export interface Uptime {
+  windows: { label: string; onAirSeconds: number; downSeconds: number; percent: number | null }[];
+  outages: { startedAt: string; resolvedAt?: string | null }[];
+}

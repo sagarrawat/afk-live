@@ -292,6 +292,35 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
         assertThat(service.view(email, s.getId()).destinations()).allMatch(d -> d.enabled());
     }
 
+    @Autowired com.afklive.streamer.repository.StreamIncidentRepository incidents;
+
+    @Test
+    void uptimeIsTheShareOfOnAirTimeWithoutAnOutage() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        assertThat(service.uptime(email, s.getId(), now).windows()).allMatch(w -> w.percent() == null); // never on air
+
+        StreamJob job = service.goLive(email, s.getId(), null);
+        // Live for the last 10 hours, with a 30-minute outage 2 hours ago.
+        job.setStartTime(now.minusHours(10));
+        jobs.save(job);
+        incidents.open(job.getId(), "DOWN", "", now.minusHours(2));
+        incidents.resolve(job.getId(), "DOWN", "", now.minusHours(2).plusMinutes(30));
+        // Another creator's run must not count.
+        String other = newUser(PlanType.ESSENTIALS);
+        StreamJob old = service.goLive(other, ready(other).getId(), null);
+
+        var up = service.uptime(email, s.getId(), now);
+        var day = up.windows().getFirst();
+        assertThat(day.label()).isEqualTo("24 hours");
+        assertThat(day.onAirSeconds()).isEqualTo(10 * 3600);
+        assertThat(day.downSeconds()).isEqualTo(30 * 60);
+        assertThat(day.percent()).isEqualTo(95.0);
+        assertThat(up.outages()).hasSize(1);
+        assertThat(old.getStreamId()).isNotEqualTo(s.getId());
+    }
+
     @Test
     void stopAtUsesTheCreatorsTimeZone() {
         String email = newUser(PlanType.ESSENTIALS);

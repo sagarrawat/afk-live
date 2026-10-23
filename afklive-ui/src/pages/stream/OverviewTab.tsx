@@ -6,7 +6,7 @@ import { HealthDot, isOnAir } from '@/components/status';
 import { Badge, Button, Panel, Toggle } from '@/components/ui';
 import { post } from '@/lib/api';
 import { clock, dateTime, duration } from '@/lib/format';
-import { useRuns } from '@/lib/queries';
+import { useRuns, useUptime } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
 
@@ -24,6 +24,7 @@ export function OverviewTab({ stream: s }: { stream: StreamView }) {
       <div className="space-y-6">
         {s.source === 'PHONE' ? <PhoneControl stream={s} /> : <NowPlaying stream={s} />}
         {onAir && s.overlays.length > 0 && <OverlayToggles stream={s} />}
+        <UptimePanel stream={s} />
         <RecentRuns stream={s} />
       </div>
       <div className="space-y-6">
@@ -268,6 +269,32 @@ function DestinationsPanel({ stream: s }: { stream: StreamView }) {
           ))}
         </ul>
       )}
+    </Panel>
+  );
+}
+
+/** RE-4: how reliably this stream stays up, in numbers a creator can show a client. */
+export function UptimePanel({ stream: s }: { stream: StreamView }) {
+  const { data } = useUptime(s.id);
+  if (!data || data.windows.every((w) => w.percent === null)) return null;
+  const last = data.outages[0];
+  return (
+    <Panel title="Uptime">
+      <dl className="grid grid-cols-3 gap-3">
+        {data.windows.map((w) => (
+          <div key={w.label}>
+            <dt className="text-sm text-muted">{w.label}</dt>
+            <dd className="tnum mt-0.5 text-xl font-semibold">{w.percent === null ? '–' : `${w.percent}%`}</dd>
+            {w.percent !== null && <dd className="tnum text-xs text-muted">on air {duration(w.onAirSeconds)}</dd>}
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 text-sm text-muted">
+        {last
+          ? `Last outage ${dateTime(last.startedAt, s.timeZone)}${last.resolvedAt ? `, back after ${duration((new Date(last.resolvedAt).getTime() - new Date(last.startedAt).getTime()) / 1000)}` : ', still going'}.`
+          : 'No outages in the last 30 days.'}{' '}
+        Counts time on air; an outage is a minute or more down.
+      </p>
     </Panel>
   );
 }

@@ -54,6 +54,7 @@ public class LiveStreamService {
     private final IngestService ingest;
     private final NotificationService notifications;
     private final com.afklive.streamer.repository.StreamJobDestinationRepository jobDestinations;
+    private final com.afklive.streamer.repository.StreamIncidentRepository incidents;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -687,6 +688,49 @@ public class LiveStreamService {
         return jobs.findTop20ByStreamIdOrderByStartTimeDesc(id).stream()
                 .map(j -> new RunView(j.getId(), j.getStartTime(), j.getEndTime(), j.getStatus(), j.getEndReason(), j.getRestarts()))
                 .toList();
+    }
+
+    /**
+     * RE-4: for the last 24 hours, 7 and 30 days, how much of the time the stream was on air it was
+     * also up. "Down" is an outage the alert monitor recorded (down for a minute or more); shorter
+     * hiccups don't count, the same line the alerts use.
+     */
+    public com.afklive.streamer.dto.StreamDtos.Uptime uptime(String email, Long id, ZonedDateTime now) {
+        get(email, id);
+        List<StreamJob> runs = jobs.findRunsSince(id, now.minusDays(30));
+        Map<Long, StreamJob> byId = new HashMap<>();
+        runs.forEach(j -> byId.put(j.getId(), j));
+        List<com.afklive.streamer.model.StreamIncident> downs = byId.isEmpty() ? List.of()
+                : incidents.findAllByJobIdInAndKindOrderByStartedAtDesc(byId.keySet(), "DOWN");
+        List<com.afklive.streamer.dto.StreamDtos.UptimeWindow> windows = new ArrayList<>();
+        for (Object[] w : new Object[][]{{"24 hours", now.minusHours(24)}, {"7 days", now.minusDays(7)}, {"30 days", now.minusDays(30)}}) {
+            ZonedDateTime from = (ZonedDateTime) w[1];
+            long onAir = 0;
+            for (StreamJob j : runs) {
+                onAir += overlap(j.getStartTime(), j.getEndTime(), from, now);
+            }
+            long down = 0;
+            for (var inc : downs) {
+                StreamJob j = byId.get(inc.getJobId());
+                ZonedDateTime end = inc.getResolvedAt() != null ? inc.getResolvedAt() : j != null && j.getEndTime() != null ? j.getEndTime() : now;
+                down += overlap(inc.getStartedAt(), end, from, now);
+            }
+            down = Math.min(down, onAir);
+            Double pct = onAir == 0 ? null : Math.floor(1000.0 * (onAir - down) / onAir) / 10.0;
+            windows.add(new com.afklive.streamer.dto.StreamDtos.UptimeWindow((String) w[0], onAir, down, pct));
+        }
+        List<com.afklive.streamer.dto.StreamDtos.Outage> outages = downs.stream().limit(20)
+                .map(i -> new com.afklive.streamer.dto.StreamDtos.Outage(i.getStartedAt(), i.getResolvedAt())).toList();
+        return new com.afklive.streamer.dto.StreamDtos.Uptime(windows, outages);
+    }
+
+    private static long overlap(ZonedDateTime start, ZonedDateTime end, ZonedDateTime from, ZonedDateTime to) {
+        if (start == null) {
+            return 0;
+        }
+        ZonedDateTime a = start.isAfter(from) ? start : from;
+        ZonedDateTime b = end == null || end.isAfter(to) ? to : end;
+        return Math.max(0, java.time.Duration.between(a, b).getSeconds());
     }
 
     public List<QualityOption> qualityOptions(String email) {

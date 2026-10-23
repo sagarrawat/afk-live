@@ -103,4 +103,14 @@ public final class StreamDtos {
     public record RunView(Long jobId, ZonedDateTime startedAt, ZonedDateTime endedAt, String status, String endReason,
                           int restarts) {
     }
+
+    /** RE-4: share of on-air time without an outage, per window; null when it wasn't on air then. */
+    public record UptimeWindow(String label, long onAirSeconds, long downSeconds, Double percent) {
+    }
+
+    public record Outage(ZonedDateTime startedAt, ZonedDateTime resolvedAt) {
+    }
+
+    public record Uptime(List<UptimeWindow> windows, List<Outage> outages) {
+    }
 }
