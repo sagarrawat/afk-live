@@ -27,7 +27,7 @@ public class DestinationController {
     public ResponseEntity<?> getDestinations(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
-        return ResponseEntity.ok(destinationRepository.findByUser(user));
+        return ResponseEntity.ok(destinationRepository.findByUser(user).stream().map(DestinationView::of).toList());
     }
 
     @PostMapping
@@ -54,7 +54,7 @@ public class DestinationController {
         dest.setSelected(selected);
         StreamDestination saved = destinationRepository.save(dest);
 
-        return ResponseEntity.ok(saved);
+        return ResponseEntity.ok(DestinationView.of(saved));
     }
 
     @DeleteMapping("/{id}")
@@ -98,7 +98,7 @@ public class DestinationController {
                     }
                     if (body.containsKey("selected")) dest.setSelected((Boolean) body.get("selected"));
 
-                    return ResponseEntity.ok(destinationRepository.save(dest));
+                    return ResponseEntity.ok(DestinationView.of(destinationRepository.save(dest)));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -125,5 +125,37 @@ public class DestinationController {
         return ResponseEntity.ok(java.util.Map.of("testId", t.getId(), "status", t.getStatus(),
                 "ok", t.getStatus() == com.afklive.streamer.model.DestinationTest.Status.OK,
                 "message", t.getMessage() == null ? "Testing…" : t.getMessage()));
+    }
+
+    /**
+     * A destination as the app shows it: the server and the last characters of the key, never the
+     * whole key (a leaked key lets anyone stream to the channel).
+     */
+    public record DestinationView(Long id, String name, String type, String platform, String server, String keyHint,
+                                  boolean selected) {
+        static DestinationView of(StreamDestination d) {
+            String url = d.getStreamKey() == null ? "" : d.getStreamKey();
+            String server = url;
+            String key = "";
+            int slash = url.lastIndexOf('/');
+            if (url.contains("://") && slash > url.indexOf("://") + 2) {
+                server = url.substring(0, slash);
+                key = url.substring(slash + 1);
+            }
+            if (!url.contains("://")) {
+                server = "rtmp://a.rtmp.youtube.com/live2"; // a bare key is a YouTube stream key
+                key = url;
+            }
+            if (url.startsWith("srt://")) {
+                server = url.contains("?") ? url.substring(0, url.indexOf('?')) : url;
+                key = url.contains("streamid=") ? url.substring(url.indexOf("streamid=") + 9) : "";
+            }
+            String hint = key.length() <= 4 ? (key.isEmpty() ? "" : "••••") : "••••" + key.substring(key.length() - 4);
+            String host = server.toLowerCase(java.util.Locale.ROOT);
+            String platform = host.contains("youtube.com") ? "YOUTUBE" : host.contains("facebook.com") ? "FACEBOOK"
+                    : host.contains("instagram.com") ? "INSTAGRAM" : host.contains("twitch.tv") ? "TWITCH"
+                    : host.contains("kick.com") || host.contains("live-video.net") ? "KICK" : "CUSTOM";
+            return new DestinationView(d.getId(), d.getName(), d.getType(), platform, server, hint, d.isSelected());
+        }
     }
 }

@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'afklive-web/**'
+      - 'afklive-ui/**'
       - 'pom.xml'
   workflow_dispatch:
 
@@ -23,7 +24,14 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # Build ONLY the web module (saves time)
+      - name: Set up Node 22 (builds the React app into the jar)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: afklive-ui/package-lock.json
+
+      # Build ONLY the web module (saves time); this also builds afklive-ui into it
       - name: Build Web Module
         run: mvn clean package -pl afklive-web -am
 
