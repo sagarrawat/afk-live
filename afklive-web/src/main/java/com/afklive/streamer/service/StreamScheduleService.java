@@ -100,7 +100,7 @@ public class StreamScheduleService {
 
     public List<ScheduleView> list(String email, Long streamId) {
         liveStreams.get(email, streamId);
-        return schedules.findAllByStreamIdOrderByIdAsc(streamId).stream().map(StreamScheduleService::view).toList();
+        return schedules.findAllByStreamIdOrderByIdAsc(streamId).stream().map(this::view).toList();
     }
 
     public ScheduleView create(String email, Long streamId, ScheduleRequest req) {
@@ -131,7 +131,7 @@ public class StreamScheduleService {
         liveStreams.get(email, streamId);
         StreamSchedule sc = owned(streamId, scheduleId);
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
-        StreamJob job = liveStreams.goLive(email, streamId, null);
+        StreamJob job = liveStreams.goLive(email, streamId, null, playlistIds(sc));
         currentWindow(sc, now).map(Window::end).filter(Objects::nonNull).filter(end -> end.isAfter(now))
                 .ifPresent(end -> streamService.setStopAt(job.getId(), email, end));
         schedules.recordError(sc.getId(), null);
@@ -219,6 +219,40 @@ public class StreamScheduleService {
             throw new IllegalArgumentException("Up to 100 skipped dates.");
         }
         sc.setSkipDates(skips.isEmpty() ? null : String.join(",", skips));
+        // SC-4: the slot's own videos ([] for the stream's playlist); left out, the slot keeps its list.
+        if (req.playlist() == null) {
+            return;
+        }
+        List<Long> playlist = req.playlist().stream().filter(Objects::nonNull).toList();
+        if (playlist.size() > 500) {
+            throw new IllegalArgumentException("A slot's list can hold up to 500 videos.");
+        }
+        if (!playlist.isEmpty()) {
+            String email = streams.findById(sc.getStreamId()).map(x -> x.getUser().getEmail()).orElse("");
+            if (liveStreams.slotVideos(email, ids(playlist)).size() != playlist.size()) {
+                throw new IllegalArgumentException("A file in this slot's list isn't a video in your library.");
+            }
+        }
+        sc.setPlaylist(playlist.isEmpty() ? null : ids(playlist));
+    }
+
+    private static String ids(List<Long> ids) {
+        return String.join(",", ids.stream().map(String::valueOf).toList());
+    }
+
+    static List<Long> playlistIds(StreamSchedule sc) {
+        if (sc.getPlaylist() == null || sc.getPlaylist().isBlank()) {
+            return null;
+        }
+        List<Long> out = new ArrayList<>();
+        for (String p : sc.getPlaylist().split(",")) {
+            try {
+                out.add(Long.parseLong(p.trim()));
+            } catch (NumberFormatException ignored) {
+                // skip
+            }
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------ occurrences
@@ -331,7 +365,7 @@ public class StreamScheduleService {
                     // Already live, started by hand (or by another schedule): leave that run and its end alone.
                     schedules.recordError(sc.getId(), "Was already live at the scheduled start; left running as it was.");
                 } else {
-                    StreamJob job = liveStreams.goLive(email, sc.getStreamId(), null);
+                    StreamJob job = liveStreams.goLive(email, sc.getStreamId(), null, playlistIds(sc));
                     if (w.end() != null && w.end().isAfter(now)) {
                         streamService.setStopAt(job.getId(), email, w.end().withZoneSameInstant(ZoneId.of("UTC")));
                     }
@@ -372,13 +406,23 @@ public class StreamScheduleService {
 
     // ------------------------------------------------------------------ views
 
-    static ScheduleView view(StreamSchedule sc) {
+    ScheduleView view(StreamSchedule sc) {
+        List<com.afklive.streamer.dto.StreamDtos.SlotItem> slot = List.of();
+        if (sc.getPlaylist() != null) {
+            String email = streams.findById(sc.getStreamId()).map(x -> x.getUser().getEmail()).orElse("");
+            slot = liveStreams.slotVideos(email, sc.getPlaylist()).stream()
+                    .map(m -> new com.afklive.streamer.dto.StreamDtos.SlotItem(m.getId(), m.getTitle())).toList();
+        }
+        return view(sc, slot);
+    }
+
+    static ScheduleView view(StreamSchedule sc, List<com.afklive.streamer.dto.StreamDtos.SlotItem> slot) {
         return new ScheduleView(sc.getId(), sc.getKind().name(), sc.getStartAt(), sc.getEndAt(),
                 sc.getDaysOfWeek() == null ? List.of() : List.of(sc.getDaysOfWeek().split(",")),
                 sc.getStartTime() == null ? null : sc.getStartTime().toString(),
                 sc.getEndTime() == null ? null : sc.getEndTime().toString(),
                 sc.getTimeZone(), sc.getSkipDates() == null ? List.of() : List.of(sc.getSkipDates().split(",")),
-                sc.isEnabled(), nextStart(sc, ZonedDateTime.now(ZoneId.of("UTC"))), sc.getLastError());
+                sc.isEnabled(), nextStart(sc, ZonedDateTime.now(ZoneId.of("UTC"))), sc.getLastError(), slot);
     }
 
     private static ZonedDateTime localDateTime(String value, ZoneId zone, String what) {

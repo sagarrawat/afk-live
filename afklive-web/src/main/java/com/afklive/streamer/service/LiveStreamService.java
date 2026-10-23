@@ -503,13 +503,19 @@ public class LiveStreamService {
 
     /** GL-1: everything that would make a start fail, each with where to fix it. */
     public Preflight preflight(String email, Long id) {
+        return preflight(email, id, null);
+    }
+
+    public Preflight preflight(String email, Long id, List<Long> playlist) {
         LiveStream s = get(email, id);
         User user = s.getUser();
         List<Check> checks = new ArrayList<>();
 
         if (s.getSource() == LiveStream.Source.PLAYLIST) {
-            List<StreamItem> videos = items.findAllByStreamIdAndKindOrderByPositionAsc(id, StreamItem.Kind.VIDEO);
-            long ready = videos.stream().filter(i -> i.getMedia().getStatus() == MediaStatus.READY).count();
+            List<MediaAsset> videos = playlist == null || playlist.isEmpty()
+                    ? items.findAllByStreamIdAndKindOrderByPositionAsc(id, StreamItem.Kind.VIDEO).stream().map(StreamItem::getMedia).toList()
+                    : slotVideos(email, String.join(",", playlist.stream().map(String::valueOf).toList()));
+            long ready = videos.stream().filter(m -> m.getStatus() == MediaStatus.READY).count();
             if (videos.isEmpty()) {
                 checks.add(new Check("playlist", false, "Add at least one video to the playlist.", "playlist"));
             } else if (ready == 0) {
@@ -586,6 +592,12 @@ public class LiveStreamService {
     /** GL-2: go live. Runs pre-flight; on success a worker picks the run up within seconds. */
     @Transactional
     public StreamJob goLive(String email, Long id, String scene) {
+        return goLive(email, id, scene, null);
+    }
+
+    /** {@code playlist}: SC-4, a scheduled slot's own videos for this run (null: the stream's playlist). */
+    @Transactional
+    public StreamJob goLive(String email, Long id, String scene, List<Long> playlist) {
         get(email, id); // ownership first, before taking any lock
         // Plan limits count the user's live runs: serialize this user's starts (and free-tier starts
         // platform-wide), then this stream's, so two simultaneous starts can't both pass the check.
@@ -594,7 +606,7 @@ public class LiveStreamService {
             jobs.lockFreeCapacity();
         }
         streams.lockById(id);
-        Preflight pf = preflight(email, id);
+        Preflight pf = preflight(email, id, playlist);
         if (!pf.ok()) {
             String first = pf.checks().stream().filter(c -> !c.ok()).map(Check::message).findFirst().orElse("Pre-flight failed.");
             pf.checks().stream().filter(c -> !c.ok() && Set.of("concurrency", "quality", "hours", "capacity", "destinations-limit").contains(c.id()))
@@ -608,7 +620,9 @@ public class LiveStreamService {
         if (scene != null && !SCENES.contains(scene)) {
             throw new IllegalArgumentException("Unknown scene: " + scene);
         }
-        StudioSpec studio = studioSpec(s, scene);
+        String override = playlist == null || playlist.isEmpty() ? null
+                : String.join(",", playlist.stream().map(String::valueOf).toList());
+        StudioSpec studio = studioSpec(s, scene, override);
         List<StreamDestination> enabled = enabledDestinations(s);
         List<StreamSpec.Destination> dests = new ArrayList<>();
         for (StreamDestination d : enabled) {
@@ -626,6 +640,7 @@ public class LiveStreamService {
         job.setSpec(spec.toJson());
         job.setStreamId(s.getId());
         job.setScene(studio.initialScene());
+        job.setPlaylistOverride(override);
         for (int i = 0; i < dests.size(); i++) {
             job.getDestinations().add(new StreamJobDestination(job, i, dests.get(i).name()));
         }
@@ -855,10 +870,41 @@ public class LiveStreamService {
 
     /** The worker's instructions, with every library reference resolved to a storage key the owner may use. */
     public StudioSpec studioSpec(LiveStream s, String scene) {
+        return studioSpec(s, scene, null);
+    }
+
+    /** SC-4: the owner's video files for a slot's list ("12,7,9"), in that order; others are left out. */
+    List<MediaAsset> slotVideos(String email, String ids) {
+        List<Long> wanted = new ArrayList<>();
+        for (String p : ids.split(",")) {
+            try {
+                wanted.add(Long.parseLong(p.trim()));
+            } catch (NumberFormatException ignored) {
+                // skip
+            }
+        }
+        Map<Long, MediaAsset> owned = new HashMap<>();
+        for (MediaAsset m : media.findAllByIdInAndUserEmail(new HashSet<>(wanted), email)) {
+            if (m.getContentType() == MediaAsset.ContentType.VIDEO) {
+                owned.put(m.getId(), m);
+            }
+        }
+        return wanted.stream().map(owned::get).filter(Objects::nonNull).toList();
+    }
+
+    StudioSpec studioSpec(LiveStream s, String scene, String playlistOverride) {
         List<StudioSpec.Media> videos = new ArrayList<>();
-        for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(s.getId(), StreamItem.Kind.VIDEO)) {
-            if (i.getMedia().getStatus() == MediaStatus.READY) {
-                videos.add(mediaOf(i.getMedia(), i.getFit()));
+        if (playlistOverride != null) {
+            for (MediaAsset m : slotVideos(s.getUser().getEmail(), playlistOverride)) {
+                if (m.getStatus() == MediaStatus.READY) {
+                    videos.add(mediaOf(m));
+                }
+            }
+        } else {
+            for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(s.getId(), StreamItem.Kind.VIDEO)) {
+                if (i.getMedia().getStatus() == MediaStatus.READY) {
+                    videos.add(mediaOf(i.getMedia(), i.getFit()));
+                }
             }
         }
         List<StudioSpec.Media> music = new ArrayList<>();
@@ -896,7 +942,7 @@ public class LiveStreamService {
                     key == null ? "COLOR" : sc.backgroundType(), sc.color(), sc.music()));
         }
         StudioSpec.Position resume = null;
-        if (s.getResumePosition() != null) {
+        if (s.getResumePosition() != null && playlistOverride == null) { // a slot's own list starts at the top
             try {
                 resume = StudioSpec.parse(s.getResumePosition(), StudioSpec.Position.class);
             } catch (Exception ignored) {
@@ -953,7 +999,7 @@ public class LiveStreamService {
      */
     private StudioSpec persistSpec(StreamJob job, LiveStream s, boolean sceneFromJob) {
         StreamSpec current = StreamSpec.fromJson(job.getSpec());
-        StudioSpec next = studioSpec(s, sceneFromJob ? job.getScene() : null);
+        StudioSpec next = studioSpec(s, sceneFromJob ? job.getScene() : null, job.getPlaylistOverride());
         if (current.studio() != null && current.studio().finishAfterPass()) {
             next = next.withFinishAfterPass();
         }
@@ -1080,7 +1126,12 @@ public class LiveStreamService {
     }
 
     private List<ScheduleView> scheduleViews(LiveStream s) {
-        return schedules.findAllByStreamIdOrderByIdAsc(s.getId()).stream().map(StreamScheduleService::view).toList();
+        String email = s.getUser().getEmail();
+        return schedules.findAllByStreamIdOrderByIdAsc(s.getId()).stream()
+                .map(sc -> StreamScheduleService.view(sc, sc.getPlaylist() == null ? List.of()
+                        : slotVideos(email, sc.getPlaylist()).stream()
+                        .map(m -> new com.afklive.streamer.dto.StreamDtos.SlotItem(m.getId(), m.getTitle())).toList()))
+                .toList();
     }
 
     private int planMaxHeight(User user) {

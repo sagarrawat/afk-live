@@ -56,6 +56,10 @@ public class StreamSchedule {
     @Column(columnDefinition = "TEXT")
     private String lastError;
 
+    /** SC-4: this slot's videos, as media ids "12,7,9"; null plays the stream's playlist. */
+    @Column(columnDefinition = "TEXT")
+    private String playlist;
+
     @Column(nullable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now();
 }

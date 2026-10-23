@@ -5,6 +5,7 @@ import { Badge, Button, Dialog, Empty, Field, IconButton, Input, Panel, Segmente
 import { del, post, put } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 import type { ScheduleView, StreamView } from '@/lib/types';
+import { MediaPicker } from '@/components/MediaPicker';
 import { useStreamUpdate } from './useStreamUpdate';
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
@@ -36,6 +37,7 @@ function toRequest(sc: ScheduleView, enabled = sc.enabled) {
     timeZone: sc.timeZone,
     skipDates: sc.skipDates,
     enabled,
+    playlist: (sc.playlist ?? []).map((m) => m.id),
   };
 }
 
@@ -68,6 +70,7 @@ export function ScheduleTab({ stream: s }: { stream: StreamView }) {
                 <span className="block text-sm text-muted">
                   {sc.enabled ? (sc.nextStart ? `Next start ${dateTime(sc.nextStart, sc.timeZone)}` : 'No upcoming start') : 'Paused'}
                   {sc.timeZone !== Intl.DateTimeFormat().resolvedOptions().timeZone && `, ${sc.timeZone} time`}
+                  {(sc.playlist?.length ?? 0) > 0 && `. Plays its own ${sc.playlist!.length} video${sc.playlist!.length === 1 ? '' : 's'}`}
                 </span>
                 {sc.lastError && (
                   <span className="mt-1 block">
@@ -102,9 +105,11 @@ function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; 
   const [endTime, setEndTime] = useState(init?.endTime ?? '22:00');
   const [days, setDays] = useState<string[]>(init?.daysOfWeek ?? ['MON', 'TUE', 'WED', 'THU', 'FRI']);
   const [tz, setTz] = useState(schedule?.timeZone ?? s.timeZone);
+  const [slot, setSlot] = useState<{ id: number; title: string }[]>(schedule?.playlist ?? []);
+  const [picking, setPicking] = useState(false);
   const { busy, update } = useStreamUpdate(s.id);
   const save = async () => {
-    const body = { kind, startAt: kind === 'ONCE' ? startAt : null, endAt: kind === 'ONCE' ? endAt : null, daysOfWeek: kind === 'WEEKLY' ? days : [], startTime, endTime, timeZone: tz, skipDates: schedule?.skipDates ?? [], enabled: schedule?.enabled ?? true };
+    const body = { kind, startAt: kind === 'ONCE' ? startAt : null, endAt: kind === 'ONCE' ? endAt : null, daysOfWeek: kind === 'WEEKLY' ? days : [], startTime, endTime, timeZone: tz, skipDates: schedule?.skipDates ?? [], enabled: schedule?.enabled ?? true, playlist: slot.map((m) => m.id) };
     const ok = await update(() => (schedule ? put(`/api/streams/${s.id}/schedules/${schedule.id}`, body) : post(`/api/streams/${s.id}/schedules`, body)), 'Schedule saved.');
     if (ok) onClose();
   };
@@ -168,7 +173,40 @@ function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; 
         <Field label="Time zone" htmlFor="sc-tz">
           <Input id="sc-tz" value={tz} onChange={(e) => setTz(e.target.value)} />
         </Field>
+        {s.source === 'PLAYLIST' && (
+          <div>
+            <span className="block text-sm font-medium">Plays</span>
+            <Segmented
+              label="Plays"
+              value={slot.length > 0 ? 'OWN' : 'STREAM'}
+              onChange={(v) => (v === 'OWN' ? setPicking(true) : setSlot([]))}
+              options={[
+                { value: 'STREAM', label: "The stream's playlist" },
+                { value: 'OWN', label: 'Its own videos' },
+              ]}
+            />
+            {slot.length > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                {slot.length} video{slot.length === 1 ? '' : 's'}: {slot.map((m) => m.title).slice(0, 3).join(', ')}
+                {slot.length > 3 ? ` and ${slot.length - 3} more` : ''}.{' '}
+                <button type="button" className="text-accent hover:underline" onClick={() => setPicking(true)}>
+                  Change
+                </button>
+              </p>
+            )}
+          </div>
+        )}
       </div>
+      <MediaPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        type="VIDEO"
+        title="Videos for this time"
+        onPick={(items) => {
+          setSlot(items.map((m) => ({ id: m.id, title: m.title })));
+          setPicking(false);
+        }}
+      />
     </Dialog>
   );
 }

@@ -137,6 +137,8 @@ export interface ScheduleView {
   enabled: boolean;
   nextStart?: string | null;
   lastError?: string | null;
+  /** SC-4: this slot's own videos; empty plays the stream's playlist. */
+  playlist?: { id: number; title: string }[];
 }
 
 export interface StreamView {

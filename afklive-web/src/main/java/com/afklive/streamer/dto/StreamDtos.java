@@ -62,15 +62,23 @@ public final class StreamDtos {
                             Health health, String endReason) {
     }
 
+    /** {@code playlist}: the slot's own videos (SC-4); empty plays the stream's playlist. */
     public record ScheduleView(Long id, String kind, ZonedDateTime startAt, ZonedDateTime endAt, List<String> daysOfWeek,
                                String startTime, String endTime, String timeZone, List<String> skipDates,
-                               boolean enabled, ZonedDateTime nextStart, String lastError) {
+                               boolean enabled, ZonedDateTime nextStart, String lastError, List<SlotItem> playlist) {
+    }
+
+    public record SlotItem(Long id, String title) {
     }
 
     /** startAt/endAt are local date-times (yyyy-MM-ddTHH:mm) in {@code timeZone}; startTime/endTime HH:mm. */
     public record ScheduleRequest(String kind, String startAt, String endAt, List<String> daysOfWeek,
                                   String startTime, String endTime, String timeZone, List<String> skipDates,
-                                  Boolean enabled) {
+                                  Boolean enabled, List<Long> playlist) {
+        public ScheduleRequest(String kind, String startAt, String endAt, List<String> daysOfWeek, String startTime,
+                               String endTime, String timeZone, List<String> skipDates, Boolean enabled) {
+            this(kind, startAt, endAt, daysOfWeek, startTime, endTime, timeZone, skipDates, enabled, null);
+        }
     }
 
     public record StreamView(Long id, String name, String source, String orientation, int qualityHeight, int fps,
