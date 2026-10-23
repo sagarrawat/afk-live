@@ -43,7 +43,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
      * Marks a live job ended. Returns 1 only for the single caller that actually ended it, so the
      * final charge and cleanup run exactly once even if a stop and a process exit race.
      */
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.isLive = false, j.endTime = :endTime, j.endReason = :reason, j.status = :status, j.desiredState = 'STOP' WHERE j.id = :id AND j.isLive = true")
     int markEnded(@org.springframework.data.repository.query.Param("id") Long id,
@@ -59,7 +59,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
      * Adds a billing increment only if the job is still live and nobody billed it since {@code previous}.
      * Returns 1 when applied; then (and only then) the user's balance should be charged.
      */
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.accumulatedCost = j.accumulatedCost + :increment, j.lastBillingTime = :now WHERE j.id = :id AND j.isLive = true AND j.lastBillingTime = :previous")
     int addBilling(@org.springframework.data.repository.query.Param("id") Long id,
@@ -68,7 +68,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
                    @org.springframework.data.repository.query.Param("previous") java.time.ZonedDateTime previous);
 
     /** The last charge when a job ends (it is no longer live); also records the total as the job's cost. */
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.accumulatedCost = j.accumulatedCost + :increment, j.cost = j.accumulatedCost + :increment, j.lastBillingTime = :now WHERE j.id = :id AND j.lastBillingTime = :previous")
     int addFinalBilling(@org.springframework.data.repository.query.Param("id") Long id,
@@ -79,7 +79,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     // ---- worker coordination (all conditional, so concurrent workers never both own a job) ----
 
     /** Web asks for a stop; the reason is kept so the worker records it. */
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.desiredState = 'STOP', j.endReason = :reason WHERE j.id = :id AND j.isLive = true")
     int requestStop(@org.springframework.data.repository.query.Param("id") Long id,
@@ -98,7 +98,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     List<Long> findAbandonedStopIds(@org.springframework.data.repository.query.Param("cutoff") java.time.ZonedDateTime cutoff);
 
     /** A restarted worker resumes its own jobs (same worker id). */
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.heartbeatAt = :now WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true AND j.desiredState = 'RUN'")
     int resumeOwn(@org.springframework.data.repository.query.Param("id") Long id,
@@ -106,13 +106,13 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
                   @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
 
     /** First time the stream is actually on air: billing starts now (not while files were downloading). */
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.status = 'LIVE', j.lastBillingTime = :now WHERE j.id = :id AND j.isLive = true AND j.status = 'STARTING'")
     int markFirstLive(@org.springframework.data.repository.query.Param("id") Long id,
                       @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
 
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.stopAt = :stopAt WHERE j.id = :id AND j.isLive = true")
     int updateStopAt(@org.springframework.data.repository.query.Param("id") Long id,
@@ -124,14 +124,49 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     List<StreamJob> findAllByWorkerIdAndIsLiveTrue(String workerId);
 
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    /** Studio state for the health panel and remote: what's on screen and playing. Only the owning worker writes it. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.scene = :scene, j.inputLive = :inputLive, j.nowPlaying = :nowPlaying WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true")
+    int reportStudio(@org.springframework.data.repository.query.Param("id") Long id,
+                     @org.springframework.data.repository.query.Param("worker") String worker,
+                     @org.springframework.data.repository.query.Param("scene") String scene,
+                     @org.springframework.data.repository.query.Param("inputLive") Boolean inputLive,
+                     @org.springframework.data.repository.query.Param("nowPlaying") String nowPlaying);
+
+    List<StreamJob> findAllByStreamIdAndIsLiveTrue(Long streamId);
+
+    java.util.Optional<StreamJob> findFirstByStreamIdOrderByStartTimeDesc(Long streamId);
+
+    List<StreamJob> findTop20ByStreamIdOrderByStartTimeDesc(Long streamId);
+
+    /** Free-tier capacity is platform-wide: starts that count it are serialized with this lock. */
+    @org.springframework.data.jpa.repository.Query(value = "SELECT pg_advisory_xact_lock(7391001)", nativeQuery = true)
+    Object lockFreeCapacity();
+
+    /** The web app keeps the run's spec current with live edits, so a takeover or restart builds the latest. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.spec = :spec WHERE j.id = :id AND j.isLive = true")
+    int updateSpec(@org.springframework.data.repository.query.Param("id") Long id,
+                   @org.springframework.data.repository.query.Param("spec") String spec);
+
+    /** Highest command id this run has applied (worker, fenced by ownership). */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.appliedCommandId = :applied WHERE j.id = :id AND j.workerId = :worker AND j.appliedCommandId < :applied")
+    int saveAppliedCommand(@org.springframework.data.repository.query.Param("id") Long id,
+                           @org.springframework.data.repository.query.Param("worker") String worker,
+                           @org.springframework.data.repository.query.Param("applied") long applied);
+
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = :worker, j.heartbeatAt = :now WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NULL")
     int claim(@org.springframework.data.repository.query.Param("id") Long id,
               @org.springframework.data.repository.query.Param("worker") String worker,
               @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
 
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = :worker, j.heartbeatAt = :now, j.restarts = j.restarts + 1 WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND (j.heartbeatAt IS NULL OR j.heartbeatAt < :cutoff)")
     int takeOver(@org.springframework.data.repository.query.Param("id") Long id,
@@ -144,7 +179,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
      * last wrote, so if anything else (a takeover, or a duplicate process with the same id) touched the
      * job, this returns 0 and the worker must stop its copy.
      */
-    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.heartbeatAt = :now, j.status = :status, j.bitrateKbps = :bitrate, j.fps = :fps, j.speed = :speed, j.droppedFrames = :drops, j.lastError = :error WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true AND j.heartbeatAt = :expected")
     int heartbeat(@org.springframework.data.repository.query.Param("id") Long id,

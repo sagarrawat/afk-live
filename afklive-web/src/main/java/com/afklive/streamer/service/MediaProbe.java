@@ -24,12 +24,16 @@ public class MediaProbe {
      * What we need to know about a file. {@code height}/{@code fps} are 0 when unknown;
      * {@code hasAudio} is null when the file couldn't be probed.
      */
-    public record MediaInfo(String videoCodec, int width, int height, double fps, Boolean hasAudio) {
-        public static final MediaInfo UNKNOWN = new MediaInfo(null, 0, 0, 0, null);
+    public record MediaInfo(String videoCodec, int width, int height, double fps, Boolean hasAudio, double durationSeconds) {
+        public static final MediaInfo UNKNOWN = new MediaInfo(null, 0, 0, 0, null, 0);
+
+        public MediaInfo(String videoCodec, int width, int height, double fps, Boolean hasAudio) {
+            this(videoCodec, width, height, fps, hasAudio, 0);
+        }
     }
 
     public MediaInfo probe(Path file) {
-        List<String> command = List.of(ffprobe(), "-v", "error", "-print_format", "json", "-show_streams", file.toString());
+        List<String> command = List.of(ffprobe(), "-v", "error", "-print_format", "json", "-show_streams", "-show_format", file.toString());
         Path out = null;
         try {
             // Output goes to a file so a hung ffprobe can't block us before the timeout applies.
@@ -66,7 +70,9 @@ public class MediaProbe {
     }
 
     static MediaInfo parse(byte[] ffprobeJson) throws IOException {
-        JsonNode streams = JSON.readTree(ffprobeJson).path("streams");
+        JsonNode root = JSON.readTree(ffprobeJson);
+        JsonNode streams = root.path("streams");
+        double duration = root.path("format").path("duration").asDouble(0);
         String codec = null;
         int width = 0;
         int height = 0;
@@ -86,7 +92,7 @@ public class MediaProbe {
                 hasAudio = true;
             }
         }
-        return new MediaInfo(codec, width, height, fps, hasAudio);
+        return new MediaInfo(codec, width, height, fps, hasAudio, duration);
     }
 
     static double parseRate(String rate) {

@@ -53,10 +53,16 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
     @Autowired StreamJobDestinationRepository destinations;
     @Autowired StreamPreparer preparer;
     @Autowired YouTubeService youTubeService;
+    @Autowired com.afklive.streamer.streaming.StudioRuns studioRuns;
+    @Autowired com.afklive.streamer.repository.StreamCommandRepository commandRepository;
+    @Autowired com.afklive.streamer.service.LiveStreamService liveStreams;
+    @Autowired com.afklive.streamer.repository.LiveStreamRepository streamRepository;
+    @Autowired com.afklive.streamer.repository.MediaAssetRepository mediaRepository;
 
     /** A separate worker process, as far as coordination goes (own id, own first pass). */
     private StreamWorker newWorker(String id) {
-        return new StreamWorker(jobs, destinations, streamService, preparer, storage, youTubeService, id, 5, 500, false);
+        return new StreamWorker(jobs, destinations, streamService, preparer, storage, youTubeService, studioRuns,
+                commandRepository, id, 5, 500, false);
     }
 
     private String uploadSource() throws Exception {
@@ -250,5 +256,72 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
         StreamJob ended = jobs.findById(id).orElseThrow();
         assertThat(ended.isLive()).isFalse();
         assertThat(ended.getEndReason()).isEqualTo("Stopped by user");
+    }
+
+    @Test
+    void aSavedPlaylistStreamRunsInTheStudioAndTakesLiveCommands() throws Exception {
+        User owner = account("worker-studio@example.com");
+        com.afklive.streamer.model.LiveStream stream = liveStreams.create(owner.getEmail(),
+                new com.afklive.streamer.dto.StreamDtos.CreateStream("Studio test", null, null, 720, 30));
+        List<Long> ids = new java.util.ArrayList<>();
+        for (String title : List.of("first.mp4", "second.mp4")) {
+            com.afklive.streamer.model.MediaAsset m = new com.afklive.streamer.model.MediaAsset(owner, title, uploadSource(),
+                    Files.size(source), com.afklive.streamer.model.MediaAsset.ContentType.VIDEO);
+            ids.add(mediaRepository.save(m).getId()); // duration and audio unknown: the worker probes them
+        }
+        liveStreams.setItems(owner.getEmail(), stream.getId(), com.afklive.streamer.model.StreamItem.Kind.VIDEO, ids);
+        liveStreams.setOverlays(owner.getEmail(), stream.getId(), List.of(new com.afklive.streamer.streaming.StudioSpec.OverlaySetting(
+                "np", "TEXT", true, 0.05, 0.05, 0, 0.05, "Now playing: {title}", null, null, "#ffffff", "#99000000", 1,
+                null, null, 0, null)));
+        stream = streamRepository.findById(stream.getId()).orElseThrow();
+
+        Path out = dir.resolve("studio.flv");
+        com.afklive.streamer.streaming.StudioSpec studio = liveStreams.studioSpec(stream, null);
+        StreamSpec spec = StreamSpec.studio(owner.getEmail(), stream.getId(), studio,
+                List.of(new StreamSpec.Destination("File", "file://" + out)));
+        StreamJob job = job(owner, spec.toJson(), null, null);
+        job.setStreamId(stream.getId());
+        jobs.save(job);
+        long id = job.getId();
+
+        StreamWorker w = newWorker("w-studio");
+        try {
+            // A command sent while the run is still starting is applied once the studio is ready.
+            liveStreams.switchScene(owner.getEmail(), stream.getId(), "STARTING");
+            tickUntil(w, () -> {
+                w.pollCommands();
+                return onAir(id) && "STARTING".equals(jobs.findById(id).orElseThrow().getScene());
+            }, Duration.ofSeconds(60));
+            liveStreams.switchScene(owner.getEmail(), stream.getId(), "LIVE");
+            tickUntil(w, () -> {
+                w.pollCommands();
+                StreamJob j = jobs.findById(id).orElseThrow();
+                return "LIVE".equals(j.getScene()) && j.getNowPlaying() != null;
+            }, Duration.ofSeconds(20));
+            StreamJob live = jobs.findById(id).orElseThrow();
+            assertThat(live.getNowPlaying()).contains("first.mp4");
+            assertThat(streamRepository.findById(stream.getId()).orElseThrow().getResumePosition()).isNotNull();
+
+            // The remote switches to BRB: applied between frames, the encoder keeps running.
+            liveStreams.switchScene(owner.getEmail(), stream.getId(), "BRB");
+            w.pollCommands();
+            tickUntil(w, () -> "BRB".equals(jobs.findById(id).orElseThrow().getScene()), Duration.ofSeconds(10));
+            liveStreams.switchScene(owner.getEmail(), stream.getId(), "LIVE");
+            liveStreams.skip(owner.getEmail(), stream.getId());
+            w.pollCommands();
+            tickUntil(w, () -> {
+                String np = jobs.findById(id).orElseThrow().getNowPlaying();
+                return np != null && np.contains("second.mp4") && "LIVE".equals(jobs.findById(id).orElseThrow().getScene());
+            }, Duration.ofSeconds(15));
+
+            streamService.stopStream(id, owner.getEmail());
+            tickUntil(w, () -> !jobs.findById(id).orElseThrow().isLive(), Duration.ofSeconds(30));
+            assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(StreamStates.ENDED);
+            assertThat(jobs.findById(id).orElseThrow().getRestarts()).isZero();
+            assertThat(Files.size(out)).isPositive();
+        } finally {
+            w.shutdown();
+            streamService.finalizeJob(id, "test");
+        }
     }
 }

@@ -19,6 +19,9 @@ import java.util.List;
  * @param maxHeight       output height cap from the plan and the requested quality
  * @param scheduledStreamId the schedule that started this stream, if any
  * @param destinations    where to send it; urls/keys already validated
+ * @param streamId        the saved stream this run belongs to (null for one-off runs)
+ * @param studio          set for studio streams (playlists, phone input, scenes, overlays); null for a
+ *                        single file run by the classic encoder
  */
 public record StreamSpec(
         String username,
@@ -33,8 +36,24 @@ public record StreamSpec(
         boolean overlayEnabled,
         String overlayTemplate,
         Long scheduledStreamId,
-        List<Destination> destinations
+        List<Destination> destinations,
+        Long streamId,
+        StudioSpec studio
 ) {
+
+    /** A classic single-file run. */
+    public StreamSpec(String username, String videoKey, String musicKey, String musicVolume, int loopCount,
+                      String watermarkKey, boolean muteVideoAudio, String streamMode, int maxHeight,
+                      boolean overlayEnabled, String overlayTemplate, Long scheduledStreamId, List<Destination> destinations) {
+        this(username, videoKey, musicKey, musicVolume, loopCount, watermarkKey, muteVideoAudio, streamMode, maxHeight,
+                overlayEnabled, overlayTemplate, scheduledStreamId, destinations, null, null);
+    }
+
+    /** A studio run of a saved stream. */
+    public static StreamSpec studio(String username, Long streamId, StudioSpec studio, List<Destination> destinations) {
+        return new StreamSpec(username, null, null, null, 0, null, false, "studio", studio.height(), false, null, null,
+                destinations, streamId, studio);
+    }
 
     /** A platform to send to. {@code url} is a full rtmp/rtmps/srt URL or a bare YouTube stream key. */
     public record Destination(String name, String url) {

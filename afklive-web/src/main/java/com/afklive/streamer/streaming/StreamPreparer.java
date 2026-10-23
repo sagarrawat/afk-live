@@ -99,6 +99,14 @@ public class StreamPreparer {
         return target;
     }
 
+    /** A fresh folder for one run of a job. */
+    public Path newWorkDir(long jobId) throws IOException {
+        Path workDir = SafePaths.resolveInside(Paths.get(workDirRoot),
+                "job-" + jobId + "-" + java.util.UUID.randomUUID().toString().substring(0, 8));
+        Files.createDirectories(workDir);
+        return workDir;
+    }
+
     /** Removes the job's downloaded files. */
     public void cleanup(Path workDir) {
         if (workDir == null || !Files.exists(workDir)) {
