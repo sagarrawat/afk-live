@@ -25,6 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -57,7 +58,12 @@ class AppShellTest extends PostgresIntegrationTest {
         }
         mvc.perform(get("/studio/library")).andExpect(status().is3xxRedirection()); // sign in first
         mvc.perform(get("/studio").with(user("ops@example.com").roles("ADMIN"))).andExpect(status().isOk());
-        mvc.perform(get("/classic").with(user(email).roles("USER"))).andExpect(forwardedUrl("/classic.html"));
+        // One product: the old app and old addresses lead into the new app and site.
+        mvc.perform(get("/classic").with(user(email).roles("USER"))).andExpect(redirectedUrl("/studio"));
+        mvc.perform(get("/classic.html")).andExpect(redirectedUrl("/studio"));
+        mvc.perform(get("/privacy")).andExpect(forwardedUrl("/site/privacy.html"));
+        mvc.perform(get("/terms")).andExpect(forwardedUrl("/site/terms.html"));
+        mvc.perform(get("/terms.html")).andExpect(redirectedUrl("/terms"));
     }
 
     @Test

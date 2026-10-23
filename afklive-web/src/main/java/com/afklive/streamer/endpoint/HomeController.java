@@ -35,11 +35,11 @@ public class HomeController {
 
     @GetMapping("/terms")
     public String terms() {
-        return "forward:/terms.html";
+        return "forward:/site/terms.html";
     }
 
     @GetMapping("/privacy")
     public String privacy() {
-        return "forward:/privacy.html";
+        return "forward:/site/privacy.html";
     }
 }

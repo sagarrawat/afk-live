@@ -99,7 +99,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.FORWARD, jakarta.servlet.DispatcherType.ERROR).permitAll()
                         // 1. PUBLIC: Landing page, assets
-                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/pricing", "/features", "/for/**", "/status", "/api/public/status", "/sitemap.xml", "/robots.txt", "/css/**", "/js/**", "/app/assets/**", "/app/manifest.webmanifest", "/app/*.png", "/favicon.ico", "/sw.js", "/site/**", "/api/user-info", "/api/pricing", "/api/billing/plans", "/error").permitAll()
+                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/classic", "/classic.html", "/pricing", "/features", "/for/**", "/status", "/api/public/status", "/sitemap.xml", "/robots.txt", "/css/**", "/js/**", "/app/assets/**", "/app/manifest.webmanifest", "/app/*.png", "/favicon.ico", "/sw.js", "/site/**", "/api/user-info", "/api/pricing", "/api/billing/plans", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**", "/account/restore").permitAll()
                         // Server-to-server payment notification; verified by signature in the controller.
                         .requestMatchers("/api/payment/callback").permitAll()
@@ -110,7 +110,7 @@ public class SecurityConfig {
                         .requestMatchers("/admin/**", "/api/admin/**", "/api/logs").hasRole("ADMIN")
 
                         // 3. PROTECTED: The Studio URL and internal index file
-                        .requestMatchers("/studio", "/studio/**", "/app", "/app/index.html", "/classic", "/classic.html").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/studio", "/studio/**", "/app", "/app/index.html").hasAnyRole("USER", "ADMIN")
 
                         // 4. CATCH-ALL
                         .anyRequest().authenticated()

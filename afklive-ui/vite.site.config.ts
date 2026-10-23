@@ -25,6 +25,8 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, 'site/index.html'),
         pricing: resolve(__dirname, 'site/pricing.html'),
+        privacy: resolve(__dirname, 'site/privacy.html'),
+        terms: resolve(__dirname, 'site/terms.html'),
         // RE-7: the public status page (served at /status).
         status: resolve(__dirname, 'site/status.html'),
         // MK-3: the use-case pages (site/use-cases.py).

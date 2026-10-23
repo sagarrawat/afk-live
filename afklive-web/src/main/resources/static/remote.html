@@ -9,13 +9,15 @@
 <title>AFK Live Remote</title>
 <style>
   :root {
-    --bg: #0b0d10; --panel: #14181d; --line: #252b33; --text: #e8ecf1; --muted: #8b95a1;
-    --accent: #5b8cff; --live: #e5484d; --green: #30a46c; --amber: #f5a524; --red: #e5484d;
+    /* The app's night theme (docs/brand.md): marigold for actions, red only for on air. */
+    --bg: #10122A; --panel: #181B38; --line: #2E325E; --text: #EEF0FA; --muted: #969BC2;
+    --accent: #FFB627; --live: #FF4438; --green: #3CCB7F; --amber: #FF8A34; --red: #FF4438;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
          padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
   header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .mark { width: 26px; height: 26px; flex: none; }
   h1 { font-size: 17px; margin: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .04em; background: var(--line); color: var(--muted); }
   .badge.live { background: var(--live); color: #fff; }
@@ -24,11 +26,11 @@
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  button { min-height: 56px; border-radius: 12px; border: 1px solid var(--line); background: #1b2128; color: var(--text);
+  button { min-height: 56px; border-radius: 12px; border: 1px solid var(--line); background: #222650; color: var(--text);
            font: inherit; font-weight: 600; padding: 10px; touch-action: manipulation; }
   button:active { transform: scale(.98); }
-  button.on { border-color: var(--accent); background: rgba(91,140,255,.18); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.on { border-color: var(--accent); background: rgba(255,182,39,.15); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #10122A; }
   button.danger { background: transparent; border-color: var(--red); color: var(--red); }
   button:disabled { opacity: .45; }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 52px; border-top: 1px solid var(--line); }
@@ -37,12 +39,13 @@
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; background: var(--muted); }
   .green { background: var(--green); } .amber { background: var(--amber); } .red { background: var(--red); }
   .note { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
-  #toast { position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); background: #222a33; border: 1px solid var(--line);
+  #toast { position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); background: #222650; border: 1px solid var(--line);
            border-radius: 12px; padding: 12px 14px; display: none; }
 </style>
 </head>
 <body>
 <header>
+  <a href="/studio" aria-label="AFK Live"><img class="mark" src="/site/brand/mark.svg" alt=""></a>
   <span id="badge" class="badge">…</span>
   <h1 id="name">Loading…</h1>
   <span id="uptime" class="num"></span>
