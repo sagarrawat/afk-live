@@ -33,6 +33,28 @@ public class MediaAsset {
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** Facts playout needs, filled when the file is probed (null until then). */
+    private Double durationSeconds;
+    private Integer width;
+    private Integer height;
+    private String videoCodec;
+    private Boolean hasAudio;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MediaStatus status = MediaStatus.READY;
+    @Column(columnDefinition = "TEXT")
+    private String statusReason;
+    private Double fps;
+
+    /** Small JPEG for the library grid (videos and images), null until processed. */
+    @Column(name = "thumbnail_key", length = 512)
+    private String thumbnailKey;
+
+    /** Set by the instance processing this file; a stale claim is taken over (ML-2). */
+    @Column(name = "processing_claimed_at")
+    private java.time.ZonedDateTime processingClaimedAt;
+
     public enum ContentType {
         VIDEO, IMAGE, AUDIO
     }

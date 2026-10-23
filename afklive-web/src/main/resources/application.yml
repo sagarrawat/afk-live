@@ -83,11 +83,65 @@ logging:
     org.hibernate.engine.jdbc: WARN
     
 rate-limiter:
-  capacity: 10
-  refill-tokens: 1
+  general-per-minute: ${RATE_LIMIT_GENERAL_PER_MINUTE:300}
+  expensive-per-minute: ${RATE_LIMIT_EXPENSIVE_PER_MINUTE:20}
+  account-per-minute: ${RATE_LIMIT_ACCOUNT_PER_MINUTE:10}
 
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  security:
+    # Signs remember-me cookies. Set a long random value in production; if empty, a random key
+    # is generated at startup (remember-me logins then end when the app restarts).
+    remember-me-key: ${REMEMBER_ME_KEY:}
+  cors:
+    # Comma-separated extra origins allowed to call the API with credentials (the app's own origin always is).
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  streaming:
+    # "all" runs the web app and a stream worker in one process (simple single-server setup).
+    # In production run two processes from the same jar: role "web" and role "worker"
+    # (profile "worker"), so deploying the web app never interrupts live streams.
+    role: ${STREAMING_ROLE:all}
+    # Identifies this worker; must be stable across restarts so it resumes its own streams.
+    worker-id: ${STREAMING_WORKER_ID:}
+    work-dir: ${STREAMING_WORK_DIR:data/worker}
+    worker:
+      max-streams: ${STREAMING_WORKER_MAX_STREAMS:20}
+    # Library files kept on each worker's disk, in GB (least recently used are removed first).
+    cache-gb: ${STREAMING_CACHE_GB:50}
+  # Encrypts stream keys and phone ingest keys at rest: 32 random bytes, base64 (openssl rand -base64 32).
+  # Required: the app won't start without it. To rotate, move the old key to APP_ENCRYPTION_OLD_KEYS
+  # (comma-separated) and set a new one; stored secrets are re-encrypted at startup.
+  encryption-key: ${APP_ENCRYPTION_KEY:}
+  encryption-old-keys: ${APP_ENCRYPTION_OLD_KEYS:}
+  # Phone streaming (MS-1): the ingest server (MediaMTX) phones publish to. Empty host: phone streams are off.
+  media:
+    # Probe and thumbnail new library files on web instances (ML-2); off only in tests.
+    auto-process: ${APP_MEDIA_AUTO_PROCESS:true}
+    # Resumable upload part size (S3 minimum is 5 MB).
+    min-part-bytes: ${APP_MEDIA_MIN_PART_BYTES:16777216}
+  billing:
+    # Shown on GST invoices (BI-3). seller-state is the two-digit GST state code of seller-gstin.
+    seller-name: ${APP_BILLING_SELLER_NAME:AFK Live}
+    seller-address: ${APP_BILLING_SELLER_ADDRESS:}
+    seller-gstin: ${APP_BILLING_SELLER_GSTIN:}
+    seller-state: ${APP_BILLING_SELLER_STATE:}
+    sac: ${APP_BILLING_SAC:998439}
+  ingest:
+    # What creators type into their phone app, e.g. ingest.afklive.com
+    public-host: ${INGEST_PUBLIC_HOST:}
+    rtmp-port: ${INGEST_RTMP_PORT:1935}
+    srt-port: ${INGEST_SRT_PORT:8890}
+    # Where workers read a phone's feed; {key} is the stream's ingest key, {user}/{pass} the read credentials.
+    read-url: ${INGEST_READ_URL:rtmp://127.0.0.1:1935/live/{key}?user={user}&pass={pass}}
+    read-user: ${INGEST_READ_USER:worker}
+    read-pass: ${INGEST_READ_PASS:}
+    # Networks workers read from; reads from elsewhere are refused even with the right credentials.
+    read-allowed: ${INGEST_READ_ALLOWED:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
+    # Shared secret MediaMTX sends on its auth calls (authHTTPAddress ...?secret=...).
+    auth-secret: ${INGEST_AUTH_SECRET:}
+  jobrunr:
+    # The JobRunr dashboard has no authentication and listens on its own port; enable only for local debugging.
+    dashboard-enabled: ${JOBRUNR_DASHBOARD_ENABLED:false}
   email:
     support: ${APP_EMAIL_SUPPORT:test@test.com}
     no-reply: ${APP_EMAIL_NO_REPLY:test@test.com}
@@ -109,15 +163,21 @@ app:
     region: eu-north-1
     function-name: afklive-optimizer-lambda
   phonepe:
-    merchant-id: ${PHONEPE_MERCHANT_ID:}
-    salt-key: ${PHONEPE_SALT_KEY:}
-    salt-index: ${PHONEPE_SALT_INDEX:1}
-    salt-env: ${PHONEPE_ENV:https://api-preprod.phonepe.com/apis/pg-sandbox}
+    # PhonePe Standard Checkout v2 credentials (PhonePe dashboard > Developer settings)
+    client-id: ${PHONEPE_CLIENT_ID:}
+    client-secret: ${PHONEPE_CLIENT_SECRET:}
+    client-version: ${PHONEPE_CLIENT_VERSION:1}
+    env: ${PHONEPE_ENV:SANDBOX}   # SANDBOX or PRODUCTION
+    # Username/password set for the webhook in the PhonePe dashboard (verifies callbacks)
+    callback-username: ${PHONEPE_CALLBACK_USERNAME:}
+    callback-password: ${PHONEPE_CALLBACK_PASSWORD:}
 server:
   forward-headers-strategy: native
   error:
+    # Don't leak exception messages or stack details to clients in production.
     include-binding-errors: always
-    include-message: always
+    include-message: never
+    include-stacktrace: never
   tomcat:
     max-part-count: 200
     max-swallow-size: 100MB
@@ -127,6 +187,4 @@ server:
 org:
   jobrunr:
     background-job-server:
-      enabled: true
-    dashboard:
       enabled: true

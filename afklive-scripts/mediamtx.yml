@@ -1,0 +1,38 @@
+# MediaMTX: the ingest server phones publish to (MS-1). Run it near your streamers (e.g. an India
+# region) on the worker hosts or a small box of its own. Workers read each phone's feed from it.
+#
+# Every publish and read is authorized by the AFK Live web app:
+#   - a phone may publish only to live/<its stream's ingest key>
+#   - only workers, with INGEST_READ_USER / INGEST_READ_PASS, may read
+# Replace WEB_HOST and the secret (same value as INGEST_AUTH_SECRET in afklive.env). Use https:// (or a
+# private network): each call carries the secret and the phone's stream key.
+
+logLevel: info
+
+authMethod: http
+authHTTPAddress: http://WEB_HOST:8080/internal/ingest/auth?secret=CHANGE_ME_INGEST_AUTH_SECRET
+# The control API, metrics and pprof are never exposed; deny them via the auth hook too.
+authHTTPExclude: []
+
+api: no
+metrics: no
+pprof: no
+playback: no
+
+# Phones: RTMP (every app) and SRT (better on weak mobile networks).
+rtmp: yes
+rtmpAddress: :1935
+srt: yes
+srtAddress: :8890
+
+# Not used by AFK Live.
+rtsp: no
+hls: no
+webrtc: no
+
+paths:
+  # Phone streams: live/<ingest key>. Nothing is recorded here; the cloud studio reads the feed.
+  "~^live/[A-Za-z0-9]{8,64}$":
+    source: publisher
+    # A phone that reconnects takes over its own path at once.
+    overridePublisher: yes

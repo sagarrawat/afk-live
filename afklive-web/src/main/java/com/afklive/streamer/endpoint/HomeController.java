@@ -15,11 +15,11 @@ public class HomeController {
         if (authentication != null && authentication.isAuthenticated()) {
             Set<String> roles = AuthorityUtils.authorityListToSet(authentication.getAuthorities());
             if (roles.contains("ROLE_ADMIN")) {
-                return "redirect:/admin";
+                return "redirect:/studio/admin";
             }
             return "redirect:/studio";
         }
-        return "forward:/home.html";
+        return "forward:/site/index.html";
     }
 
     @GetMapping("/terms")

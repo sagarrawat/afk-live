@@ -36,12 +36,25 @@ public class UserFileService {
     }
 
     public Path getUserUploadDir(String username) throws IOException {
-        Path userDir = baseUploadDir.resolve(username);
+        // The username is an email the user typed: use a safe name plus a hash, so it can't escape
+        // the uploads folder and two emails that sanitize alike (a@b.com, a_b.com) never share a folder.
+        Path userDir = com.afklive.streamer.util.SafePaths.resolveInside(baseUploadDir, userDirName(username));
         if (!Files.exists(userDir)) {
             log.info("Creating user directory: {}", userDir);
             Files.createDirectories(userDir);
         }
         return userDir;
+    }
+
+    static String userDirName(String username) {
+        String safe = com.afklive.streamer.util.SafePaths.sanitizeFilename(username);
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(username.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return safe + "-" + java.util.HexFormat.of().formatHex(digest, 0, 6);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     public List<String> listConvertedVideos(String username) throws IOException {

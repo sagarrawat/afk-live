@@ -165,6 +165,7 @@ public class VideoConversionService {
                         fileSize,
                         com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
                     );
+                    asset.setStatus(com.afklive.streamer.model.MediaStatus.PROCESSING); // checked by MediaProcessor (ML-2)
                     asset = mediaAssetRepository.save(asset);
 
                     // Create NEW DB Entry
@@ -239,6 +240,7 @@ public class VideoConversionService {
                     newSize,
                     com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
                 );
+                asset.setStatus(com.afklive.streamer.model.MediaStatus.PROCESSING); // checked by MediaProcessor (ML-2)
                 asset = mediaAssetRepository.save(asset);
 
                 // Create NEW DB Entry
@@ -384,6 +386,7 @@ public class VideoConversionService {
                 size,
                 com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
             );
+            asset.setStatus(com.afklive.streamer.model.MediaStatus.PROCESSING); // checked by MediaProcessor (ML-2)
             asset = mediaAssetRepository.save(asset);
 
             // DB

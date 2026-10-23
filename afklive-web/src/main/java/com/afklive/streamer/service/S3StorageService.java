@@ -56,15 +56,35 @@ public class S3StorageService implements FileStorageService {
     }
 
     public String uploadFile(InputStream inputStream, String originalFilename, long contentLength) {
-        String key = UUID.randomUUID().toString() + "_" + originalFilename;
+        String key = UUID.randomUUID().toString() + "_" + com.afklive.streamer.util.SafePaths.sanitizeFilename(originalFilename);
 
         PutObjectRequest putOb = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(key)
                 .build();
 
-        s3Client.putObject(putOb, RequestBody.fromInputStream(inputStream, contentLength));
-        return key;
+        if (contentLength >= 0) {
+            s3Client.putObject(putOb, RequestBody.fromInputStream(inputStream, contentLength));
+            return key;
+        }
+        // Unknown length (e.g. a zip entry): spool to a temp file first, since S3 needs the size up front.
+        Path temp = null;
+        try {
+            temp = java.nio.file.Files.createTempFile("upload-", ".tmp");
+            java.nio.file.Files.copy(inputStream, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            s3Client.putObject(putOb, RequestBody.fromFile(temp));
+            return key;
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to store file", e);
+        } finally {
+            if (temp != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(temp);
+                } catch (java.io.IOException ignored) {
+                    // best effort
+                }
+            }
+        }
     }
 
     public InputStream downloadFile(String key) {
@@ -118,5 +138,84 @@ public class S3StorageService implements FileStorageService {
             // Log error or return empty
             return Optional.empty();
         }
+    }
+
+    // ------------------------------------------------------------------ resumable uploads
+
+    @Override
+    public String newKey(String filename) {
+        return UUID.randomUUID() + "_" + com.afklive.streamer.util.SafePaths.sanitizeFilename(filename);
+    }
+
+    @Override
+    public String beginMultipart(String key) {
+        return s3Client.createMultipartUpload(software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest.builder()
+                .bucket(bucketName).key(key).build()).uploadId();
+    }
+
+    @Override
+    public Optional<String> presignPart(String key, String uploadId, int partNumber, long contentLength) {
+        var part = software.amazon.awssdk.services.s3.model.UploadPartRequest.builder()
+                .bucket(bucketName).key(key).uploadId(uploadId).partNumber(partNumber).contentLength(contentLength).build();
+        var presign = software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest.builder()
+                .signatureDuration(Duration.ofHours(1)).uploadPartRequest(part).build();
+        return Optional.of(s3Presigner.presignUploadPart(presign).url().toString());
+    }
+
+    @Override
+    public String writePart(String key, String uploadId, int partNumber, InputStream data, long contentLength) {
+        return s3Client.uploadPart(software.amazon.awssdk.services.s3.model.UploadPartRequest.builder()
+                        .bucket(bucketName).key(key).uploadId(uploadId).partNumber(partNumber).contentLength(contentLength).build(),
+                RequestBody.fromInputStream(data, contentLength)).eTag();
+    }
+
+    @Override
+    public java.util.List<Part> listParts(String key, String uploadId) {
+        java.util.List<Part> out = new java.util.ArrayList<>();
+        Integer marker = null;
+        while (true) {
+            var req = software.amazon.awssdk.services.s3.model.ListPartsRequest.builder()
+                    .bucket(bucketName).key(key).uploadId(uploadId);
+            if (marker != null) {
+                req.partNumberMarker(marker);
+            }
+            var res = s3Client.listParts(req.build());
+            for (var p : res.parts()) {
+                out.add(new Part(p.partNumber(), p.size(), p.eTag()));
+            }
+            if (!Boolean.TRUE.equals(res.isTruncated())) {
+                return out;
+            }
+            marker = res.nextPartNumberMarker();
+        }
+    }
+
+    @Override
+    public void completeMultipart(String key, String uploadId, java.util.List<Part> parts) {
+        var completed = parts.stream()
+                .sorted(java.util.Comparator.comparingInt(Part::number))
+                .map(p -> software.amazon.awssdk.services.s3.model.CompletedPart.builder().partNumber(p.number()).eTag(p.etag()).build())
+                .toList();
+        s3Client.completeMultipartUpload(software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest.builder()
+                .bucket(bucketName).key(key).uploadId(uploadId)
+                .multipartUpload(software.amazon.awssdk.services.s3.model.CompletedMultipartUpload.builder().parts(completed).build())
+                .build());
+    }
+
+    @Override
+    public void abortMultipart(String key, String uploadId) {
+        s3Client.abortMultipartUpload(software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest.builder()
+                .bucket(bucketName).key(key).uploadId(uploadId).build());
+    }
+
+    @Override
+    public String readLocation(String key) {
+        return generatePresignedUrl(key).orElseThrow(() -> new IllegalStateException("Could not sign a read URL"));
+    }
+
+    @Override
+    public long size(String key) {
+        return s3Client.headObject(software.amazon.awssdk.services.s3.model.HeadObjectRequest.builder()
+                .bucket(bucketName).key(key).build()).contentLength();
     }
 }

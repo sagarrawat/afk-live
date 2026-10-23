@@ -54,6 +54,7 @@ public class FileUploadService {
             size,
             com.afklive.streamer.model.MediaAsset.ContentType.VIDEO
         );
+        asset.setStatus(com.afklive.streamer.model.MediaStatus.PROCESSING); // checked by MediaProcessor (ML-2)
         asset = mediaAssetRepository.save(asset);
 
         // Create DB Entry so it can be converted/listed

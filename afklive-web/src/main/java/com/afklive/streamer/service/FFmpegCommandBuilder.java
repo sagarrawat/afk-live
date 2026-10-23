@@ -266,12 +266,173 @@ public class FFmpegCommandBuilder {
             boolean isOptimized,
             Path textOverlayPath
     ) {
-        String ffmpeg = "ffmpeg";
-        java.io.File local = new java.io.File("bin/ffmpeg");
-        if (local.exists()) ffmpeg = local.getAbsolutePath();
+        return buildStreamCommand(videoPath, streamKeys, musicPath, musicVolume, loopCount, watermarkPath,
+                muteVideoAudio, streamMode, maxHeight, isOptimized, textOverlayPath, null);
+    }
 
+    /**
+     * Music volume goes into an FFmpeg filter graph, so it must be a plain number: anything else
+     * could inject filters (e.g. ones that read other files). Clamped to 0..2; default 1.
+     */
+    static String safeVolume(String volume) {
+        double v = 1.0;
+        if (volume != null) {
+            try {
+                v = Double.parseDouble(volume.trim());
+            } catch (NumberFormatException ignored) {
+                v = 1.0;
+            }
+        }
+        if (Double.isNaN(v) || v < 0) v = 0;
+        if (v > 2) v = 2;
+        return String.format(java.util.Locale.ROOT, "%.2f", v);
+    }
+
+    /** Output frame rate. Fixed so the 2-second keyframe interval YouTube requires is exact. */
+    static final int OUTPUT_FPS = 30;
+    /** Keyframe every 2 seconds (YouTube requirement: 2 s recommended, never above 4 s). */
+    static final int GOP = OUTPUT_FPS * 2;
+
+    /**
+     * Video bitrate ladder (kbps): target / maxrate / buffer. Each tier is at or above YouTube's
+     * minimum for that resolution at 30 fps (720p 3 Mbps, 1080p 5, 1440p 7, 2160p 11).
+     */
+    static String[] bitrateFor(int height) {
+        if (height >= 2160) return new String[]{"15000k", "20000k", "40000k"};
+        if (height >= 1440) return new String[]{"9000k", "10000k", "18000k"};
+        if (height >= 1080) return new String[]{"6000k", "6500k", "12000k"};
+        return new String[]{"4000k", "4500k", "8000k"};
+    }
+
+    /**
+     * x264 + AAC settings for a live (studio) encode: constant-ish bitrate from the ladder by the
+     * picture's short side, keyframe exactly every 2 s at any frame rate, AAC 128k 44.1 kHz stereo.
+     * 60 fps gets 1.5x the 30 fps bitrate.
+     */
+    public static List<String> liveEncodeArgs(int shortSide, int fps) {
+        String[] rate = bitrateFor(shortSide);
+        if (fps > 30) {
+            for (int i = 0; i < rate.length; i++) {
+                rate[i] = (Integer.parseInt(rate[i].replace("k", "")) * 3 / 2) + "k";
+            }
+        }
+        int gop = fps * 2;
+        return List.of("-c:v", "libx264", "-preset", "veryfast",
+                "-b:v", rate[0], "-maxrate", rate[1], "-bufsize", rate[2],
+                "-pix_fmt", "yuv420p", "-g", String.valueOf(gop), "-keyint_min", String.valueOf(gop), "-sc_threshold", "0",
+                "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2");
+    }
+
+    /**
+     * Builds the FFmpeg command for one destination.
+     *
+     * @param sourceHasAudio false when the video has no audio track (a silent track is then added,
+     *                       because YouTube keeps a stream in "preparing" without audio); null when unknown,
+     *                       in which case the source audio is mapped if present
+     */
+    public static List<String> buildStreamCommand(
+            Path videoPath,
+            List<String> streamKeys,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized,
+            Path textOverlayPath,
+            Boolean sourceHasAudioOrNull
+    ) {
+        List<String> command = buildEncodeArgs(videoPath, musicPath, musicVolume, loopCount, watermarkPath,
+                muteVideoAudio, streamMode, maxHeight, isOptimized, textOverlayPath, sourceHasAudioOrNull);
+        String url = destinationUrl(streamKeys.get(0));
+        command.add("-f");
+        command.add(formatFor(url));
+        command.add(url);
+        return command;
+    }
+
+    /**
+     * The encoder for a worker: encodes once and writes MPEG-TS to stdout, where the worker copies
+     * it to every destination's relay. Progress (fps, bitrate, speed, drops) goes to stderr as
+     * key=value lines for the health panel.
+     */
+    public static List<String> buildEncoderToPipeCommand(
+            Path videoPath,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized,
+            Path textOverlayPath,
+            Boolean sourceHasAudioOrNull
+    ) {
+        List<String> command = buildEncodeArgs(videoPath, musicPath, musicVolume, loopCount, watermarkPath,
+                muteVideoAudio, streamMode, maxHeight, isOptimized, textOverlayPath, sourceHasAudioOrNull);
+        command.addAll(2, List.of("-loglevel", "warning", "-nostats", "-progress", "pipe:2", "-stats_period", "2"));
+        command.addAll(List.of("-f", "mpegts", "-mpegts_flags", "+resend_headers", "pipe:1"));
+        return command;
+    }
+
+    /**
+     * A relay for one destination: reads the encoder's MPEG-TS from stdin and copies it to the
+     * platform without re-encoding (almost no CPU), so each destination can reconnect on its own.
+     */
+    public static List<String> buildRelayCommand(String destination) {
+        String url = destinationUrl(destination);
+        List<String> command = new ArrayList<>(List.of(ffmpegBinary(), "-hide_banner", "-loglevel", "warning", "-nostats",
+                // Enough analysis to cover a full 2 s GOP at high bitrates, so a relay that joins mid-stream
+                // always sees a keyframe with its SPS/PPS; less than FFmpeg's 5 s default to speed reconnects.
+                "-analyzeduration", "3000000", "-probesize", "8000000",
+                "-fflags", "+genpts", "-f", "mpegts", "-i", "pipe:0", "-map", "0", "-c", "copy"));
+        String format = formatFor(url);
+        if ("flv".equals(format)) {
+            command.addAll(List.of("-bsf:a", "aac_adtstoasc"));
+        }
+        command.addAll(List.of("-f", format, url));
+        return command;
+    }
+
+    /** Only a full URL is used as-is; anything else is a bare key for YouTube's ingest. */
+    static String destinationUrl(String destination) {
+        // Checking for "://" matters: a bare key like "rtmp_x.flv" must never become a local output file.
+        String key = destination.trim();
+        return key.contains("://") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
+    }
+
+    static String formatFor(String url) {
+        return url.regionMatches(true, 0, "srt://", 0, 6) ? "mpegts" : "flv";
+    }
+
+    public static String ffmpegBinary() {
+        java.io.File local = new java.io.File("bin/ffmpeg");
+        return local.exists() ? local.getAbsolutePath() : "ffmpeg";
+    }
+
+    /** Inputs, filters and encoding settings shared by every way of sending a stream (no output). */
+    private static List<String> buildEncodeArgs(
+            Path videoPath,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized,
+            Path textOverlayPath,
+            Boolean sourceHasAudioOrNull
+    ) {
+        boolean audioUnknown = sourceHasAudioOrNull == null;
+        boolean sourceHasAudio = audioUnknown || sourceHasAudioOrNull;
+        String volume = safeVolume(musicVolume);
         List<String> command = new ArrayList<>();
-        command.add(ffmpeg);
+        command.add(ffmpegBinary());
+        command.add("-hide_banner");
 
         // Global settings
         command.add("-re");
@@ -284,31 +445,37 @@ public class FFmpegCommandBuilder {
         command.add("-i");
         command.add(videoPath.toString());
 
+        boolean hasMusic = musicPath != null;
+        // Silence is needed when the output would otherwise have no audio at all.
+        boolean needsSilence = !hasMusic && (muteVideoAudio || !sourceHasAudio);
+
         if (isOptimized) {
-            // STREAM COPY MODE (Low CPU)
-            // Assumes video is already h264/aac and scaled/padded correctly
-            command.add("-c:v");
-            command.add("copy");
-
-            // Audio: Re-encode to AAC to be safe against sample rate issues, but it's cheap
-            command.add("-c:a");
-            command.add("aac");
-            command.add("-b:a");
-            command.add("128k");
-            command.add("-ar");
-            command.add("44100");
-
+            // STREAM COPY MODE (low CPU): the file was normalized at upload to the stream profile.
+            if (needsSilence) {
+                command.add("-f"); command.add("lavfi");
+                command.add("-i"); command.add("anullsrc=channel_layout=stereo:sample_rate=44100");
+                command.add("-map"); command.add("0:v:0");
+                command.add("-map"); command.add("1:a:0");
+            } else {
+                command.add("-map"); command.add("0:v:0");
+                command.add("-map"); command.add(audioUnknown ? "0:a?" : "0:a:0");
+            }
+            command.add("-c:v"); command.add("copy");
+            // Audio is re-encoded (cheap) so the sample rate always matches what YouTube expects.
+            command.add("-c:a"); command.add("aac");
+            command.add("-b:a"); command.add("128k");
+            command.add("-ar"); command.add("44100");
+            command.add("-ac"); command.add("2");
         } else {
-            // RE-ENCODE MODE (High CPU)
+            // RE-ENCODE MODE
 
-            // Input 1: Audio (Music or Silence)
-            boolean hasMusic = musicPath != null;
+            // Input 1: Audio (music or silence)
             if (hasMusic) {
                 command.add("-stream_loop");
                 command.add("-1");
                 command.add("-i");
                 command.add(musicPath.toString());
-            } else if (muteVideoAudio) {
+            } else if (needsSilence) {
                 command.add("-f");
                 command.add("lavfi");
                 command.add("-i");
@@ -317,7 +484,7 @@ public class FFmpegCommandBuilder {
 
             // Input 2: Watermark
             boolean hasWatermark = watermarkPath != null;
-            int wmIdx = (hasMusic || muteVideoAudio) ? 2 : 1;
+            int wmIdx = (hasMusic || needsSilence) ? 2 : 1;
             if (hasWatermark) {
                 command.add("-i");
                 command.add(watermarkPath.toString());
@@ -325,13 +492,11 @@ public class FFmpegCommandBuilder {
 
             // --- Filters ---
             List<String> filterChains = new ArrayList<>();
-            String vLabel = "0:v";
+            String vLabel;
             String aLabel = "0:a";
 
-            // Dynamic Resolution Logic
-            String scaleFilter;
             int safeMaxHeight = (maxHeight > 0) ? maxHeight : 1080;
-
+            String scaleFilter;
             if ("force_portrait".equals(streamMode)) {
                 int h = safeMaxHeight;
                 int w = (int) Math.round(h * (9.0 / 16.0));
@@ -342,7 +507,8 @@ public class FFmpegCommandBuilder {
                 scaleFilter = String.format("scale=-2:min(ih\\,%d),pad=ceil(iw/2)*2:ceil(ih/2)*2", safeMaxHeight);
             }
 
-            filterChains.add("[0:v]" + scaleFilter + "[scaled]");
+            // Constant frame rate so keyframes land exactly every 2 seconds.
+            filterChains.add("[0:v]" + scaleFilter + ",fps=" + OUTPUT_FPS + "[scaled]");
             vLabel = "[scaled]";
 
             if (hasWatermark) {
@@ -354,26 +520,23 @@ public class FFmpegCommandBuilder {
             // Text Overlay (Subscribers)
             if (textOverlayPath != null) {
                 String safePath = textOverlayPath.toString().replace("\\", "/").replace(":", "\\:");
-                // Use a different output label
                 String nextLabel = "[vtext]";
-                // Draw text: White text with box, bottom left
                 String drawText = String.format("drawtext=textfile='%s':reload=1:fontcolor=white:fontsize=24:box=1:boxcolor=black@0.6:boxborderw=5:x=20:y=h-th-20", safePath);
-
                 filterChains.add(String.format("[%s]%s%s", vLabel.replace("[", "").replace("]", ""), drawText, nextLabel));
                 vLabel = nextLabel;
             }
 
-            // Audio Logic
+            // Audio
             if (hasMusic) {
-                if (muteVideoAudio) {
-                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100[aout]", musicVolume));
+                if (muteVideoAudio || !sourceHasAudio) {
+                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100[aout]", volume));
                 } else {
                     filterChains.add("[0:a]aresample=44100,asetpts=PTS-STARTPTS[a0]");
-                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100,asetpts=PTS-STARTPTS[a1]", musicVolume));
+                    filterChains.add(String.format("[1:a]volume=%s,aresample=44100,asetpts=PTS-STARTPTS[a1]", volume));
                     filterChains.add("[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]");
                 }
                 aLabel = "[aout]";
-            } else if (muteVideoAudio) {
+            } else if (needsSilence) {
                 aLabel = "1:a";
             }
 
@@ -381,51 +544,26 @@ public class FFmpegCommandBuilder {
             command.add(String.join(";", filterChains));
 
             // --- Encoding ---
+            String[] rate = bitrateFor(safeMaxHeight);
             command.add("-map"); command.add(vLabel);
             command.add("-c:v"); command.add("libx264");
-            command.add("-preset"); command.add("ultrafast");
-
-            // Dynamic Bitrate Logic based on Max Height
-            String bitrate = "4500k";
-            String maxrate = "6000k";
-            String bufsize = "12000k";
-
-            if (safeMaxHeight >= 2160) {
-                bitrate = "15000k"; maxrate = "20000k"; bufsize = "40000k";
-            } else if (safeMaxHeight >= 1440) {
-                bitrate = "9000k"; maxrate = "12000k"; bufsize = "24000k";
-            }
-
-            command.add("-b:v"); command.add(bitrate);
-            command.add("-maxrate"); command.add(maxrate);
-            command.add("-bufsize"); command.add(bufsize);
+            command.add("-preset"); command.add("veryfast");
+            command.add("-b:v"); command.add(rate[0]);
+            command.add("-maxrate"); command.add(rate[1]);
+            command.add("-bufsize"); command.add(rate[2]);
             command.add("-pix_fmt"); command.add("yuv420p");
-            command.add("-g"); command.add("60");
-            command.add("-keyint_min"); command.add("60");
+            command.add("-g"); command.add(String.valueOf(GOP));
+            command.add("-keyint_min"); command.add(String.valueOf(GOP));
             command.add("-sc_threshold"); command.add("0");
 
-            // Map audio
-            if (aLabel.equals("0:a")) {
-                 command.add("-map"); command.add("0:a?");
-            } else {
-                 command.add("-map"); command.add(aLabel);
-            }
-
+            command.add("-map"); command.add(aLabel.equals("0:a") ? (audioUnknown ? "0:a?" : "0:a:0") : aLabel);
             command.add("-c:a"); command.add("aac");
             command.add("-b:a"); command.add("128k");
             command.add("-ar"); command.add("44100");
+            command.add("-ac"); command.add("2");
         }
 
         command.add("-shortest");
-
-        // --- Output ---
-        String key = streamKeys.get(0);
-        String url = key.startsWith("rtmp") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
-
-        command.add("-f");
-        command.add("flv");
-        command.add(url);
-
         return command;
     }
 

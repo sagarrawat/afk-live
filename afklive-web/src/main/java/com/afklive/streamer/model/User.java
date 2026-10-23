@@ -23,7 +23,18 @@ public class User {
     @Enumerated(EnumType.STRING)
     private PlanType planType = PlanType.FREE;
 
+    /** Changed only by atomic updates (UserRepository.reserveStorage / addStorage), never by saving the entity. */
+    @Column(name = "used_storage_bytes", insertable = false, updatable = false)
     private long usedStorageBytes = 0;
+
+    /** ON-3: the creator's time zone (IANA id) and billing currency (INR or USD); null until set. */
+    @Column(name = "time_zone", length = 64)
+    private String timeZone;
+    @Column(length = 3)
+    private String currency;
+    /** ON-2: when the setup wizard was finished or skipped. */
+    @Column(name = "onboarded_at")
+    private java.time.ZonedDateTime onboardedAt;
 
     private String password;
     private boolean enabled = true;
@@ -40,6 +51,10 @@ public class User {
 
     private double unpaidBalance = 0.0;
     private double creditLimit = 50.0;
+
+    /** NT-1/NT-2: send alerts by email as well as in the app. */
+    @Column(name = "email_alerts", nullable = false)
+    private boolean emailAlerts = true;
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UserSettings settings;
@@ -245,5 +260,37 @@ public class User {
 
     public void setChannels(java.util.List<SocialChannel> channels) {
         this.channels = channels;
+    }
+
+    public boolean isEmailAlerts() {
+        return emailAlerts;
+    }
+
+    public void setEmailAlerts(boolean emailAlerts) {
+        this.emailAlerts = emailAlerts;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
+    public void setTimeZone(String timeZone) {
+        this.timeZone = timeZone;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public java.time.ZonedDateTime getOnboardedAt() {
+        return onboardedAt;
+    }
+
+    public void setOnboardedAt(java.time.ZonedDateTime onboardedAt) {
+        this.onboardedAt = onboardedAt;
     }
 }

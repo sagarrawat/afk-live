@@ -3,3 +3,23 @@ databaseChangeLog:
       file: db/changelog/changes/001-initial-schema.sql
   - include:
       file: db/changelog/changes/002-dev-seed.sql
+  - include:
+      file: db/changelog/changes/003-stream-job-stop-and-reason.sql
+  - include:
+      file: db/changelog/changes/004-scheduled-stream-asset-on-delete.sql
+  - include:
+      file: db/changelog/changes/005-stream-workers.sql
+  - include:
+      file: db/changelog/changes/006-streams.sql
+  - include:
+      file: db/changelog/changes/007-phone-ingest.sql
+  - include:
+      file: db/changelog/changes/008-alerts.sql
+  - include:
+      file: db/changelog/changes/009-billing.sql
+  - include:
+      file: db/changelog/changes/010-media-library.sql
+  - include:
+      file: db/changelog/changes/011-admin.sql
+  - include:
+      file: db/changelog/changes/012-account-preferences.sql

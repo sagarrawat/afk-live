@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "stream_jobs", indexes = {
     @Index(name = "idx_streamjob_user_live", columnList = "user_id, is_live"),
     @Index(name = "idx_streamjob_live", columnList = "is_live"),
@@ -25,9 +26,12 @@ public class StreamJob {
     @com.fasterxml.jackson.annotation.JsonIgnore
     private User user;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
     private String streamKey;
     private String fileName;
     private boolean isLive;
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private long pid;
     private String musicName;
     private String musicVolume;
@@ -45,6 +49,56 @@ public class StreamJob {
     private java.time.ZonedDateTime startTime;
     private java.time.ZonedDateTime endTime;
     private Double cost;
+
+    /** Lifecycle as reported by the worker: STARTING, LIVE, RECONNECTING, ENDED, FAILED. */
+    private String status;
+    /** What the web app wants: RUN or STOP. Workers act on it. */
+    private String desiredState;
+    /** Everything a worker needs to run the stream (JSON StreamSpec). Contains stream keys: never sent to clients. */
+    @Column(columnDefinition = "TEXT")
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String spec;
+    /** The worker running this job; null until claimed. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String workerId;
+    /** AD-1: an admin moved this job off this worker; it isn't claimed back by it for a minute. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String avoidWorker;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.ZonedDateTime moveRequestedAt;
+    /** Last time the worker confirmed the job is running. A stale heartbeat means the worker is gone. */
+    private java.time.ZonedDateTime heartbeatAt;
+    private int restarts;
+    private Double bitrateKbps;
+    private Double fps;
+    private Double speed;
+    private Long droppedFrames;
+    @Column(columnDefinition = "TEXT")
+    private String lastError;
+
+    @lombok.ToString.Exclude
+    @lombok.EqualsAndHashCode.Exclude
+    @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("position ASC")
+    private java.util.List<StreamJobDestination> destinations = new java.util.ArrayList<>();
+
+    /** When set, the stream is stopped automatically at this time. */
+    private java.time.ZonedDateTime stopAt;
+
+    /** The saved stream this run belongs to (null for legacy one-off runs). */
+    @Column(name = "stream_id")
+    private Long streamId;
+    /** Scene on screen, whether the phone input is live, and what's playing: reported by the worker. */
+    private String scene;
+    private Boolean inputLive;
+    @Column(name = "now_playing", columnDefinition = "TEXT")
+    private String nowPlaying;
+    /** Highest live command the worker has applied (commands after it are still to apply). */
+    @Column(name = "applied_command_id", nullable = false)
+    private long appliedCommandId;
+    /** Why the stream ended (user, schedule, credit limit, crash, server restart). */
+    private String endReason;
 
     private java.time.ZonedDateTime lastBillingTime;
     private double accumulatedCost = 0.0;

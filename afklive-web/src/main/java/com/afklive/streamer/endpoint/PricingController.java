@@ -1,5 +1,7 @@
 package com.afklive.streamer.endpoint;
 
+import com.afklive.streamer.service.BillingService;
+
 import com.afklive.streamer.model.PlanConfig;
 import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
@@ -24,66 +26,27 @@ public class PricingController {
     private final UserService userService;
     private final EmailService emailService;
     private final PlanService planService;
+    private final com.afklive.streamer.service.BillingService billing;
 
+    /** Plans for the pricing page; the same limits and prices billing enforces (MK-2). */
     @GetMapping("/pricing")
     public ResponseEntity<?> getPricing(@RequestParam(defaultValue = "IN") String country) {
+        String currency = "IN".equalsIgnoreCase(country) ? "INR" : "USD";
         List<Map<String, Object>> planList = new java.util.ArrayList<>();
-        List<PlanConfig> configs = planService.getAllPlans();
-
-        for (PlanConfig p : configs) {
-            String price = p.getPrice() != null ? p.getPrice() : "0";
-            if (!price.startsWith("₹") && !price.startsWith("$") && !price.equals("Free")) {
-                price = "₹" + price;
-            }
-
+        for (BillingService.PlanView p : billing.catalog(currency)) {
             List<String> features = new java.util.ArrayList<>();
-            features.add(p.getMaxChannels() + " Channels");
-
-            if (p.getMaxScheduledPosts() == Integer.MAX_VALUE) {
-                features.add("Unlimited Scheduling");
-            } else {
-                features.add(p.getMaxScheduledPosts() + " Scheduled Posts");
+            features.add(p.concurrentStreams() + (p.concurrentStreams() == 1 ? " stream" : " streams") + " at a time");
+            features.add("Up to " + p.maxHeight() + "p" + p.maxFps());
+            features.add(p.monthlyHours() > 0 ? p.monthlyHours() + " streaming hours a month" : "Unlimited streaming hours");
+            features.add(formatStorage(p.storageBytes()) + " storage");
+            features.add(p.destinationsPerStream() + (p.destinationsPerStream() == 1 ? " destination" : " destinations") + " per stream");
+            if (p.watermark()) {
+                features.add("Small AFK Live mark on the stream");
             }
-
-            if (p.getMaxActiveStreams() == Integer.MAX_VALUE) {
-                features.add("Unlimited Concurrent Streams");
-            } else {
-                features.add(p.getMaxActiveStreams() + " Concurrent Streams");
-            }
-
-            if (p.getMaxResolution() >= 1080) {
-                features.add("HD Streaming");
-            } else {
-                features.add("Basic Streaming");
-            }
-
-            features.add("Storage: " + formatStorage(p.getMaxStorageBytes()));
-
-            String cycle = p.getBillingCycle() != null ? "/" + p.getBillingCycle().toLowerCase() : "/mo";
-            if (p.getBillingCycle() != null && (p.getBillingCycle().equalsIgnoreCase("Hourly") || p.getBillingCycle().equalsIgnoreCase("Hour"))) {
-                 cycle = "/hr";
-            }
-
-            planList.add(Map.of(
-                    "id", p.getPlanType().name(),
-                    "title", p.getDisplayName(),
-                    "price", price,
-                    "period", cycle,
-                    "features", features
-            ));
+            planList.add(Map.of("id", p.id(), "title", p.name(), "price", p.monthlyLabel(), "yearlyPrice", p.yearlyLabel(),
+                    "period", p.monthly() == 0 ? "" : "/mo", "features", features));
         }
-
-        // Sort ensuring FREE is first
-        planList.sort((a, b) -> {
-            if ("FREE".equals(a.get("id"))) return -1;
-            if ("FREE".equals(b.get("id"))) return 1;
-            return 0;
-        });
-
-        return ResponseEntity.ok(Map.of(
-                "currency", "INR",
-                "plans", planList
-        ));
+        return ResponseEntity.ok(Map.of("currency", currency, "plans", planList));
     }
 
     private String formatStorage(long bytes) {
@@ -93,44 +56,14 @@ public class PricingController {
         return (bytes / (1024 * 1024)) + " MB";
     }
 
-    @PostMapping("/pricing/upgrade")
-    public ResponseEntity<?> upgradePlan(@RequestBody Map<String, String> body, Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).build();
+    // Plans change only through a verified payment (PaymentController callback) or an admin.
+    // The old POST /api/pricing/upgrade changed the plan without any payment and was removed.
 
-        String email = SecurityUtils.getEmail(principal);
-        String planId = body.get("planId");
-        log.info("Upgrade request for user {} to plan {}", email, planId);
-
-        if (planId == null) return ResponseEntity.badRequest().body(Map.of("message", "Plan ID required"));
-
-        try {
-            PlanType plan = PlanType.valueOf(planId);
-            userService.updatePlan(email, plan);
-            log.info("Plan updated successfully for {}", email);
-
-            // Send email
-            try {
-                 User user = userService.getOrCreateUser(email);
-                 emailService.sendUpgradeEmail(user.getUsername(), plan.getDisplayName());
-            } catch(Exception ex) {
-                log.error("Failed to send upgrade email", ex);
-                // log error but don't fail upgrade
-            }
-
-            return ResponseEntity.ok(Map.of("success", true, "message", "Plan upgraded to " + plan.getDisplayName()));
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid plan ID provided: {}", planId);
-            return ResponseEntity.badRequest().body(Map.of("message", "Invalid Plan ID"));
-        } catch (Exception e) {
-            log.error("Upgrade failed for user " + email, e);
-            return ResponseEntity.internalServerError().body(Map.of("message", "Upgrade failed: " + e.getMessage()));
-        }
-    }
-
+    /** Cancels at the end of the paid period (BI-5); access is kept until then. */
     @PostMapping("/pricing/cancel")
     public ResponseEntity<?> cancelPlan(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        userService.updatePlan(SecurityUtils.getEmail(principal), PlanType.FREE);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Subscription cancelled. You are now on the Free plan."));
+        billing.cancel(SecurityUtils.getEmail(principal));
+        return ResponseEntity.ok(Map.of("success", true, "message", "Your plan will end at the end of the period you paid for."));
     }
 }

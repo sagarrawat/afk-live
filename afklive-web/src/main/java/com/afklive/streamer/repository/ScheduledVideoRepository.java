@@ -32,4 +32,14 @@ public interface ScheduledVideoRepository extends JpaRepository<ScheduledVideo, 
 
     @Query("SELECT v FROM ScheduledVideo v JOIN v.mediaAsset ma WHERE v.user.email = :email AND ma.s3Key = :s3Key")
     Optional<ScheduledVideo> findFirstByUserEmailAndS3Key(String email, String s3Key);
+
+    List<ScheduledVideo> findAllByMediaAssetId(Long mediaAssetId);
+
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("UPDATE ScheduledVideo v SET v.thumbnailAsset = NULL WHERE v.thumbnailAsset.id = :id")
+    int clearThumbnail(@org.springframework.data.repository.query.Param("id") Long id);
+
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("UPDATE ScheduledVideo v SET v.mediaAsset = NULL WHERE v.mediaAsset.id = :id")
+    int clearMedia(@org.springframework.data.repository.query.Param("id") Long id);
 }

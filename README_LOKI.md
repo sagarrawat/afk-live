@@ -10,6 +10,11 @@ You need a Grafana Cloud account (free tier works) to get your Loki credentials.
 2.  In your stack, find the "Loki" section.
 3.  Click "Send Logs" or "Details" to find your `URL`, `User` (Username), and create an API Key (Password).
 
+## Enabling
+
+Loki shipping is off unless the `loki` Spring profile is active (so local runs and tests don't need a
+Loki server). In production add it to the active profiles, e.g. `SPRING_PROFILES_ACTIVE=loki`.
+
 ## Environment Variables
 
 You must set the following environment variables for the application to send logs to Loki:

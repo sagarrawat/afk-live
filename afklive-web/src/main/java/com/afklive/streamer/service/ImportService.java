@@ -24,6 +24,7 @@ public class ImportService {
     private final FileStorageService storageService;
     private final ScheduledVideoRepository repository;
     private final UserService userService;
+    private final MediaLibraryService mediaLibraryService;
 
     @Async
     public CompletableFuture<Boolean> downloadFromYouTube(String url, String username) {
@@ -141,15 +142,8 @@ public class ImportService {
             String s3Key = storageService.uploadFile(Files.newInputStream(downloadedFile.toPath()), originalName, size);
             userService.updateStorageUsage(username, size);
 
-            // Save to DB
-            ScheduledVideo video = new ScheduledVideo();
-            video.setUsername(username);
-            video.setTitle(originalName);
-            video.setS3Key(s3Key);
-            video.setStatus(ScheduledVideo.VideoStatus.LIBRARY);
-            video.setPrivacyStatus(AppConstants.PRIVACY_PRIVATE);
-            video.setFileSize(size);
-            repository.save(video);
+            // Save to the user's library (the old code used no-op setters and never saved).
+            mediaLibraryService.addVideo(username, originalName, s3Key, size);
 
             log.info("Successfully imported video from {}: {}", sourceLabel, originalName);
             return CompletableFuture.completedFuture(true);
