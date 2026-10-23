@@ -113,6 +113,14 @@ public final class TsStitcher {
         }
     }
 
+    /** Forgets an expected producer that never took over (it failed, or a hand-off timed out). */
+    public synchronized void cancel(int id) {
+        if (expected == id) {
+            expected = -1;
+            sources.remove(id);
+        }
+    }
+
     public synchronized int current() {
         return current;
     }

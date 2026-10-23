@@ -45,11 +45,11 @@ class TsStitcherTest {
         wrapping = encode("w", "smptebars=size=640x360:rate=30", 660, "-output_ts_offset", "95441.7");
     }
 
-    record Packet(String type, double pts, double dts) {
+    public record Packet(String type, double pts, double dts) {
     }
 
     /** Packet timestamps per stream as FFmpeg's own demuxer reads them, unwrapped as it does. */
-    static List<Packet> probe(Path file) throws Exception {
+    public static List<Packet> probe(Path file) throws Exception {
         Process p = new ProcessBuilder("ffprobe", "-v", "error", "-show_entries", "packet=codec_type,pts_time,dts_time",
                 "-of", "csv=p=0", file.toString()).redirectErrorStream(true).start();
         List<Packet> out = new ArrayList<>();
@@ -63,7 +63,7 @@ class TsStitcherTest {
         return out;
     }
 
-    static void assertContinuous(List<Packet> packets, double expectedSeconds) {
+    public static void assertContinuous(List<Packet> packets, double expectedSeconds) {
         for (String type : List.of("video", "audio")) {
             List<Packet> s = packets.stream().filter(x -> x.type().equals(type)).toList();
             assertThat(s).as(type).isNotEmpty();
