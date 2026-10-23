@@ -305,7 +305,7 @@ public class FFmpegCommandBuilder {
     }
 
     /**
-     * x264 + AAC settings for a live (studio) encode: constant-ish bitrate from the ladder by the
+     * x264 + AAC settings for a live (studio) encode: constant bitrate from the ladder by the
      * picture's short side, keyframe exactly every 2 s at any frame rate, AAC 128k 44.1 kHz stereo.
      * 60 fps gets 1.5x the 30 fps bitrate.
      */
@@ -317,8 +317,12 @@ public class FFmpegCommandBuilder {
             }
         }
         int gop = fps * 2;
+        // Constant bitrate with filler: a still or slow picture (a talk, a lofi loop) would otherwise drop to
+        // a few hundred kbps, and YouTube flags the stream as below its recommended bitrate.
+        int target = Integer.parseInt(rate[0].replace("k", ""));
         return List.of("-c:v", "libx264", "-preset", "veryfast",
-                "-b:v", rate[0], "-maxrate", rate[1], "-bufsize", rate[2],
+                "-b:v", rate[0], "-minrate", rate[0], "-maxrate", rate[0], "-bufsize", (target * 2) + "k",
+                "-x264-params", "nal-hrd=cbr:force-cfr=1",
                 "-pix_fmt", "yuv420p", "-g", String.valueOf(gop), "-keyint_min", String.valueOf(gop), "-sc_threshold", "0",
                 "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2");
     }
