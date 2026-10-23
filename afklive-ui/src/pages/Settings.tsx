@@ -2,13 +2,17 @@ import clsx from 'clsx';
 import { NavLink, Navigate, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/ui';
 import { BillingSettings } from './settings/BillingSettings';
+import { DataSettings } from './settings/DataSettings';
 import { NotificationSettings } from './settings/NotificationSettings';
 import { ProfileSettings } from './settings/ProfileSettings';
+import { SecuritySettings } from './settings/SecuritySettings';
 
 const SECTIONS = [
   ['profile', 'Profile'],
   ['billing', 'Plan & billing'],
   ['notifications', 'Notifications'],
+  ['security', 'Sign-in & security'],
+  ['data', 'Your data'],
 ] as const;
 
 export function Settings() {
@@ -35,6 +39,8 @@ export function Settings() {
       {section === 'profile' && <ProfileSettings />}
       {section === 'billing' && <BillingSettings />}
       {section === 'notifications' && <NotificationSettings />}
+      {section === 'security' && <SecuritySettings />}
+      {section === 'data' && <DataSettings />}
     </>
   );
 }

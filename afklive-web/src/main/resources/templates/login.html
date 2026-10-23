@@ -24,6 +24,13 @@
 <main class="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-10 sm:px-6 lg:justify-center">
     <a href="/" class="lg:hidden"><img src="/site/brand/logo-on-light.svg" alt="AFK Live" width="111" height="30" class="h-[30px] w-auto"></a>
     <div class="mt-12 rounded-2xl border border-line bg-panel p-6 shadow-[0_24px_48px_-32px_rgba(16,18,42,0.35)] sm:p-8 lg:mt-0">
+        <div th:if="${deletionDate}" class="mb-6 space-y-3 rounded-xl border border-line p-4" role="status">
+            <p class="font-semibold">Your account is scheduled for deletion</p>
+            <p class="text-sm text-muted">We'll delete your streams, videos and settings on <strong th:text="${deletionDate}">1 January 2027</strong>. Until then you can keep it.</p>
+            <form th:action="@{/account/restore}" method="post">
+                <button type="submit" class="btn-primary w-full">Keep my account</button>
+            </form>
+        </div>
         <h1 class="display text-[28px] font-extrabold tracking-[-0.02em]">Sign in</h1>
         <p class="mt-1 text-muted">Welcome back. Your streams are where you left them.</p>
         <div class="mt-6">
@@ -36,6 +43,7 @@
         <form th:action="@{/login}" method="post" class="space-y-4">
             <p th:if="${param.error}" class="note-bad" role="alert">That email and password don't match. Try again, or reset your password.</p>
             <p th:if="${param.logout}" class="note-ok">You're signed out.</p>
+            <p th:if="${param.restored}" class="note-ok">Your account is kept. Sign in to carry on.</p>
             <p th:if="${success}" class="note-ok" th:text="${success}"></p>
             <div>
                 <label for="email" class="label">Email</label>

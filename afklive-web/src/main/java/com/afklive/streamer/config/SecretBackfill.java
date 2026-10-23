@@ -25,7 +25,9 @@ public class SecretBackfill {
             new String[]{"stream_destinations", "id", "stream_key"},
             new String[]{"streams", "id", "ingest_key"},
             new String[]{"stream_jobs", "id", "spec"},
-            new String[]{"stream_jobs", "id", "stream_key"});
+            new String[]{"stream_jobs", "id", "stream_key"},
+            new String[]{"users", "id", "two_factor_secret"},
+            new String[]{"users", "id", "two_factor_pending_secret"});
 
     private final JdbcTemplate jdbc;
     private final String role;

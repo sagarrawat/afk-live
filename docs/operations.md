@@ -83,13 +83,30 @@ private address, add an accept rule for it (TCP 1935) in `worker-egress.nft`.
 ## Secrets at rest
 
 `APP_ENCRYPTION_KEY` (32 random bytes, base64: `openssl rand -base64 32`) encrypts stream keys, ingest
-keys and run specs. **The app refuses to start without it.** Keep it in a password manager: without it
+keys, run specs and two-step sign-in secrets. **The app refuses to start without it.** Keep it in a password manager: without it
 the stored keys can't be read. On first start of this version, keys saved earlier in plain text are
 encrypted automatically.
 
 To rotate: put the current key in `APP_ENCRYPTION_OLD_KEYS` (comma-separated), set a new
 `APP_ENCRYPTION_KEY`, restart; everything is re-encrypted with the new key at startup. Remove the old
 key from `APP_ENCRYPTION_OLD_KEYS` after that.
+
+## Account security and deletion (ON-6, ON-7)
+
+- **Two-step sign-in** (TOTP, `TwoFactorService`): after a password or Google sign-in, an account with
+  it on is only partly signed in until the code is entered at `/login/2fa`; `AccountGateFilter` (in the
+  security chain) allows nothing else, and the API answers 401. Remember-me sign-ins ask for the code
+  again. Five wrong codes in a row lock code entry for 10 minutes (counted in `users`, so it holds across
+  instances); `/login/2fa` is also limited per IP. Recovery codes are stored as SHA-256 hashes only.
+  A creator who lost both phone and recovery codes: an admin can clear `two_factor_secret` after
+  checking who they are.
+- **Deletion**: "Delete my account" closes the account at once (live runs stop, schedules and go-live
+  refuse, every session is signed out on its next request) and sets `deletion_scheduled_for` to 7 days
+  later. Signing in during that time offers "Keep my account". The web side checks hourly
+  (`AccountService.purgeDue`) and deletes due accounts: rows cascade from `users`, library files and
+  open uploads are removed from storage, connected-channel tokens are deleted. Invoices stay for the
+  tax records, detached from the account; B2C invoices (no GSTIN) lose the customer's name and address,
+  B2B invoices keep the legal name, address and GSTIN that GST law requires.
 
 ## Destination tests
 

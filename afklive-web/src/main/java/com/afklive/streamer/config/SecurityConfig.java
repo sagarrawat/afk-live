@@ -83,7 +83,8 @@ public class SecurityConfig {
                                            ClientRegistrationRepository clientRegistrationRepository,
                                            OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler,
                                            CustomAuthenticationSuccessHandler customAuthenticationSuccessHandler,
-                                           CustomUserDetailsService userDetailsService) throws Exception {
+                                           CustomUserDetailsService userDetailsService,
+                                           com.afklive.streamer.security.AccountGate accountGate) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf
@@ -92,11 +93,14 @@ public class SecurityConfig {
                         .ignoringRequestMatchers("/api/payment/callback", "/internal/ingest/auth")
                 )
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
+                // ON-6 / ON-7: a second sign-in step for two-step accounts; accounts scheduled for deletion are closed.
+                .addFilterBefore(new com.afklive.streamer.security.AccountGateFilter(accountGate),
+                        org.springframework.security.web.access.intercept.AuthorizationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.FORWARD, jakarta.servlet.DispatcherType.ERROR).permitAll()
                         // 1. PUBLIC: Landing page, assets
                         .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/pricing", "/features", "/for/**", "/status", "/api/public/status", "/sitemap.xml", "/robots.txt", "/css/**", "/js/**", "/app/assets/**", "/app/manifest.webmanifest", "/app/*.png", "/favicon.ico", "/sw.js", "/site/**", "/api/user-info", "/api/pricing", "/api/billing/plans", "/error").permitAll()
-                        .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
+                        .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**", "/account/restore").permitAll()
                         // Server-to-server payment notification; verified by signature in the controller.
                         .requestMatchers("/api/payment/callback").permitAll()
                         // Ingest server (MediaMTX) auth hook; verified by a shared secret in the controller.

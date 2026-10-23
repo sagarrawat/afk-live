@@ -384,8 +384,8 @@ public class StreamScheduleService {
      */
     private void startOccurrence(StreamSchedule sc, Window w, ZonedDateTime now) {
         Optional<LiveStream> stream = streams.findById(sc.getStreamId());
-        if (stream.isEmpty()) {
-            return;
+        if (stream.isEmpty() || stream.get().getUser().getDeletionScheduledFor() != null) {
+            return; // ON-7: closed accounts don't start on schedule (nothing is claimed, so keeping the account resumes)
         }
         String email = stream.get().getUser().getEmail();
         try {

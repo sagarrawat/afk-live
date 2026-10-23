@@ -120,6 +120,17 @@ public class EmailService {
         sendEmail(to, "Reset your password - AFK Live", html);
     }
 
+    /** ON-7: the account will be deleted on {@code when}; signing in offers to keep it until then. */
+    public void sendDeletionScheduledEmail(String to, String when) {
+        String content = "<p>You asked us to delete your AFK Live account. Your streams are stopped and the account is closed.</p>"
+                + "<p>We'll delete your streams, videos and settings on <strong>" + escape(when) + "</strong>.</p>"
+                + "<p>Changed your mind? Sign in before then and choose <strong>Keep my account</strong>.</p>"
+                + "<p style='margin-top: 30px; text-align: center;'><a href='" + escape(baseUrl + "/login") + "' style='background: #21245C; "
+                + "color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Sign in</a></p>"
+                + "<p style='font-size:13px;color:#999'>Didn't ask for this? Sign in now to keep your account, then change your password.</p>";
+        sendEmail(to, "Your AFK Live account will be deleted on " + when, createBaseHtml("Your account is scheduled for deletion", content));
+    }
+
     public void sendWelcomeEmail(String to) {
         String content = "<p>Welcome to AFK Live! We are excited to have you on board.</p>" +
                          "<p>You are now ready to take your streaming to the next level with our 24/7 cloud streaming platform.</p>" +

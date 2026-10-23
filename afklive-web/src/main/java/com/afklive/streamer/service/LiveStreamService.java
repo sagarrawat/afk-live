@@ -602,6 +602,10 @@ public class LiveStreamService {
         // Plan limits count the user's live runs: serialize this user's starts (and free-tier starts
         // platform-wide), then this stream's, so two simultaneous starts can't both pass the check.
         User owner = users.lockByEmail(email).orElseThrow();
+        if (owner.getDeletionScheduledFor() != null) {
+            // ON-7: a closed account (deletion scheduled) can't go live, by hand or on a schedule.
+            throw new com.afklive.streamer.exception.ConflictException("This account is scheduled for deletion, so streams can't start. Keep the account to stream again.");
+        }
         if (owner.getPlanType() == PlanType.FREE) {
             jobs.lockFreeCapacity();
         }

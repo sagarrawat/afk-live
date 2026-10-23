@@ -26,7 +26,7 @@ import java.util.Set;
 public class AccountRateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> ACCOUNT_PATHS = Set.of(
-            "/login", "/register", "/forgot-password", "/reset-password", "/verify-email");
+            "/login", "/register", "/forgot-password", "/reset-password", "/verify-email", "/login/2fa", "/account/restore");
 
     private final long perMinute;
     private final Cache<String, Bucket> buckets =

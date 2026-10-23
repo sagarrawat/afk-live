@@ -16,6 +16,10 @@ public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
+        // ON-6: a new password sign-in starts without the second step done (AccountGateFilter asks for it).
+        if (request.getSession(false) != null) {
+            request.getSession(false).removeAttribute(AccountGate.VERIFIED);
+        }
         Set<String> roles = AuthorityUtils.authorityListToSet(authentication.getAuthorities());
 
         if (roles.contains("ROLE_ADMIN")) {
