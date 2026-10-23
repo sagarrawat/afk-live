@@ -242,6 +242,122 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void destinationsTurnedOnAndOffWhileLiveReachTheWorkerWithoutMovingTheOthers() {
+        // DS-5: before, the change was saved but the running stream kept its old destinations.
+        String email = newUser(PlanType.PRO);
+        LiveStream s = ready(email);
+        StreamDestination yt = destinations.findAll().stream()
+                .filter(d -> d.getUser().getEmail().equals(email)).findFirst().orElseThrow();
+        StreamJob job = service.goLive(email, s.getId(), null);
+        StreamDestination fb = destination(email, "rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
+
+        service.setTargets(email, s.getId(), List.of(new TargetRequest(yt.getId(), true), new TargetRequest(fb.getId(), true)));
+        List<StreamSpec.Destination> after = StreamSpec.fromJson(jobs.findById(job.getId()).orElseThrow().getSpec()).destinations();
+        assertThat(after).extracting(StreamSpec.Destination::off).containsExactly(false, false);
+        assertThat(after.get(1).url()).endsWith("fb-key");
+
+        service.setTargets(email, s.getId(), List.of(new TargetRequest(yt.getId(), false), new TargetRequest(fb.getId(), true)));
+        after = StreamSpec.fromJson(jobs.findById(job.getId()).orElseThrow().getSpec()).destinations();
+        assertThat(after).extracting(StreamSpec.Destination::off).containsExactly(true, false); // positions kept
+
+        List<StreamCommand> sent = commands.findNew(List.of(job.getId()), 0).stream()
+                .filter(c -> c.getType() == StreamCommand.Type.TARGETS).toList();
+        assertThat(sent).hasSize(2);
+        assertThat(StreamSpec.destinationsFromJson(sent.get(1).getPayload())).extracting(StreamSpec.Destination::off)
+                .containsExactly(true, false);
+        // The turned-off destination drops out of health instead of showing as broken.
+        assertThat(service.view(email, s.getId()).live().health().destinations()).hasSize(1);
+
+        assertThatThrownBy(() -> service.setTargets(email, s.getId(), List.of(new TargetRequest(fb.getId(), false))))
+                .hasMessageContaining("at least one destination");
+    }
+
+    @Test
+    void duplicatingCopiesTheSetupButNotWhereItGoesOrWhen() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        service.update(email, s.getId(), new UpdateStream(null, null, null, null, "SHUFFLE", null, null, null, null, null, null));
+        service.setOverlays(email, s.getId(), List.of(new StudioSpec.OverlaySetting(null, "TEXT", true, 0.05, 0.05, 0, 0.05,
+                "lofi rain", null, null, "#ffffff", "#99000000", 1, null, null, 0, null)));
+
+        LiveStream copy = service.duplicate(email, s.getId());
+        var view = service.view(email, copy.getId());
+        assertThat(view.name()).isEqualTo("Lofi 24/7 (copy)");
+        assertThat(view.playbackOrder()).isEqualTo("SHUFFLE");
+        assertThat(view.playlist()).extracting(m -> m.title()).containsExactly("rain.mp4", "night.mp4");
+        assertThat(view.overlays()).extracting(StudioSpec.OverlaySetting::text).containsExactly("lofi rain");
+        assertThat(view.destinations()).hasSize(1).allMatch(d -> !d.enabled()); // same channel, switched off
+        assertThat(view.schedules()).isEmpty();
+        // The original is untouched.
+        assertThat(service.view(email, s.getId()).destinations()).allMatch(d -> d.enabled());
+    }
+
+    @Autowired com.afklive.streamer.repository.StreamIncidentRepository incidents;
+
+    @Test
+    void uptimeIsTheShareOfOnAirTimeWithoutAnOutage() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        assertThat(service.uptime(email, s.getId(), now).windows()).allMatch(w -> w.percent() == null); // never on air
+
+        StreamJob job = service.goLive(email, s.getId(), null);
+        // Live for the last 10 hours, with a 30-minute outage 2 hours ago.
+        job.setStartTime(now.minusHours(10));
+        jobs.save(job);
+        incidents.open(job.getId(), "DOWN", "", now.minusHours(2));
+        incidents.resolve(job.getId(), "DOWN", "", now.minusHours(2).plusMinutes(30));
+        // Another creator's run must not count.
+        String other = newUser(PlanType.ESSENTIALS);
+        StreamJob old = service.goLive(other, ready(other).getId(), null);
+
+        var up = service.uptime(email, s.getId(), now);
+        var day = up.windows().getFirst();
+        assertThat(day.label()).isEqualTo("24 hours");
+        assertThat(day.onAirSeconds()).isEqualTo(10 * 3600);
+        assertThat(day.downSeconds()).isEqualTo(30 * 60);
+        assertThat(day.percent()).isEqualTo(95.0);
+        assertThat(up.outages()).hasSize(1);
+        assertThat(old.getStreamId()).isNotEqualTo(s.getId());
+    }
+
+    @Test
+    void reconnectIsACommandForALiveStreamOnly() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        assertThatThrownBy(() -> service.reconnect(email, s.getId())).hasMessageContaining("isn't live");
+        StreamJob job = service.goLive(email, s.getId(), null);
+        service.reconnect(email, s.getId());
+        assertThat(commands.findNew(List.of(job.getId()), 0)).extracting(StreamCommand::getType).containsExactly(StreamCommand.Type.RECONNECT);
+    }
+
+    @Test
+    void fitAndCrossfadeReachTheWorkerAndItemFitsSurviveReordering() {
+        // PL-6 / AU-3.
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        service.setPresentation(email, s.getId(), new com.afklive.streamer.dto.StreamDtos.Presentation("blur", 6));
+        assertThatThrownBy(() -> service.setPresentation(email, s.getId(), new com.afklive.streamer.dto.StreamDtos.Presentation(null, 25)))
+                .hasMessageContaining("0 to 20");
+        assertThatThrownBy(() -> service.setPresentation(email, s.getId(), new com.afklive.streamer.dto.StreamDtos.Presentation("stretch", null)))
+                .hasMessageContaining("FIT, FILL or BLUR");
+        var view = service.view(email, s.getId());
+        assertThat(view.fit()).isEqualTo("BLUR");
+        assertThat(view.crossfadeSeconds()).isEqualTo(6);
+
+        service.setItemFit(email, s.getId(), 1, "FILL"); // night.mp4
+        List<Long> ids = view.playlist().stream().map(m -> m.id()).toList();
+        service.setItems(email, s.getId(), StreamItem.Kind.VIDEO, List.of(ids.get(1), ids.get(0))); // reorder
+        view = service.view(email, s.getId());
+        assertThat(view.playlist()).extracting(m -> m.title() + ":" + m.fit()).containsExactly("night.mp4:FILL", "rain.mp4:null");
+
+        StudioSpec spec = service.studioSpec(streams.findById(s.getId()).orElseThrow(), null);
+        assertThat(spec.fit()).isEqualTo("BLUR");
+        assertThat(spec.crossfadeSeconds()).isEqualTo(6.0);
+        assertThat(spec.videos()).extracting(StudioSpec.Media::fit).containsExactly("FILL", null);
+    }
+
+    @Test
     void stopAtUsesTheCreatorsTimeZone() {
         String email = newUser(PlanType.ESSENTIALS);
         LiveStream s = ready(email);

@@ -27,4 +27,6 @@ public interface StreamIncidentRepository extends JpaRepository<StreamIncident, 
     int resolve(@Param("jobId") Long jobId, @Param("kind") String kind, @Param("target") String target, @Param("at") ZonedDateTime at);
 
     List<StreamIncident> findAllByJobIdAndResolvedAtIsNull(Long jobId);
+
+    List<StreamIncident> findAllByJobIdInAndKindOrderByStartedAtDesc(java.util.Collection<Long> jobIds, String kind);
 }

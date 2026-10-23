@@ -91,6 +91,10 @@ public class StreamJob {
     private Long streamId;
     /** Scene on screen, whether the phone input is live, and what's playing: reported by the worker. */
     private String scene;
+
+    /** SC-4: this run plays these media ids ("12,7,9") instead of the stream's playlist; null: the playlist. */
+    @Column(name = "playlist_override", columnDefinition = "TEXT")
+    private String playlistOverride;
     private Boolean inputLive;
     @Column(name = "now_playing", columnDefinition = "TEXT")
     private String nowPlaying;

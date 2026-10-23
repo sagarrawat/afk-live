@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -32,8 +32,9 @@ jobs:
           cache-dependency-path: afklive-ui/package-lock.json
 
       # Build ONLY the web module (saves time); this also builds afklive-ui into it
+      # Tests ran on the pull request (PR checks, with FFmpeg); here we only build what we ship.
       - name: Build Web Module
-        run: mvn clean package -pl afklive-web -am
+        run: mvn -B clean package -pl afklive-web -am -DskipTests -DskipUiTests
 
       # Fix: Path is now inside the sub-module
       - name: Copy JAR to DigitalOcean VM

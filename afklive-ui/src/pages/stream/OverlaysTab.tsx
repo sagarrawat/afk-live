@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Clock, Image as ImageIcon, Plus, Timer, Trash2, Type, Rss } from 'lucide-react';
+import { Clock, Image as ImageIcon, Music, Plus, Timer, Trash2, Type, Rss } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { MediaPicker } from '@/components/MediaPicker';
 import { isOnAir } from '@/components/status';
@@ -38,12 +38,13 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
 
   const visibleIn = (o: Overlay) => scene === 'ALL' || !o.scene || o.scene === scene;
   const set = (id: string, patch: Partial<Overlay>) => setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  const add = (type: Overlay['type']) => {
+  const add = (type: AddKind) => {
     if (type === 'IMAGE') {
       setPicking('image');
       return;
     }
-    const o = { ...newOverlay(type), scene: scene === 'ALL' ? null : scene };
+    const made = type === 'NOW_PLAYING' ? nowPlayingOverlay(s.music.length > 0) : newOverlay(type);
+    const o = { ...made, scene: scene === 'ALL' ? null : scene };
     setLayers((ls) => [...ls, o]);
     setSelected(o.id);
   };
@@ -138,10 +139,18 @@ function sceneColor(scenes: Scene[], scene: string): string {
   return sc?.color && scene !== 'LIVE' ? sc.color : '#1b2230';
 }
 
-function AddMenu({ onAdd }: { onAdd: (t: Overlay['type']) => void }) {
+export type AddKind = Overlay['type'] | 'NOW_PLAYING';
+
+/** OV-2: a ready-made "now playing" line: the music track when there's music, else the video. */
+export function nowPlayingOverlay(hasMusic: boolean): Overlay {
+  return { ...newOverlay('TEXT'), id: `now-${Math.random().toString(36).slice(2, 7)}`, y: 0.86, size: 0.04, text: hasMusic ? '♪ {track}' : 'Now playing: {title}' };
+}
+
+function AddMenu({ onAdd }: { onAdd: (t: AddKind) => void }) {
   const [open, setOpen] = useState(false);
-  const items: [Overlay['type'], string, typeof Type][] = [
+  const items: [AddKind, string, typeof Type][] = [
     ['IMAGE', 'Image or logo', ImageIcon],
+    ['NOW_PLAYING', 'Now playing', Music],
     ['TEXT', 'Text', Type],
     ['TICKER', 'Scrolling ticker', Rss],
     ['CLOCK', 'Clock', Clock],
@@ -300,7 +309,11 @@ function LayerEditor({ overlay: o, onChange, onPickImage }: { overlay: Overlay; 
     <Panel title={`Edit ${overlayName(o).toLowerCase()}`}>
       <div className="space-y-4">
         {hasText && (
-          <Field label={o.type === 'COUNTDOWN' ? 'Label' : 'Text'} htmlFor="ov-text">
+          <Field
+            label={o.type === 'COUNTDOWN' ? 'Label' : 'Text'}
+            htmlFor="ov-text"
+            hint={o.type === 'COUNTDOWN' ? undefined : 'Fills in as it plays: {title} the video, {next} the one after, {track} the music.'}
+          >
             <Input id="ov-text" value={o.text ?? ''} maxLength={300} onChange={(e) => onChange({ text: e.target.value })} />
           </Field>
         )}

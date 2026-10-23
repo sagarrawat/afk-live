@@ -37,12 +37,23 @@ public record StudioSpec(
         String timeZone,
         Position resume,
         Phone phone,
-        boolean finishAfterPass
+        boolean finishAfterPass,
+        String fit,
+        double crossfadeSeconds
 ) {
+
+    /** Without fit (PL-6) and crossfade (AU-3): the stream's fit is FIT and music cuts straight. */
+    public StudioSpec(int height, boolean vertical, int fps, String source, List<Media> videos, String order, int loops,
+                      List<Media> music, String musicOrder, String audioMode, double videoVolume, double musicVolume,
+                      List<OverlaySetting> overlays, List<SceneSetting> scenes, String initialScene, String timeZone,
+                      Position resume, Phone phone, boolean finishAfterPass) {
+        this(height, vertical, fps, source, videos, order, loops, music, musicOrder, audioMode, videoVolume, musicVolume,
+                overlays, scenes, initialScene, timeZone, resume, phone, finishAfterPass, null, 0);
+    }
 
     public StudioSpec withFinishAfterPass() {
         return new StudioSpec(height, vertical, fps, source, videos, order, loops, music, musicOrder, audioMode,
-                videoVolume, musicVolume, overlays, scenes, initialScene, timeZone, resume, phone, true);
+                videoVolume, musicVolume, overlays, scenes, initialScene, timeZone, resume, phone, true, fit, crossfadeSeconds);
     }
 
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper()
@@ -79,7 +90,15 @@ public record StudioSpec(
     public static final String ENDING = "ENDING";
 
     /** A library file: id for now-playing and resume, storage key to fetch it. */
-    public record Media(String id, String key, String title, double duration, Boolean hasAudio) {
+    /** {@code fit}: this item's own fit (PL-6), or null for the stream's. {@code gainDb}: loudness correction (AU-5). */
+    public record Media(String id, String key, String title, double duration, Boolean hasAudio, String fit, double gainDb) {
+        public Media(String id, String key, String title, double duration, Boolean hasAudio) {
+            this(id, key, title, duration, hasAudio, null, 0);
+        }
+
+        public Media(String id, String key, String title, double duration, Boolean hasAudio, String fit) {
+            this(id, key, title, duration, hasAudio, fit, 0);
+        }
     }
 
     /**

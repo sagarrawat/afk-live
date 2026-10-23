@@ -118,6 +118,14 @@ public class LiveStream {
     @Column(name = "srt_latency_ms", nullable = false)
     private int srtLatencyMs = 1000;
 
+    /** PL-6 / MS-10: FIT (bars), FILL (crop) or BLUR (blurred background); items may override. */
+    @Column(nullable = false, length = 10)
+    private String fit = "FIT";
+
+    /** AU-3: seconds the music overlaps from one track into the next (0: straight cut). */
+    @Column(name = "crossfade_seconds", nullable = false)
+    private int crossfadeSeconds = 0;
+
     @Column(name = "created_at", nullable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now();
 

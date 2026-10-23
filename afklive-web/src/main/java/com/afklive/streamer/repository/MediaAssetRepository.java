@@ -54,4 +54,16 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, Long>,
     List<MediaAsset> findAllByIdIn(java.util.Collection<Long> ids);
 
     boolean existsByUserEmailAndTitle(String email, String title);
+
+    /** AU-5: ready files with sound whose loudness hasn't been measured yet (older uploads), oldest first. */
+    @org.springframework.data.jpa.repository.Query("SELECT a.id FROM MediaAsset a WHERE a.status = com.afklive.streamer.model.MediaStatus.READY "
+            + "AND a.loudnessChecked = false AND (a.contentType = com.afklive.streamer.model.MediaAsset.ContentType.AUDIO "
+            + "OR (a.contentType = com.afklive.streamer.model.MediaAsset.ContentType.VIDEO AND a.hasAudio = true)) ORDER BY a.id")
+    List<Long> findNeedingLoudness(org.springframework.data.domain.Pageable page);
+
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("UPDATE MediaAsset a SET a.loudnessLufs = :lufs, a.loudnessChecked = true WHERE a.id = :id")
+    int setLoudness(@org.springframework.data.repository.query.Param("id") Long id,
+                    @org.springframework.data.repository.query.Param("lufs") Double lufs);
 }

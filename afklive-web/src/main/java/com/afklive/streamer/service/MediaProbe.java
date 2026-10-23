@@ -74,6 +74,56 @@ public class MediaProbe {
         }
     }
 
+    /**
+     * AU-5: integrated loudness (EBU R128) of a file's sound in LUFS, or null if it can't be measured
+     * or is silent. Decodes the whole sound track once (at low priority); a few seconds per hour of audio.
+     */
+    public Double loudness(String file) {
+        List<String> command = new java.util.ArrayList<>();
+        if (java.nio.file.Files.isExecutable(java.nio.file.Path.of("/usr/bin/nice"))) {
+            command.addAll(List.of("/usr/bin/nice", "-n", "15"));
+        }
+        command.addAll(List.of(com.afklive.streamer.service.FFmpegCommandBuilder.ffmpegBinary(), "-hide_banner", "-nostdin", "-nostats",
+                "-i", file, "-vn", "-sn", "-dn", "-af", "ebur128=framelog=quiet", "-f", "null", "-"));
+        Path err = null;
+        try {
+            err = java.nio.file.Files.createTempFile("loudness-", ".log");
+            Process process = new ProcessBuilder(command).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(err.toFile()).start();
+            if (!process.waitFor(15, TimeUnit.MINUTES)) {
+                process.destroyForcibly();
+                return null;
+            }
+            return process.exitValue() == 0 ? parseLoudness(java.nio.file.Files.readString(err)) : null;
+        } catch (IOException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        } finally {
+            if (err != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(err);
+                } catch (IOException ignored) {
+                    // temp file
+                }
+            }
+        }
+    }
+
+    /** The "I: -16.2 LUFS" line of ebur128's summary; null for silence (-70 LUFS) or no summary. */
+    static Double parseLoudness(String log) {
+        int summary = log.lastIndexOf("Summary:");
+        if (summary < 0) {
+            return null;
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("I:\\s+(-?[0-9.]+|-inf) LUFS").matcher(log.substring(summary));
+        if (!m.find() || m.group(1).equals("-inf")) {
+            return null;
+        }
+        double v = Double.parseDouble(m.group(1));
+        return v <= -69 ? null : v;
+    }
+
     static MediaInfo parse(byte[] ffprobeJson) throws IOException {
         JsonNode root = JSON.readTree(ffprobeJson);
         JsonNode streams = root.path("streams");

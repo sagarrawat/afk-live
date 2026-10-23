@@ -160,6 +160,35 @@ class AlertsTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void aFileTheWorkerSkippedIsReportedOnceADay() {
+        // PL-7: the worker lists skipped files with its heartbeat; the creator hears about each once.
+        ZonedDateTime t = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
+        StreamJob job = liveJob(StreamStates.LIVE, t);
+        job.setNowPlaying("{\"title\":\"rain.mp4\",\"failed\":[{\"mediaId\":42,\"title\":\"broken.mov\",\"reason\":\"Invalid data\"}]}");
+        jobs.save(job);
+        monitor.check(t);
+        monitor.check(t.plusSeconds(30));
+        assertThat(types()).containsExactly(NotificationService.Types.ITEM_FAILED);
+        assertThat(notifications.findTop50ByUserIdOrderByCreatedAtDesc(owner.getId()).getFirst().getTitle()).isEqualTo("broken.mov was skipped");
+    }
+
+    @Test
+    void alertPreferencesPerKind() throws Exception {
+        // NT-3.
+        mvc.perform(get("/api/notifications/preferences").with(user(owner.getEmail()).roles("USER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("STREAM"))
+                .andExpect(jsonPath("$[0].email").value(true));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/notifications/preferences")
+                        .with(user(owner.getEmail()).roles("USER")).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"PHONE\":{\"email\":false,\"push\":true},\"NOPE\":{\"email\":false,\"push\":false}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id=='PHONE')].email").value(false));
+        assertThat(users.findById(owner.getId()).orElseThrow().getAlertPreferences()).contains("PHONE").doesNotContain("NOPE");
+    }
+
+    @Test
     void repeatsAreSuppressedWithinTheirWindow() {
         NotificationService.Alert a = new NotificationService.Alert(NotificationService.Types.STORAGE_ALMOST_FULL,
                 Notification.Level.WARNING, null, "Your library is 85% full", "Free space.", "/library", "storage",

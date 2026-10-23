@@ -35,4 +35,35 @@ class MediaProbeTest {
         assertThat(info.fps()).isEqualTo(25.0);
         assertThat(info.hasAudio()).isFalse();
     }
+
+    @Test
+    void readsTheIntegratedLoudnessFromTheSummary() {
+        String log = """
+                [Parsed_ebur128_0 @ 0x1] Summary:
+
+                  Integrated loudness:
+                    I:         -18.3 LUFS
+                    Threshold: -28.4 LUFS
+                """;
+        assertThat(MediaProbe.parseLoudness(log)).isEqualTo(-18.3);
+        assertThat(MediaProbe.parseLoudness("Summary:\n  I:         -70.0 LUFS")).isNull(); // silence
+        assertThat(MediaProbe.parseLoudness("no summary")).isNull();
+    }
+
+    @Test
+    void measuresARealFile() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("loud");
+        java.nio.file.Path quiet = dir.resolve("quiet.m4a");
+        java.nio.file.Path loud = dir.resolve("loud.m4a");
+        for (var f : new Object[][]{{quiet, "0.05"}, {loud, "0.5"}}) {
+            Process p = new ProcessBuilder("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=f=440:r=44100:d=4",
+                    "-af", "volume=" + f[1], "-c:a", "aac", f[0].toString()).start();
+            org.junit.jupiter.api.Assumptions.assumeTrue(p.waitFor() == 0, "ffmpeg not available");
+        }
+        MediaProbe probe = new MediaProbe();
+        Double q = probe.loudness(quiet.toString());
+        Double l = probe.loudness(loud.toString());
+        assertThat(q).isNotNull();
+        assertThat(l - q).as("10x the amplitude is 20 dB louder").isBetween(19.0, 21.0);
+    }
 }

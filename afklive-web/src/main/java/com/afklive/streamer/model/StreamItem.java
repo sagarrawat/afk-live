@@ -31,6 +31,10 @@ public class StreamItem {
     @JoinColumn(name = "media_asset_id", nullable = false)
     private MediaAsset media;
 
+    /** PL-6: this item's own fit (FIT, FILL, BLUR); null follows the stream. */
+    @Column(length = 10)
+    private String fit;
+
     public StreamItem(Long streamId, Kind kind, int position, MediaAsset media) {
         this.streamId = streamId;
         this.kind = kind;

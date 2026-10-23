@@ -29,8 +29,13 @@ public final class StreamDtos {
         }
     }
 
+    /** {@code fit}: the item's own fit (PL-6), null when it follows the stream. */
     public record MediaRef(Long id, String title, Double durationSeconds, Integer width, Integer height,
-                           String contentType, String status) {
+                           String contentType, String status, String fit) {
+    }
+
+    /** PL-6 / AU-3: how pictures fill the frame, and the music crossfade. Either may be left out. */
+    public record Presentation(String fit, Integer crossfadeSeconds) {
     }
 
     public record TargetView(Long destinationId, String name, String type, boolean enabled) {
@@ -57,15 +62,23 @@ public final class StreamDtos {
                             Health health, String endReason) {
     }
 
+    /** {@code playlist}: the slot's own videos (SC-4); empty plays the stream's playlist. */
     public record ScheduleView(Long id, String kind, ZonedDateTime startAt, ZonedDateTime endAt, List<String> daysOfWeek,
                                String startTime, String endTime, String timeZone, List<String> skipDates,
-                               boolean enabled, ZonedDateTime nextStart, String lastError) {
+                               boolean enabled, ZonedDateTime nextStart, String lastError, List<SlotItem> playlist) {
+    }
+
+    public record SlotItem(Long id, String title) {
     }
 
     /** startAt/endAt are local date-times (yyyy-MM-ddTHH:mm) in {@code timeZone}; startTime/endTime HH:mm. */
     public record ScheduleRequest(String kind, String startAt, String endAt, List<String> daysOfWeek,
                                   String startTime, String endTime, String timeZone, List<String> skipDates,
-                                  Boolean enabled) {
+                                  Boolean enabled, List<Long> playlist) {
+        public ScheduleRequest(String kind, String startAt, String endAt, List<String> daysOfWeek, String startTime,
+                               String endTime, String timeZone, List<String> skipDates, Boolean enabled) {
+            this(kind, startAt, endAt, daysOfWeek, startTime, endTime, timeZone, skipDates, enabled, null);
+        }
     }
 
     public record StreamView(Long id, String name, String source, String orientation, int qualityHeight, int fps,
@@ -74,7 +87,7 @@ public final class StreamDtos {
                              List<StudioSpec.OverlaySetting> overlays, List<StudioSpec.SceneSetting> scenes,
                              List<MediaRef> playlist, List<MediaRef> music, double totalRuntimeSeconds,
                              List<TargetView> destinations, List<ScheduleView> schedules, LiveState live,
-                             PhoneSettings phone) {
+                             PhoneSettings phone, String fit, int crossfadeSeconds) {
     }
 
     /** Phone streams: what happens when the signal drops, and the SRT buffer. */
@@ -102,5 +115,15 @@ public final class StreamDtos {
 
     public record RunView(Long jobId, ZonedDateTime startedAt, ZonedDateTime endedAt, String status, String endReason,
                           int restarts) {
+    }
+
+    /** RE-4: share of on-air time without an outage, per window; null when it wasn't on air then. */
+    public record UptimeWindow(String label, long onAirSeconds, long downSeconds, Double percent) {
+    }
+
+    public record Outage(ZonedDateTime startedAt, ZonedDateTime resolvedAt) {
+    }
+
+    public record Uptime(List<UptimeWindow> windows, List<Outage> outages) {
     }
 }

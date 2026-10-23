@@ -71,4 +71,4 @@ export const get = <T>(path: string) => api<T>(path);
 export const post = <T>(path: string, json?: Json) => api<T>(path, { method: 'POST', json: json ?? {} });
 export const put = <T>(path: string, json?: Json) => api<T>(path, { method: 'PUT', json: json ?? {} });
 export const patch = <T>(path: string, json?: Json) => api<T>(path, { method: 'PATCH', json: json ?? {} });
-export const del = <T>(path: string) => api<T>(path, { method: 'DELETE' });
+export const del = <T>(path: string, json?: Json) => api<T>(path, json === undefined ? { method: 'DELETE' } : { method: 'DELETE', json });

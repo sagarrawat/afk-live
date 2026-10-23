@@ -10,7 +10,7 @@ import java.time.Instant;
  * @param y        top edge, 0..1 of canvas height (ignored by tickers when {@code bottom} anchoring is used)
  * @param width    IMAGE: width as a fraction of canvas width (height keeps the image's aspect)
  * @param size     text height as a fraction of canvas height (e.g. 0.04)
- * @param text     TEXT and TICKER content; may contain {title} / {next} (filled from the playlist)
+ * @param text     TEXT and TICKER content; may contain {title} / {next} (the video playlist) and {track} (the music)
  * @param image    IMAGE: a PNG/JPG on this worker
  * @param color    text colour 0xRRGGBB
  * @param background box colour 0xAARRGGBB (alpha 0 = no box)
