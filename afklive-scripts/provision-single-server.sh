@@ -94,20 +94,21 @@ INGEST_READ_PASS=$(alnum 20)
 INGEST_READ_ALLOWED=127.0.0.0/8,::1/128
 INGEST_AUTH_SECRET=$(alnum 24)
 
-# Fill these in, then: sudo systemctl restart afklive afklive-worker
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-ZEPTOMAIL_URL=
-ZEPTOMAIL_TOKEN=
+# Fill these in (remove the "# "), then: sudo systemctl restart afklive afklive-worker
+# An empty value overrides the app's default, so leave unused ones commented out.
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# ZEPTOMAIL_URL=
+# ZEPTOMAIL_TOKEN=
 APP_EMAIL_SUPPORT=support@$DOMAIN
 APP_EMAIL_NO_REPLY=no-reply@$DOMAIN
-PHONEPE_CLIENT_ID=
-PHONEPE_CLIENT_SECRET=
+# PHONEPE_CLIENT_ID=
+# PHONEPE_CLIENT_SECRET=
 PHONEPE_ENV=SANDBOX
 APP_BILLING_SELLER_NAME=AFK Live
-APP_BILLING_SELLER_ADDRESS=
-APP_BILLING_SELLER_GSTIN=
-APP_BILLING_SELLER_STATE=
+# APP_BILLING_SELLER_ADDRESS=
+# APP_BILLING_SELLER_GSTIN=
+# APP_BILLING_SELLER_STATE=
 EOF
   chown root:afklive "$ENV" && chmod 640 "$ENV"
 fi
