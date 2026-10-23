@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  content: ['./index.html', './src/**/*.{ts,tsx}', './site/**/*.{html,ts}', '../afklive-web/src/main/resources/templates/{login,register,forgot-password,reset-password}.html'],
   darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {

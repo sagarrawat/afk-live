@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p . && vite build",
+    "build": "tsc --noEmit -p . && vite build && vite build -c vite.site.config.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "dev:site": "vite -c vite.site.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

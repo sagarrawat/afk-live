@@ -137,7 +137,7 @@ are aborted and give the space back.
 The bucket needs a CORS rule so browsers can PUT parts and read the ETag:
 
 ```json
-[{"AllowedOrigins": ["https://afklive.com"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"],
+[{"AllowedOrigins": ["https://afk.live"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"],
   "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3600}]
 ```
 
