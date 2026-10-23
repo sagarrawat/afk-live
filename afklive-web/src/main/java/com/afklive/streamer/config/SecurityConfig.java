@@ -90,7 +90,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/api/payment/callback", "/internal/ingest/auth")
+                        .ignoringRequestMatchers("/api/payment/callback", "/internal/ingest/auth", "/internal/worker/**")
                 )
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 // ON-6 / ON-7: a second sign-in step for two-step accounts; accounts scheduled for deletion are closed.
@@ -105,6 +105,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/payment/callback").permitAll()
                         // Ingest server (MediaMTX) auth hook; verified by a shared secret in the controller.
                         .requestMatchers("/internal/ingest/auth").permitAll()
+                        // OPS-3: worker process only, localhost only; checks a shared token in the controller.
+                        .requestMatchers("/internal/worker/**").permitAll()
 
                         // 2. ADMIN (raw FFmpeg logs include every user's streams). /admin/** only redirects
                         //    old bookmarks to the app's admin console (/studio/admin, which checks the role too).

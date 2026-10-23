@@ -60,9 +60,20 @@ public class StudioRuns {
     }
 
     public Handle start(long jobId, StreamSpec spec, String scene, Studio.Listener listener) throws IOException {
+        return start(jobId, spec, scene, listener, null);
+    }
+
+    /**
+     * @param handoverPosition OPS-3: where the worker handing this stream over is now; wins over the saved
+     *                         position (which can be up to 10 s old). Null otherwise.
+     */
+    public Handle start(long jobId, StreamSpec spec, String scene, Studio.Listener listener,
+                        StudioSpec.Position handoverPosition) throws IOException {
         Path workDir = preparer.newWorkDir(jobId);
         StudioSpec.Position resume = spec.studio().resume();
-        if (spec.streamId() != null) {
+        if (handoverPosition != null) {
+            resume = handoverPosition;
+        } else if (spec.streamId() != null) {
             // The latest saved position wins: after a restart or takeover, continue where it was.
             String saved = streams.findById(spec.streamId()).map(LiveStream::getResumePosition).orElse(null);
             if (saved != null) {
@@ -102,6 +113,16 @@ public class StudioRuns {
             }
             h.lastSaveNanos = System.nanoTime();
         }
+    }
+
+    /** OPS-3: the playlist position right now, for a handover offer; null without a playlist or before it plays. */
+    public StudioSpec.Position position(Handle h) {
+        PlaylistFeed playlist = h.built.playlist();
+        if (h.closed || playlist == null) {
+            return null;
+        }
+        PlaylistFeed.Position p = playlist.position();
+        return p.itemId() == null ? null : new StudioSpec.Position(p.itemId(), p.offsetSeconds(), p.loopsCompleted());
     }
 
     /** Applies one command from the web app. Runs on the worker's command thread; the studio applies it between frames. */

@@ -175,6 +175,29 @@ public final class StreamRunner {
     }
 
     /**
+     * OPS-3: stops the relays at these positions and waits (up to {@code wait}) until their processes
+     * have exited, so the platform has seen the disconnect before another worker connects in their place.
+     * The encoder and the other destinations keep running.
+     */
+    public void dropRelays(java.util.Collection<Integer> positions, Duration wait) {
+        List<Relay> dropped;
+        synchronized (this) {
+            List<List<String>> commands = new ArrayList<>(relayCommands);
+            for (int p : positions) {
+                if (p >= 0 && p < commands.size()) {
+                    commands.set(p, null);
+                }
+            }
+            dropped = relays.stream().filter(r -> positions.contains(r.position)).toList();
+            setRelays(commands);
+        }
+        long deadline = System.nanoTime() + wait.toNanos();
+        for (Relay r : dropped) {
+            r.awaitDone(Duration.ofNanos(Math.max(1, deadline - System.nanoTime())));
+        }
+    }
+
+    /**
      * GL-5: drop and redial every destination (a platform got stuck), without touching the encoder,
      * so the playlist carries on where it is. Each relay restarts straight away, not after a backoff.
      */
