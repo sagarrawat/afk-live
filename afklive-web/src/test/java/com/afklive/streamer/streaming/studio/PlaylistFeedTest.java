@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import static com.afklive.streamer.streaming.studio.StudioFixtures.CANVAS;
@@ -132,7 +133,30 @@ class PlaylistFeedTest {
             assertThat(order).last().isEqualTo("c");
             assertThat(feed.finished()).isTrue();
             assertThat(feed.framesPlayed()).isBetween(55L, 65L);
+            // PL-7: the skipped file is reported, so the creator can be told.
+            assertThat(feed.failedItems()).extracting(f -> f.item().title()).containsExactly("Broken");
         }
+    }
+
+    @Test
+    void overlaysCanNameTheMusicTrackAndTheVideo() throws Exception {
+        // OV-2: {track} is the music bed's current song, {title} the video; file names read cleanly.
+        PlaylistFeed.Item song = new PlaylistFeed.Item("s", "chill_beat-01.mp3", StudioFixtures.audio(dir, "song2", 1.5, 330), true, 1.5);
+        try (PlaylistFeed video = new PlaylistFeed(CANVAS, List.of(c), PlaylistFeed.Order.IN_ORDER, 1,
+                null, StudioFixtures.factory(dir), false, new Random(1));
+             PlaylistFeed music = new PlaylistFeed(CANVAS, List.of(song), PlaylistFeed.Order.IN_ORDER, 1,
+                     null, StudioFixtures.factory(dir), true, new Random(1))) {
+            Frame f = new Frame(CANVAS);
+            for (int i = 0; i < 400 && (video.nowPlaying() == null || music.nowPlaying() == null || music.nowPlaying().item() == null); i++) {
+                video.next(f);
+                music.next(f);
+                Thread.sleep(5);
+            }
+            Map<String, String> vars = Studio.vars(new Studio.Scene("LIVE", video, music, 1, 1, List.of(), null));
+            assertThat(vars).containsEntry("title", "Clip C").containsEntry("track", "chill beat-01");
+        }
+        assertThat(Studio.displayTitle("Rainy window, Kyoto.mp4")).isEqualTo("Rainy window, Kyoto");
+        assertThat(Studio.displayTitle("notes.v2")).isEqualTo("notes.v2");
     }
 
     @Test

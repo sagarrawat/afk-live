@@ -145,6 +145,9 @@ app:
   email:
     support: ${APP_EMAIL_SUPPORT:test@test.com}
     no-reply: ${APP_EMAIL_NO_REPLY:test@test.com}
+  push:
+    # NT-1 / MB-2: push alerts. A P-256 key in SEC1 DER, base64 (afklive-scripts/vapid-key.sh). Empty: off.
+    vapid-key: ${APP_PUSH_VAPID_KEY:}
   zeptomail:
     url: ${ZEPTOMAIL_URL:}
     token: ${ZEPTOMAIL_TOKEN:}

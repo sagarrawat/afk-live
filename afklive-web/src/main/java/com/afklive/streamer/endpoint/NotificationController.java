@@ -21,6 +21,42 @@ public class NotificationController {
 
     private final NotificationService notifications;
     private final UserRepository users;
+    private final com.afklive.streamer.service.PushService push;
+
+    /** NT-1 / MB-2: whether push alerts are available, the key browsers subscribe with, and this user's devices. */
+    public record PushInfo(boolean available, String publicKey, long devices) {
+    }
+
+    public record PushKeys(String p256dh, String auth) {
+    }
+
+    public record PushSubscribe(String endpoint, PushKeys keys) {
+    }
+
+    @GetMapping("/push")
+    public PushInfo pushInfo(Principal principal) {
+        return new PushInfo(push.enabled(), push.publicKey(), push.devices(user(principal).getId()));
+    }
+
+    @PostMapping("/push")
+    public PushInfo subscribe(@RequestBody PushSubscribe body, Principal principal,
+                              @RequestHeader(value = "User-Agent", required = false) String ua) {
+        User u = user(principal);
+        if (body == null || body.keys() == null) {
+            throw new IllegalArgumentException("That browser subscription isn't valid.");
+        }
+        push.subscribe(u.getId(), body.endpoint(), body.keys().p256dh(), body.keys().auth(), ua);
+        return new PushInfo(true, push.publicKey(), push.devices(u.getId()));
+    }
+
+    @DeleteMapping("/push")
+    public PushInfo unsubscribe(@RequestBody PushSubscribe body, Principal principal) {
+        User u = user(principal);
+        if (body != null && body.endpoint() != null) {
+            push.unsubscribe(u.getId(), body.endpoint());
+        }
+        return new PushInfo(push.enabled(), push.publicKey(), push.devices(u.getId()));
+    }
 
     public record Feed(long unread, boolean emailAlerts, List<Notification> items) {
     }

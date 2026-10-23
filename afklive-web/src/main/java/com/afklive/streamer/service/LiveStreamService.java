@@ -53,6 +53,8 @@ public class LiveStreamService {
     private final UserRepository users;
     private final IngestService ingest;
     private final NotificationService notifications;
+    private final com.afklive.streamer.repository.StreamJobDestinationRepository jobDestinations;
+    private final com.afklive.streamer.repository.StreamIncidentRepository incidents;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -189,6 +191,41 @@ public class LiveStreamService {
         return s;
     }
 
+    /**
+     * ST-4: a copy to start a similar channel from: name, picture settings, playlist, music, audio,
+     * overlays and scenes. Destinations come along switched off (two streams on one key would fight)
+     * and schedules stay behind; a phone stream gets its own new ingest key.
+     */
+    @Transactional
+    public LiveStream duplicate(String email, Long id) {
+        LiveStream src = get(email, id);
+        String base = src.getName().length() > 92 ? src.getName().substring(0, 92) : src.getName();
+        LiveStream copy = create(email, new CreateStream(base + " (copy)", src.getSource().name(), src.getOrientation().name(),
+                src.getQualityHeight(), src.getFps()));
+        copy.setPlaybackOrder(src.getPlaybackOrder());
+        copy.setLoopCount(src.getLoopCount());
+        copy.setMusicOrder(src.getMusicOrder());
+        copy.setAudioMode(src.getAudioMode());
+        copy.setVideoVolume(src.getVideoVolume());
+        copy.setMusicVolume(src.getMusicVolume());
+        copy.setOverlays(src.getOverlays());
+        copy.setScenes(src.getScenes());
+        copy.setTimeZone(src.getTimeZone());
+        copy.setEndOnInputLoss(src.isEndOnInputLoss());
+        copy.setInputGraceSeconds(src.getInputGraceSeconds());
+        copy.setSrtLatencyMs(src.getSrtLatencyMs());
+        copy = streams.save(copy);
+        for (StreamItem.Kind kind : StreamItem.Kind.values()) {
+            for (StreamItem i : items.findAllByStreamIdAndKindOrderByPositionAsc(src.getId(), kind)) {
+                items.save(new StreamItem(copy.getId(), kind, i.getPosition(), i.getMedia()));
+            }
+        }
+        for (StreamTarget t : targets.findAllByStreamId(src.getId())) {
+            targets.save(new StreamTarget(copy.getId(), t.getDestinationId(), false));
+        }
+        return copy;
+    }
+
     @Transactional
     public void delete(String email, Long id) {
         LiveStream s = get(email, id);
@@ -254,9 +291,62 @@ public class LiveStreamService {
             throw new IllegalArgumentException("Your " + plan.getDisplayName() + " plan sends a stream to " + plan.getMaxDestinations()
                     + " destination" + (plan.getMaxDestinations() == 1 ? "" : "s") + " at once. Upgrade to add more.");
         }
+        Optional<StreamJob> live = currentJob(s);
+        if (live.isPresent() && enabled == 0) {
+            throw new IllegalArgumentException("A live stream needs at least one destination. Stop the stream to turn off the last one.");
+        }
         targets.deleteAll(targets.findAllByStreamId(id));
         targets.flush();
         targets.saveAll(next);
+        live.ifPresent(job -> applyTargetsLive(job, s));
+    }
+
+    /**
+     * DS-5: destinations turned on or off while live reach the running stream without touching the
+     * others. Positions in the run's list never change (destination health is keyed by them): a
+     * destination turned off stays in the list marked off; a new one is added at the end.
+     */
+    private void applyTargetsLive(StreamJob job, LiveStream s) {
+        StreamSpec spec = StreamSpec.fromJson(job.getSpec());
+        List<StreamSpec.Destination> current = spec.destinations() == null ? List.of() : spec.destinations();
+        List<StreamSpec.Destination> next = new ArrayList<>();
+        boolean[] wanted = new boolean[current.size()];
+        List<StreamDestination> added = new ArrayList<>();
+        for (StreamDestination d : enabledDestinations(s)) {
+            int match = -1;
+            for (int i = 0; i < current.size(); i++) {
+                if (!wanted[i] && java.util.Objects.equals(current.get(i).url(), d.getStreamKey())) {
+                    match = i;
+                    break;
+                }
+            }
+            if (match >= 0) {
+                wanted[match] = true;
+            } else {
+                added.add(d);
+            }
+        }
+        for (int i = 0; i < current.size(); i++) {
+            next.add(current.get(i).withOff(!wanted[i]));
+        }
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        for (StreamDestination d : added) {
+            String name = d.getName() == null ? "Destination" : d.getName();
+            next.add(new StreamSpec.Destination(name, d.getStreamKey()));
+            StreamJobDestination row = new StreamJobDestination(job, next.size() - 1, name);
+            row.setUpdatedAt(now);
+            jobDestinations.save(row);
+        }
+        if (next.equals(current)) {
+            return;
+        }
+        for (int i = 0; i < current.size(); i++) {
+            if (next.get(i).off() != current.get(i).off()) {
+                jobDestinations.updateState(job.getId(), i, next.get(i).off() ? "OFF" : "CONNECTING", 0, null, now);
+            }
+        }
+        jobs.updateSpec(job.getId(), spec.withDestinations(next).toJson());
+        command(job, StreamCommand.Type.TARGETS, StreamSpec.destinationsJson(next));
     }
 
     // ------------------------------------------------------------------ overlays and scenes
@@ -588,6 +678,12 @@ public class LiveStreamService {
     }
 
     @Transactional
+    /** GL-5: redial every destination; the picture and the playlist carry on. */
+    public void reconnect(String email, Long id) {
+        StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
+        command(job, StreamCommand.Type.RECONNECT, null);
+    }
+
     public void skip(String email, Long id) {
         StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         command(job, StreamCommand.Type.SKIP, null);
@@ -598,6 +694,49 @@ public class LiveStreamService {
         return jobs.findTop20ByStreamIdOrderByStartTimeDesc(id).stream()
                 .map(j -> new RunView(j.getId(), j.getStartTime(), j.getEndTime(), j.getStatus(), j.getEndReason(), j.getRestarts()))
                 .toList();
+    }
+
+    /**
+     * RE-4: for the last 24 hours, 7 and 30 days, how much of the time the stream was on air it was
+     * also up. "Down" is an outage the alert monitor recorded (down for a minute or more); shorter
+     * hiccups don't count, the same line the alerts use.
+     */
+    public com.afklive.streamer.dto.StreamDtos.Uptime uptime(String email, Long id, ZonedDateTime now) {
+        get(email, id);
+        List<StreamJob> runs = jobs.findRunsSince(id, now.minusDays(30));
+        Map<Long, StreamJob> byId = new HashMap<>();
+        runs.forEach(j -> byId.put(j.getId(), j));
+        List<com.afklive.streamer.model.StreamIncident> downs = byId.isEmpty() ? List.of()
+                : incidents.findAllByJobIdInAndKindOrderByStartedAtDesc(byId.keySet(), "DOWN");
+        List<com.afklive.streamer.dto.StreamDtos.UptimeWindow> windows = new ArrayList<>();
+        for (Object[] w : new Object[][]{{"24 hours", now.minusHours(24)}, {"7 days", now.minusDays(7)}, {"30 days", now.minusDays(30)}}) {
+            ZonedDateTime from = (ZonedDateTime) w[1];
+            long onAir = 0;
+            for (StreamJob j : runs) {
+                onAir += overlap(j.getStartTime(), j.getEndTime(), from, now);
+            }
+            long down = 0;
+            for (var inc : downs) {
+                StreamJob j = byId.get(inc.getJobId());
+                ZonedDateTime end = inc.getResolvedAt() != null ? inc.getResolvedAt() : j != null && j.getEndTime() != null ? j.getEndTime() : now;
+                down += overlap(inc.getStartedAt(), end, from, now);
+            }
+            down = Math.min(down, onAir);
+            Double pct = onAir == 0 ? null : Math.floor(1000.0 * (onAir - down) / onAir) / 10.0;
+            windows.add(new com.afklive.streamer.dto.StreamDtos.UptimeWindow((String) w[0], onAir, down, pct));
+        }
+        List<com.afklive.streamer.dto.StreamDtos.Outage> outages = downs.stream().limit(20)
+                .map(i -> new com.afklive.streamer.dto.StreamDtos.Outage(i.getStartedAt(), i.getResolvedAt())).toList();
+        return new com.afklive.streamer.dto.StreamDtos.Uptime(windows, outages);
+    }
+
+    private static long overlap(ZonedDateTime start, ZonedDateTime end, ZonedDateTime from, ZonedDateTime to) {
+        if (start == null) {
+            return 0;
+        }
+        ZonedDateTime a = start.isAfter(from) ? start : from;
+        ZonedDateTime b = end == null || end.isAfter(to) ? to : end;
+        return Math.max(0, java.time.Duration.between(a, b).getSeconds());
     }
 
     public List<QualityOption> qualityOptions(String email) {

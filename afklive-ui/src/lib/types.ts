@@ -203,7 +203,7 @@ export interface Destination {
   id: number;
   name: string;
   type: string;
-  platform: 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TWITCH' | 'KICK' | 'CUSTOM';
+  platform: 'YOUTUBE' | 'FACEBOOK' | 'INSTAGRAM' | 'TWITCH' | 'KICK' | 'TIKTOK' | 'RUMBLE' | 'CUSTOM';
   server: string;
   keyHint: string;
   selected: boolean;
@@ -342,4 +342,10 @@ export interface BillingProfile {
   country?: string | null;
   stateCode?: string | null;
   gstin?: string | null;
+}
+
+/** RE-4: share of on-air time without an outage; percent is null when the stream wasn't on air in that window. */
+export interface Uptime {
+  windows: { label: string; onAirSeconds: number; downSeconds: number; percent: number | null }[];
+  outages: { startedAt: string; resolvedAt?: string | null }[];
 }

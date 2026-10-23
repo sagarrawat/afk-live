@@ -476,15 +476,27 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
         return v == null || v == o.visible() ? o : o.withVisible(v);
     }
 
-    private static Map<String, String> vars(Scene scene) {
+    /** Overlay text placeholders: {title} and {next} from the video playlist, {track} from the music (OV-2). */
+    static Map<String, String> vars(Scene scene) {
+        Map<String, String> m = new HashMap<>();
         if (scene.video() instanceof PlaylistFeed p && p.nowPlaying() != null) {
             PlaylistFeed.NowPlaying np = p.nowPlaying();
-            Map<String, String> m = new HashMap<>();
-            m.put("title", np.item() == null ? "" : np.item().title());
-            m.put("next", np.upNext().isEmpty() ? "" : np.upNext().get(0).title());
-            return m;
+            m.put("title", np.item() == null ? "" : displayTitle(np.item().title()));
+            m.put("next", np.upNext().isEmpty() ? "" : displayTitle(np.upNext().get(0).title()));
         }
-        return Map.of();
+        if (scene.music() instanceof PlaylistFeed music && music.nowPlaying() != null && music.nowPlaying().item() != null) {
+            m.put("track", displayTitle(music.nowPlaying().item().title()));
+        }
+        return m;
+    }
+
+    /** "chill_beat-01.mp3" reads as "chill beat-01" on screen: no extension, no underscores. */
+    static String displayTitle(String fileTitle) {
+        if (fileTitle == null) {
+            return "";
+        }
+        String t = fileTitle.replaceFirst("(?i)\\.(mp4|mov|mkv|webm|avi|m4v|mp3|m4a|aac|wav|flac|ogg|opus)$", "");
+        return t.replace('_', ' ').trim();
     }
 
     private void finish(String reason) {

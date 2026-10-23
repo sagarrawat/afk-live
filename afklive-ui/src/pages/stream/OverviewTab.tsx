@@ -3,10 +3,10 @@ import { SkipForward, Smartphone, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HealthDot, isOnAir } from '@/components/status';
-import { Badge, Button, Panel, Toggle } from '@/components/ui';
+import { Badge, Button, Panel, Toggle, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
 import { clock, dateTime, duration } from '@/lib/format';
-import { useRuns } from '@/lib/queries';
+import { useRuns, useUptime } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
 
@@ -24,6 +24,7 @@ export function OverviewTab({ stream: s }: { stream: StreamView }) {
       <div className="space-y-6">
         {s.source === 'PHONE' ? <PhoneControl stream={s} /> : <NowPlaying stream={s} />}
         {onAir && s.overlays.length > 0 && <OverlayToggles stream={s} />}
+        <UptimePanel stream={s} />
         <RecentRuns stream={s} />
       </div>
       <div className="space-y-6">
@@ -229,6 +230,16 @@ function HealthPanel({ stream: s }: { stream: StreamView }) {
   );
 }
 
+/** GL-5: redial every destination after a platform glitch; the picture and playlist carry on. */
+function ReconnectButton({ stream: s }: { stream: StreamView }) {
+  const { busy, run } = useAction();
+  return (
+    <Button size="sm" busy={busy} title="Drops and redials every destination. The playlist carries on where it is." onClick={() => run(() => post(`/api/streams/${s.id}/reconnect`), 'Reconnecting every destination.')}>
+      Reconnect destinations
+    </Button>
+  );
+}
+
 function DestinationsPanel({ stream: s }: { stream: StreamView }) {
   const onAir = isOnAir(s.live.state);
   const health = s.live.health?.destinations ?? [];
@@ -253,6 +264,9 @@ function DestinationsPanel({ stream: s }: { stream: StreamView }) {
               </span>
             </li>
           ))}
+          <li className="pt-1">
+            <ReconnectButton stream={s} />
+          </li>
         </ul>
       ) : enabled.length === 0 ? (
         <p className="text-muted">
@@ -268,6 +282,32 @@ function DestinationsPanel({ stream: s }: { stream: StreamView }) {
           ))}
         </ul>
       )}
+    </Panel>
+  );
+}
+
+/** RE-4: how reliably this stream stays up, in numbers a creator can show a client. */
+export function UptimePanel({ stream: s }: { stream: StreamView }) {
+  const { data } = useUptime(s.id);
+  if (!data || data.windows.every((w) => w.percent === null)) return null;
+  const last = data.outages[0];
+  return (
+    <Panel title="Uptime">
+      <dl className="grid grid-cols-3 gap-3">
+        {data.windows.map((w) => (
+          <div key={w.label}>
+            <dt className="text-sm text-muted">{w.label}</dt>
+            <dd className="tnum mt-0.5 text-xl font-semibold">{w.percent === null ? '–' : `${w.percent}%`}</dd>
+            {w.percent !== null && <dd className="tnum text-xs text-muted">on air {duration(w.onAirSeconds)}</dd>}
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 text-sm text-muted">
+        {last
+          ? `Last outage ${dateTime(last.startedAt, s.timeZone)}${last.resolvedAt ? `, back after ${duration((new Date(last.resolvedAt).getTime() - new Date(last.startedAt).getTime()) / 1000)}` : ', still going'}.`
+          : 'No outages in the last 30 days.'}{' '}
+        Counts time on air; an outage is a minute or more down.
+      </p>
     </Panel>
   );
 }

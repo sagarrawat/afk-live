@@ -88,7 +88,8 @@ public class StudioRuns {
             return;
         }
         Studio.Status st = h.studio().status();
-        jobs.reportStudio(jobId, workerId, st.scene(), st.inputLive(), nowPlayingJson(st.nowPlaying()));
+        jobs.reportStudio(jobId, workerId, st.scene(), st.inputLive(),
+                nowPlayingJson(st.nowPlaying(), h.built.playlist() == null ? List.of() : h.built.playlist().failedItems()));
         PlaylistFeed playlist = h.built.playlist();
         if (h.streamId != null && playlist != null && System.nanoTime() - h.lastSaveNanos >= SAVE_POSITION_MILLIS * 1_000_000) {
             PlaylistFeed.Position p = playlist.position();
@@ -127,6 +128,9 @@ public class StudioRuns {
                 }
             }
             case RELOAD -> reload(h, StudioSpec.parse(c.getPayload(), StudioSpec.class));
+            case TARGETS, RECONNECT -> {
+                // destinations belong to the runner, not the studio: StreamWorker applies these
+            }
         }
     }
 
@@ -219,8 +223,21 @@ public class StudioRuns {
     }
 
     static String nowPlayingJson(PlaylistFeed.NowPlaying np) {
+        return nowPlayingJson(np, List.of());
+    }
+
+    /** What's playing, plus (PL-7) the items skipped because they couldn't be played, for the web app to alert on. */
+    static String nowPlayingJson(PlaylistFeed.NowPlaying np, List<PlaylistFeed.Failed> failed) {
+        List<Map<String, Object>> failures = new ArrayList<>();
+        for (PlaylistFeed.Failed f : failed) {
+            Map<String, Object> x = new LinkedHashMap<>();
+            x.put("mediaId", StudioBuilder.mediaIdOf(f.item().id()));
+            x.put("title", f.item().title() == null ? "" : f.item().title());
+            x.put("reason", f.reason() == null ? "" : f.reason().length() > 200 ? f.reason().substring(0, 200) : f.reason());
+            failures.add(x);
+        }
         if (np == null || np.item() == null) {
-            return null;
+            return failures.isEmpty() ? null : StudioSpec.json(Map.of("failed", failures));
         }
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("mediaId", StudioBuilder.mediaIdOf(np.item().id()));
@@ -232,6 +249,9 @@ public class StudioRuns {
             next.add(Map.of("mediaId", StudioBuilder.mediaIdOf(i.id()), "title", i.title() == null ? "" : i.title()));
         }
         m.put("next", next);
+        if (!failures.isEmpty()) {
+            m.put("failed", failures);
+        }
         return StudioSpec.json(m);
     }
 }

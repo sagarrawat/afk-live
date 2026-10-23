@@ -40,6 +40,7 @@ public class NotificationService {
         public static final String PAYMENT_FAILED = "PAYMENT_FAILED";
         public static final String PLAN_LIMIT = "PLAN_LIMIT";
         public static final String CREDIT_LIMIT = "CREDIT_LIMIT";
+        public static final String ITEM_FAILED = "ITEM_FAILED";
 
         private Types() {
         }
@@ -48,16 +49,18 @@ public class NotificationService {
     private final NotificationRepository notifications;
     private final UserRepository users;
     private final EmailService email;
+    private final PushService push;
     private final ExecutorService mailer = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "alert-mailer");
         t.setDaemon(true);
         return t;
     });
 
-    public NotificationService(NotificationRepository notifications, UserRepository users, EmailService email) {
+    public NotificationService(NotificationRepository notifications, UserRepository users, EmailService email, PushService push) {
         this.notifications = notifications;
         this.users = users;
         this.email = email;
+        this.push = push;
     }
 
     /** One alert to send. {@code dedupeKey} + {@code dedupeWindow}: skip if the same key was sent within the window. */
@@ -107,6 +110,12 @@ public class NotificationService {
                     log.warn("Alert email failed: {}", e.getMessage());
                 }
             });
+        }
+        if (a.emailIt() && push.enabled()) {
+            // NT-1 / MB-2: the same alerts on the creator's devices; links open the app.
+            Long userId = user.getId();
+            String url = a.link() == null ? "/studio" : a.link().startsWith("/studio") ? a.link() : "/studio" + a.link();
+            mailer.submit(() -> push.send(userId, a.title(), a.body(), url, a.dedupeKey() != null ? a.dedupeKey() : a.type()));
         }
         return Optional.of(n);
     }

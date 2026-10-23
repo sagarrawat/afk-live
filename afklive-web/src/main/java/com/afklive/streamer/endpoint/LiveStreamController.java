@@ -64,6 +64,19 @@ public class LiveStreamController {
         return service.view(email(principal), id);
     }
 
+    /** RE-4. */
+    @GetMapping("/{id}/uptime")
+    public com.afklive.streamer.dto.StreamDtos.Uptime uptime(@PathVariable Long id, Principal principal) {
+        return service.uptime(email(principal), id, java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
+    }
+
+    /** ST-4. */
+    @PostMapping("/{id}/duplicate")
+    public ResponseEntity<StreamView> duplicate(@PathVariable Long id, Principal principal) {
+        LiveStream s = service.duplicate(email(principal), id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.view(email(principal), s.getId()));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, Principal principal) {
         service.delete(email(principal), id);
@@ -148,6 +161,13 @@ public class LiveStreamController {
                                                @RequestBody Map<String, Boolean> body, Principal principal) {
         service.setOverlayVisible(email(principal), id, overlayId, Boolean.TRUE.equals(body.get("visible")));
         return ResponseEntity.accepted().build();
+    }
+
+    /** GL-5. */
+    @PostMapping("/{id}/reconnect")
+    public ResponseEntity<Void> reconnect(@PathVariable Long id, Principal principal) {
+        service.reconnect(email(principal), id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/skip")
