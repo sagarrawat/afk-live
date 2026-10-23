@@ -46,4 +46,18 @@ class DestinationTestServiceTest {
         assertThat(cmd).containsSequence("-g", "60").containsSequence("-ar", "44100").contains("flv").contains("-rw_timeout")
                 .last().asString().startsWith("rtmp://a.rtmp.youtube.com");
     }
+
+    @Test
+    void theRealTestCommandRunsWithFFmpeg() throws Exception {
+        // Before the fix, -rw_timeout sat before the test-picture input and FFmpeg refused every test
+        // ("Option rw_timeout not found"), on production too.
+        org.junit.jupiter.api.Assumptions.assumeTrue(new ProcessBuilder("ffmpeg", "-version").start().waitFor() == 0, "ffmpeg");
+        java.nio.file.Path out = java.nio.file.Files.createTempDirectory("dest-test").resolve("out.flv");
+        List<String> cmd = new java.util.ArrayList<>(DestinationTestService.ffmpegTest("file://" + out));
+        cmd.remove("-re"); // as fast as possible here
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        String log = new String(p.getInputStream().readAllBytes());
+        assertThat(p.waitFor()).as(log).isZero();
+        assertThat(java.nio.file.Files.size(out)).isPositive();
+    }
 }
