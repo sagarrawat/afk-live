@@ -117,4 +117,28 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
         assertThat(copies.keyFor(a.getS3Key(), 360, 640, 60)).isEqualTo(a.getS3Key());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ?", Integer.class, a.getId())).isZero();
     }
+
+    @Test
+    void copiesNobodyPlayedFor30DaysAreDeletedAndRecentlyPlayedOnesKept() throws Exception {
+        MediaAsset a = upload("copies-old@example.com");
+        copies.forget();
+        copies.keyFor(a.getS3Key(), 180, 320, 30);
+        copies.keyFor(a.getS3Key(), 90, 160, 30);
+        while (copies.prepareNext()) {
+            // make both
+        }
+        copies.forget();
+        String played = copies.keyFor(a.getS3Key(), 180, 320, 30); // records a play
+        String idle = jdbc.queryForObject("SELECT storage_key FROM media_playout_copies WHERE media_id = ? AND canvas_width = 90",
+                String.class, a.getId());
+        // Made long ago; only the 180x320 one has been played since.
+        jdbc.update("UPDATE media_playout_copies SET created_at = now() - interval '40 days', finished_at = now() - interval '40 days' WHERE media_id = ?",
+                a.getId());
+
+        assertThat(copies.deleteUnplayed()).isEqualTo(1);
+        assertThat(jdbc.queryForList("SELECT canvas_width FROM media_playout_copies WHERE media_id = ?", Integer.class, a.getId()))
+                .containsExactly(180);
+        assertThatThrownBy(() -> storage.size(idle)).isInstanceOf(Exception.class);
+        assertThat(storage.size(played)).isPositive();
+    }
 }

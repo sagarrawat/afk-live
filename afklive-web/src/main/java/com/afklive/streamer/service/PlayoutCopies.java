@@ -48,6 +48,8 @@ public class PlayoutCopies {
     static final double MAX_SECONDS = 4 * 3600;
     /** A claim this old belongs to an instance that died mid-way. */
     static final Duration STALE_CLAIM = Duration.ofHours(8);
+    /** FO-6: a copy nobody has played for this long is deleted; it's made again if a stream needs it. */
+    static final Duration KEEP_UNPLAYED = Duration.ofDays(30);
     private static final Duration REMEMBER_READY = Duration.ofMinutes(10);
     private static final Duration REMEMBER_OTHER = Duration.ofSeconds(60);
 
@@ -89,6 +91,7 @@ public class PlayoutCopies {
                 while (prepareNext()) {
                     // one at a time, back to back
                 }
+                deleteUnplayed();
             } catch (Exception e) {
                 log.error("Preparing playout copies failed", e);
             }
@@ -185,7 +188,13 @@ public class PlayoutCopies {
             return originalKey;
         }
         Map<String, Object> c = copies.getFirst();
-        return "READY".equals(c.get("status")) && c.get("storage_key") != null ? (String) c.get("storage_key") : originalKey;
+        if (!"READY".equals(c.get("status")) || c.get("storage_key") == null) {
+            return originalKey;
+        }
+        // Remembered for 10 minutes, so this write happens at most that often per stream and file.
+        jdbc.update("UPDATE media_playout_copies SET last_played_at = now() WHERE media_id = ? AND canvas_width = ? AND canvas_height = ? AND fps = ?",
+                mediaId, t.canvasWidth(), t.canvasHeight(), t.fps());
+        return (String) c.get("storage_key");
     }
 
     private static Integer intOrNull(Object o) {
@@ -275,6 +284,32 @@ public class PlayoutCopies {
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-g", String.valueOf(2 * fps), "-threads", "1",
                 "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", output.toString()));
         return cmd;
+    }
+
+    /**
+     * FO-6: deletes copies nobody has played for {@link #KEEP_UNPLAYED} (a batch at a time). Safe: a
+     * worker that still had one in mind falls back to the original (StudioBuilder) and asks again.
+     */
+    public int deleteUnplayed() {
+        Instant cutoff = Instant.now().minus(KEEP_UNPLAYED);
+        List<Map<String, Object>> old = jdbc.queryForList(
+                "SELECT id, storage_key FROM media_playout_copies WHERE status IN ('READY', 'FAILED') "
+                        + "AND COALESCE(last_played_at, finished_at, created_at) < ? ORDER BY id LIMIT 50", Timestamp.from(cutoff));
+        int deleted = 0;
+        for (Map<String, Object> row : old) {
+            // Conditional: a play recorded since the select keeps the copy.
+            if (jdbc.update("DELETE FROM media_playout_copies WHERE id = ? AND COALESCE(last_played_at, finished_at, created_at) < ?",
+                    row.get("id"), Timestamp.from(cutoff)) == 1) {
+                deleted++;
+                if (row.get("storage_key") != null) {
+                    deleteQuietly((String) row.get("storage_key"));
+                }
+            }
+        }
+        if (deleted > 0) {
+            log.info("Deleted {} playout copies nobody played for {} days", deleted, KEEP_UNPLAYED.toDays());
+        }
+        return deleted;
     }
 
     /** Storage keys of a file's copies, to delete with it. */
