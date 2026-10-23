@@ -63,6 +63,7 @@ class StreamRunnerTest {
         final Map<Integer, String> lastStatus = new ConcurrentHashMap<>();
         final CopyOnWriteArrayList<String> statuses = new CopyOnWriteArrayList<>();
         final Map<Integer, Integer> restarts = new ConcurrentHashMap<>();
+        final CopyOnWriteArrayList<String> errors = new CopyOnWriteArrayList<>();
         final AtomicInteger progress = new AtomicInteger();
         final AtomicInteger encoderFailures = new AtomicInteger();
         volatile String finishedReason;
@@ -74,6 +75,9 @@ class StreamRunnerTest {
             lastStatus.put(pos, status);
             statuses.add(pos + ":" + status);
             restarts.merge(pos, r, Math::max);
+            if (error != null) {
+                errors.add(pos + ":" + error);
+            }
         }
         @Override public void onEncoderFailure(int r, String error) { encoderFailures.incrementAndGet(); }
         @Override public void onFinished(String reason, boolean f) { finishedReason = reason; failed = f; }
@@ -110,6 +114,24 @@ class StreamRunnerTest {
         assertThat(probe(good)).contains("h264");
         assertThat(rec.restarts.getOrDefault(1, 0)).as("bad destination retried").isPositive();
         assertThat(rec.restarts.getOrDefault(0, 0)).as("good destination untouched").isZero();
+    }
+
+    @Test
+    void aDestinationThatDropsKeepsItsRealErrorAndIsNotKilledByTheWaitBetweenAttempts() throws Exception {
+        // Production, Oct 2026: a YouTube destination dropped once and never came back. While the relay waited
+        // to retry, the stream kept queueing for it, overflowed the buffer, and every later attempt was killed
+        // within a second as "couldn't keep up", hiding the real reason. The wait here (1.5 s) is long enough
+        // for a 100 KB buffer to overflow many times over.
+        StreamRunner.Settings slowRetry = new StreamRunner.Settings(Duration.ofMillis(1500), Duration.ofMillis(1500),
+                Duration.ofSeconds(60), 3, Duration.ofMinutes(1), 100_000);
+        List<String> refused = List.of("sh", "-c", "cat > /dev/null & sleep 0.3; echo 'Server refused the stream' >&2; exit 1");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(9, () -> realtimeEncoder(1), List.of(refused), rec, slowRetry);
+        runner.start();
+        assertThat(runner.awaitFinished(Duration.ofSeconds(60))).isTrue();
+
+        assertThat(rec.errors).as("errors reported").isNotEmpty()
+                .allMatch(e -> e.contains("refused"), "the destination's own error, not a buffer overflow");
     }
 
     @Test
