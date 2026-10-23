@@ -77,7 +77,9 @@ public class TsStitcherTest {
                 }
                 prev = t;
             }
-            assertThat(maxGap).as(type + " has no hole in the timeline").isLessThan(0.25);
+            // Audio travels in PES packets of up to ~0.2 s that FFmpeg interleaves loosely with video, so a switch
+            // at a video frame boundary can leave up to a few tenths of a second of audio uncovered.
+            assertThat(maxGap).as(type + " has no hole in the timeline").isLessThan(type.equals("video") ? 0.25 : 0.5);
             double span = (type.equals("video") ? s.getLast().dts() : s.getLast().pts())
                     - (type.equals("video") ? s.getFirst().dts() : s.getFirst().pts());
             assertThat(span).as(type + " length").isBetween(expectedSeconds - 0.6, expectedSeconds + 0.3);
