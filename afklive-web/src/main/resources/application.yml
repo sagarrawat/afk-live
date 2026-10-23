@@ -96,6 +96,16 @@ app:
   cors:
     # Comma-separated extra origins allowed to call the API with credentials (the app's own origin always is).
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  streaming:
+    # "all" runs the web app and a stream worker in one process (simple single-server setup).
+    # In production run two processes from the same jar: role "web" and role "worker"
+    # (profile "worker"), so deploying the web app never interrupts live streams.
+    role: ${STREAMING_ROLE:all}
+    # Identifies this worker; must be stable across restarts so it resumes its own streams.
+    worker-id: ${STREAMING_WORKER_ID:}
+    work-dir: ${STREAMING_WORK_DIR:data/worker}
+    worker:
+      max-streams: ${STREAMING_WORKER_MAX_STREAMS:20}
   jobrunr:
     # The JobRunr dashboard has no authentication and listens on its own port; enable only for local debugging.
     dashboard-enabled: ${JOBRUNR_DASHBOARD_ENABLED:false}

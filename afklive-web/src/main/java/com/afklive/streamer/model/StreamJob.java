@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "stream_jobs", indexes = {
     @Index(name = "idx_streamjob_user_live", columnList = "user_id, is_live"),
     @Index(name = "idx_streamjob_live", columnList = "is_live"),
@@ -25,9 +26,11 @@ public class StreamJob {
     @com.fasterxml.jackson.annotation.JsonIgnore
     private User user;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String streamKey;
     private String fileName;
     private boolean isLive;
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private long pid;
     private String musicName;
     private String musicVolume;
@@ -45,6 +48,33 @@ public class StreamJob {
     private java.time.ZonedDateTime startTime;
     private java.time.ZonedDateTime endTime;
     private Double cost;
+
+    /** Lifecycle as reported by the worker: STARTING, LIVE, RECONNECTING, ENDED, FAILED. */
+    private String status;
+    /** What the web app wants: RUN or STOP. Workers act on it. */
+    private String desiredState;
+    /** Everything a worker needs to run the stream (JSON StreamSpec). Contains stream keys: never sent to clients. */
+    @Column(columnDefinition = "TEXT")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String spec;
+    /** The worker running this job; null until claimed. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String workerId;
+    /** Last time the worker confirmed the job is running. A stale heartbeat means the worker is gone. */
+    private java.time.ZonedDateTime heartbeatAt;
+    private int restarts;
+    private Double bitrateKbps;
+    private Double fps;
+    private Double speed;
+    private Long droppedFrames;
+    @Column(columnDefinition = "TEXT")
+    private String lastError;
+
+    @lombok.ToString.Exclude
+    @lombok.EqualsAndHashCode.Exclude
+    @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("position ASC")
+    private java.util.List<StreamJobDestination> destinations = new java.util.ArrayList<>();
 
     /** When set, the stream is stopped automatically at this time. */
     private java.time.ZonedDateTime stopAt;

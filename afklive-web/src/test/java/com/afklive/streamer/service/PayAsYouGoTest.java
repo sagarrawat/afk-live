@@ -55,7 +55,8 @@ class PayAsYouGoTest {
         // But for StreamService injection we use userServiceMock
         realUserService = new UserService(userRepository, null, emailService, planService);
         // The job is live, so this caller wins the atomic "end" update.
-        when(streamJobRepository.markEnded(any(), any(), any())).thenReturn(1);
+        when(streamJobRepository.markEnded(any(), any(), any(), any())).thenReturn(1);
+        when(streamJobRepository.addFinalBilling(any(), anyDouble(), any(), any())).thenReturn(1);
     }
 
     @Test
@@ -123,6 +124,8 @@ class PayAsYouGoTest {
         job.setPid(999999L); // Invalid PID likely
         // Start time 2 hours ago
         job.setStartTime(ZonedDateTime.now().minusHours(2));
+        job.setLastBillingTime(job.getStartTime());
+        job.setStatus("LIVE");
 
         when(streamJobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
@@ -135,9 +138,8 @@ class PayAsYouGoTest {
         verify(userServiceMock).addUnpaidBalance(eq(username), doubleThat(cost -> Math.abs(cost - 2.50) < 0.1));
 
         // Ending is an atomic database update now (see StreamJobRepository.markEnded).
-        verify(streamJobRepository).markEnded(eq(jobId), any(), eq("Ended"));
-        assertNotNull(job.getCost());
-        assertEquals(2.50, job.getCost(), 0.1);
+        verify(streamJobRepository).markEnded(eq(jobId), any(), eq("Ended"), eq("ENDED"));
+        verify(streamJobRepository).addFinalBilling(eq(jobId), doubleThat(cost -> Math.abs(cost - 2.50) < 0.1), any(), eq(job.getLastBillingTime()));
     }
 
     @Test
@@ -156,6 +158,7 @@ class PayAsYouGoTest {
         // Start time 15 minutes ago
         job.setStartTime(ZonedDateTime.now().minusMinutes(15));
         job.setLastBillingTime(job.getStartTime());
+        job.setStatus("RECONNECTING");
 
         when(streamJobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
@@ -165,7 +168,26 @@ class PayAsYouGoTest {
 
         // Verify cost: 0.25 hours * 1.25 = 0.3125
         verify(userServiceMock).addUnpaidBalance(eq(username), doubleThat(cost -> Math.abs(cost - 0.3125) < 0.0001));
+    }
 
-        assertEquals(0.3125, job.getCost(), 0.0001);
+    @Test
+    void aStreamThatNeverWentLiveIsNotCharged() {
+        String username = "test@neverlive.com";
+        User user = new User(username);
+        user.setPlanType(PlanType.FREE);
+        StreamJob job = new StreamJob();
+        job.setId(3L);
+        job.setUser(user);
+        job.setLive(true);
+        job.setStatus("STARTING");
+        job.setStartTime(ZonedDateTime.now().minusHours(1));
+        job.setLastBillingTime(job.getStartTime());
+        when(streamJobRepository.findById(3L)).thenReturn(Optional.of(job));
+        when(userServiceMock.getOrCreateUser(username)).thenReturn(user);
+
+        streamService.finalizeJob(3L, "Could not load the stream's files", true);
+
+        verify(streamJobRepository).markEnded(eq(3L), any(), any(), eq("FAILED"));
+        verify(userServiceMock, never()).addUnpaidBalance(any(), anyDouble());
     }
 }

@@ -362,6 +362,9 @@
                                         <div class="flex-1 min-w-0">
                                             <h4 class="font-semibold text-sm text-gray-900 truncate" x-text="stream.title || 'Live Stream'"></h4>
                                             <div class="text-[10px] text-blue-600 font-medium truncate" x-show="stream.destinationName" x-text="stream.destinationName"></div>
+                                            <div class="text-[10px] font-semibold mt-0.5"
+                                                 :class="stream.status === 'LIVE' ? 'text-green-600' : (stream.status === 'RECONNECTING' ? 'text-amber-600' : 'text-gray-500')"
+                                                 x-text="(stream.status === 'LIVE' ? 'Live' : (stream.status === 'RECONNECTING' ? 'Reconnecting…' : 'Starting…')) + (stream.status === 'LIVE' && stream.bitrateKbps ? ' · ' + Math.round(stream.bitrateKbps) + ' kbps · ' + Math.round(stream.fps || 0) + ' fps' : '')"></div>
                                             <p class="text-xs text-gray-500 mt-0.5" x-text="getStreamDuration(stream.startTime)"></p>
                                             <div class="mt-3 flex items-center gap-2">
                                                 <button @click="stopStream(stream.id)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition flex items-center gap-1">

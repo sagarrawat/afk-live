@@ -62,23 +62,8 @@ class StreamLifecycleIntegrationTest extends PostgresIntegrationTest {
         StreamJob job = new StreamJob(owner, "key", "video.mp4", null, null, true, 999_999,
                 "t", "d", "private", ZonedDateTime.now(ZoneId.of("UTC")).minusHours(2), "YouTube", false);
         job.setLastBillingTime(ZonedDateTime.now(ZoneId.of("UTC")).minusMinutes(30));
+        job.setStatus("LIVE"); // on air, so billable
         return jobs.save(job);
-    }
-
-    @Test
-    void jobsLeftLiveByAPreviousRunAreClosedOnStartupWithoutBillingDowntime() {
-        User owner = account("restart@example.com");
-        StreamJob stale = liveJob(owner);
-        ZonedDateTime lastBilled = stale.getLastBillingTime();
-
-        streamService.reconcileStaleJobs();
-
-        StreamJob after = jobs.findById(stale.getId()).orElseThrow();
-        assertThat(after.isLive()).isFalse();
-        assertThat(after.getEndReason()).isEqualTo("Server restarted");
-        // Ended at the last billed moment, not "now": downtime isn't charged.
-        assertThat(java.time.Duration.between(lastBilled.toInstant(), after.getEndTime().toInstant()).abs().toMillis()).isLessThan(1);
-        assertThat(users.findByEmail("restart@example.com").orElseThrow().getUnpaidBalance()).isZero();
     }
 
     @Test

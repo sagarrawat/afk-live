@@ -325,15 +325,94 @@ public class FFmpegCommandBuilder {
             Path textOverlayPath,
             Boolean sourceHasAudioOrNull
     ) {
+        List<String> command = buildEncodeArgs(videoPath, musicPath, musicVolume, loopCount, watermarkPath,
+                muteVideoAudio, streamMode, maxHeight, isOptimized, textOverlayPath, sourceHasAudioOrNull);
+        String url = destinationUrl(streamKeys.get(0));
+        command.add("-f");
+        command.add(formatFor(url));
+        command.add(url);
+        return command;
+    }
+
+    /**
+     * The encoder for a worker: encodes once and writes MPEG-TS to stdout, where the worker copies
+     * it to every destination's relay. Progress (fps, bitrate, speed, drops) goes to stderr as
+     * key=value lines for the health panel.
+     */
+    public static List<String> buildEncoderToPipeCommand(
+            Path videoPath,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized,
+            Path textOverlayPath,
+            Boolean sourceHasAudioOrNull
+    ) {
+        List<String> command = buildEncodeArgs(videoPath, musicPath, musicVolume, loopCount, watermarkPath,
+                muteVideoAudio, streamMode, maxHeight, isOptimized, textOverlayPath, sourceHasAudioOrNull);
+        command.addAll(2, List.of("-loglevel", "warning", "-nostats", "-progress", "pipe:2", "-stats_period", "2"));
+        command.addAll(List.of("-f", "mpegts", "-mpegts_flags", "+resend_headers", "pipe:1"));
+        return command;
+    }
+
+    /**
+     * A relay for one destination: reads the encoder's MPEG-TS from stdin and copies it to the
+     * platform without re-encoding (almost no CPU), so each destination can reconnect on its own.
+     */
+    public static List<String> buildRelayCommand(String destination) {
+        String url = destinationUrl(destination);
+        List<String> command = new ArrayList<>(List.of(ffmpegBinary(), "-hide_banner", "-loglevel", "warning", "-nostats",
+                // Enough analysis to cover a full 2 s GOP at high bitrates, so a relay that joins mid-stream
+                // always sees a keyframe with its SPS/PPS; less than FFmpeg's 5 s default to speed reconnects.
+                "-analyzeduration", "3000000", "-probesize", "8000000",
+                "-fflags", "+genpts", "-f", "mpegts", "-i", "pipe:0", "-map", "0", "-c", "copy"));
+        String format = formatFor(url);
+        if ("flv".equals(format)) {
+            command.addAll(List.of("-bsf:a", "aac_adtstoasc"));
+        }
+        command.addAll(List.of("-f", format, url));
+        return command;
+    }
+
+    /** Only a full URL is used as-is; anything else is a bare key for YouTube's ingest. */
+    static String destinationUrl(String destination) {
+        // Checking for "://" matters: a bare key like "rtmp_x.flv" must never become a local output file.
+        String key = destination.trim();
+        return key.contains("://") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
+    }
+
+    static String formatFor(String url) {
+        return url.regionMatches(true, 0, "srt://", 0, 6) ? "mpegts" : "flv";
+    }
+
+    static String ffmpegBinary() {
+        java.io.File local = new java.io.File("bin/ffmpeg");
+        return local.exists() ? local.getAbsolutePath() : "ffmpeg";
+    }
+
+    /** Inputs, filters and encoding settings shared by every way of sending a stream (no output). */
+    private static List<String> buildEncodeArgs(
+            Path videoPath,
+            Path musicPath,
+            String musicVolume,
+            int loopCount,
+            Path watermarkPath,
+            boolean muteVideoAudio,
+            String streamMode,
+            int maxHeight,
+            boolean isOptimized,
+            Path textOverlayPath,
+            Boolean sourceHasAudioOrNull
+    ) {
         boolean audioUnknown = sourceHasAudioOrNull == null;
         boolean sourceHasAudio = audioUnknown || sourceHasAudioOrNull;
         String volume = safeVolume(musicVolume);
-        String ffmpeg = "ffmpeg";
-        java.io.File local = new java.io.File("bin/ffmpeg");
-        if (local.exists()) ffmpeg = local.getAbsolutePath();
-
         List<String> command = new ArrayList<>();
-        command.add(ffmpeg);
+        command.add(ffmpegBinary());
         command.add("-hide_banner");
 
         // Global settings
@@ -466,17 +545,6 @@ public class FFmpegCommandBuilder {
         }
 
         command.add("-shortest");
-
-        // --- Output ---
-        String key = streamKeys.get(0).trim();
-        // Only a full URL is used as-is; anything else is a bare key for YouTube's ingest.
-        // (Checking for "://" matters: a bare key like "rtmp_x.flv" must never become a local output file.)
-        String url = key.contains("://") ? key : "rtmp://a.rtmp.youtube.com:1935/live2/" + key;
-
-        command.add("-f");
-        command.add(url.regionMatches(true, 0, "srt://", 0, 6) ? "mpegts" : "flv");
-        command.add(url);
-
         return command;
     }
 

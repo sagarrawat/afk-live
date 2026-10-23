@@ -98,3 +98,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local runtime data (worker downloads, local storage)
+data/

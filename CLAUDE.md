@@ -9,12 +9,14 @@ non-functional requirements (continuity, quality, latency, cost). Reference stor
 
 ## Repository layout
 
-- `afklive-web/`: Spring Boot 4 (Java 21) app: REST API, auth, scheduling, and (for now) the FFmpeg stream processes.
+- `afklive-web/`: Spring Boot 4 (Java 21) app. One jar, two roles: web (API, site, billing) and stream worker.
   - `src/main/java/com/afklive/streamer/`: `endpoint/` (controllers), `service/`, `model/`, `repository/`, `config/`, `security/`
+  - `streaming/`: the worker: `StreamWorker` (claims jobs, heartbeats, takeover), `StreamRunner` (one encoder + a relay per destination, restarts with backoff), `StreamPreparer`, `StreamSpec`
   - `src/main/resources/db/changelog/`: Liquibase migrations (the only way to change the schema)
   - `src/main/resources/static/`: current frontend (Alpine + Tailwind CDN); to be replaced per the design direction
 - `afklive-optimizer/`: AWS Lambda that normalizes uploaded videos with FFmpeg.
 - `docs/product-spec.md`: product spec (source of truth for scope and priorities).
+- `docs/operations.md`: how web and worker processes run, deploy, and the worker egress firewall.
 
 ## Build, test, run
 
@@ -45,4 +47,6 @@ FFmpeg must be on PATH.
 - Secrets come from environment variables only. Optional integrations get empty defaults (`${VAR:}`) so the app boots without them.
 - Every change ships with tests. Bug fixes get a test that fails before the fix.
 - Streaming changes must respect the continuity rules in the spec: planned changes never disconnect a destination.
+- Web and worker communicate only through the database, with conditional updates (claim, heartbeat, markEnded). Never signal processes by PID or keep stream state only in memory on the web side.
+- Process-level behaviour is tested with real FFmpeg (StreamRunnerTest, StreamWorkerIntegrationTest); keep those passing.
 - Encoding must meet YouTube's ingest minimums (1080p30 ≥ 5 Mbps, keyframe every 2 s, AAC 44.1 kHz).

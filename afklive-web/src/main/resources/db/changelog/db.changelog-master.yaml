@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/changes/003-stream-job-stop-and-reason.sql
   - include:
       file: db/changelog/changes/004-scheduled-stream-asset-on-delete.sql
+  - include:
+      file: db/changelog/changes/005-stream-workers.sql
