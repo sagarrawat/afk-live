@@ -18,34 +18,18 @@ public class PlanService {
 
     private final PlanConfigRepository planConfigRepository;
 
+    /**
+     * Makes sure every plan has a row, and fills new columns of rows created by an older version.
+     * Admin edits to a row that's already current are never overwritten.
+     */
     @PostConstruct
     public void initPlans() {
-        if (planConfigRepository.count() == 0) {
-            for (PlanType type : PlanType.values()) {
-                String defaultPrice = switch (type) {
-                    case FREE -> "₹0";
-                    case ESSENTIALS -> "₹199";
-                    default -> "₹0";
-                };
-
-                String defaultCycle = switch (type) {
-                    case FREE -> "Hourly";
-                    case ESSENTIALS -> "Monthly";
-                    default -> "Monthly";
-                };
-
-                PlanConfig config = new PlanConfig(
-                        type,
-                        type.getDisplayName(),
-                        defaultPrice,
-                        defaultCycle,
-                        type.getMaxStorageBytes(),
-                        type.getMaxScheduledPosts(),
-                        type.getMaxActiveStreams(),
-                        type.getMaxChannels(),
-                        type.getMaxResolution()
-                );
-                planConfigRepository.save(config);
+        for (PlanType type : PlanType.values()) {
+            PlanConfig c = planConfigRepository.findById(type).orElse(null);
+            if (c == null || c.getDefaultsVersion() < PlanConfig.CURRENT_DEFAULTS) {
+                PlanConfig fresh = c == null ? new PlanConfig() : c;
+                fresh.applyDefaults(type);
+                planConfigRepository.save(fresh);
             }
         }
     }

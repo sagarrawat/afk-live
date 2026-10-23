@@ -32,6 +32,7 @@ class PaymentServiceTest {
     private PaymentAuditRepository audits;
     private UserService userService;
     private PaymentService service;
+    private com.afklive.streamer.service.BillingService billing;
     private User user;
 
     @BeforeEach
@@ -39,7 +40,10 @@ class PaymentServiceTest {
         gateway = mock(PaymentGateway.class);
         audits = mock(PaymentAuditRepository.class);
         userService = mock(UserService.class);
-        service = new PaymentService(gateway, audits, userService);
+        billing = mock(com.afklive.streamer.service.BillingService.class);
+        service = new PaymentService(gateway, audits, userService, billing);
+        when(billing.checkout(anyString(), anyString(), anyString())).thenReturn(
+                new com.afklive.streamer.service.BillingService.Checkout("MTX", "https://pay.example/checkout", null));
         user = new User(EMAIL);
         user.setPlanType(PlanType.FREE);
         when(userService.getOrCreateUser(EMAIL)).thenReturn(user);
@@ -55,9 +59,9 @@ class PaymentServiceTest {
     }
 
     @Test
-    void checkoutAmountIsSetByTheServer() {
-        service.startCheckout(EMAIL, "ESSENTIALS");
-        verify(gateway).createCheckout(anyString(), eq(PaymentService.ESSENTIALS_PRICE_PAISE), anyString());
+    void planCheckoutsGoThroughBilling() {
+        assertThat(service.startCheckout(EMAIL, "ESSENTIALS")).isEqualTo("https://pay.example/checkout");
+        verify(billing).checkout(EMAIL, "ESSENTIALS", "MONTHLY");
     }
 
     @Test
@@ -74,14 +78,9 @@ class PaymentServiceTest {
     }
 
     @Test
-    void freePlanCannotBeBought() {
-        assertThatThrownBy(() -> service.startCheckout(EMAIL, "FREE")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.startCheckout(EMAIL, "NOT_A_PLAN")).isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
     void redirectBringsTheOrderIdBack() {
-        service.startCheckout(EMAIL, "ESSENTIALS");
+        user.setUnpaidBalance(1.0);
+        service.startCheckout(EMAIL, PaymentService.BALANCE_CLEAR);
         ArgumentCaptor<String> order = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> redirect = ArgumentCaptor.forClass(String.class);
         verify(gateway).createCheckout(order.capture(), anyLong(), redirect.capture());
@@ -95,7 +94,7 @@ class PaymentServiceTest {
 
         assertThat(service.confirm("MT1")).isEqualTo("COMPLETED");
         assertThat(service.confirm("MT1")).isEqualTo("COMPLETED"); // replayed callback
-        verify(userService, times(1)).updatePlan(EMAIL, PlanType.ESSENTIALS);
+        verify(billing, times(1)).applyPaid(any());
         verify(gateway, times(1)).fetchOrderState("MT1");
     }
 
@@ -115,7 +114,7 @@ class PaymentServiceTest {
         when(gateway.fetchOrderState("MT3")).thenReturn(new PaymentGateway.OrderState("PENDING", 19900));
 
         assertThat(service.confirm("MT3")).isEqualTo(PaymentService.INITIATED);
-        verify(userService, never()).updatePlan(any(), any());
+        verify(billing, never()).applyPaid(any());
     }
 
     @Test
@@ -125,7 +124,7 @@ class PaymentServiceTest {
 
         assertThat(service.confirm("MT4")).isEqualTo("FAILED");
         assertThat(audit.getStatus()).isEqualTo("FAILED");
-        verify(userService, never()).updatePlan(any(), any());
+        verify(billing, never()).applyPaid(any());
     }
 
     @Test

@@ -247,6 +247,13 @@ public class LiveStreamService {
                     .orElseThrow(() -> new IllegalArgumentException("Destination not found."));
             next.add(new StreamTarget(s.getId(), d.getId(), t.enabled()));
         }
+        // BI-8: destinations per stream by plan.
+        PlanConfig plan = planService.getPlanConfig(s.getUser().getPlanType());
+        long enabled = next.stream().filter(StreamTarget::isEnabled).count();
+        if (enabled > plan.getMaxDestinations()) {
+            throw new IllegalArgumentException("Your " + plan.getDisplayName() + " plan sends a stream to " + plan.getMaxDestinations()
+                    + " destination" + (plan.getMaxDestinations() == 1 ? "" : "s") + " at once. Upgrade to add more.");
+        }
         targets.deleteAll(targets.findAllByStreamId(id));
         targets.flush();
         targets.saveAll(next);
@@ -383,6 +390,11 @@ public class LiveStreamService {
         }
 
         List<StreamDestination> enabled = enabledDestinations(s);
+        int maxDest = planService.getPlanConfig(user.getPlanType()).getMaxDestinations();
+        if (enabled.size() > maxDest) {
+            checks.add(new Check("destinations-limit", false, "Your plan sends to " + maxDest + " destination"
+                    + (maxDest == 1 ? "" : "s") + " at once; turn some off or upgrade.", "destinations"));
+        }
         if (enabled.isEmpty()) {
             checks.add(new Check("destinations", false, "Turn on at least one destination (YouTube stream key or RTMP/SRT).", "destinations"));
         } else {
@@ -401,8 +413,8 @@ public class LiveStreamService {
         String planName = planService.getPlanConfig(user.getPlanType()).getDisplayName();
         if (s.getQualityHeight() > planMax) {
             checks.add(new Check("quality", false, s.getQualityHeight() + "p is above your " + planName + " plan's " + planMax + "p.", "/pricing"));
-        } else if (s.getFps() > 30 && user.getPlanType() == PlanType.FREE) {
-            checks.add(new Check("quality", false, "60 fps needs a paid plan.", "/pricing"));
+        } else if (s.getFps() > planService.getPlanConfig(user.getPlanType()).getMaxFps()) {
+            checks.add(new Check("quality", false, s.getFps() + " fps isn't included in your " + planName + " plan.", "/pricing"));
         } else {
             checks.add(new Check("quality", true, s.getQualityHeight() + "p" + s.getFps() + " is included in your plan.", "settings"));
         }
@@ -417,8 +429,8 @@ public class LiveStreamService {
                     + " stream(s) at a time and " + live + " are live.", "/pricing"));
         }
         if (user.getPlanType() == PlanType.FREE) {
-            if (!userService.checkCreditLimit(email)) {
-                checks.add(new Check("balance", false, "Clear your pending balance to start more streams.", "/settings#billing"));
+            if (streamService.freeHoursUsedUp(user)) {
+                checks.add(new Check("hours", false, "You've used this month's free streaming hours. Upgrade to keep streaming.", "/pricing"));
             }
             if (jobs.countByIsLiveTrue() >= appConfigService.getGlobalStreamLimit()) {
                 checks.add(new Check("capacity", false, "Free capacity is full right now. Try again soon or upgrade.", "/pricing"));
@@ -442,7 +454,7 @@ public class LiveStreamService {
         Preflight pf = preflight(email, id);
         if (!pf.ok()) {
             String first = pf.checks().stream().filter(c -> !c.ok()).map(Check::message).findFirst().orElse("Pre-flight failed.");
-            pf.checks().stream().filter(c -> !c.ok() && Set.of("concurrency", "quality", "balance", "capacity").contains(c.id()))
+            pf.checks().stream().filter(c -> !c.ok() && Set.of("concurrency", "quality", "hours", "capacity", "destinations-limit").contains(c.id()))
                     .findFirst().ifPresent(limit -> notifications.notify(owner, new NotificationService.Alert(
                             NotificationService.Types.PLAN_LIMIT, Notification.Level.INFO, id, "Plan limit reached",
                             limit.message() + " Upgrade to remove this limit.", "/pricing", "plan-limit:" + limit.id(),
@@ -598,8 +610,8 @@ public class LiveStreamService {
                 String reason = null;
                 if (h > max) {
                     reason = "Your " + planName + " plan streams up to " + max + "p.";
-                } else if (f > 30 && user.getPlanType() == PlanType.FREE) {
-                    reason = "60 fps needs a paid plan.";
+                } else if (f > planService.getPlanConfig(user.getPlanType()).getMaxFps()) {
+                    reason = f + " fps isn't included in your " + planName + " plan.";
                 }
                 out.add(new QualityOption(h, f, reason == null, reason));
             }
@@ -676,6 +688,11 @@ public class LiveStreamService {
             overlays.add(new StudioSpec.OverlaySetting(o.id(), o.type(), o.visible(), o.x(), o.y(), o.width(), o.size(),
                     o.text(), o.imageMediaId(), key, o.color(), o.background(), o.opacity(),
                     o.timeZone() != null ? o.timeZone() : s.getTimeZone(), o.target(), o.speed(), o.scene()));
+        }
+        if (planService.getPlanConfig(s.getUser().getPlanType()).isWatermark()) {
+            // BI-1: the Free plan's small mark, added here so it can't be removed from the client.
+            overlays.add(new StudioSpec.OverlaySetting("afk-watermark", "TEXT", true, 0.83, 0.92, 0, 0.03, "AFK Live",
+                    null, null, "#ffffff", "#66000000", 0.8, null, null, 0, null));
         }
         List<StudioSpec.SceneSetting> scenes = new ArrayList<>();
         for (StudioSpec.SceneSetting sc : scenes(s)) {
@@ -795,8 +812,8 @@ public class LiveStreamService {
         if (height > max) {
             throw new IllegalArgumentException("Your " + planName + " plan streams up to " + max + "p. Upgrade for " + height + "p.");
         }
-        if (fps > 30 && user.getPlanType() == PlanType.FREE) {
-            throw new IllegalArgumentException("60 fps needs a paid plan.");
+        if (fps > planService.getPlanConfig(user.getPlanType()).getMaxFps()) {
+            throw new IllegalArgumentException(fps + " fps isn't included in your " + planName + " plan. Upgrade for " + fps + " fps.");
         }
     }
 

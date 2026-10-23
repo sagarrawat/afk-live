@@ -42,6 +42,7 @@ class StreamLifecycleIntegrationTest extends PostgresIntegrationTest {
     @Autowired StreamDestinationRepository destinations;
     @Autowired ScheduledStreamRepository scheduled;
     @Autowired StreamService streamService;
+    @Autowired com.afklive.streamer.repository.UsageRepository usage;
 
     MockMvc mvc;
 
@@ -139,16 +140,33 @@ class StreamLifecycleIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void endingTwiceChargesOnce() {
+    void endingTwiceMetersOnce() {
         User owner = account("twice@example.com");
         StreamJob job = liveJob(owner);
 
         streamService.stopStream(job.getId(), "twice@example.com");
         streamService.stopStream(job.getId(), "twice@example.com");
 
-        double balance = users.findByEmail("twice@example.com").orElseThrow().getUnpaidBalance();
-        // 30 minutes since the last billing tick at 1.25/hour
-        assertThat(balance).isBetween(0.62, 0.64);
+        long seconds = usage.secondsIn(owner.getId(),
+                com.afklive.streamer.service.BillingService.month(ZonedDateTime.now(ZoneId.of("UTC"))));
+        // 30 minutes since the last metering tick, counted once; nothing is charged to a balance any more
+        assertThat(seconds).isBetween(1795L, 1810L);
+        assertThat(users.findByEmail("twice@example.com").orElseThrow().getUnpaidBalance()).isZero();
+    }
+
+    @Test
+    void meteringStopsAFreeStreamWhenTheMonthsHoursAreUsed() {
+        User owner = account("meter@example.com");
+        StreamJob job = liveJob(owner); // 30 minutes since the last tick
+        String month = com.afklive.streamer.service.BillingService.month(ZonedDateTime.now(ZoneId.of("UTC")));
+        usage.add(owner.getId(), month, 9 * 3600L + 1800L);
+
+        streamService.processPeriodicBilling();
+
+        assertThat(usage.secondsIn(owner.getId(), month)).isGreaterThanOrEqualTo(10 * 3600L);
+        StreamJob after = jobs.findById(job.getId()).orElseThrow();
+        assertThat(after.getDesiredState()).isEqualTo("STOP");
+        streamService.finalizeJob(job.getId(), "test");
     }
 
     @Test

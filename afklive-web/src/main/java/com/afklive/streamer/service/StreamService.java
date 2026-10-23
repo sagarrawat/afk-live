@@ -69,6 +69,8 @@ public class StreamService {
     @org.springframework.context.annotation.Lazy
     private NotificationService notifications;
     @Autowired
+    private com.afklive.streamer.repository.UsageRepository usage;
+    @Autowired
     @org.springframework.context.annotation.Lazy
     private AlertMonitor alertMonitor;
 
@@ -156,8 +158,8 @@ public class StreamService {
             if (streamJobRepo.countByIsLiveTrue() >= globalMaxStreams) {
                 throw new IllegalStateException("Platform capacity reached for Pay As You Go users. Please try again later or upgrade to Essentials.");
             }
-            if (!userService.checkCreditLimit(username)) {
-                throw new IllegalStateException("Credit limit exceeded. Please clear your pending balance.");
+            if (freeHoursUsedUp(user)) {
+                throw new IllegalStateException("You've used this month's free streaming hours. Upgrade to keep streaming.");
             }
         }
         if (title != null && title.length() > 100) {
@@ -339,7 +341,7 @@ public class StreamService {
     }
 
     /**
-     * Ends a job and makes the final pay-as-you-go charge. The atomic live-to-ended update means only
+     * Ends a job and records its last streamed time. The atomic live-to-ended update means only
      * one caller (worker exit, stop request, cleanup) ever does this for a job.
      */
     public void finalizeJob(Long jobId, String reason, boolean failed) {
@@ -355,14 +357,10 @@ public class StreamService {
             return;
         }
         StreamJob job = streamJobRepo.findById(jobId).orElseThrow();
-        if (wasOnAir) {
-            String email = job.getUser().getEmail();
-            com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
-            if (user.getPlanType() == com.afklive.streamer.model.PlanType.FREE && job.getLastBillingTime() != null) {
-                double increment = charge(job.getLastBillingTime(), end);
-                if (increment > 0 && streamJobRepo.addFinalBilling(jobId, increment, end, job.getLastBillingTime()) == 1) {
-                    userService.addUnpaidBalance(email, increment);
-                }
+        if (wasOnAir && job.getLastBillingTime() != null) {
+            long seconds = Duration.between(job.getLastBillingTime(), end).getSeconds();
+            if (seconds > 0 && streamJobRepo.addFinalBilling(jobId, 0, end, job.getLastBillingTime()) == 1) {
+                usage.add(job.getUser().getId(), BillingService.month(end), seconds);
             }
         }
         updateScheduledStream(job, reason, failed);
@@ -406,43 +404,44 @@ public class StreamService {
         }
     }
 
-    /** Pay-as-you-go: hourly rate in rupees. */
-    static final double HOURLY_RATE = 1.25;
-
-    static double charge(ZonedDateTime from, ZonedDateTime to) {
-        long seconds = Duration.between(from, to).getSeconds();
-        if (seconds <= 0) {
-            return 0;
-        }
-        return Math.round(seconds / 3600.0 * HOURLY_RATE * 10000.0) / 10000.0;
-    }
-
-    /** Charges live pay-as-you-go streams every minute; conditional updates make it safe on any number of instances. */
-    void processPeriodicBilling() {
+    /**
+     * Meters streamed time every minute (BI-1, BI-6): each on-air run's seconds since the last tick go to
+     * its owner's monthly usage. Conditional updates make it safe on any number of instances. A plan with
+     * monthly hours (Free) stops its streams when they're used up.
+     */
+    public void processPeriodicBilling() {
         for (StreamJob job : streamJobRepo.findAllOnAir()) {
             try {
-                String email = job.getUser().getEmail();
-                com.afklive.streamer.model.User user = userService.getOrCreateUser(email);
-                if (user.getPlanType() != com.afklive.streamer.model.PlanType.FREE || job.getLastBillingTime() == null) {
+                if (job.getLastBillingTime() == null) {
                     continue;
                 }
                 ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
-                double increment = charge(job.getLastBillingTime(), now);
-                if (increment > 0 && streamJobRepo.addBilling(job.getId(), increment, now, job.getLastBillingTime()) == 1) {
-                    userService.addUnpaidBalance(email, increment);
+                long seconds = Duration.between(job.getLastBillingTime(), now).getSeconds();
+                if (seconds > 0 && streamJobRepo.addBilling(job.getId(), 0, now, job.getLastBillingTime()) == 1) {
+                    usage.add(job.getUser().getId(), BillingService.month(now), seconds);
                 }
-                if (!userService.checkCreditLimit(email) && !StreamStates.STOP.equals(job.getDesiredState())) {
-                    log.warn("User {} exceeded credit limit. Stopping stream {}.", email, job.getId());
-                    requestStop(job, "Credit limit reached");
-                    notifications.notify(email, new NotificationService.Alert(NotificationService.Types.CREDIT_LIMIT,
-                            com.afklive.streamer.model.Notification.Level.ERROR, job.getStreamId(), "Stream stopped: balance limit reached",
-                            "Your pay-as-you-go balance reached its limit, so the stream was stopped. Clear the balance to go live again.",
-                            "/settings#billing", "credit-limit", java.time.Duration.ofDays(1), true));
+                com.afklive.streamer.model.User user = job.getUser();
+                if (freeHoursUsedUp(user) && !StreamStates.STOP.equals(job.getDesiredState())) {
+                    log.info("User {} used this month's included hours; stopping stream {}", user.getId(), job.getId());
+                    requestStop(job, "This month's free streaming hours are used up");
+                    notifications.notify(user.getEmail(), new NotificationService.Alert(NotificationService.Types.PLAN_LIMIT,
+                            com.afklive.streamer.model.Notification.Level.WARNING, job.getStreamId(), "Free streaming hours used up",
+                            "Your stream stopped because this month's free hours are used. Upgrade to stream without a limit.",
+                            "/pricing", "free-hours:" + BillingService.month(now), java.time.Duration.ofDays(31), true));
                 }
             } catch (Exception e) {
-                log.error("Error in billing task for job " + job.getId(), e);
+                log.error("Error metering job " + job.getId(), e);
             }
         }
+    }
+
+    /** True when the user's plan includes a monthly number of hours and they're all used. */
+    public boolean freeHoursUsedUp(com.afklive.streamer.model.User user) {
+        int hours = planService.getPlanConfig(user.getPlanType()).getMonthlyHours();
+        if (hours <= 0) {
+            return false;
+        }
+        return usage.secondsIn(user.getId(), BillingService.month(ZonedDateTime.now(ZoneId.of("UTC")))) >= hours * 3600L;
     }
 
     @jakarta.annotation.PostConstruct

@@ -28,6 +28,7 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     @Autowired StreamDestinationRepository destinations;
     @Autowired StreamJobRepository jobs;
     @Autowired StreamCommandRepository commands;
+    @Autowired com.afklive.streamer.repository.UsageRepository usage;
     @Autowired LiveStreamRepository streams;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired com.afklive.streamer.service.StreamService streamService;
@@ -151,6 +152,46 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
         LiveState after = service.stop(email, s.getId(), new StopRequest("NOW", null, null));
         assertThat(after.state()).isEqualTo("ENDED");
         assertThat(jobs.findById(job.getId()).orElseThrow().isLive()).isFalse();
+    }
+
+    @Test
+    void destinationsPerStreamAreLimitedByThePlan() {
+        String email = newUser(PlanType.FREE);
+        LiveStream s = service.create(email, new CreateStream("One place", null, null, 720, 30));
+        StreamDestination a = destination(email, "aaaa-bbbb-cccc-dddd");
+        StreamDestination b = destination(email, "eeee-ffff-gggg-hhhh");
+        assertThatThrownBy(() -> service.setTargets(email, s.getId(), List.of(new TargetRequest(a.getId(), true), new TargetRequest(b.getId(), true))))
+                .hasMessageContaining("1 destination");
+        // a second destination may be saved switched off
+        service.setTargets(email, s.getId(), List.of(new TargetRequest(a.getId(), true), new TargetRequest(b.getId(), false)));
+
+        String creator = newUser(PlanType.ESSENTIALS);
+        LiveStream c = service.create(creator, new CreateStream("Two places", null, null, 1080, 30));
+        StreamDestination x = destination(creator, "aaaa-bbbb-cccc-dddd");
+        StreamDestination y = destination(creator, "eeee-ffff-gggg-hhhh");
+        service.setTargets(creator, c.getId(), List.of(new TargetRequest(x.getId(), true), new TargetRequest(y.getId(), true)));
+    }
+
+    @Test
+    void freeStreamsCarryTheWatermarkAndPaidOnesDont() {
+        String free = newUser(PlanType.FREE);
+        StreamJob job = service.goLive(free, ready(free).getId(), null);
+        assertThat(StreamSpec.fromJson(job.getSpec()).studio().overlays())
+                .anyMatch(o -> o.id().equals("afk-watermark") && "AFK Live".equals(o.text()));
+
+        String paid = newUser(PlanType.ESSENTIALS);
+        StreamJob paidJob = service.goLive(paid, ready(paid).getId(), null);
+        assertThat(StreamSpec.fromJson(paidJob.getSpec()).studio().overlays()).noneMatch(o -> o.id().equals("afk-watermark"));
+    }
+
+    @Test
+    void usedUpFreeHoursBlockGoingLive() {
+        String email = newUser(PlanType.FREE);
+        LiveStream s = ready(email);
+        User u = users.findByEmail(email).orElseThrow();
+        usage.add(u.getId(), com.afklive.streamer.service.BillingService.month(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"))), 10 * 3600L);
+        assertThat(service.preflight(email, s.getId()).checks()).anyMatch(c -> c.id().equals("hours") && !c.ok());
+        assertThatThrownBy(() -> service.goLive(email, s.getId(), null)).hasMessageContaining("hours");
     }
 
     @Test

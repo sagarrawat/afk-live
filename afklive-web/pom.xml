@@ -86,6 +86,12 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- GST invoices as PDF (BI-3) -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>2.0.3</version>
+        </dependency>
         <!-- QR codes for setting up phone streaming apps (MS-1) -->
         <dependency>
             <groupId>com.google.zxing</groupId>

@@ -38,6 +38,12 @@ class StreamLimitTest {
     @InjectMocks
     private StreamService streamService;
 
+    private static com.afklive.streamer.model.PlanConfig config(PlanType t) {
+        com.afklive.streamer.model.PlanConfig c = new com.afklive.streamer.model.PlanConfig();
+        c.applyDefaults(t);
+        return c;
+    }
+
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
@@ -54,7 +60,7 @@ class StreamLimitTest {
         when(userService.getOrCreateUser(username)).thenReturn(user);
         when(userService.checkCreditLimit(username)).thenReturn(true);
         // Mock plan service to avoid NPE later in method
-        when(planService.getPlanConfig(any())).thenReturn(new com.afklive.streamer.model.PlanConfig(PlanType.FREE, "Free", "0", "Monthly", 100L, 10, 10, 1, 720));
+        when(planService.getPlanConfig(any())).thenReturn(config(PlanType.FREE));
 
         try {
              streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 720, null, null, null, false, null, false);
@@ -94,7 +100,7 @@ class StreamLimitTest {
         when(userService.getOrCreateUser(username)).thenReturn(user);
 
         // Mock plan service
-        when(planService.getPlanConfig(any())).thenReturn(new com.afklive.streamer.model.PlanConfig(PlanType.ESSENTIALS, "Essentials", "10", "Monthly", 100L, 10, 10, 1, 1080));
+        when(planService.getPlanConfig(any())).thenReturn(config(PlanType.ESSENTIALS));
 
         try {
              streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 1080, null, null, null, false, null, false);
