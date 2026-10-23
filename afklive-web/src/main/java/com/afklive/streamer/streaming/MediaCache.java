@@ -15,6 +15,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -34,8 +35,10 @@ public class MediaCache {
     private final Path root;
     private final long budgetBytes;
     private final Map<String, ReentrantLock> locks = new ConcurrentHashMap<>();
-    private final Map<String, Integer> pins = new HashMap<>();
-    private final Map<String, Long> lastUsed = new HashMap<>();
+    /** By file: pin counts and last use. Files left by an earlier process are found by a scan at start. */
+    private final Map<Path, Integer> pins = new HashMap<>();
+    private final Map<Path, Long> lastUsed = new HashMap<>();
+    private final java.util.concurrent.atomic.AtomicLong useClock = new java.util.concurrent.atomic.AtomicLong();
     private final ExecutorService prefetcher = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "media-prefetch");
         t.setDaemon(true);
@@ -48,6 +51,31 @@ public class MediaCache {
         this.storage = storage;
         this.root = Paths.get(workDir).resolve("cache");
         this.budgetBytes = cacheGb * 1024L * 1024 * 1024;
+        adoptExistingFiles();
+    }
+
+    /** Files from before a restart count against the budget and are evicted oldest first. */
+    private synchronized void adoptExistingFiles() {
+        if (!Files.isDirectory(root)) {
+            return;
+        }
+        try (var files = Files.list(root)) {
+            List<Path> old = new java.util.ArrayList<>();
+            for (Path p : (Iterable<Path>) files::iterator) {
+                if (p.getFileName().toString().endsWith(".part")) {
+                    Files.deleteIfExists(p); // an interrupted download
+                } else {
+                    old.add(p);
+                }
+            }
+            old.sort(java.util.Comparator.comparingLong(p -> p.toFile().lastModified()));
+            long rank = -old.size();
+            for (Path p : old) {
+                lastUsed.put(p, rank++); // older than anything used from now on, oldest first
+            }
+        } catch (IOException e) {
+            log.warn("Couldn't scan the media cache: {}", e.getMessage());
+        }
     }
 
     /** The local copy of {@code key}, downloading it now if needed. Blocks; never call from the studio clock. */
@@ -64,12 +92,16 @@ public class MediaCache {
                 Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
                 log.info("Cached {} ({} MB in {} ms)", target.getFileName(), Files.size(target) / (1024 * 1024),
                         (System.nanoTime() - started) / 1_000_000);
-                evictIfNeeded();
+                touch(target);
+                evictIfNeeded(target);
             }
-            touch(key);
+            touch(target);
             return target;
         } finally {
             lock.unlock();
+            if (!lock.hasQueuedThreads()) {
+                locks.remove(key, lock); // don't keep a lock per file ever seen
+            }
         }
     }
 
@@ -89,51 +121,50 @@ public class MediaCache {
 
     /** Marks a file in use (it won't be evicted until released). */
     public synchronized void pin(String key) {
-        pins.merge(key, 1, Integer::sum);
-        lastUsed.put(key, System.nanoTime());
+        Path p = pathFor(key);
+        pins.merge(p, 1, Integer::sum);
+        lastUsed.put(p, useClock.incrementAndGet());
     }
 
     public synchronized void release(String key) {
-        pins.computeIfPresent(key, (k, n) -> n <= 1 ? null : n - 1);
+        pins.computeIfPresent(pathFor(key), (k, n) -> n <= 1 ? null : n - 1);
     }
 
-    private synchronized void touch(String key) {
-        lastUsed.put(key, System.nanoTime());
+    private synchronized void touch(Path p) {
+        lastUsed.put(p, useClock.incrementAndGet());
     }
 
-    private synchronized void evictIfNeeded() throws IOException {
+    /** Removes least recently used, unpinned files until the cache fits its budget (never {@code keep}). */
+    private synchronized void evictIfNeeded(Path keep) throws IOException {
         long total = 0;
-        Map<Path, String> byPath = new HashMap<>();
         try (var files = Files.list(root)) {
             for (Path p : (Iterable<Path>) files::iterator) {
                 if (!p.getFileName().toString().endsWith(".part")) {
                     total += Files.size(p);
+                    lastUsed.putIfAbsent(p, Long.MIN_VALUE);
                 }
             }
         }
         if (total <= budgetBytes) {
             return;
         }
-        for (String key : lastUsed.keySet()) {
-            byPath.put(pathFor(key), key);
-        }
         var candidates = new java.util.ArrayList<>(lastUsed.entrySet());
         candidates.sort(Map.Entry.comparingByValue());
-        for (Map.Entry<String, Long> e : candidates) {
+        for (Map.Entry<Path, Long> e : candidates) {
             if (total <= budgetBytes) {
                 break;
             }
-            if (pins.containsKey(e.getKey())) {
+            Path p = e.getKey();
+            if (pins.containsKey(p) || p.equals(keep)) {
                 continue;
             }
-            Path p = pathFor(e.getKey());
             if (Files.exists(p)) {
                 long size = Files.size(p);
                 Files.deleteIfExists(p);
                 total -= size;
-                lastUsed.remove(e.getKey());
                 log.info("Evicted {} from the media cache", p.getFileName());
             }
+            lastUsed.remove(p);
         }
     }
 

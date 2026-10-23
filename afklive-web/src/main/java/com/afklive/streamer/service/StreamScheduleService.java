@@ -46,6 +46,7 @@ public class StreamScheduleService {
     private final String role;
     private final com.afklive.streamer.repository.StreamCommandRepository commands;
     private long ticks;
+    private final org.springframework.transaction.support.TransactionTemplate tx;
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "stream-schedules");
         t.setDaemon(true);
@@ -55,7 +56,9 @@ public class StreamScheduleService {
     public StreamScheduleService(StreamScheduleRepository schedules, LiveStreamRepository streams, StreamJobRepository jobs,
                                  LiveStreamService liveStreams, StreamService streamService,
                                  com.afklive.streamer.repository.StreamCommandRepository commands,
+                                 org.springframework.transaction.PlatformTransactionManager txManager,
                                  @Value("${app.streaming.role:all}") String role) {
+        this.tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
         this.commands = commands;
         this.schedules = schedules;
         this.streams = streams;
@@ -301,13 +304,16 @@ public class StreamScheduleService {
             if (w.isEmpty()) {
                 continue;
             }
-            if (schedules.claimOccurrence(sc.getId(), w.get().date()) != 1) {
-                continue; // already started (by us or another instance)
-            }
             startOccurrence(sc, w.get(), now);
         }
     }
 
+    /**
+     * Claims the occurrence and starts the stream in one transaction: if this instance dies halfway,
+     * nothing is committed and another instance (or the next tick) starts it. A start that fails for a
+     * reason (pre-flight) is claimed in a second transaction with the reason recorded, so it isn't
+     * retried every tick.
+     */
     private void startOccurrence(StreamSchedule sc, Window w, ZonedDateTime now) {
         Optional<LiveStream> stream = streams.findById(sc.getStreamId());
         if (stream.isEmpty()) {
@@ -315,26 +321,40 @@ public class StreamScheduleService {
         }
         String email = stream.get().getUser().getEmail();
         try {
-            StreamJob job;
-            List<StreamJob> live = jobs.findAllByStreamIdAndIsLiveTrue(sc.getStreamId());
-            if (!live.isEmpty()) {
-                job = live.getFirst(); // already live (started by hand): just apply the scheduled end
-            } else {
-                job = liveStreams.goLive(email, sc.getStreamId(), null);
-                log.info("Schedule {} started stream {} (job {})", sc.getId(), sc.getStreamId(), job.getId());
+            Boolean started = tx.execute(status -> {
+                if (schedules.claimOccurrence(sc.getId(), w.date()) != 1) {
+                    return false; // already started (by us or another instance)
+                }
+                if (!jobs.findAllByStreamIdAndIsLiveTrue(sc.getStreamId()).isEmpty()) {
+                    // Already live, started by hand (or by another schedule): leave that run and its end alone.
+                    schedules.recordError(sc.getId(), "Was already live at the scheduled start; left running as it was.");
+                } else {
+                    StreamJob job = liveStreams.goLive(email, sc.getStreamId(), null);
+                    if (w.end() != null && w.end().isAfter(now)) {
+                        streamService.setStopAt(job.getId(), email, w.end().withZoneSameInstant(ZoneId.of("UTC")));
+                    }
+                    schedules.recordError(sc.getId(), null);
+                    log.info("Schedule {} started stream {} (job {})", sc.getId(), sc.getStreamId(), job.getId());
+                }
+                if (sc.getKind() == StreamSchedule.Kind.ONCE) {
+                    schedules.disable(sc.getId());
+                }
+                return true;
+            });
+            if (!Boolean.TRUE.equals(started)) {
+                return;
             }
-            if (w.end() != null && w.end().isAfter(now)) {
-                streamService.setStopAt(job.getId(), email, w.end().withZoneSameInstant(ZoneId.of("UTC")));
-            }
-            schedules.recordError(sc.getId(), null);
         } catch (Exception e) {
             String reason = e.getMessage() == null ? "Could not start" : e.getMessage();
             log.warn("Schedule {} could not start stream {}: {}", sc.getId(), sc.getStreamId(), reason);
-            schedules.recordError(sc.getId(), reason);
-        } finally {
-            if (sc.getKind() == StreamSchedule.Kind.ONCE) {
-                schedules.disable(sc.getId());
-            }
+            tx.executeWithoutResult(status -> {
+                if (schedules.claimOccurrence(sc.getId(), w.date()) == 1) {
+                    schedules.recordError(sc.getId(), reason);
+                    if (sc.getKind() == StreamSchedule.Kind.ONCE) {
+                        schedules.disable(sc.getId());
+                    }
+                }
+            });
         }
     }
 

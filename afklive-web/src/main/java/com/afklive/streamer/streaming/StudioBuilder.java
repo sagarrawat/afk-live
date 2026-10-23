@@ -36,17 +36,65 @@ public class StudioBuilder {
     private final MediaCache cache;
     private final com.afklive.streamer.service.MediaProbe probe;
     /** Whether each file has an audio track, when the library knows (from upload) or a probe found out. */
-    private final Map<String, Boolean> audioKnown = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<String, Double> durationKnown = new java.util.concurrent.ConcurrentHashMap<>();
+    /**
+     * A built studio plus what's needed to change it while live: the factory and canvas for new
+     * feeds, and the media lists that drive prefetching (updated by live playlist edits).
+     */
+    public final class Built {
+        final Studio studio;
+        final PlaylistFeed playlist;
+        volatile PlaylistFeed music;
+        final Canvas canvas;
+        final String ffmpeg;
+        final Random random = new Random();
+        final PlaylistFeed.SourceFactory factory;
+        /** The lists prefetching follows; live playlist edits replace them. */
+        java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> videoRefs;
+        java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> musicRefs;
+        final Map<String, StudioSpec.SceneSetting> sceneSettings = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /** What a built studio exposes to the worker for live changes. */
-    public record Built(Studio studio, PlaylistFeed playlist, PlaylistFeed music) {
+        private Built(Studio studio, PlaylistFeed playlist, PlaylistFeed music, Canvas canvas, String ffmpeg,
+                      PlaylistFeed.SourceFactory factory) {
+            this.studio = studio;
+            this.playlist = playlist;
+            this.music = music;
+            this.canvas = canvas;
+            this.ffmpeg = ffmpeg;
+            this.factory = factory;
+        }
+
+        public Studio studio() {
+            return studio;
+        }
+
+        public PlaylistFeed playlist() {
+            return playlist;
+        }
+
+        public PlaylistFeed music() {
+            return music;
+        }
+
+        /** A music bed for a live change that adds music to a run that started without it. */
+        PlaylistFeed newMusic(List<StudioSpec.Media> media, String musicOrder) {
+            musicRefs.set(List.copyOf(media));
+            if (!media.isEmpty()) {
+                cache.prefetch(media.getFirst().key());
+            }
+            return new PlaylistFeed(canvas, items(media), order(musicOrder), 0, null, prefetching(factory, musicRefs), true, random);
+        }
+
+        Feed background(StudioSpec.SceneSetting setting) throws IOException {
+            return StudioBuilder.this.background(canvas, setting, factory, ffmpeg, random);
+        }
     }
 
     public Built build(long jobId, StudioSpec spec, Path workDir, StudioSpec.Position resume, String initialScene,
                        Studio.Listener listener) throws IOException {
         Canvas canvas = Canvas.of(spec.height(), spec.vertical(), spec.fps());
         String ffmpeg = FFmpegCommandBuilder.ffmpegBinary();
+        Map<String, Boolean> audioKnown = new java.util.concurrent.ConcurrentHashMap<>();
+        Map<String, Double> durationKnown = new java.util.concurrent.ConcurrentHashMap<>();
         Random random = new Random();
 
         PlaylistFeed.SourceFactory factory = (item, start, audioOnly) -> {
@@ -61,7 +109,7 @@ public class StudioBuilder {
                         Boolean hasAudio = audioOnly ? Boolean.TRUE : audioKnown.get(key);
                         Double duration = item.durationSeconds() > 0 ? null : durationKnown.get(key);
                         if (hasAudio == null || (item.durationSeconds() <= 0 && duration == null)) {
-                            // Older library files weren't probed at upload: check now, once per file.
+                            // Older library files weren't probed at upload: check now, once per file per run.
                             com.afklive.streamer.service.MediaProbe.MediaInfo info = probe.probe(file);
                             if (info.hasAudio() != null) {
                                 audioKnown.put(key, info.hasAudio());
@@ -84,25 +132,31 @@ public class StudioBuilder {
                 list.stream().filter(m -> m.hasAudio() != null).forEach(m -> audioKnown.put(m.key(), m.hasAudio()));
             }
         }
+        java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> videoRefs =
+                new java.util.concurrent.atomic.AtomicReference<>(spec.videos() == null ? List.of() : List.copyOf(spec.videos()));
+        java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> musicRefs =
+                new java.util.concurrent.atomic.AtomicReference<>(spec.music() == null ? List.of() : List.copyOf(spec.music()));
 
-        // Video playlist (PLAYLIST source). Fetch the first few items now so the start is instant.
+        // Video playlist (PLAYLIST source). Fetch the first items now so the start is quick.
         PlaylistFeed playlist = null;
         if ("PLAYLIST".equals(spec.source())) {
-            List<PlaylistFeed.Item> items = items(spec.videos());
             for (int i = 0; i < Math.min(2, spec.videos().size()); i++) {
                 cache.prefetch(spec.videos().get(i).key());
             }
-            playlist = new PlaylistFeed(canvas, items, order(spec.order()), spec.loops(), position(resume),
-                    prefetching(factory, spec.videos()), false, random);
+            playlist = new PlaylistFeed(canvas, items(spec.videos()), order(spec.order()), spec.loops(), position(resume),
+                    prefetching(factory, videoRefs), false, random);
+            if (spec.finishAfterPass()) {
+                playlist.endAfterThisPass(); // asked for before a restart or takeover: still applies
+            }
         }
 
         // Music bed: plays under any scene that asks for it; KEEP means the videos' own sound only.
         PlaylistFeed music = null;
         boolean musicOn = !"KEEP".equals(spec.audioMode()) && spec.music() != null && !spec.music().isEmpty();
         if (musicOn) {
-            cache.prefetch(spec.music().get(0).key());
+            cache.prefetch(spec.music().getFirst().key());
             music = new PlaylistFeed(canvas, items(spec.music()), order(spec.musicOrder()), 0, null,
-                    prefetching(factory, spec.music()), true, random);
+                    prefetching(factory, musicRefs), true, random);
         }
         double videoVolume = "MUTE".equals(spec.audioMode()) ? 0 : clampVolume(spec.videoVolume());
         double musicVolume = clampVolume(spec.musicVolume());
@@ -147,7 +201,11 @@ public class StudioBuilder {
         String first = wanted != null && scenes.stream().anyMatch(sc -> sc.name().equals(wanted)) ? wanted : StudioSpec.LIVE;
         long grace = spec.phone() != null ? spec.phone().graceSeconds() * 1000L : 0;
         Studio studio = new Studio(canvas, workDir, ffmpeg, scenes, first, global, grace, listener);
-        return new Built(studio, playlist, music);
+        Built built = new Built(studio, playlist, music, canvas, ffmpeg, factory);
+        built.videoRefs = videoRefs;
+        built.musicRefs = musicRefs;
+        built.sceneSettings.putAll(settings);
+        return built;
     }
 
     /** Overlays for live updates (RELOAD): global ones, and per scene. */
@@ -156,7 +214,13 @@ public class StudioBuilder {
             return;
         }
         for (StudioSpec.OverlaySetting o : spec.overlays()) {
-            Overlay overlay = toOverlay(o);
+            Overlay overlay;
+            try {
+                overlay = toOverlay(o);
+            } catch (IOException e) {
+                log.warn("Overlay {} skipped: its image couldn't be fetched ({})", o.id(), e.getMessage());
+                continue;
+            }
             if (overlay == null) {
                 continue;
             }
@@ -200,9 +264,11 @@ public class StudioBuilder {
     }
 
     /** When an item starts, fetch the two after it so they're on disk before they're needed. */
-    private PlaylistFeed.SourceFactory prefetching(PlaylistFeed.SourceFactory inner, List<StudioSpec.Media> media) {
+    private PlaylistFeed.SourceFactory prefetching(PlaylistFeed.SourceFactory inner,
+                                                   java.util.concurrent.atomic.AtomicReference<List<StudioSpec.Media>> refs) {
         return (item, start, audioOnly) -> {
             String key = keyOf(item);
+            List<StudioSpec.Media> media = refs.get();
             for (int i = 0; i < media.size(); i++) {
                 if (media.get(i).key().equals(key)) {
                     cache.prefetch(media.get((i + 1) % media.size()).key());
@@ -221,7 +287,7 @@ public class StudioBuilder {
         return new PlaylistFeed.Position(p.itemId(), p.offsetSeconds(), p.loopsCompleted());
     }
 
-    private Feed background(Canvas canvas, StudioSpec.SceneSetting s, PlaylistFeed.SourceFactory factory,
+    Feed background(Canvas canvas, StudioSpec.SceneSetting s, PlaylistFeed.SourceFactory factory,
                             String ffmpeg, Random random) throws IOException {
         if (s.backgroundKey() != null && "IMAGE".equals(s.backgroundType())) {
             try {

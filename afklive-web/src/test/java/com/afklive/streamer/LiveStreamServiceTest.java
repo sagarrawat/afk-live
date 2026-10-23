@@ -190,6 +190,11 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
         assertThat(StudioSpec.parse(sent.get(4).getPayload(), StudioSpec.class).order()).isEqualTo("SHUFFLE");
         // The hidden overlay stays hidden next time.
         assertThat(service.view(email, s.getId()).overlays().getFirst().visible()).isFalse();
+        // And a worker that restarts or takes over builds the latest settings, including the pending stop.
+        StudioSpec persisted = StreamSpec.fromJson(jobs.findById(job.getId()).orElseThrow().getSpec()).studio();
+        assertThat(persisted.order()).isEqualTo("SHUFFLE");
+        assertThat(persisted.overlays().getFirst().visible()).isFalse();
+        assertThat(persisted.finishAfterPass()).isTrue();
     }
 
     @Test
@@ -232,5 +237,53 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
         service.goLive(email, s.getId(), null);
         assertThatThrownBy(() -> service.delete(email, s.getId())).hasMessageContaining("Stop the stream");
         assertThat(jobs.findAllByStreamIdAndIsLiveTrue(s.getId()).getFirst().getStatus()).isEqualTo(StreamStates.STARTING);
+    }
+
+    @Test
+    void twoSimultaneousStartsCantBothPassTheOneStreamLimit() throws Exception {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream a = ready(email);
+        LiveStream b = ready(email);
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
+        java.util.concurrent.atomic.AtomicInteger started = new java.util.concurrent.atomic.AtomicInteger();
+        List<Thread> threads = new java.util.ArrayList<>();
+        for (LiveStream s : List.of(a, b)) {
+            threads.add(Thread.ofPlatform().start(() -> {
+                try {
+                    barrier.await();
+                    service.goLive(email, s.getId(), null);
+                    started.incrementAndGet();
+                } catch (Exception ignored) {
+                    // the one that loses the race is refused by pre-flight
+                }
+            }));
+        }
+        for (Thread t : threads) {
+            t.join(20_000);
+        }
+        assertThat(started.get()).isEqualTo(1);
+        assertThat(jobs.countByUserEmailAndIsLiveTrue(email)).isEqualTo(1);
+    }
+
+    @Test
+    void picturesettingsCantChangeWhileLiveAndUnknownStreamsAreNotFound() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        service.goLive(email, s.getId(), null);
+        assertThatThrownBy(() -> service.update(email, s.getId(), new UpdateStream(null, null, 1080, null, null, null, null, null, null, null, null)))
+                .isInstanceOf(com.afklive.streamer.exception.ConflictException.class);
+        // Other settings still apply live.
+        service.update(email, s.getId(), new UpdateStream("Renamed", null, null, null, null, null, null, null, null, 0.5, null));
+        assertThatThrownBy(() -> service.view(email, 987654321L)).isInstanceOf(com.afklive.streamer.exception.NotFoundException.class);
+    }
+
+    @Test
+    void aFinishedPlaylistStartsFromTheTopNextTime() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        StreamJob job = service.goLive(email, s.getId(), null);
+        streams.saveResumePositionForTest(s.getId(), "{\"itemId\":\"1|k\",\"offsetSeconds\":10,\"loopsCompleted\":0}");
+        streamService.finalizeJob(job.getId(), "Playlist finished");
+        assertThat(streams.findById(s.getId()).orElseThrow().getResumePosition()).isNull();
     }
 }

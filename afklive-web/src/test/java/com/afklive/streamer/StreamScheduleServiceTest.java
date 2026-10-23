@@ -159,4 +159,16 @@ class StreamScheduleServiceTest extends PostgresIntegrationTest {
     private static ZonedDateTime callNext(StreamSchedule s, ZonedDateTime now) {
         return StreamScheduleService.nextStart(s, now);
     }
+
+    @Test
+    void aScheduleDoesntCutShortAStreamStartedByHand() {
+        Fixture f = readyStream();
+        StreamJob manual = liveStreams.goLive(f.email(), f.stream().getId(), null);
+        LocalTime start = LocalTime.now(IST).minusMinutes(1).withSecond(0).withNano(0);
+        ScheduleView v = schedules.create(f.email(), f.stream().getId(), new ScheduleRequest("DAILY", null, null, null,
+                start.toString(), start.plusHours(1).toString(), "Asia/Kolkata", null, true));
+        schedules.runDue(ZonedDateTime.now(ZoneId.of("UTC")));
+        assertThat(jobs.findById(manual.getId()).orElseThrow().getStopAt()).isNull();
+        assertThat(scheduleRepository.findById(v.id()).orElseThrow().getLastError()).contains("already live");
+    }
 }

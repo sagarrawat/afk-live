@@ -87,6 +87,9 @@ public class StreamJob {
     private Boolean inputLive;
     @Column(name = "now_playing", columnDefinition = "TEXT")
     private String nowPlaying;
+    /** Highest live command the worker has applied (commands after it are still to apply). */
+    @Column(name = "applied_command_id", nullable = false)
+    private long appliedCommandId;
     /** Why the stream ended (user, schedule, credit limit, crash, server restart). */
     private String endReason;
 

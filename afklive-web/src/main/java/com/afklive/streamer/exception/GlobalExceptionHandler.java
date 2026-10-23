@@ -34,6 +34,16 @@ public class GlobalExceptionHandler {
         return body(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_ERROR);
     }
 
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(NotFoundException e) {
+        return body(HttpStatus.NOT_FOUND, userFacing(e.getMessage()));
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleConflict(ConflictException e) {
+        return body(HttpStatus.CONFLICT, userFacing(e.getMessage()));
+    }
+
     @ExceptionHandler({IllegalStateException.class, IllegalArgumentException.class})
     public ResponseEntity<Map<String, Object>> handleBadRequest(RuntimeException e) {
         return body(HttpStatus.BAD_REQUEST, userFacing(e.getMessage()));

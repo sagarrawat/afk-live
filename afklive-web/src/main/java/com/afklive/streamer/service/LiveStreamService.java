@@ -50,6 +50,7 @@ public class LiveStreamService {
     private final PlanService planService;
     private final AppConfigService appConfigService;
     private final StreamService streamService;
+    private final UserRepository users;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -88,7 +89,7 @@ public class LiveStreamService {
     }
 
     public LiveStream get(String email, Long id) {
-        return streams.findByIdAndUserEmail(id, email).orElseThrow(() -> new IllegalArgumentException("Stream not found."));
+        return streams.findByIdAndUserEmail(id, email).orElseThrow(() -> new com.afklive.streamer.exception.NotFoundException("Stream not found."));
     }
 
     public StreamView view(String email, Long id) {
@@ -116,6 +117,14 @@ public class LiveStreamService {
         }
         if (req.orientation() != null) {
             s.setOrientation(parse(LiveStream.Orientation.class, req.orientation(), "orientation"));
+        }
+        boolean live = currentJob(s).isPresent();
+        boolean picture = (req.orientation() != null && !req.orientation().equalsIgnoreCase(s.getOrientation().name()))
+                || (req.qualityHeight() != null && req.qualityHeight() != s.getQualityHeight())
+                || (req.fps() != null && req.fps() != s.getFps());
+        if (live && picture) {
+            throw new com.afklive.streamer.exception.ConflictException(
+                    "Quality, frame rate and orientation can't change while live. Stop the stream to change them.");
         }
         if (req.qualityHeight() != null || req.fps() != null) {
             int h = req.qualityHeight() != null ? req.qualityHeight() : s.getQualityHeight();
@@ -157,7 +166,7 @@ public class LiveStreamService {
     public void delete(String email, Long id) {
         LiveStream s = get(email, id);
         if (!jobs.findAllByStreamIdAndIsLiveTrue(id).isEmpty()) {
-            throw new IllegalStateException("Stop the stream before deleting it.");
+            throw new com.afklive.streamer.exception.ConflictException("Stop the stream before deleting it.");
         }
         streams.delete(s);
     }
@@ -220,7 +229,8 @@ public class LiveStreamService {
 
     @Transactional
     public List<StudioSpec.OverlaySetting> setOverlays(String email, Long id, List<StudioSpec.OverlaySetting> list) {
-        LiveStream s = get(email, id);
+        get(email, id);
+        LiveStream s = streams.lockById(id).orElseThrow(); // two tabs editing overlays mustn't drop each other's changes
         List<StudioSpec.OverlaySetting> clean = new ArrayList<>();
         Set<String> ids = new HashSet<>();
         if (list != null && list.size() > MAX_OVERLAYS) {
@@ -274,7 +284,8 @@ public class LiveStreamService {
 
     @Transactional
     public List<StudioSpec.SceneSetting> setScenes(String email, Long id, List<StudioSpec.SceneSetting> list) {
-        LiveStream s = get(email, id);
+        get(email, id);
+        LiveStream s = streams.lockById(id).orElseThrow();
         Map<String, StudioSpec.SceneSetting> byName = new LinkedHashMap<>();
         for (StudioSpec.SceneSetting sc : defaultScenes()) {
             byName.put(sc.name(), sc);
@@ -299,6 +310,7 @@ public class LiveStreamService {
         List<StudioSpec.SceneSetting> clean = new ArrayList<>(byName.values());
         s.setScenes(StudioSpec.json(clean));
         streams.save(s);
+        reloadIfLive(s);
         return clean;
     }
 
@@ -381,7 +393,14 @@ public class LiveStreamService {
     /** GL-2: go live. Runs pre-flight; on success a worker picks the run up within seconds. */
     @Transactional
     public StreamJob goLive(String email, Long id, String scene) {
-        streams.lockById(id); // one start at a time per stream
+        get(email, id); // ownership first, before taking any lock
+        // Plan limits count the user's live runs: serialize this user's starts (and free-tier starts
+        // platform-wide), then this stream's, so two simultaneous starts can't both pass the check.
+        User owner = users.lockByEmail(email).orElseThrow();
+        if (owner.getPlanType() == PlanType.FREE) {
+            jobs.lockFreeCapacity();
+        }
+        streams.lockById(id);
         Preflight pf = preflight(email, id);
         if (!pf.ok()) {
             String first = pf.checks().stream().filter(c -> !c.ok()).map(Check::message).findFirst().orElse("Pre-flight failed.");
@@ -435,7 +454,7 @@ public class LiveStreamService {
     @Transactional
     public LiveState stop(String email, Long id, StopRequest req) {
         LiveStream s = get(email, id);
-        StreamJob job = currentJob(s).orElseThrow(() -> new IllegalStateException("This stream isn't live."));
+        StreamJob job = currentJob(s).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         String mode = req == null || req.mode() == null ? "NOW" : req.mode().toUpperCase(Locale.ROOT);
         switch (mode) {
             case "NOW" -> streamService.stopStream(job.getId(), email);
@@ -456,6 +475,11 @@ public class LiveStreamService {
                 if (s.getSource() != LiveStream.Source.PLAYLIST) {
                     throw new IllegalArgumentException("Only playlist streams can stop after the playlist.");
                 }
+                StreamSpec current = StreamSpec.fromJson(job.getSpec());
+                if (current.studio() != null) {
+                    jobs.updateSpec(job.getId(), StreamSpec.studio(current.username(), current.streamId(),
+                            current.studio().withFinishAfterPass(), current.destinations()).toJson());
+                }
                 command(job, StreamCommand.Type.FINISH_PASS, null);
             }
             default -> throw new IllegalArgumentException("Stop mode must be NOW, AT or AFTER_PLAYLIST.");
@@ -466,7 +490,7 @@ public class LiveStreamService {
     @Transactional
     public void cancelScheduledStop(String email, Long id) {
         LiveStream s = get(email, id);
-        StreamJob job = currentJob(s).orElseThrow(() -> new IllegalStateException("This stream isn't live."));
+        StreamJob job = currentJob(s).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         streamService.setStopAt(job.getId(), email, null);
     }
 
@@ -477,14 +501,15 @@ public class LiveStreamService {
         if (scene == null || !SCENES.contains(scene)) {
             throw new IllegalArgumentException("Unknown scene: " + scene);
         }
-        StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new IllegalStateException("This stream isn't live."));
+        StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         command(job, StreamCommand.Type.SCENE, scene);
     }
 
     /** Shows or hides an overlay now, and remembers it for the next time the stream goes live. */
     @Transactional
     public void setOverlayVisible(String email, Long id, String overlayId, boolean visible) {
-        LiveStream s = get(email, id);
+        get(email, id);
+        LiveStream s = streams.lockById(id).orElseThrow();
         List<StudioSpec.OverlaySetting> list = new ArrayList<>(overlays(s));
         boolean found = false;
         for (int i = 0; i < list.size(); i++) {
@@ -501,13 +526,15 @@ public class LiveStreamService {
         }
         s.setOverlays(StudioSpec.json(list));
         streams.save(s);
-        currentJob(s).ifPresent(job -> command(job, StreamCommand.Type.OVERLAY,
-                StudioSpec.json(Map.of("id", overlayId, "visible", visible))));
+        currentJob(s).ifPresent(job -> {
+            persistSpec(job, s, true); // a takeover keeps the toggle
+            command(job, StreamCommand.Type.OVERLAY, StudioSpec.json(Map.of("id", overlayId, "visible", visible)));
+        });
     }
 
     @Transactional
     public void skip(String email, Long id) {
-        StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new IllegalStateException("This stream isn't live."));
+        StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         command(job, StreamCommand.Type.SKIP, null);
     }
 
@@ -627,7 +654,7 @@ public class LiveStreamService {
         return new StudioSpec(s.getQualityHeight(), s.getOrientation() == LiveStream.Orientation.VERTICAL, s.getFps(),
                 s.getSource().name(), videos, s.getPlaybackOrder().name(), s.getLoopCount(), music,
                 s.getMusicOrder().name(), s.getAudioMode().name(), s.getVideoVolume(), s.getMusicVolume(),
-                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, null);
+                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, null, false);
     }
 
     private static StudioSpec.Media mediaOf(MediaAsset m) {
@@ -637,7 +664,25 @@ public class LiveStreamService {
 
     /** Edits made while live reach the running studio without restarting anything. */
     private void reloadIfLive(LiveStream s) {
-        currentJob(s).ifPresent(job -> command(job, StreamCommand.Type.RELOAD, StudioSpec.json(studioSpec(s, null))));
+        currentJob(s).ifPresent(job -> {
+            StudioSpec next = persistSpec(job, s, true);
+            command(job, StreamCommand.Type.RELOAD, StudioSpec.json(next));
+        });
+    }
+
+    /**
+     * Writes the stream's current settings into the run's spec, so a worker that restarts or takes the
+     * run over builds what the creator sees now, not what it was at go-live. Keeps the run's
+     * destinations and any pending "stop after the playlist".
+     */
+    private StudioSpec persistSpec(StreamJob job, LiveStream s, boolean sceneFromJob) {
+        StreamSpec current = StreamSpec.fromJson(job.getSpec());
+        StudioSpec next = studioSpec(s, sceneFromJob ? job.getScene() : null);
+        if (current.studio() != null && current.studio().finishAfterPass()) {
+            next = next.withFinishAfterPass();
+        }
+        jobs.updateSpec(job.getId(), StreamSpec.studio(current.username(), current.streamId(), next, current.destinations()).toJson());
+        return next;
     }
 
     private void command(StreamJob job, StreamCommand.Type type, String payload) {

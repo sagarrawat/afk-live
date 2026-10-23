@@ -27,7 +27,7 @@ public final class LiveFeed implements Feed {
 
     private final Canvas canvas;
     private final DecoderSource input;
-    private final Feed fallback;
+    private volatile Feed fallback;
     private final Settings settings;
     private final Listener listener;
     private final Frame scratch;
@@ -43,6 +43,11 @@ public final class LiveFeed implements Feed {
         this.settings = settings;
         this.listener = listener == null ? live -> { } : listener;
         this.scratch = new Frame(canvas);
+    }
+
+    /** Replaces the fallback (the BRB scene's background changed while live). */
+    public void setFallback(Feed feed) {
+        this.fallback = feed;
     }
 
     public boolean onLive() {

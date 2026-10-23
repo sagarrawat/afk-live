@@ -67,7 +67,7 @@ class LiveStreamControllerTest extends PostgresIntegrationTest {
 
         // Someone else's stream is simply not found.
         mvc.perform(get("/api/streams/" + id).with(user(OTHER).roles("USER")))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
 
         mvc.perform(post("/api/streams").with(user(EMAIL).roles("USER")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"4K\",\"qualityHeight\":2160}"))

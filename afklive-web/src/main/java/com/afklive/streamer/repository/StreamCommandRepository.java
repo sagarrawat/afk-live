@@ -20,6 +20,11 @@ public interface StreamCommandRepository extends JpaRepository<StreamCommand, Lo
     @Query("SELECT COALESCE(MAX(c.id), 0) FROM StreamCommand c")
     long maxId();
 
+    /** Recent commands for these jobs (ids after {@code after}, created since {@code since}), oldest first. */
+    @Query("SELECT c FROM StreamCommand c WHERE c.jobId IN :jobIds AND c.id > :after AND c.createdAt > :since ORDER BY c.id")
+    List<StreamCommand> findRecent(@Param("jobIds") Collection<Long> jobIds, @Param("after") long after,
+                                   @Param("since") ZonedDateTime since);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM StreamCommand c WHERE c.createdAt < :before")

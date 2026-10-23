@@ -83,4 +83,5 @@ ALTER TABLE stream_jobs ADD COLUMN stream_id BIGINT REFERENCES streams(id) ON DE
 ALTER TABLE stream_jobs ADD COLUMN scene VARCHAR(30);
 ALTER TABLE stream_jobs ADD COLUMN input_live BOOLEAN;
 ALTER TABLE stream_jobs ADD COLUMN now_playing TEXT;
+ALTER TABLE stream_jobs ADD COLUMN applied_command_id BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX idx_stream_jobs_stream ON stream_jobs(stream_id);

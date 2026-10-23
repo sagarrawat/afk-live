@@ -63,6 +63,8 @@ public class StreamService {
     private com.afklive.streamer.repository.MediaAssetRepository mediaAssetRepository;
     @Autowired
     private com.afklive.streamer.repository.ScheduledStreamRepository scheduledStreamRepository;
+    @Autowired
+    private com.afklive.streamer.repository.LiveStreamRepository liveStreamRepository;
 
     /** "all" (default: web and worker in one process), "web" or "worker". */
     @Value("${app.streaming.role:all}")
@@ -358,6 +360,9 @@ public class StreamService {
             }
         }
         updateScheduledStream(job, reason, failed);
+        if (job.getStreamId() != null && "Playlist finished".equals(reason)) {
+            liveStreamRepository.clearResumePosition(job.getStreamId()); // next time, start from the top
+        }
     }
 
     private void updateScheduledStream(StreamJob job, String reason, boolean failed) {

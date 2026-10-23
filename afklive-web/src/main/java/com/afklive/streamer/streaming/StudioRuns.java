@@ -45,6 +45,7 @@ public class StudioRuns {
         volatile StudioSpec spec;
         long lastSaveNanos;
         String lastPosition;
+        boolean closed;
 
         Handle(StudioBuilder.Built built, Path workDir, Long streamId, StudioSpec spec) {
             this.built = built;
@@ -83,6 +84,9 @@ public class StudioRuns {
 
     /** Reports studio state with the heartbeat; saves the playlist position every 10 s. */
     public void report(long jobId, String workerId, Handle h) {
+        if (h.closed) {
+            return;
+        }
         Studio.Status st = h.studio().status();
         jobs.reportStudio(jobId, workerId, st.scene(), st.inputLive(), nowPlayingJson(st.nowPlaying()));
         PlaylistFeed playlist = h.built.playlist();
@@ -91,7 +95,7 @@ public class StudioRuns {
             if (p.itemId() != null) {
                 String json = StudioSpec.json(new StudioSpec.Position(p.itemId(), p.offsetSeconds(), p.loopsCompleted()));
                 if (!json.equals(h.lastPosition)) {
-                    streams.saveResumePosition(h.streamId, json);
+                    streams.saveResumePosition(h.streamId, json, jobId, workerId); // only while this worker owns the run
                     h.lastPosition = json;
                 }
             }
@@ -101,6 +105,14 @@ public class StudioRuns {
 
     /** Applies one command from the web app. Runs on the worker's command thread; the studio applies it between frames. */
     public void apply(Handle h, StreamCommand c) {
+        synchronized (h) {
+            if (!h.closed) {
+                applyLocked(h, c);
+            }
+        }
+    }
+
+    private void applyLocked(Handle h, StreamCommand c) {
         Studio studio = h.studio();
         switch (c.getType()) {
             case SCENE -> studio.switchScene(c.getPayload());
@@ -118,46 +130,87 @@ public class StudioRuns {
         }
     }
 
-    /** New playlist, music, volumes or overlays while live: applied in place, the output never restarts. */
+    /** New playlist, music, volumes, scenes or overlays while live: applied in place, the output never restarts. */
     private void reload(Handle h, StudioSpec next) {
         Studio studio = h.studio();
-        PlaylistFeed playlist = h.built.playlist();
+        StudioBuilder.Built built = h.built;
+        PlaylistFeed playlist = built.playlist();
         if (playlist != null && next.videos() != null) {
+            built.videoRefs.set(List.copyOf(next.videos()));
             playlist.setItems(StudioBuilder.items(next.videos()), StudioBuilder.order(next.order()), next.loops());
+            if (next.finishAfterPass()) {
+                playlist.endAfterThisPass();
+            }
         }
-        PlaylistFeed music = h.built.music();
-        if (music != null && next.music() != null && !next.music().isEmpty()) {
+
+        // Music: KEEP or an empty list means none; otherwise update the bed, creating it if the run had none.
+        boolean wantMusic = !"KEEP".equals(next.audioMode()) && next.music() != null && !next.music().isEmpty();
+        PlaylistFeed music = built.music();
+        if (wantMusic && music == null) {
+            music = built.newMusic(next.music(), next.musicOrder());
+            built.music = music;
+        } else if (wantMusic) {
+            built.musicRefs.set(List.copyOf(next.music()));
             music.setItems(StudioBuilder.items(next.music()), StudioBuilder.order(next.musicOrder()), 0);
         }
+        PlaylistFeed musicNow = wantMusic ? music : null;
+
         List<Overlay> global = new ArrayList<>();
         Map<String, List<Overlay>> perScene = new LinkedHashMap<>();
         try {
             builder.splitOverlays(next, global, perScene);
         } catch (IOException e) {
-            log.warn("Overlay images for a live update couldn't be fetched: {}", e.getMessage());
+            log.warn("Overlays for a live update couldn't be prepared: {}", e.getMessage());
         }
         studio.setGlobalOverlays(global);
+
+        Map<String, StudioSpec.SceneSetting> settings = new LinkedHashMap<>();
+        if (next.scenes() != null) {
+            next.scenes().forEach(sc -> settings.put(sc.name(), sc));
+        }
         double videoVolume = "MUTE".equals(next.audioMode()) ? 0 : Math.max(0, Math.min(2, next.videoVolume()));
         double musicVolume = Math.max(0, Math.min(2, next.musicVolume()));
-        for (String name : List.of(StudioSpec.LIVE, StudioSpec.BRB, StudioSpec.STARTING, StudioSpec.ENDING)) {
+        for (String name : List.of(StudioSpec.BRB, StudioSpec.STARTING, StudioSpec.ENDING, StudioSpec.LIVE)) {
             Studio.Scene old = studio.scene(name);
             if (old == null) {
                 continue;
             }
             boolean live = StudioSpec.LIVE.equals(name);
-            Feed music1 = old.music();
-            if ("KEEP".equals(next.audioMode()) && live) {
-                music1 = null;
-            } else if (live && music1 == null && h.built.music() != null) {
-                music1 = h.built.music();
+            StudioSpec.SceneSetting setting = settings.get(name);
+            StudioSpec.SceneSetting before = built.sceneSettings.get(name);
+            boolean sceneMusic = setting == null ? (before == null || before.music()) : setting.music();
+            Feed video = old.video();
+            if (!live && setting != null && before != null && !sameBackground(setting, before)) {
+                try {
+                    video = built.background(setting); // the old background is closed when the scene is replaced
+                    Studio.Scene liveScene = studio.scene(StudioSpec.LIVE);
+                    if (StudioSpec.BRB.equals(name) && liveScene != null
+                            && liveScene.video() instanceof com.afklive.streamer.streaming.studio.LiveFeed lf) {
+                        lf.setFallback(video); // the phone's never-drop fallback follows the new BRB look
+                    }
+                } catch (IOException e) {
+                    log.warn("Scene {} background couldn't be changed live: {}", name, e.getMessage());
+                }
             }
-            studio.putScene(new Studio.Scene(name, old.video(), music1, live ? videoVolume : 0, musicVolume,
+            if (setting != null) {
+                built.sceneSettings.put(name, setting);
+            }
+            studio.putScene(new Studio.Scene(name, video, sceneMusic ? musicNow : null, live ? videoVolume : 0, musicVolume,
                     perScene.getOrDefault(name, List.of()), old.fallbackScene()));
         }
         h.spec = next;
     }
 
+    private static boolean sameBackground(StudioSpec.SceneSetting a, StudioSpec.SceneSetting b) {
+        return java.util.Objects.equals(a.backgroundKey(), b.backgroundKey())
+                && java.util.Objects.equals(a.backgroundType(), b.backgroundType())
+                && java.util.Objects.equals(a.color(), b.color());
+    }
+
     public void close(Handle h) {
+        synchronized (h) {
+            h.closed = true;
+        }
         try {
             h.studio().close();
         } finally {

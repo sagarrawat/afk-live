@@ -286,10 +286,19 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
 
         StreamWorker w = newWorker("w-studio");
         try {
-            w.pollCommands(); // start listening for commands
-            tickUntil(w, () -> onAir(id) && jobs.findById(id).orElseThrow().getNowPlaying() != null, Duration.ofSeconds(60));
+            // A command sent while the run is still starting is applied once the studio is ready.
+            liveStreams.switchScene(owner.getEmail(), stream.getId(), "STARTING");
+            tickUntil(w, () -> {
+                w.pollCommands();
+                return onAir(id) && "STARTING".equals(jobs.findById(id).orElseThrow().getScene());
+            }, Duration.ofSeconds(60));
+            liveStreams.switchScene(owner.getEmail(), stream.getId(), "LIVE");
+            tickUntil(w, () -> {
+                w.pollCommands();
+                StreamJob j = jobs.findById(id).orElseThrow();
+                return "LIVE".equals(j.getScene()) && j.getNowPlaying() != null;
+            }, Duration.ofSeconds(20));
             StreamJob live = jobs.findById(id).orElseThrow();
-            assertThat(live.getScene()).isEqualTo("LIVE");
             assertThat(live.getNowPlaying()).contains("first.mp4");
             assertThat(streamRepository.findById(stream.getId()).orElseThrow().getResumePosition()).isNotNull();
 

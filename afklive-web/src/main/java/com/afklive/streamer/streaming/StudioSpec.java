@@ -16,6 +16,7 @@ import java.util.List;
  * @param initialScene scene on air when the stream starts
  * @param resume       playlist position to resume from, or null
  * @param phone        phone ingest settings (PHONE source), or null
+ * @param finishAfterPass the creator asked to stop when the current pass through the playlist ends
  */
 public record StudioSpec(
         int height,
@@ -35,8 +36,14 @@ public record StudioSpec(
         String initialScene,
         String timeZone,
         Position resume,
-        Phone phone
+        Phone phone,
+        boolean finishAfterPass
 ) {
+
+    public StudioSpec withFinishAfterPass() {
+        return new StudioSpec(height, vertical, fps, source, videos, order, loops, music, musicOrder, audioMode,
+                videoVolume, musicVolume, overlays, scenes, initialScene, timeZone, resume, phone, true);
+    }
 
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper()
             .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);

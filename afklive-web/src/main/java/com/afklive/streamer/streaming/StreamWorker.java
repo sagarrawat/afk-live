@@ -61,7 +61,11 @@ public class StreamWorker {
     private final YouTubeService youTubeService;
     private final StudioRuns studioRuns;
     private final com.afklive.streamer.repository.StreamCommandRepository commands;
-    private volatile long lastCommandId = -1;
+    private final ScheduledExecutorService commandPoller = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "studio-commands");
+        t.setDaemon(true);
+        return t;
+    });
     private final String workerId;
     private final int maxStreams;
     private final long tickMillis;
@@ -142,7 +146,7 @@ public class StreamWorker {
                 fenceIfCutOff();
             }
         }, 0, tickMillis, TimeUnit.MILLISECONDS);
-        overlayUpdater.scheduleWithFixedDelay(() -> {
+        commandPoller.scheduleWithFixedDelay(() -> {
             try {
                 pollCommands();
             } catch (Exception e) {
@@ -199,6 +203,10 @@ public class StreamWorker {
                     StudioRuns.Handle h = r.studio;
                     if (h != null) {
                         try {
+                            if (r.maxAppliedCommand > r.reportedAppliedCommand) {
+                                jobs.saveAppliedCommand(id, workerId, r.maxAppliedCommand);
+                                r.reportedAppliedCommand = r.maxAppliedCommand;
+                            }
                             studioRuns.report(id, workerId, h);
                         } catch (Exception e) {
                             log.debug("Studio report for {} failed: {}", id, e.getMessage());
@@ -253,6 +261,7 @@ public class StreamWorker {
         r.lastHeartbeat = heartbeatWritten;
         running.put(id, r);
         if (spec.studio() != null) {
+            r.commandsAfter = job.getAppliedCommandId();
             startStudio(job, spec, r);
             return;
         }
@@ -322,25 +331,33 @@ public class StreamWorker {
         });
     }
 
-    /** Live changes from the web app, picked up every half second so they're on air within 2 s. */
+    /** Commands are looked at for this long: covers ids committed out of order and clock differences. */
+    static final Duration COMMAND_WINDOW = Duration.ofMinutes(5);
+
+    /**
+     * Live changes from the web app, picked up every half second so they're on air within 2 s.
+     * Ids can become visible out of order (two web instances, long transactions), so instead of a
+     * single "last id" each run remembers which recent commands it applied. Lasting changes are also
+     * written into the run's spec by the web app, so a takeover rebuilds them without replaying.
+     */
     public void pollCommands() {
-        List<Long> ids = running.values().stream().filter(x -> x.studio != null).map(x -> x.id).toList();
-        if (lastCommandId < 0) {
-            lastCommandId = commands.maxId(); // only commands from now on; persistent state comes from the stream
+        List<Running> ready = running.values().stream().filter(x -> x.studio != null && x.finishPending == null).toList();
+        if (ready.isEmpty()) {
             return;
         }
-        if (ids.isEmpty()) {
-            return;
-        }
-        for (com.afklive.streamer.model.StreamCommand c : commands.findNew(ids, lastCommandId)) {
-            lastCommandId = Math.max(lastCommandId, c.getId());
+        long after = ready.stream().mapToLong(x -> x.commandsAfter).min().orElse(0);
+        ZonedDateTime since = ZonedDateTime.now(ZoneId.of("UTC")).minus(COMMAND_WINDOW);
+        List<Long> ids = ready.stream().map(x -> x.id).toList();
+        for (com.afklive.streamer.model.StreamCommand c : commands.findRecent(ids, after, since)) {
             Running r = running.get(c.getJobId());
-            if (r != null && r.studio != null) {
-                try {
-                    studioRuns.apply(r.studio, c);
-                } catch (Exception e) {
-                    log.warn("Command {} for job {} failed: {}", c.getType(), c.getJobId(), e.getMessage());
-                }
+            if (r == null || r.studio == null || c.getId() <= r.commandsAfter || !r.appliedCommands.add(c.getId())) {
+                continue;
+            }
+            r.maxAppliedCommand = Math.max(r.maxAppliedCommand, c.getId());
+            try {
+                studioRuns.apply(r.studio, c);
+            } catch (Exception e) {
+                log.warn("Command {} for job {} failed: {}", c.getType(), c.getJobId(), e.getMessage());
             }
         }
     }
@@ -401,6 +418,7 @@ public class StreamWorker {
     @PreDestroy
     public void shutdown() {
         ticker.shutdownNow();
+        commandPoller.shutdownNow();
         overlayUpdater.shutdownNow();
         for (Long id : Set.copyOf(running.keySet())) {
             lose(id, "Worker shutting down");
@@ -419,6 +437,17 @@ public class StreamWorker {
         volatile StreamRunner runner;
         volatile StreamPreparer.Prepared prepared;
         volatile StudioRuns.Handle studio;
+        /** Commands up to this id were applied by an earlier worker of this run (from the job row). */
+        volatile long commandsAfter;
+        /** Commands this worker applied recently (bounded). */
+        final java.util.Set<Long> appliedCommands = java.util.Collections.newSetFromMap(new java.util.LinkedHashMap<>() {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<Long, Boolean> eldest) {
+                return size() > 2000;
+            }
+        });
+        volatile long maxAppliedCommand;
+        long reportedAppliedCommand;
         volatile ScheduledFuture<?> overlayTask;
         volatile boolean lost;
         volatile String pendingStop;

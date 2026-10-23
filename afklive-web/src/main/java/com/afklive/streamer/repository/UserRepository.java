@@ -13,6 +13,11 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
+
+    /** Serializes a user's stream starts, so plan limits hold even for simultaneous starts. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT u FROM User u WHERE u.email = :email")
+    Optional<User> lockByEmail(@org.springframework.data.repository.query.Param("email") String email);
     Optional<User> findByVerificationToken(String token);
     Optional<User> findByResetToken(String token);
 

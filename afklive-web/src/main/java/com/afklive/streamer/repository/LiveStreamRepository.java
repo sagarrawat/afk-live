@@ -24,8 +24,22 @@ public interface LiveStreamRepository extends JpaRepository<LiveStream, Long> {
     Optional<LiveStream> lockById(@Param("id") Long id);
 
     /** Saved by the worker every few seconds; a targeted update so it never overwrites the creator's edits. */
-    @Modifying(clearAutomatically = true)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("UPDATE LiveStream s SET s.resumePosition = :position WHERE s.id = :id AND EXISTS "
+            + "(SELECT 1 FROM StreamJob j WHERE j.id = :jobId AND j.workerId = :worker AND j.isLive = true)")
+    int saveResumePosition(@Param("id") Long id, @Param("position") String position,
+                           @Param("jobId") Long jobId, @Param("worker") String worker);
+
+    /** Test support: set a saved position without a worker. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("UPDATE LiveStream s SET s.resumePosition = :position WHERE s.id = :id")
-    int saveResumePosition(@Param("id") Long id, @Param("position") String position);
+    int saveResumePositionForTest(@Param("id") Long id, @Param("position") String position);
+
+    /** Starts the next run from the top (the playlist finished). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("UPDATE LiveStream s SET s.resumePosition = NULL WHERE s.id = :id")
+    int clearResumePosition(@Param("id") Long id);
 }
