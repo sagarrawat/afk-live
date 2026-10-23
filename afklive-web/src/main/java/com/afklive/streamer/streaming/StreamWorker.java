@@ -83,6 +83,12 @@ public class StreamWorker {
         t.setDaemon(true);
         return t;
     });
+    /** Don't take on a new stream while the machine is this busy (0..1), unless no one else has for a while. */
+    private final double maxCpuToClaim;
+    /** A new stream waiting this long starts here even when busy: late beats never (e.g. a single worker). */
+    public static final java.time.Duration BUSY_CLAIM_GRACE = java.time.Duration.ofSeconds(45);
+    private volatile java.util.function.DoubleSupplier cpuLoad = StreamWorker::systemCpuLoad;
+    private double smoothedCpu = -1;
     private volatile boolean firstPassDone;
     private volatile long lastSuccessfulTickNanos = System.nanoTime();
 
@@ -97,7 +103,9 @@ public class StreamWorker {
                         @Value("${app.streaming.worker-id:}") String workerId,
                         @Value("${app.streaming.worker.max-streams:20}") int maxStreams,
                         @Value("${app.streaming.worker.tick-millis:2000}") long tickMillis,
-                        @Value("${app.streaming.worker.auto-start:true}") boolean autoStart) {
+                        @Value("${app.streaming.worker.auto-start:true}") boolean autoStart,
+                        @Value("${app.streaming.worker.max-cpu-to-claim:0.85}") double maxCpuToClaim) {
+        this.maxCpuToClaim = maxCpuToClaim;
         this.jobs = jobs;
         this.destinations = destinations;
         this.streamService = streamService;
@@ -226,9 +234,13 @@ public class StreamWorker {
         }
 
         // 2. New streams, then 3. other workers' streams that stopped reporting.
+        boolean busy = !running.isEmpty() && cpuBusy();
         for (Long id : jobs.findUnclaimedIds(workerId, now.minusMinutes(1))) {
             if (running.size() >= maxStreams) {
                 break;
+            }
+            if (busy && !waitedLong(id, now)) {
+                continue; // leave it to a less busy worker for now
             }
             if (!running.containsKey(id) && jobs.claim(id, workerId, now) == 1) {
                 jobs.findById(id).ifPresent(j -> start(j, now));
@@ -246,6 +258,34 @@ public class StreamWorker {
         }
         firstPassDone = true;
         lastSuccessfulTickNanos = System.nanoTime();
+    }
+
+    /** CPU use of the whole machine, smoothed over a few ticks so one spike doesn't turn work away. */
+    boolean cpuBusy() {
+        double load = cpuLoad.getAsDouble();
+        if (load < 0) {
+            return false; // unknown
+        }
+        smoothedCpu = smoothedCpu < 0 ? load : 0.6 * smoothedCpu + 0.4 * load;
+        return smoothedCpu > maxCpuToClaim;
+    }
+
+    private boolean waitedLong(Long id, ZonedDateTime now) {
+        return jobs.findById(id).map(j -> j.getStartTime() == null
+                || j.getStartTime().isBefore(now.minus(BUSY_CLAIM_GRACE))).orElse(true);
+    }
+
+    /** For tests: what the machine's CPU use reads as. */
+    public void cpuLoadFrom(java.util.function.DoubleSupplier supplier) {
+        this.cpuLoad = supplier;
+        this.smoothedCpu = -1;
+    }
+
+    private static double systemCpuLoad() {
+        if (java.lang.management.ManagementFactory.getOperatingSystemMXBean() instanceof com.sun.management.OperatingSystemMXBean os) {
+            return os.getCpuLoad();
+        }
+        return -1;
     }
 
     private void start(StreamJob job, ZonedDateTime heartbeatWritten) {

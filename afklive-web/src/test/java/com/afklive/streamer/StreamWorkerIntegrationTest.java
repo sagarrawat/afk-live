@@ -62,7 +62,7 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
     /** A separate worker process, as far as coordination goes (own id, own first pass). */
     private StreamWorker newWorker(String id) {
         return new StreamWorker(jobs, destinations, streamService, preparer, storage, youTubeService, studioRuns,
-                commandRepository, id, 5, 500, false);
+                commandRepository, id, 5, 500, false, 1.01); // never "busy": test machines are, and these tests are about coordination
     }
 
     private String uploadSource() throws Exception {
@@ -128,6 +128,39 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
 
     private void tickUntil(BooleanSupplier condition, Duration timeout) throws InterruptedException {
         tickUntil(worker, condition, timeout);
+    }
+
+    @Test
+    void aBusyWorkerLeavesNewStreamsToOthersButStartsThemIfNobodyDoes() throws Exception {
+        User owner = account("worker-cpu@example.com");
+        StreamWorker busy = new StreamWorker(jobs, destinations, streamService, preparer, storage, youTubeService, studioRuns,
+                commandRepository, "w-cpu", 5, 500, false, 0.85);
+        busy.cpuLoadFrom(() -> 0.95);
+        long first = job(owner, fileSpec(owner, uploadSource(), dir.resolve("cpu-1.flv")).toJson(), null, null).getId();
+        long second = -1;
+        try {
+            // Idle (nothing running yet): takes the first stream whatever the CPU reads.
+            tickUntil(busy, () -> onAir(first), Duration.ofSeconds(40));
+
+            second = job(owner, fileSpec(owner, uploadSource(), dir.resolve("cpu-2.flv")).toJson(), null, null).getId();
+            for (int i = 0; i < 3; i++) {
+                busy.tick();
+            }
+            assertThat(jobs.findById(second).orElseThrow().getWorkerId()).as("left for a less busy worker").isNull();
+
+            // Nobody else took it within the grace period: start it here rather than never.
+            StreamJob waiting = jobs.findById(second).orElseThrow();
+            waiting.setStartTime(waiting.getStartTime().minus(StreamWorker.BUSY_CLAIM_GRACE).minusSeconds(5));
+            jobs.save(waiting);
+            busy.tick();
+            assertThat(jobs.findById(second).orElseThrow().getWorkerId()).isEqualTo("w-cpu");
+        } finally {
+            busy.shutdown();
+            streamService.finalizeJob(first, "test");
+            if (second > 0) {
+                streamService.finalizeJob(second, "test");
+            }
+        }
     }
 
     @Test
