@@ -120,10 +120,11 @@ class StreamRunnerTest {
     void aDestinationThatDropsKeepsItsRealErrorAndIsNotKilledByTheWaitBetweenAttempts() throws Exception {
         // Production, Oct 2026: a YouTube destination dropped once and never came back. While the relay waited
         // to retry, the stream kept queueing for it, overflowed the buffer, and every later attempt was killed
-        // within a second as "couldn't keep up", hiding the real reason. The wait here (1.5 s) is long enough
-        // for a 100 KB buffer to overflow many times over.
-        StreamRunner.Settings slowRetry = new StreamRunner.Settings(Duration.ofMillis(1500), Duration.ofMillis(1500),
-                Duration.ofSeconds(60), 3, Duration.ofMinutes(1), 100_000);
+        // within a second as "couldn't keep up", hiding the real reason. This encoder sends about 230 KB/s: a 3 s
+        // wait (about 700 KB) overflows a 300 KB buffer twice over, while the 0.3 s a relay runs (about 70 KB)
+        // stays far below it even on a busy machine. (100 KB was too close: CI flaked.)
+        StreamRunner.Settings slowRetry = new StreamRunner.Settings(Duration.ofMillis(3000), Duration.ofMillis(3000),
+                Duration.ofSeconds(60), 3, Duration.ofMinutes(1), 300_000);
         List<String> refused = List.of("sh", "-c", "cat > /dev/null & sleep 0.3; echo 'Server refused the stream' >&2; exit 1");
         Recorder rec = new Recorder();
         StreamRunner runner = new StreamRunner(9, () -> realtimeEncoder(1), List.of(refused), rec, slowRetry);
