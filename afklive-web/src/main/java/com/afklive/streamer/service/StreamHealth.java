@@ -1,0 +1,114 @@
+package com.afklive.streamer.service;
+
+import com.afklive.streamer.dto.StreamDtos.DestinationHealth;
+import com.afklive.streamer.dto.StreamDtos.Health;
+import com.afklive.streamer.dto.StreamDtos.Metric;
+import com.afklive.streamer.model.StreamJob;
+import com.afklive.streamer.model.StreamJobDestination;
+
+import java.time.Duration;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * RE-3: turns the worker's numbers into green / amber / red with a sentence a creator understands.
+ */
+public final class StreamHealth {
+
+    public static final String GREEN = "green";
+    public static final String AMBER = "amber";
+    public static final String RED = "red";
+
+    private StreamHealth() {
+    }
+
+    /** Expected encoder output (kbps) for the profile, matching the bitrate ladder. */
+    static double expectedKbps(int height, int fps) {
+        double base = height >= 2160 ? 15000 : height >= 1440 ? 9000 : height >= 1080 ? 6000 : 4000;
+        return fps > 30 ? base * 1.5 : base;
+    }
+
+    public static Health of(StreamJob j, int height, int fps) {
+        List<Metric> metrics = new ArrayList<>();
+        boolean reporting = j.getHeartbeatAt() != null
+                && Duration.between(j.getHeartbeatAt(), ZonedDateTime.now()).getSeconds() < 15;
+        if (!reporting && j.getHeartbeatAt() != null) {
+            metrics.add(new Metric("status", "delayed", AMBER, "We haven't heard from the stream server for a few seconds."));
+        }
+
+        Double f = j.getFps();
+        if (f != null) {
+            String level = f >= fps * 0.95 ? GREEN : f >= fps * 0.8 ? AMBER : RED;
+            metrics.add(new Metric("fps", String.format("%.0f", f), level, switch (level) {
+                case GREEN -> "Smooth: " + fps + " frames a second.";
+                case AMBER -> "Slightly below " + fps + " fps; viewers may notice small stutters.";
+                default -> "Well below " + fps + " fps; the picture will stutter.";
+            }));
+        }
+
+        Double speed = j.getSpeed();
+        if (speed != null) {
+            String level = speed >= 0.98 ? GREEN : speed >= 0.9 ? AMBER : RED;
+            metrics.add(new Metric("speed", String.format("%.2fx", speed), level, switch (level) {
+                case GREEN -> "Encoding in real time.";
+                case AMBER -> "Encoding slightly slower than real time; we'll keep it live by skipping frames.";
+                default -> "The server can't keep up; try a lower quality.";
+            }));
+        }
+
+        Double kbps = j.getBitrateKbps();
+        if (kbps != null) {
+            double expected = expectedKbps(height, fps);
+            String level = kbps >= expected * 0.7 ? GREEN : kbps >= expected * 0.4 ? AMBER : RED;
+            metrics.add(new Metric("bitrate", String.format("%.1f Mbps", kbps / 1000), level, switch (level) {
+                case GREEN -> "Sending at full quality.";
+                case AMBER -> "Sending below the usual quality.";
+                default -> "Sending far below the usual quality; YouTube may show it blurry.";
+            }));
+        }
+
+        Long drops = j.getDroppedFrames();
+        if (drops != null) {
+            String level = drops == 0 ? GREEN : drops < 300 ? AMBER : RED;
+            metrics.add(new Metric("dropped", String.valueOf(drops), level,
+                    drops == 0 ? "No frames dropped." : "Frames dropped since the start; a few are normal after a hiccup."));
+        }
+
+        if (Boolean.FALSE.equals(j.getInputLive())) {
+            metrics.add(new Metric("input", "lost", AMBER, "Your phone's signal dropped: viewers see the BRB scene until it's back."));
+        } else if (Boolean.TRUE.equals(j.getInputLive())) {
+            metrics.add(new Metric("input", "live", GREEN, "Receiving your phone's stream."));
+        }
+
+        List<DestinationHealth> dests = new ArrayList<>();
+        for (StreamJobDestination d : j.getDestinations()) {
+            String status = d.getStatus() == null ? "CONNECTING" : d.getStatus();
+            String level = switch (status) {
+                case "LIVE" -> GREEN;
+                case "CONNECTING", "RECONNECTING" -> AMBER;
+                default -> RED;
+            };
+            dests.add(new DestinationHealth(d.getName(), status, level, d.getLastError(), d.getRestarts()));
+        }
+
+        String overall = GREEN;
+        for (Metric m : metrics) {
+            overall = worse(overall, m.level());
+        }
+        for (DestinationHealth d : dests) {
+            overall = worse(overall, d.level());
+        }
+        return new Health(overall, metrics, dests);
+    }
+
+    private static String worse(String a, String b) {
+        if (RED.equals(a) || RED.equals(b)) {
+            return RED;
+        }
+        if (AMBER.equals(a) || AMBER.equals(b)) {
+            return AMBER;
+        }
+        return GREEN;
+    }
+}

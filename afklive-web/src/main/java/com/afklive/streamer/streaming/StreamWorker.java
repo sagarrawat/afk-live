@@ -59,6 +59,9 @@ public class StreamWorker {
     private final StreamPreparer preparer;
     private final FileStorageService storage;
     private final YouTubeService youTubeService;
+    private final StudioRuns studioRuns;
+    private final com.afklive.streamer.repository.StreamCommandRepository commands;
+    private volatile long lastCommandId = -1;
     private final String workerId;
     private final int maxStreams;
     private final long tickMillis;
@@ -85,6 +88,8 @@ public class StreamWorker {
                         StreamPreparer preparer,
                         FileStorageService storage,
                         YouTubeService youTubeService,
+                        StudioRuns studioRuns,
+                        com.afklive.streamer.repository.StreamCommandRepository commands,
                         @Value("${app.streaming.worker-id:}") String workerId,
                         @Value("${app.streaming.worker.max-streams:20}") int maxStreams,
                         @Value("${app.streaming.worker.tick-millis:2000}") long tickMillis,
@@ -95,6 +100,8 @@ public class StreamWorker {
         this.preparer = preparer;
         this.storage = storage;
         this.youTubeService = youTubeService;
+        this.studioRuns = studioRuns;
+        this.commands = commands;
         this.workerId = workerId == null || workerId.isBlank() ? defaultWorkerId() : workerId;
         this.maxStreams = maxStreams;
         this.tickMillis = tickMillis;
@@ -135,6 +142,13 @@ public class StreamWorker {
                 fenceIfCutOff();
             }
         }, 0, tickMillis, TimeUnit.MILLISECONDS);
+        overlayUpdater.scheduleWithFixedDelay(() -> {
+            try {
+                pollCommands();
+            } catch (Exception e) {
+                log.debug("Command poll failed: {}", e.getMessage());
+            }
+        }, 0, 500, TimeUnit.MILLISECONDS);
     }
 
     /** No successful pass for a while (database unreachable): stop everything rather than risk running twice. */
@@ -182,6 +196,14 @@ public class StreamWorker {
                 }
                 if (jobs.heartbeat(id, workerId, r.lastHeartbeat, now, r.status(), r.bitrate, r.fps, r.speed, r.drops, r.lastError) == 1) {
                     r.lastHeartbeat = now;
+                    StudioRuns.Handle h = r.studio;
+                    if (h != null) {
+                        try {
+                            studioRuns.report(id, workerId, h);
+                        } catch (Exception e) {
+                            log.debug("Studio report for {} failed: {}", id, e.getMessage());
+                        }
+                    }
                 } else {
                     lose(id, "Moved to another worker");
                 }
@@ -230,6 +252,10 @@ public class StreamWorker {
         Running r = new Running(id, spec);
         r.lastHeartbeat = heartbeatWritten;
         running.put(id, r);
+        if (spec.studio() != null) {
+            startStudio(job, spec, r);
+            return;
+        }
         // Downloads can take a while: prepare off the loop thread. Heartbeats keep the job ours meanwhile.
         Thread.ofVirtual().name("prepare-" + id).start(() -> {
             try {
@@ -259,6 +285,66 @@ public class StreamWorker {
         });
     }
 
+    /** A studio stream: playlists, scenes, phone input and overlays, all behind one encoder. */
+    private void startStudio(StreamJob job, StreamSpec spec, Running r) {
+        long id = job.getId();
+        String scene = job.getScene();
+        Thread.ofVirtual().name("prepare-" + id).start(() -> {
+            try {
+                StudioRuns.Handle h = studioRuns.start(id, spec, scene, new com.afklive.streamer.streaming.studio.Studio.Listener() {
+                    @Override
+                    public void onInputSwitch(boolean live) {
+                        streamService.addLog("[job " + id + "] phone input " + (live ? "back: live" : "lost: showing BRB"));
+                    }
+                });
+                r.studio = h;
+                List<List<String>> relays = spec.destinations().stream()
+                        .map(d -> com.afklive.streamer.service.FFmpegCommandBuilder.buildRelayCommand(d.url()))
+                        .toList();
+                StreamRunner runner = new StreamRunner(id, h.studio(), relays, r, settings);
+                synchronized (r) {
+                    if (r.lost) {
+                        cleanup(r, false);
+                        return;
+                    }
+                    if (r.pendingStop != null) {
+                        r.onFinished(r.pendingStop, false);
+                        return;
+                    }
+                    h.studio().start();
+                    r.runner = runner;
+                    runner.start();
+                }
+            } catch (Exception e) {
+                log.error("Could not prepare studio stream {}", id, e);
+                r.onFinished("Could not load the stream's files: " + Redact.streamKeys(e.getMessage()), true);
+            }
+        });
+    }
+
+    /** Live changes from the web app, picked up every half second so they're on air within 2 s. */
+    public void pollCommands() {
+        List<Long> ids = running.values().stream().filter(x -> x.studio != null).map(x -> x.id).toList();
+        if (lastCommandId < 0) {
+            lastCommandId = commands.maxId(); // only commands from now on; persistent state comes from the stream
+            return;
+        }
+        if (ids.isEmpty()) {
+            return;
+        }
+        for (com.afklive.streamer.model.StreamCommand c : commands.findNew(ids, lastCommandId)) {
+            lastCommandId = Math.max(lastCommandId, c.getId());
+            Running r = running.get(c.getJobId());
+            if (r != null && r.studio != null) {
+                try {
+                    studioRuns.apply(r.studio, c);
+                } catch (Exception e) {
+                    log.warn("Command {} for job {} failed: {}", c.getType(), c.getJobId(), e.getMessage());
+                }
+            }
+        }
+    }
+
     private void updateOverlay(StreamSpec spec, StreamPreparer.Prepared prepared) {
         try {
             String subs = youTubeService.getSubscriberCount(spec.username());
@@ -284,6 +370,15 @@ public class StreamWorker {
     }
 
     private void cleanup(Running r, boolean ended) {
+        StudioRuns.Handle h = r.studio;
+        if (h != null) {
+            r.studio = null;
+            try {
+                studioRuns.close(h);
+            } catch (Exception e) {
+                log.warn("Studio cleanup for job {} failed", r.id, e);
+            }
+        }
         if (r.overlayTask != null) {
             r.overlayTask.cancel(true);
         }
@@ -323,6 +418,7 @@ public class StreamWorker {
         final StreamSpec spec;
         volatile StreamRunner runner;
         volatile StreamPreparer.Prepared prepared;
+        volatile StudioRuns.Handle studio;
         volatile ScheduledFuture<?> overlayTask;
         volatile boolean lost;
         volatile String pendingStop;

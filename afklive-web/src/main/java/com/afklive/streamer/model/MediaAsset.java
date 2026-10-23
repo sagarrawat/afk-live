@@ -33,6 +33,19 @@ public class MediaAsset {
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** Facts playout needs, filled when the file is probed (null until then). */
+    private Double durationSeconds;
+    private Integer width;
+    private Integer height;
+    private String videoCodec;
+    private Boolean hasAudio;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MediaStatus status = MediaStatus.READY;
+    @Column(columnDefinition = "TEXT")
+    private String statusReason;
+
     public enum ContentType {
         VIDEO, IMAGE, AUDIO
     }

@@ -124,6 +124,22 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     List<StreamJob> findAllByWorkerIdAndIsLiveTrue(String workerId);
 
+    /** Studio state for the health panel and remote: what's on screen and playing. Only the owning worker writes it. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.scene = :scene, j.inputLive = :inputLive, j.nowPlaying = :nowPlaying WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true")
+    int reportStudio(@org.springframework.data.repository.query.Param("id") Long id,
+                     @org.springframework.data.repository.query.Param("worker") String worker,
+                     @org.springframework.data.repository.query.Param("scene") String scene,
+                     @org.springframework.data.repository.query.Param("inputLive") Boolean inputLive,
+                     @org.springframework.data.repository.query.Param("nowPlaying") String nowPlaying);
+
+    List<StreamJob> findAllByStreamIdAndIsLiveTrue(Long streamId);
+
+    java.util.Optional<StreamJob> findFirstByStreamIdOrderByStartTimeDesc(Long streamId);
+
+    List<StreamJob> findTop20ByStreamIdOrderByStartTimeDesc(Long streamId);
+
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = :worker, j.heartbeatAt = :now WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND j.workerId IS NULL")

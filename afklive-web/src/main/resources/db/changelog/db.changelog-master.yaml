@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/004-scheduled-stream-asset-on-delete.sql
   - include:
       file: db/changelog/changes/005-stream-workers.sql
+  - include:
+      file: db/changelog/changes/006-streams.sql

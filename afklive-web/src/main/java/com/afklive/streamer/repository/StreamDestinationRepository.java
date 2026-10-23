@@ -10,4 +10,6 @@ public interface StreamDestinationRepository extends JpaRepository<StreamDestina
     List<StreamDestination> findByUser(User user);
     List<StreamDestination> findByUserAndSelectedTrue(User user);
     List<StreamDestination> findByStreamKeyAndUser(String streamKey, User user);
+
+    java.util.Optional<StreamDestination> findByIdAndUserEmail(Long id, String email);
 }

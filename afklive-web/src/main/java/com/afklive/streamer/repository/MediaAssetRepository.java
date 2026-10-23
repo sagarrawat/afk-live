@@ -14,4 +14,8 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, Long> {
     // For legacy lookups by filename (title)
     Optional<MediaAsset> findByUserEmailAndTitle(String email, String title);
     Optional<MediaAsset> findFirstByUserEmailAndS3Key(String email, String s3Key);
+
+    Optional<MediaAsset> findByIdAndUserEmail(Long id, String email);
+
+    List<MediaAsset> findAllByIdInAndUserEmail(java.util.Collection<Long> ids, String email);
 }

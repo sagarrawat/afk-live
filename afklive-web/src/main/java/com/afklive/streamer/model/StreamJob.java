@@ -78,6 +78,15 @@ public class StreamJob {
 
     /** When set, the stream is stopped automatically at this time. */
     private java.time.ZonedDateTime stopAt;
+
+    /** The saved stream this run belongs to (null for legacy one-off runs). */
+    @Column(name = "stream_id")
+    private Long streamId;
+    /** Scene on screen, whether the phone input is live, and what's playing: reported by the worker. */
+    private String scene;
+    private Boolean inputLive;
+    @Column(name = "now_playing", columnDefinition = "TEXT")
+    private String nowPlaying;
     /** Why the stream ended (user, schedule, credit limit, crash, server restart). */
     private String endReason;
 

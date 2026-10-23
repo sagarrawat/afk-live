@@ -13,6 +13,7 @@ non-functional requirements (continuity, quality, latency, cost). Reference stor
   - `src/main/java/com/afklive/streamer/`: `endpoint/` (controllers), `service/`, `model/`, `repository/`, `config/`, `security/`
   - `streaming/`: the worker: `StreamWorker` (claims jobs, heartbeats, takeover), `StreamRunner` (one encoder + a relay per destination, restarts with backoff), `StreamPreparer`, `StreamSpec`
   - `streaming/studio/`: the cloud studio: a frame clock (`Studio`) feeding one long-lived encoder raw video + PCM; `PlaylistFeed` (gapless playlists), `LiveFeed` (never-drop phone input with BRB fallback), `StillFeed`, `DecoderSource` (FFmpeg decoders), `OverlayCompositor` (overlays drawn in Java). Everything a creator changes while live happens here, between frames, never by restarting FFmpeg
+  - Saved streams (`LiveStream`, `/api/streams`, `LiveStreamService`, `StreamScheduleService`): a stream is a draft until it goes live; each go-live is a `StreamJob` whose spec carries a `StudioSpec`. Live edits become `stream_commands` that the worker applies between frames (`StudioRuns`). Library files reach workers through `MediaCache`
   - `src/main/resources/db/changelog/`: Liquibase migrations (the only way to change the schema)
   - `src/main/resources/static/`: current frontend (Alpine + Tailwind CDN); to be replaced per the design direction
 - `afklive-optimizer/`: AWS Lambda that normalizes uploaded videos with FFmpeg.
