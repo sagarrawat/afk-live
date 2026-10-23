@@ -47,6 +47,14 @@ public class MediaAsset {
     private String statusReason;
     private Double fps;
 
+    /** AU-5: integrated loudness in LUFS (EBU R128); null when unknown or silent. */
+    @Column(name = "loudness_lufs")
+    private Double loudnessLufs;
+
+    /** AU-5: measured (or tried); older files are measured in the background. */
+    @Column(name = "loudness_checked", nullable = false)
+    private boolean loudnessChecked;
+
     /** Small JPEG for the library grid (videos and images), null until processed. */
     @Column(name = "thumbnail_key", length = 512)
     private String thumbnailKey;

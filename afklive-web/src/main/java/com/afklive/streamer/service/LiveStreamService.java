@@ -924,7 +924,18 @@ public class LiveStreamService {
 
     private static StudioSpec.Media mediaOf(MediaAsset m, String fit) {
         return new StudioSpec.Media(String.valueOf(m.getId()), m.getS3Key(), m.getTitle(),
-                m.getDurationSeconds() == null ? 0 : m.getDurationSeconds(), m.getHasAudio(), fit);
+                m.getDurationSeconds() == null ? 0 : m.getDurationSeconds(), m.getHasAudio(), fit, gainFor(m.getLoudnessLufs()));
+    }
+
+    /** AU-5: every file is brought to YouTube's playback loudness; no file is boosted or cut by more than 12 dB. */
+    static final double TARGET_LUFS = -14;
+
+    static double gainFor(Double lufs) {
+        if (lufs == null) {
+            return 0;
+        }
+        double g = TARGET_LUFS - lufs;
+        return Math.round(Math.max(-12, Math.min(12, g)) * 10) / 10.0;
     }
 
     /** Edits made while live reach the running studio without restarting anything. */

@@ -90,10 +90,14 @@ public record StudioSpec(
     public static final String ENDING = "ENDING";
 
     /** A library file: id for now-playing and resume, storage key to fetch it. */
-    /** {@code fit}: this item's own fit (PL-6), or null for the stream's. */
-    public record Media(String id, String key, String title, double duration, Boolean hasAudio, String fit) {
+    /** {@code fit}: this item's own fit (PL-6), or null for the stream's. {@code gainDb}: loudness correction (AU-5). */
+    public record Media(String id, String key, String title, double duration, Boolean hasAudio, String fit, double gainDb) {
         public Media(String id, String key, String title, double duration, Boolean hasAudio) {
-            this(id, key, title, duration, hasAudio, null);
+            this(id, key, title, duration, hasAudio, null, 0);
+        }
+
+        public Media(String id, String key, String title, double duration, Boolean hasAudio, String fit) {
+            this(id, key, title, duration, hasAudio, fit, 0);
         }
     }
 

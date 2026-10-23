@@ -180,6 +180,10 @@ class MediaLibraryTest extends PostgresIntegrationTest {
 
         assertThat(processor.process(id)).isTrue();
         assertThat(processor.process(id)).isFalse(); // done; nothing to claim
+        // AU-5: its loudness is measured for playout.
+        MediaAsset done = assets.findById(id).orElseThrow();
+        assertThat(done.isLoudnessChecked()).isTrue();
+        assertThat(done.getLoudnessLufs()).isBetween(-60.0, 0.0);
 
         mvc.perform(get("/api/media/" + id).with(user(email)))
                 .andExpect(status().isOk())

@@ -20,9 +20,14 @@ public final class PlaylistFeed implements Feed {
 
     /** One playlist entry. {@code durationSeconds} is 0 when unknown (prerolling then waits for the decoder to finish). */
     /** {@code fit}: how this item fills the frame (PL-6); null uses the stream's. */
-    public record Item(String id, String title, Path path, boolean hasAudio, double durationSeconds, DecoderSource.Fit fit) {
+    public record Item(String id, String title, Path path, boolean hasAudio, double durationSeconds, DecoderSource.Fit fit,
+                       double gainDb) {
         public Item(String id, String title, Path path, boolean hasAudio, double durationSeconds) {
-            this(id, title, path, hasAudio, durationSeconds, null);
+            this(id, title, path, hasAudio, durationSeconds, null, 0);
+        }
+
+        public Item(String id, String title, Path path, boolean hasAudio, double durationSeconds, DecoderSource.Fit fit) {
+            this(id, title, path, hasAudio, durationSeconds, fit, 0);
         }
     }
 
