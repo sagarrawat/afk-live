@@ -22,6 +22,17 @@ public abstract class PostgresIntegrationTest {
             throw new UncheckedIOException("Could not start embedded PostgreSQL", e);
         }
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            // Let Spring close the test contexts first: beans that write on shutdown (JobRunr's
+            // BackgroundJobServer) otherwise wait 30 s for a connection to a database that's gone.
+            Thread.getAllStackTraces().keySet().stream()
+                    .filter(t -> "SpringApplicationShutdownHook".equals(t.getName()))
+                    .forEach(t -> {
+                        try {
+                            t.join(20_000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    });
             try {
                 POSTGRES.close();
             } catch (IOException ignored) {

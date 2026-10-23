@@ -60,10 +60,16 @@ spring:
           batch_size: 50
           order_inserts: true
           order_updates: true
+  lifecycle:
+    # OPS-4: how long a stopping web instance waits for in-flight requests (a 16 MB upload part on a
+    # slow phone connection). The systemd unit's TimeoutStopSec is longer than this plus the drain.
+    timeout-per-shutdown-phase: ${WEB_SHUTDOWN_TIMEOUT:60s}
+  # Sessions live in PostgreSQL (Spring Session JDBC), so every web instance sees the same sign-ins:
+  # switching instances during a deploy signs nobody out. CSRF tokens are in a cookie, not the session.
   session:
-    store-type: jdbc
     jdbc:
-      initialize-schema: always
+      # The tables come from Liquibase (029-spring-session.sql), like every other table.
+      initialize-schema: never
     timeout: PT720H
   mail:
     host: ${SMTP_HOST:localhost}
@@ -182,7 +188,34 @@ app:
     # Username/password set for the webhook in the PhonePe dashboard (verifies callbacks)
     callback-username: ${PHONEPE_CALLBACK_USERNAME:}
     callback-password: ${PHONEPE_CALLBACK_PASSWORD:}
+  web:
+    # OPS-4: on shutdown, report "not ready" for this long while still serving, so the proxy moves
+    # traffic to the other instance before this one stops taking requests. 0 = stop at once (tests,
+    # dev); the production units set 5s.
+    shutdown-drain: ${WEB_SHUTDOWN_DRAIN:0s}
+
+# OPS-4 (zero-downtime web deploys): the deploy script and Caddy's health checks ask
+# /actuator/health/readiness on localhost; ActuatorSecurityConfig refuses it to anyone else and
+# Caddy also answers /actuator* with 404. Nothing else from the actuator is exposed.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      show-components: never
+  health:
+    # Email goes through ZeptoMail's API; an unused SMTP check would only report DOWN.
+    mail:
+      enabled: false
+
 server:
+  # Finish in-flight requests on stop (uploads' parts included) before exiting; new connections are refused.
+  shutdown: graceful
   forward-headers-strategy: native
   error:
     # Don't leak exception messages or stack details to clients in production.

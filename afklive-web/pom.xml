@@ -50,6 +50,11 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
+            <!-- OPS-4: readiness probe for blue/green web deploys (localhost only, see ActuatorSecurityConfig) -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
             <!-- Spring Boot 4 needs the starter: liquibase-core alone no longer runs migrations -->
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-liquibase</artifactId>
@@ -76,8 +81,10 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.session</groupId>
-            <artifactId>spring-session-jdbc</artifactId>
+            <!-- Sessions in PostgreSQL. Spring Boot 4 needs the starter: spring-session-jdbc alone is no
+                 longer auto-configured, and sessions silently stayed in memory (signed out on every deploy). -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-session-jdbc</artifactId>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
