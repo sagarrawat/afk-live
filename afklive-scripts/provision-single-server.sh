@@ -111,7 +111,10 @@ APP_BILLING_SELLER_STATE=
 EOF
   chown root:afklive "$ENV" && chmod 640 "$ENV"
 fi
-set -a; . "$ENV"; set +a
+# Read values with grep, not by sourcing: the file is for systemd (unquoted spaces, & and {} in URLs).
+env_val() { grep -m1 "^$1=" "$ENV" | cut -d= -f2-; }
+POSTGRES_PASSWORD=$(env_val POSTGRES_PASSWORD)
+INGEST_AUTH_SECRET=$(env_val INGEST_AUTH_SECRET)
 
 # --- PostgreSQL ---------------------------------------------------------------------------------------
 sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='afklive'" | grep -q 1 \
