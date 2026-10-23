@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
-/** Loads the at-rest encryption key before any bean (or entity with a secret) is created. */
+/** Loads the at-rest encryption keys before any bean (or entity with a secret) is created; refuses to start without one. */
 @Configuration
 public class EncryptionConfig {
 
@@ -19,7 +19,9 @@ public class EncryptionConfig {
     static final class KeyLoader implements BeanFactoryPostProcessor, EnvironmentAware {
         @Override
         public void setEnvironment(Environment environment) {
-            SecretBox.configure(environment.getProperty("app.encryption-key", ""));
+            String old = environment.getProperty("app.encryption-old-keys", "");
+            SecretBox.configure(environment.getProperty("app.encryption-key", ""),
+                    java.util.Arrays.stream(old.split(",")).map(String::trim).filter(x -> !x.isEmpty()).toList());
         }
 
         @Override

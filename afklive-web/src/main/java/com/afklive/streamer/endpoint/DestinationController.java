@@ -103,16 +103,27 @@ public class DestinationController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /** MS-6: send a 10-second test to the platform and say whether it was accepted. */
+    /** MS-6: ask a stream server to send a 10-second test to the platform; poll the result. */
     @PostMapping("/{id}/test")
     public ResponseEntity<?> testDestination(@PathVariable Long id, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         String email = SecurityUtils.getEmail(principal);
+        User user = userService.getOrCreateUser(email);
         return destinationRepository.findByIdAndUserEmail(id, email)
                 .<ResponseEntity<?>>map(dest -> {
-                    var result = testService.test(email, dest);
-                    return ResponseEntity.ok(new ApiResponse<>(result.ok(), result.message(), null));
+                    var t = testService.request(user, dest);
+                    return ResponseEntity.status(202).body(java.util.Map.of("testId", t.getId(), "status", t.getStatus()));
                 })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/tests/{testId}")
+    public ResponseEntity<?> testResult(@PathVariable Long testId, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
+        var t = testService.result(user, testId);
+        return ResponseEntity.ok(java.util.Map.of("testId", t.getId(), "status", t.getStatus(),
+                "ok", t.getStatus() == com.afklive.streamer.model.DestinationTest.Status.OK,
+                "message", t.getMessage() == null ? "Testing…" : t.getMessage()));
     }
 }

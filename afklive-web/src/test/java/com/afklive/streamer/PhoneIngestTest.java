@@ -68,7 +68,11 @@ class PhoneIngestTest extends PostgresIntegrationTest {
     }
 
     private String authBody(String action, String path, String user, String pass) {
-        return "{\"user\":\"" + user + "\",\"password\":\"" + pass + "\",\"token\":\"\",\"ip\":\"1.2.3.4\",\"action\":\"" + action
+        return authBody(action, path, user, pass, "10.0.0.5");
+    }
+
+    private String authBody(String action, String path, String user, String pass, String ip) {
+        return "{\"user\":\"" + user + "\",\"password\":\"" + pass + "\",\"token\":\"\",\"ip\":\"" + ip + "\",\"action\":\"" + action
                 + "\",\"path\":\"" + path + "\",\"protocol\":\"rtmp\",\"id\":\"x\",\"query\":\"\",\"userAgent\":\"Larix\"}";
     }
 
@@ -95,7 +99,7 @@ class PhoneIngestTest extends PostgresIntegrationTest {
 
         // The key is stored encrypted, never in plain text.
         String stored = jdbc.queryForObject("SELECT ingest_key FROM streams WHERE id = ?", String.class, s.getId());
-        assertThat(stored).startsWith("enc:v1:").doesNotContain(setup.streamKey());
+        assertThat(stored).startsWith("enc:v2:").doesNotContain(setup.streamKey());
 
         // Someone else can't see it.
         mvc.perform(get("/api/streams/" + s.getId() + "/ingest").with(user(newUser()).roles("USER")))
@@ -109,6 +113,13 @@ class PhoneIngestTest extends PostgresIntegrationTest {
         String path = "live/" + s.getIngestKey();
         String url = "/internal/ingest/auth?secret=test-auth-secret";
 
+        // Not live yet: the phone app is refused (and retries on its own).
+        mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(authBody("publish", path, "", "")))
+                .andExpect(status().isUnauthorized());
+        StreamDestination d = destination(email);
+        streams.setTargets(email, s.getId(), List.of(new TargetRequest(d.getId(), true)));
+        StreamJob job = streams.goLive(email, s.getId(), null);
+
         mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(authBody("publish", path, "", "")))
                 .andExpect(status().isOk());
         assertThat(streamRepository.findById(s.getId()).orElseThrow().getIngestLastPublishAt()).isNotNull();
@@ -117,6 +128,9 @@ class PhoneIngestTest extends PostgresIntegrationTest {
         mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(authBody("read", path, "worker", "test-read-pass")))
                 .andExpect(status().isOk());
         mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(authBody("read", path, "worker", "guess")))
+                .andExpect(status().isUnauthorized());
+        // Right credentials from the internet (not a worker network): refused.
+        mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(authBody("read", path, "worker", "test-read-pass", "203.0.113.9")))
                 .andExpect(status().isUnauthorized());
         mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(authBody("api", "", "", "")))
                 .andExpect(status().isUnauthorized());
@@ -128,6 +142,15 @@ class PhoneIngestTest extends PostgresIntegrationTest {
         ingest.regenerate(streamRepository.findById(s.getId()).orElseThrow());
         mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(authBody("publish", path, "", "")))
                 .andExpect(status().isUnauthorized());
+        context.getBean(com.afklive.streamer.service.StreamService.class).finalizeJob(job.getId(), "test");
+    }
+
+    private StreamDestination destination(String email) {
+        StreamDestination d = new StreamDestination();
+        d.setName("YouTube");
+        d.setStreamKey("abcd-efgh-ijkl-mnop");
+        d.setUser(users.findByEmail(email).orElseThrow());
+        return destinations.save(d);
     }
 
     @Test
@@ -145,13 +168,17 @@ class PhoneIngestTest extends PostgresIntegrationTest {
 
         Preflight pf = streams.preflight(email, s.getId());
         assertThat(pf.ok()).isTrue(); // no playlist needed; the phone just hasn't connected yet (a note, not a blocker)
-        assertThat(pf.checks()).anyMatch(c -> c.id().equals("phone") && c.message().contains("hasn't connected"));
+        assertThat(pf.checks()).anyMatch(c -> c.id().equals("phone") && c.message().contains("Set up your phone app"));
 
         StreamJob job = streams.goLive(email, s.getId(), null);
         StudioSpec studio = StreamSpec.fromJson(job.getSpec()).studio();
         LiveStream saved = streamRepository.findById(s.getId()).orElseThrow();
         assertThat(studio.source()).isEqualTo("PHONE");
-        assertThat(studio.phone().ingestUrl()).isEqualTo("rtmp://127.0.0.1:1935/live/" + saved.getIngestKey() + "?user=worker&pass=test-read-pass");
+        assertThat(studio.phone().ingestKey()).isEqualTo(saved.getIngestKey());
+        assertThat(studio.phone().ingestUrl()).isNull(); // the worker adds its own read credentials
+        // The run's spec (stream keys, ingest key) is encrypted in the database.
+        String rawSpec = jdbc.queryForObject("SELECT spec FROM stream_jobs WHERE id = ?", String.class, job.getId());
+        assertThat(rawSpec).startsWith("enc:v2:").doesNotContain("abcd-efgh").doesNotContain(saved.getIngestKey());
         assertThat(studio.phone().graceSeconds()).isEqualTo(300);
         assertThat(studio.overlays()).anyMatch(o -> "Be right back".equals(o.text()) && "BRB".equals(o.scene()));
         com.afklive.streamer.service.StreamService ss = context.getBean(com.afklive.streamer.service.StreamService.class);
@@ -167,12 +194,16 @@ class PhoneIngestTest extends PostgresIntegrationTest {
         d.setUser(users.findByEmail(email).orElseThrow());
         d = destinations.save(d);
         String stored = jdbc.queryForObject("SELECT stream_key FROM stream_destinations WHERE id = ?", String.class, d.getId());
-        assertThat(stored).startsWith("enc:v1:").doesNotContain("abcd");
+        assertThat(stored).startsWith("enc:v2:").doesNotContain("abcd");
         assertThat(destinations.findById(d.getId()).orElseThrow().getStreamKey()).isEqualTo("abcd-efgh-ijkl-mnop");
         assertThat(destinations.findByStreamKeyAndUser("abcd-efgh-ijkl-mnop", d.getUser())).hasSize(1);
 
-        // Rows saved before encryption was turned on still read correctly.
+        // Rows saved before encryption still read correctly, and the startup backfill encrypts them.
         jdbc.update("UPDATE stream_destinations SET stream_key = 'legacy-plain-key' WHERE id = ?", d.getId());
+        assertThat(destinations.findById(d.getId()).orElseThrow().getStreamKey()).isEqualTo("legacy-plain-key");
+        context.getBean(com.afklive.streamer.config.SecretBackfill.class).run();
+        assertThat(jdbc.queryForObject("SELECT stream_key FROM stream_destinations WHERE id = ?", String.class, d.getId()))
+                .startsWith("enc:v2:");
         assertThat(destinations.findById(d.getId()).orElseThrow().getStreamKey()).isEqualTo("legacy-plain-key");
     }
 
@@ -183,5 +214,33 @@ class PhoneIngestTest extends PostgresIntegrationTest {
         mvc.perform(get("/api/streams/" + s.getId() + "/ingest").with(user(email).roles("USER")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("phone")));
+    }
+
+    @Test
+    void aDestinationTestRunsOnAWorkerAndNeverHangs() throws Exception {
+        String email = newUser();
+        StreamDestination d = destination(email);
+        String body = mvc.perform(post("/api/destinations/" + d.getId() + "/test").with(user(email).roles("USER")).with(csrf()))
+                .andExpect(status().isAccepted())
+                .andReturn().getResponse().getContentAsString();
+        long testId = Long.parseLong(body.replaceAll(".*\"testId\":(\\d+).*", "$1"));
+        // A second test while one is pending is refused.
+        mvc.perform(post("/api/destinations/" + d.getId() + "/test").with(user(email).roles("USER")).with(csrf()))
+                .andExpect(status().isConflict());
+
+        com.afklive.streamer.streaming.DestinationTestRunner runner = context.getBean(com.afklive.streamer.streaming.DestinationTestRunner.class);
+        runner.poll();
+        long deadline = System.currentTimeMillis() + 60_000;
+        String status = "PENDING";
+        while (System.currentTimeMillis() < deadline && (status.equals("PENDING") || status.equals("RUNNING"))) {
+            Thread.sleep(500);
+            String r = mvc.perform(get("/api/destinations/tests/" + testId).with(user(email).roles("USER")))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            status = r.replaceAll(".*\"status\":\"(\\w+)\".*", "$1");
+        }
+        // Whatever the network allows here, the test finishes with an answer (a fake key is never accepted).
+        assertThat(status).isEqualTo("FAILED");
+        mvc.perform(get("/api/destinations/tests/" + testId).with(user(newUser()).roles("USER")))
+                .andExpect(status().isNotFound());
     }
 }

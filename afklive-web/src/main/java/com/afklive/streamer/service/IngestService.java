@@ -44,16 +44,17 @@ public class IngestService {
     private final String publicHost;
     private final int rtmpPort;
     private final int srtPort;
-    private final String readUrl;
+    private final String readAllowed;
+    private final com.afklive.streamer.repository.StreamJobRepository jobs;
     private final String readUser;
     private final String readPass;
     private final String authSecret;
 
-    public IngestService(LiveStreamRepository streams,
+    public IngestService(LiveStreamRepository streams, com.afklive.streamer.repository.StreamJobRepository jobs,
                          @Value("${app.ingest.public-host:}") String publicHost,
                          @Value("${app.ingest.rtmp-port:1935}") int rtmpPort,
                          @Value("${app.ingest.srt-port:8890}") int srtPort,
-                         @Value("${app.ingest.read-url:rtmp://127.0.0.1:1935/live/{key}?user={user}&pass={pass}}") String readUrl,
+                         @Value("${app.ingest.read-allowed:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}") String readAllowed,
                          @Value("${app.ingest.read-user:worker}") String readUser,
                          @Value("${app.ingest.read-pass:}") String readPass,
                          @Value("${app.ingest.auth-secret:}") String authSecret) {
@@ -61,7 +62,8 @@ public class IngestService {
         this.publicHost = publicHost;
         this.rtmpPort = rtmpPort;
         this.srtPort = srtPort;
-        this.readUrl = readUrl;
+        this.readAllowed = readAllowed;
+        this.jobs = jobs;
         this.readUser = readUser;
         this.readPass = readPass;
         this.authSecret = authSecret;
@@ -76,14 +78,31 @@ public class IngestService {
                         String larixLink, String larixSrtLink, ZonedDateTime lastConnectedAt, Map<String, String> guides) {
     }
 
-    /** Makes sure the stream has an ingest key (creating one the first time). */
+    /** Makes sure the stream has an ingest key (creating one the first time, under the stream's row lock). */
     @Transactional
     public LiveStream ensureKey(LiveStream s) {
-        if (s.getIngestKey() == null) {
-            assignNewKey(s);
-            s = streams.save(s);
+        if (s.getIngestKey() != null) {
+            return s;
         }
-        return s;
+        LiveStream locked = streams.lockById(s.getId()).orElseThrow();
+        if (locked.getIngestKey() == null) {
+            assignNewKey(locked);
+            locked = streams.save(locked);
+        }
+        return locked;
+    }
+
+    /** Workers read from these networks only (CIDRs; private networks and this host by default). */
+    boolean readerAllowed(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+        for (String cidr : readAllowed.split(",")) {
+            if (com.afklive.streamer.util.Cidr.contains(cidr.trim(), ip.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** MS-1: a new key; the old one stops working at once. */
@@ -130,12 +149,6 @@ public class IngestService {
         return "srt://" + publicHost + ":" + srtPort + "?streamid=publish:" + PATH_PREFIX + key + "&latency=" + (latencyMs * 1000L);
     }
 
-    /** Where a worker reads this stream's phone feed (contains internal credentials; goes only into the run's spec). */
-    public String readUrl(LiveStream s) {
-        return readUrl.replace("{key}", s.getIngestKey())
-                .replace("{user}", enc(readUser))
-                .replace("{pass}", enc(readPass));
-    }
 
     /** A QR code (PNG) for a link or address. */
     public byte[] qrPng(String content, int size) {
@@ -168,7 +181,8 @@ public class IngestService {
         if (authSecret == null || authSecret.isBlank() || secret == null) {
             return false;
         }
-        return MessageDigest.isEqual(authSecret.getBytes(StandardCharsets.UTF_8), secret.getBytes(StandardCharsets.UTF_8));
+        // Compare digests: equal length whatever was sent, so the comparison leaks nothing.
+        return MessageDigest.isEqual(hash(authSecret).getBytes(StandardCharsets.UTF_8), hash(secret).getBytes(StandardCharsets.UTF_8));
     }
 
     /** Publishing needs a valid stream key in the path; reading needs the workers' credentials. */
@@ -184,13 +198,22 @@ public class IngestService {
                     log.info("Rejected phone publish to an unknown key from {}", req.ip());
                     return false;
                 }
+                // Only while the stream is live (a leaked key isn't free ingest) and the account is active.
+                // Phone apps retry on their own, so starting the app before pressing Go Live just works a moment later.
+                if (!s.get().getUser().isEnabled() || jobs.findAllByStreamIdAndIsLiveTrue(s.get().getId()).isEmpty()) {
+                    return false;
+                }
                 streams.markIngestPublish(s.get().getId(), ZonedDateTime.now());
                 return true;
             }
             case "read" -> {
                 boolean ok = readPass != null && !readPass.isBlank()
-                        && MessageDigest.isEqual(readUser.getBytes(StandardCharsets.UTF_8), nz(req.user()).getBytes(StandardCharsets.UTF_8))
-                        && MessageDigest.isEqual(readPass.getBytes(StandardCharsets.UTF_8), nz(req.password()).getBytes(StandardCharsets.UTF_8));
+                        && MessageDigest.isEqual(hash(readUser).getBytes(StandardCharsets.UTF_8), hash(nz(req.user())).getBytes(StandardCharsets.UTF_8))
+                        && MessageDigest.isEqual(hash(readPass).getBytes(StandardCharsets.UTF_8), hash(nz(req.password())).getBytes(StandardCharsets.UTF_8));
+                if (ok && !readerAllowed(req.ip())) {
+                    log.warn("Rejected a read with valid worker credentials from {} (not a worker address)", req.ip());
+                    return false;
+                }
                 return ok && streamForPath(req.path()).isPresent();
             }
             default -> {

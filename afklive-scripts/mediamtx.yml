@@ -4,7 +4,8 @@
 # Every publish and read is authorized by the AFK Live web app:
 #   - a phone may publish only to live/<its stream's ingest key>
 #   - only workers, with INGEST_READ_USER / INGEST_READ_PASS, may read
-# Replace WEB_HOST and the secret (same value as INGEST_AUTH_SECRET in afklive.env).
+# Replace WEB_HOST and the secret (same value as INGEST_AUTH_SECRET in afklive.env). Use https:// (or a
+# private network): each call carries the secret and the phone's stream key.
 
 logLevel: info
 

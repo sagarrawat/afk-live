@@ -374,9 +374,10 @@ public class LiveStreamService {
             if (!ingest.enabled()) {
                 checks.add(new Check("phone", false, "Phone streaming isn't available on this server yet.", "phone"));
             } else if (s.getIngestLastPublishAt() == null) {
-                checks.add(new Check("phone", true, "Your phone hasn't connected yet. Viewers see the BRB scene until it does.", "phone"));
+                checks.add(new Check("phone", true, "Set up your phone app first (one QR scan). After you go live, start "
+                        + "streaming from the app; until it connects viewers see the BRB scene.", "phone"));
             } else {
-                checks.add(new Check("phone", true, "Phone app set up.", "phone"));
+                checks.add(new Check("phone", true, "Phone app set up. After you go live, start streaming from the app.", "phone"));
             }
         }
 
@@ -698,7 +699,7 @@ public class LiveStreamService {
             return null;
         }
         LiveStream withKey = s.getIngestKey() == null ? ingest.ensureKey(s) : s;
-        return new StudioSpec.Phone(ingest.readUrl(withKey), s.isEndOnInputLoss() ? s.getInputGraceSeconds() : 0);
+        return new StudioSpec.Phone(withKey.getIngestKey(), null, s.isEndOnInputLoss() ? s.getInputGraceSeconds() : 0);
     }
 
     private static StudioSpec.Media mediaOf(MediaAsset m) {

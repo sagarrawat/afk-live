@@ -105,9 +105,11 @@ public record StudioSpec(
     }
 
     /**
-     * @param ingestUrl  where the worker reads the phone's feed (the local ingest server)
+     * @param ingestKey    the phone stream's ingest key; the worker builds the read address from its own
+     *                     configuration (the read credentials never go into the run's spec)
+     * @param ingestUrl    an explicit read address instead (tests); null in production
      * @param graceSeconds how long BRB may stay on before the stream ends (0: never)
      */
-    public record Phone(String ingestUrl, int graceSeconds) {
+    public record Phone(String ingestKey, String ingestUrl, int graceSeconds) {
     }
 }

@@ -340,7 +340,7 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
         com.afklive.streamer.streaming.StudioSpec studio = new com.afklive.streamer.streaming.StudioSpec(base.height(), base.vertical(),
                 base.fps(), base.source(), base.videos(), base.order(), base.loops(), base.music(), base.musicOrder(),
                 base.audioMode(), base.videoVolume(), base.musicVolume(), base.overlays(), base.scenes(), base.initialScene(),
-                base.timeZone(), null, new com.afklive.streamer.streaming.StudioSpec.Phone("tcp://127.0.0.1:" + port + "?listen=1", 0), false);
+                base.timeZone(), null, new com.afklive.streamer.streaming.StudioSpec.Phone(null, "tcp://127.0.0.1:" + port + "?listen=1", 0), false);
         Path out = dir.resolve("phone.flv");
         StreamJob job = job(owner, StreamSpec.studio(owner.getEmail(), stream.getId(), studio,
                 List.of(new StreamSpec.Destination("File", "file://" + out))).toJson(), null, null);
@@ -360,6 +360,11 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
             tickUntil(w, () -> Boolean.FALSE.equals(jobs.findById(id).orElseThrow().getInputLive()), Duration.ofSeconds(10));
             assertThat(jobs.findById(id).orElseThrow().getScene()).isEqualTo("BRB");
             assertThat(jobs.findById(id).orElseThrow().isLive()).isTrue(); // the stream itself never stopped
+
+            // The phone reconnects: live again, still the same run.
+            phone = sendPhone(port);
+            tickUntil(w, () -> Boolean.TRUE.equals(jobs.findById(id).orElseThrow().getInputLive()), Duration.ofSeconds(20));
+            assertThat(jobs.findById(id).orElseThrow().getScene()).isEqualTo("LIVE");
 
             streamService.stopStream(id, owner.getEmail());
             tickUntil(w, () -> !jobs.findById(id).orElseThrow().isLive(), Duration.ofSeconds(30));

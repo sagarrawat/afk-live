@@ -27,6 +27,7 @@ public class StreamJob {
     private User user;
 
     @com.fasterxml.jackson.annotation.JsonIgnore
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
     private String streamKey;
     private String fileName;
     private boolean isLive;
@@ -55,6 +56,7 @@ public class StreamJob {
     private String desiredState;
     /** Everything a worker needs to run the stream (JSON StreamSpec). Contains stream keys: never sent to clients. */
     @Column(columnDefinition = "TEXT")
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
     @com.fasterxml.jackson.annotation.JsonIgnore
     private String spec;
     /** The worker running this job; null until claimed. */
