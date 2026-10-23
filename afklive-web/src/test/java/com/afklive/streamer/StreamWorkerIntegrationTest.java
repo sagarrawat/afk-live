@@ -58,6 +58,8 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
     @Autowired com.afklive.streamer.service.LiveStreamService liveStreams;
     @Autowired com.afklive.streamer.repository.LiveStreamRepository streamRepository;
     @Autowired com.afklive.streamer.repository.MediaAssetRepository mediaRepository;
+    @Autowired com.afklive.streamer.service.PlayoutCopies playoutCopies;
+    @Autowired com.afklive.streamer.streaming.MediaCache mediaCache;
 
     /** A separate worker process, as far as coordination goes (own id, own first pass). */
     private StreamWorker newWorker(String id) {
@@ -352,6 +354,79 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
             assertThat(jobs.findById(id).orElseThrow().getStatus()).isEqualTo(StreamStates.ENDED);
             assertThat(jobs.findById(id).orElseThrow().getRestarts()).isZero();
             assertThat(Files.size(out)).isPositive();
+        } finally {
+            w.shutdown();
+            streamService.finalizeJob(id, "test");
+        }
+    }
+
+    @Test
+    void aPlainPlaylistMovesToCopyModeAndBackToTheStudioWithoutReconnecting() throws Exception {
+        User owner = account("worker-copy@example.com");
+        com.afklive.streamer.model.LiveStream stream = liveStreams.create(owner.getEmail(),
+                new com.afklive.streamer.dto.StreamDtos.CreateStream("Copy test", null, null, 720, 30));
+        List<Long> ids = new java.util.ArrayList<>();
+        for (String title : List.of("first.mp4", "second.mp4")) {
+            com.afklive.streamer.model.MediaAsset m = new com.afklive.streamer.model.MediaAsset(owner, title, uploadSource(),
+                    Files.size(source), com.afklive.streamer.model.MediaAsset.ContentType.VIDEO);
+            m.setDurationSeconds(3.0);
+            m.setWidth(320);
+            m.setHeight(180);
+            m.setFps(30.0);
+            m.setHasAudio(true);
+            ids.add(mediaRepository.save(m).getId());
+        }
+        liveStreams.setItems(owner.getEmail(), stream.getId(), com.afklive.streamer.model.StreamItem.Kind.VIDEO, ids);
+        stream = streamRepository.findById(stream.getId()).orElseThrow();
+        Path out = dir.resolve("copy-mode.flv");
+        StreamSpec spec = StreamSpec.studio(owner.getEmail(), stream.getId(), liveStreams.studioSpec(stream, null),
+                List.of(new StreamSpec.Destination("File", "file://" + out)));
+        StreamJob job = job(owner, spec.toJson(), null, null);
+        job.setStreamId(stream.getId());
+        jobs.save(job);
+        long id = job.getId();
+
+        StreamWorker w = newWorker("w-copy");
+        w.setCopyRuns(new com.afklive.streamer.streaming.CopyRuns(playoutCopies, mediaCache, streamRepository, jobs, preparer, true));
+        w.copyCheckEvery(Duration.ofSeconds(1));
+        try {
+            // Its files aren't prepared yet: it starts in the studio, and asks for them.
+            tickUntil(w, () -> onAir(id), Duration.ofSeconds(60));
+            assertThat(jobs.findById(id).orElseThrow().getNowPlaying()).doesNotContain("\"mode\":\"copy\"");
+            while (playoutCopies.prepareNext()) {
+                // the web side makes them
+            }
+            // Within a check or two it moves to copy mode, on the same connection.
+            tickUntil(w, () -> String.valueOf(jobs.findById(id).orElseThrow().getNowPlaying()).contains("\"mode\":\"copy\""),
+                    Duration.ofSeconds(60));
+            tickUntil(w, () -> onAir(id), Duration.ofSeconds(20));
+
+            // A live change (skip) needs the studio: it switches back, still on the same connection.
+            liveStreams.skip(owner.getEmail(), stream.getId());
+            tickUntil(w, () -> {
+                w.pollCommands();
+                String np = String.valueOf(jobs.findById(id).orElseThrow().getNowPlaying());
+                return !np.contains("\"mode\":\"copy\"") && !np.equals("null");
+            }, Duration.ofSeconds(60));
+            tickUntil(w, () -> onAir(id), Duration.ofSeconds(20));
+
+            assertThat(jobs.findById(id).orElseThrow().getDestinations().get(0).getRestarts())
+                    .as("the destination never reconnected").isZero();
+            assertThat(jobs.findById(id).orElseThrow().getRestarts()).isZero();
+            streamService.stopStream(id, owner.getEmail());
+            tickUntil(w, () -> !jobs.findById(id).orElseThrow().isLive(), Duration.ofSeconds(30));
+            // One file, one unbroken timeline across studio → copy → studio.
+            List<com.afklive.streamer.streaming.TsStitcherTest.Packet> packets = com.afklive.streamer.streaming.TsStitcherTest.probe(out);
+            double prev = -1;
+            double maxGap = 0;
+            for (com.afklive.streamer.streaming.TsStitcherTest.Packet p : packets.stream().filter(p -> p.type().equals("video")).toList()) {
+                assertThat(p.dts()).isGreaterThan(prev);
+                if (prev >= 0) {
+                    maxGap = Math.max(maxGap, p.dts() - prev);
+                }
+                prev = p.dts();
+            }
+            assertThat(maxGap).isLessThan(0.25);
         } finally {
             w.shutdown();
             streamService.finalizeJob(id, "test");

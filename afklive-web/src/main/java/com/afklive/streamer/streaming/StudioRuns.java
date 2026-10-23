@@ -218,6 +218,26 @@ public class StudioRuns {
                 && java.util.Objects.equals(a.color(), b.color());
     }
 
+    /** The scene on air (FO-2: copy mode only plays the LIVE scene). */
+    public String scene(Handle h) {
+        return h.studio().status().scene();
+    }
+
+    /** The playlist position now, in the form copy mode and resume use; null without a playlist. */
+    public StudioSpec.Position position(Handle h) {
+        PlaylistFeed playlist = h.built.playlist();
+        if (playlist == null) {
+            return null;
+        }
+        PlaylistFeed.Position p = playlist.position();
+        return p.itemId() == null ? null : new StudioSpec.Position(p.itemId(), p.offsetSeconds(), p.loopsCompleted());
+    }
+
+    /** The run's settings as they are now, live changes included. */
+    public StudioSpec spec(Handle h) {
+        return h.spec;
+    }
+
     public void close(Handle h) {
         synchronized (h) {
             h.closed = true;

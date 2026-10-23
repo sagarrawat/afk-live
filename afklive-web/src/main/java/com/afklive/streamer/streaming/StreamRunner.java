@@ -610,6 +610,8 @@ public final class StreamRunner {
         double bitrate = 0;
         double speed = 0;
         long drops = 0;
+        long frames = 0;
+        long outTimeUs = 0;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(err, StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
@@ -621,13 +623,16 @@ public final class StreamRunner {
                     case "bitrate" -> bitrate = parseLeadingNumber(value);
                     case "speed" -> speed = parseLeadingNumber(value);
                     case "drop_frames" -> drops = (long) parseLeadingNumber(value);
+                    case "frame" -> frames = (long) parseLeadingNumber(value);
+                    case "out_time_us" -> outTimeUs = (long) parseLeadingNumber(value);
                     case "progress" -> {
+                        // Stream copy (FO-2 copy mode) reports no fps: frames over time give it.
+                        double rate = fps > 0 || frames == 0 || outTimeUs <= 0 ? fps : frames / (outTimeUs / 1e6);
                         if (report.getAsBoolean()) {
-                            listener.onProgress(new Progress(fps, bitrate, speed, drops));
+                            listener.onProgress(new Progress(rate, bitrate, speed, drops));
                         }
                     }
-                    case "frame", "stream_0_0_q", "total_size", "out_time_us", "out_time_ms", "out_time",
-                         "dup_frames" -> {
+                    case "stream_0_0_q", "total_size", "out_time_ms", "out_time", "dup_frames" -> {
                         // progress fields we don't store
                     }
                     default -> {

@@ -89,6 +89,11 @@ public class StreamWorker {
     public static final java.time.Duration BUSY_CLAIM_GRACE = java.time.Duration.ofSeconds(45);
     private volatile java.util.function.DoubleSupplier cpuLoad = StreamWorker::systemCpuLoad;
     private double smoothedCpu = -1;
+    /** FO-2 copy mode (off unless app.streaming.copy-mode=true); null in tests that don't wire it. */
+    private CopyRuns copyRuns;
+    static final Duration COPY_CHECK_EVERY = Duration.ofSeconds(60);
+    private volatile Duration copyCheckEvery = COPY_CHECK_EVERY;
+    static final Duration HAND_OFF_TIMEOUT = Duration.ofSeconds(30);
     private volatile boolean firstPassDone;
     private volatile long lastSuccessfulTickNanos = System.nanoTime();
 
@@ -134,6 +139,20 @@ public class StreamWorker {
             host = "worker";
         }
         return host + "-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCopyRuns(CopyRuns copyRuns) {
+        this.copyRuns = copyRuns;
+    }
+
+    /** For tests: how often studio runs are checked for moving to copy mode. */
+    public void copyCheckEvery(Duration every) {
+        this.copyCheckEvery = every;
+    }
+
+    private boolean copyMode() {
+        return copyRuns != null && copyRuns.enabled();
     }
 
     public String workerId() {
@@ -208,6 +227,19 @@ public class StreamWorker {
                 }
                 if (jobs.heartbeat(id, workerId, r.lastHeartbeat, now, r.status(), r.bitrate, r.fps, r.speed, r.drops, r.lastError) == 1) {
                     r.lastHeartbeat = now;
+                    CopyRuns.Handle copy = r.copy;
+                    if (copy != null) {
+                        try {
+                            if (r.maxAppliedCommand > r.reportedAppliedCommand) {
+                                jobs.saveAppliedCommand(id, workerId, r.maxAppliedCommand);
+                                r.reportedAppliedCommand = r.maxAppliedCommand;
+                            }
+                            copyRuns.report(id, workerId, copy);
+                        } catch (Exception e) {
+                            log.debug("Copy report for {} failed: {}", id, e.getMessage());
+                        }
+                    }
+                    maybeMoveToCopy(r);
                     StudioRuns.Handle h = r.studio;
                     if (h != null) {
                         try {
@@ -340,14 +372,35 @@ public class StreamWorker {
         String scene = job.getScene();
         Thread.ofVirtual().name("prepare-" + id).start(() -> {
             try {
-                StudioRuns.Handle h = studioRuns.start(id, spec, scene, new com.afklive.streamer.streaming.studio.Studio.Listener() {
-                    @Override
-                    public void onInputSwitch(boolean live) {
-                        streamService.addLog("[job " + id + "] phone input " + (live ? "back: live" : "lost: showing BRB"));
+                if (copyMode()) {
+                    CopyRuns.Handle c = copyRuns.prepare(id, spec.streamId(), spec.studio(), scene, copyRuns.resumeFor(spec));
+                    if (c != null) {
+                        StreamRunner runner = new StreamRunner(id, c.player(), relayCommands(spec.destinations()), r, settings).seamless();
+                        synchronized (r) {
+                            r.copy = c;
+                            if (r.lost) {
+                                cleanup(r, false);
+                                return;
+                            }
+                            if (r.pendingStop != null) {
+                                r.onFinished(r.pendingStop, false);
+                                return;
+                            }
+                            r.runner = runner;
+                            r.nextCopyCheckNanos = System.nanoTime();
+                            runner.start();
+                        }
+                        streamService.addLog("[job " + id + "] playing by copy (no re-encoding)");
+                        return;
                     }
-                });
+                }
+                StudioRuns.Handle h = studioRuns.start(id, spec, scene, studioListener(id));
                 r.studio = h;
                 StreamRunner runner = new StreamRunner(id, h.studio(), relayCommands(spec.destinations()), r, settings);
+                if (copyMode()) {
+                    runner.seamless(); // so it can move to copy mode later without reconnecting
+                    r.nextCopyCheckNanos = System.nanoTime() + copyCheckEvery.toNanos();
+                }
                 synchronized (r) {
                     if (r.lost) {
                         cleanup(r, false);
@@ -368,6 +421,138 @@ public class StreamWorker {
         });
     }
 
+    private com.afklive.streamer.streaming.studio.Studio.Listener studioListener(long id) {
+        return new com.afklive.streamer.streaming.studio.Studio.Listener() {
+            @Override
+            public void onInputSwitch(boolean live) {
+                streamService.addLog("[job " + id + "] phone input " + (live ? "back: live" : "lost: showing BRB"));
+            }
+        };
+    }
+
+    // ---------------------------------------------------------------- copy mode (FO-2)
+
+    /**
+     * A change while playing by copy needs the studio: build it at the current position and hand the
+     * stream over at its first keyframe (destinations stay connected), then apply the change. Changes
+     * that arrive meanwhile wait and follow in order.
+     */
+    private void switchToStudio(Running r, com.afklive.streamer.model.StreamCommand first) {
+        CopyRuns.Handle c = r.copy;
+        StreamRunner runner = r.runner;
+        if (c == null || runner == null) {
+            return;
+        }
+        r.switching = true;
+        synchronized (r.deferred) {
+            r.deferred.add(first);
+        }
+        Thread.ofVirtual().name("to-studio-" + r.id).start(() -> {
+            StudioRuns.Handle h = null;
+            try {
+                copyRuns.savePosition(r.id, workerId, c); // the studio resumes from the saved position
+                StreamSpec spec = r.spec.withStudio(c.spec());
+                h = studioRuns.start(r.id, spec, StudioSpec.LIVE, studioListener(r.id));
+                h.studio().start();
+                StudioRuns.Handle built = h;
+                boolean started = runner.handOff(h.studio(), HAND_OFF_TIMEOUT, ok -> {
+                    if (ok) {
+                        r.studio = built;
+                        r.copy = null;
+                        copyRuns.close(c);
+                        streamService.addLog("[job " + r.id + "] switched to the studio for a live change, without reconnecting");
+                    } else {
+                        studioRuns.close(built);
+                        streamService.addLog("[job " + r.id + "] a live change couldn't be applied: the studio didn't start in time");
+                    }
+                    applyDeferred(r);
+                });
+                if (!started) {
+                    studioRuns.close(h);
+                    applyDeferred(r);
+                }
+            } catch (Exception e) {
+                log.warn("Switching job {} to the studio failed: {}", r.id, e.getMessage());
+                if (h != null) {
+                    studioRuns.close(h);
+                }
+                applyDeferred(r);
+            }
+        });
+    }
+
+    private void applyDeferred(Running r) {
+        List<com.afklive.streamer.model.StreamCommand> todo;
+        synchronized (r.deferred) {
+            todo = new java.util.ArrayList<>(r.deferred);
+            r.deferred.clear();
+        }
+        r.switching = false;
+        StudioRuns.Handle h = r.studio;
+        for (com.afklive.streamer.model.StreamCommand c : todo) {
+            if (h == null) {
+                log.warn("Command {} for job {} dropped: still playing by copy", c.getType(), r.id);
+                continue;
+            }
+            try {
+                studioRuns.apply(h, c);
+            } catch (Exception e) {
+                log.warn("Command {} for job {} failed: {}", c.getType(), r.id, e.getMessage());
+            }
+        }
+        r.nextCopyCheckNanos = System.nanoTime() + copyCheckEvery.toNanos() * 5; // stay put a while after a change
+    }
+
+    /** Every minute: a studio run that qualifies (and whose copies are ready) moves to copy mode. */
+    private void maybeMoveToCopy(Running r) {
+        StudioRuns.Handle h = r.studio;
+        StreamRunner runner = r.runner;
+        if (!copyMode() || h == null || runner == null || r.switching || System.nanoTime() < r.nextCopyCheckNanos) {
+            return;
+        }
+        r.nextCopyCheckNanos = System.nanoTime() + copyCheckEvery.toNanos();
+        String scene = studioRuns.scene(h);
+        if (!StudioSpec.LIVE.equals(scene) || CopyRuns.ineligible(studioRuns.spec(h), scene) != null) {
+            return; // cheap checks first, on the loop thread
+        }
+        r.switching = true;
+        // Copies may need fetching: off the loop thread, so heartbeats never wait for a download.
+        Thread.ofVirtual().name("to-copy-" + r.id).start(() -> {
+            CopyRuns.Handle c = null;
+            try {
+                StudioSpec.Position at = studioRuns.position(h);
+                c = at == null ? null : copyRuns.prepare(r.id, r.spec.streamId(), studioRuns.spec(h), scene, at);
+                if (c == null) {
+                    applyDeferred(r);
+                    r.nextCopyCheckNanos = System.nanoTime() + copyCheckEvery.toNanos();
+                    return;
+                }
+                CopyRuns.Handle copy = c;
+                boolean started = runner.handOff(c.player(), HAND_OFF_TIMEOUT, ok -> {
+                    if (ok) {
+                        r.copy = copy;
+                        r.studio = null;
+                        studioRuns.close(h);
+                        streamService.addLog("[job " + r.id + "] now playing by copy (no re-encoding), without reconnecting");
+                    } else {
+                        copyRuns.close(copy);
+                    }
+                    applyDeferred(r);
+                });
+                if (!started) {
+                    copyRuns.close(c);
+                    applyDeferred(r);
+                }
+            } catch (Exception e) {
+                log.warn("Moving job {} to copy mode failed: {}", r.id, e.getMessage());
+                if (c != null) {
+                    copyRuns.close(c);
+                }
+                applyDeferred(r);
+            }
+        });
+    }
+
     /** Commands are looked at for this long: covers ids committed out of order and clock differences. */
     static final Duration COMMAND_WINDOW = Duration.ofMinutes(5);
 
@@ -378,7 +563,8 @@ public class StreamWorker {
      * written into the run's spec by the web app, so a takeover rebuilds them without replaying.
      */
     public void pollCommands() {
-        List<Running> ready = running.values().stream().filter(x -> x.studio != null && x.finishPending == null).toList();
+        List<Running> ready = running.values().stream().filter(x -> (x.studio != null || x.copy != null || x.switching)
+                && x.finishPending == null).toList();
         if (ready.isEmpty()) {
             return;
         }
@@ -387,7 +573,8 @@ public class StreamWorker {
         List<Long> ids = ready.stream().map(x -> x.id).toList();
         for (com.afklive.streamer.model.StreamCommand c : commands.findRecent(ids, after, since)) {
             Running r = running.get(c.getJobId());
-            if (r == null || r.studio == null || c.getId() <= r.commandsAfter || !r.appliedCommands.add(c.getId())) {
+            if (r == null || (r.studio == null && r.copy == null && !r.switching) || c.getId() <= r.commandsAfter
+                    || !r.appliedCommands.add(c.getId())) {
                 continue;
             }
             r.maxAppliedCommand = Math.max(r.maxAppliedCommand, c.getId());
@@ -403,6 +590,12 @@ public class StreamWorker {
                         runner.reconnectAll();
                         streamService.addLog("[job " + r.id + "] reconnecting every destination, as asked");
                     }
+                } else if (r.switching) {
+                    synchronized (r.deferred) {
+                        r.deferred.add(c); // applied once the switch is done
+                    }
+                } else if (r.copy != null) {
+                    switchToStudio(r, c);
                 } else {
                     studioRuns.apply(r.studio, c);
                 }
@@ -446,6 +639,15 @@ public class StreamWorker {
     }
 
     private void cleanup(Running r, boolean ended) {
+        CopyRuns.Handle copy = r.copy;
+        if (copy != null) {
+            r.copy = null;
+            try {
+                copyRuns.close(copy);
+            } catch (Exception e) {
+                log.warn("Copy cleanup for job {} failed", r.id, e);
+            }
+        }
         StudioRuns.Handle h = r.studio;
         if (h != null) {
             r.studio = null;
@@ -503,6 +705,11 @@ public class StreamWorker {
         volatile StudioRuns.Handle studio;
         /** Commands up to this id were applied by an earlier worker of this run (from the job row). */
         volatile long commandsAfter;
+        /** FO-2: set while the run plays by copy (then studio is null), and while it switches between the two. */
+        volatile CopyRuns.Handle copy;
+        volatile boolean switching;
+        final List<com.afklive.streamer.model.StreamCommand> deferred = new java.util.ArrayList<>();
+        long nextCopyCheckNanos;
         /** Commands this worker applied recently (bounded). */
         final java.util.Set<Long> appliedCommands = java.util.Collections.newSetFromMap(new java.util.LinkedHashMap<>() {
             @Override
@@ -555,7 +762,9 @@ public class StreamWorker {
             lastProgressNanos = System.nanoTime();
             everProgressed = true;
             bitrate = p.bitrateKbps();
-            fps = p.fps();
+            CopyRuns.Handle c = copy;
+            // Stream copy reports no frame rate: it plays the copies' rate at the reported speed.
+            fps = p.fps() > 0 || c == null ? p.fps() : c.spec().fps() * Math.min(1.0, p.speed() > 0 ? p.speed() : 1.0);
             speed = p.speed();
             drops = p.droppedFrames();
             lastError = null;
