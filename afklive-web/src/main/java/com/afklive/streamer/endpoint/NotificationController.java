@@ -87,6 +87,40 @@ public class NotificationController {
                 : ResponseEntity.notFound().build();
     }
 
+    /** NT-3: each kind of alert with its email and push setting. */
+    public record PreferenceView(String id, String label, String description, boolean email, boolean push) {
+    }
+
+    @GetMapping("/preferences")
+    public List<PreferenceView> preferences(Principal principal) {
+        return views(user(principal));
+    }
+
+    @PutMapping("/preferences")
+    public List<PreferenceView> setPreferences(@RequestBody Map<String, com.afklive.streamer.service.AlertPreferences.Channels> body,
+                                               Principal principal) {
+        User u = user(principal);
+        Map<String, com.afklive.streamer.service.AlertPreferences.Channels> next =
+                new java.util.LinkedHashMap<>(com.afklive.streamer.service.AlertPreferences.read(u.getAlertPreferences()));
+        if (body != null) {
+            body.forEach((k, ch) -> {
+                if (next.containsKey(k) && ch != null) {
+                    next.put(k, ch);
+                }
+            });
+        }
+        u.setAlertPreferences(com.afklive.streamer.service.AlertPreferences.write(next));
+        users.save(u);
+        return views(u);
+    }
+
+    private static List<PreferenceView> views(User u) {
+        var prefs = com.afklive.streamer.service.AlertPreferences.read(u.getAlertPreferences());
+        return com.afklive.streamer.service.AlertPreferences.KINDS.stream()
+                .map(k -> new PreferenceView(k.id(), k.label(), k.description(), prefs.get(k.id()).email(), prefs.get(k.id()).push()))
+                .toList();
+    }
+
     @PutMapping("/settings")
     public Map<String, Boolean> settings(@RequestBody Map<String, Boolean> body, Principal principal) {
         User u = user(principal);

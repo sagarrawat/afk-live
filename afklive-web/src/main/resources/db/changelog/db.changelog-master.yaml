@@ -29,3 +29,5 @@ databaseChangeLog:
       file: db/changelog/changes/014-fit-crossfade.sql
   - include:
       file: db/changelog/changes/015-loudness.sql
+  - include:
+      file: db/changelog/changes/016-alert-preferences.sql

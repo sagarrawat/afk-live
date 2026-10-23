@@ -95,7 +95,8 @@ public class NotificationService {
         n.setCreatedAt(now);
         n = notifications.save(n);
         log.info("Alert {} for user {}: {}", a.type(), user.getId(), a.title());
-        if (a.emailIt() && user.isEmailAlerts()) {
+        AlertPreferences.Channels channels = AlertPreferences.forType(user.getAlertPreferences(), a.type());
+        if (a.emailIt() && user.isEmailAlerts() && channels.email()) {
             Long id = n.getId();
             String to = user.getEmail();
             mailer.submit(() -> {
@@ -111,7 +112,7 @@ public class NotificationService {
                 }
             });
         }
-        if (a.emailIt() && push.enabled()) {
+        if (a.emailIt() && push.enabled() && channels.push()) {
             // NT-1 / MB-2: the same alerts on the creator's devices; links open the app.
             Long userId = user.getId();
             String url = a.link() == null ? "/studio" : a.link().startsWith("/studio") ? a.link() : "/studio" + a.link();
