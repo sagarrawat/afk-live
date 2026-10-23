@@ -1,0 +1,18 @@
+# Ingest server for phone streams (MediaMTX). See afklive-scripts/mediamtx.yml and docs/operations.md.
+# Install: download the mediamtx binary to /opt/afklive/ingest/mediamtx, copy mediamtx.yml next to it,
+# then: sudo cp afklive-ingest.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now afklive-ingest
+[Unit]
+Description=AFK Live ingest server (MediaMTX)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=afklive-ingest
+WorkingDirectory=/opt/afklive/ingest
+ExecStart=/opt/afklive/ingest/mediamtx /opt/afklive/ingest/mediamtx.yml
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

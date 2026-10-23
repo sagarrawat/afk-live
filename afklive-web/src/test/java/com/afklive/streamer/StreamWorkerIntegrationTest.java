@@ -324,4 +324,73 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
             streamService.finalizeJob(id, "test");
         }
     }
+
+    @Test
+    void aPhoneStreamShowsBrbWhenTheSignalDropsAndComesBack() throws Exception {
+        User owner = account("worker-phone@example.com");
+        com.afklive.streamer.model.LiveStream stream = liveStreams.create(owner.getEmail(),
+                new com.afklive.streamer.dto.StreamDtos.CreateStream("Phone test", "PHONE", null, 720, 30));
+        stream = streamRepository.findById(stream.getId()).orElseThrow();
+        int port;
+        try (java.net.ServerSocket ss = new java.net.ServerSocket(0)) {
+            port = ss.getLocalPort();
+        }
+        com.afklive.streamer.streaming.StudioSpec base = liveStreams.studioSpec(stream, null);
+        // Instead of an ingest server, the "phone" connects straight to the worker's decoder.
+        com.afklive.streamer.streaming.StudioSpec studio = new com.afklive.streamer.streaming.StudioSpec(base.height(), base.vertical(),
+                base.fps(), base.source(), base.videos(), base.order(), base.loops(), base.music(), base.musicOrder(),
+                base.audioMode(), base.videoVolume(), base.musicVolume(), base.overlays(), base.scenes(), base.initialScene(),
+                base.timeZone(), null, new com.afklive.streamer.streaming.StudioSpec.Phone(null, "tcp://127.0.0.1:" + port + "?listen=1", 0), false);
+        Path out = dir.resolve("phone.flv");
+        StreamJob job = job(owner, StreamSpec.studio(owner.getEmail(), stream.getId(), studio,
+                List.of(new StreamSpec.Destination("File", "file://" + out))).toJson(), null, null);
+        job.setStreamId(stream.getId());
+        jobs.save(job);
+        long id = job.getId();
+        StreamWorker w = newWorker("w-phone");
+        Process phone = null;
+        try {
+            tickUntil(w, () -> onAir(id), Duration.ofSeconds(30));
+            assertThat(jobs.findById(id).orElseThrow().getInputLive()).isNotEqualTo(Boolean.TRUE);
+            phone = sendPhone(port);
+            tickUntil(w, () -> Boolean.TRUE.equals(jobs.findById(id).orElseThrow().getInputLive()), Duration.ofSeconds(20));
+            assertThat(jobs.findById(id).orElseThrow().getScene()).isEqualTo("LIVE");
+
+            phone.destroyForcibly();
+            tickUntil(w, () -> Boolean.FALSE.equals(jobs.findById(id).orElseThrow().getInputLive()), Duration.ofSeconds(10));
+            assertThat(jobs.findById(id).orElseThrow().getScene()).isEqualTo("BRB");
+            assertThat(jobs.findById(id).orElseThrow().isLive()).isTrue(); // the stream itself never stopped
+
+            // The phone reconnects: live again, still the same run.
+            phone = sendPhone(port);
+            tickUntil(w, () -> Boolean.TRUE.equals(jobs.findById(id).orElseThrow().getInputLive()), Duration.ofSeconds(20));
+            assertThat(jobs.findById(id).orElseThrow().getScene()).isEqualTo("LIVE");
+
+            streamService.stopStream(id, owner.getEmail());
+            tickUntil(w, () -> !jobs.findById(id).orElseThrow().isLive(), Duration.ofSeconds(30));
+            assertThat(jobs.findById(id).orElseThrow().getRestarts()).isZero();
+        } finally {
+            if (phone != null) {
+                phone.destroyForcibly();
+            }
+            w.shutdown();
+            streamService.finalizeJob(id, "test");
+        }
+    }
+
+    private static Process sendPhone(int port) throws Exception {
+        Process p = null;
+        for (int attempt = 0; attempt < 20; attempt++) {
+            p = new ProcessBuilder("ffmpeg", "-hide_banner", "-loglevel", "error", "-re",
+                    "-f", "lavfi", "-i", "testsrc2=size=360x640:rate=30", "-f", "lavfi", "-i", "sine=f=660:r=44100",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-g", "30", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-f", "mpegts", "tcp://127.0.0.1:" + port)
+                    .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            if (!p.waitFor(700, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                return p;
+            }
+            Thread.sleep(300);
+        }
+        return p;
+    }
 }

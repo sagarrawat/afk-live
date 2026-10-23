@@ -106,6 +106,27 @@ app:
     work-dir: ${STREAMING_WORK_DIR:data/worker}
     worker:
       max-streams: ${STREAMING_WORKER_MAX_STREAMS:20}
+    # Library files kept on each worker's disk, in GB (least recently used are removed first).
+    cache-gb: ${STREAMING_CACHE_GB:50}
+  # Encrypts stream keys and phone ingest keys at rest: 32 random bytes, base64 (openssl rand -base64 32).
+  # Required: the app won't start without it. To rotate, move the old key to APP_ENCRYPTION_OLD_KEYS
+  # (comma-separated) and set a new one; stored secrets are re-encrypted at startup.
+  encryption-key: ${APP_ENCRYPTION_KEY:}
+  encryption-old-keys: ${APP_ENCRYPTION_OLD_KEYS:}
+  # Phone streaming (MS-1): the ingest server (MediaMTX) phones publish to. Empty host: phone streams are off.
+  ingest:
+    # What creators type into their phone app, e.g. ingest.afklive.com
+    public-host: ${INGEST_PUBLIC_HOST:}
+    rtmp-port: ${INGEST_RTMP_PORT:1935}
+    srt-port: ${INGEST_SRT_PORT:8890}
+    # Where workers read a phone's feed; {key} is the stream's ingest key, {user}/{pass} the read credentials.
+    read-url: ${INGEST_READ_URL:rtmp://127.0.0.1:1935/live/{key}?user={user}&pass={pass}}
+    read-user: ${INGEST_READ_USER:worker}
+    read-pass: ${INGEST_READ_PASS:}
+    # Networks workers read from; reads from elsewhere are refused even with the right credentials.
+    read-allowed: ${INGEST_READ_ALLOWED:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
+    # Shared secret MediaMTX sends on its auth calls (authHTTPAddress ...?secret=...).
+    auth-secret: ${INGEST_AUTH_SECRET:}
   jobrunr:
     # The JobRunr dashboard has no authentication and listens on its own port; enable only for local debugging.
     dashboard-enabled: ${JOBRUNR_DASHBOARD_ENABLED:false}

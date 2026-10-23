@@ -89,7 +89,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/api/payment/callback")
+                        .ignoringRequestMatchers("/api/payment/callback", "/internal/ingest/auth")
                 )
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
@@ -99,6 +99,8 @@ public class SecurityConfig {
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**").permitAll()
                         // Server-to-server payment notification; verified by signature in the controller.
                         .requestMatchers("/api/payment/callback").permitAll()
+                        // Ingest server (MediaMTX) auth hook; verified by a shared secret in the controller.
+                        .requestMatchers("/internal/ingest/auth").permitAll()
 
                         // 2. ADMIN (raw FFmpeg logs include every user's streams)
                         .requestMatchers("/admin/**", "/api/admin/**", "/api/logs").hasRole("ADMIN")

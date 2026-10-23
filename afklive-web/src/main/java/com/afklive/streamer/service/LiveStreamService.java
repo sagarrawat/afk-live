@@ -51,6 +51,7 @@ public class LiveStreamService {
     private final AppConfigService appConfigService;
     private final StreamService streamService;
     private final UserRepository users;
+    private final IngestService ingest;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -74,6 +75,13 @@ public class LiveStreamService {
         s.setFps(req.fps() == null ? 30 : req.fps());
         checkQuality(user, s.getQualityHeight(), s.getFps());
         s.setScenes(StudioSpec.json(defaultScenes()));
+        if (s.getSource() == LiveStream.Source.PHONE) {
+            // Viewers should see something friendly when the signal drops, from day one.
+            s.setOverlays(StudioSpec.json(List.of(new StudioSpec.OverlaySetting("brb-text", "TEXT", true, 0.32, 0.44, 0,
+                    0.07, "Be right back", null, null, "#ffffff", "#99000000", 1, null, null, 0, StudioSpec.BRB))));
+            s = streams.save(s);
+            return ingest.ensureKey(s);
+        }
         s.setOverlays(StudioSpec.json(List.of()));
         return streams.save(s);
     }
@@ -105,7 +113,10 @@ public class LiveStreamService {
         return new StreamView(s.getId(), s.getName(), s.getSource().name(), s.getOrientation().name(), s.getQualityHeight(),
                 s.getFps(), s.getPlaybackOrder().name(), s.getLoopCount(), s.getMusicOrder().name(), s.getAudioMode().name(),
                 s.getVideoVolume(), s.getMusicVolume(), s.getTimeZone(), overlays(s), scenes(s), playlist, music, runtime,
-                tv, scheduleViews(s), liveState(s));
+                tv, scheduleViews(s), liveState(s),
+                s.getSource() == LiveStream.Source.PHONE
+                        ? new PhoneSettings(s.isEndOnInputLoss(), s.getInputGraceSeconds(), s.getSrtLatencyMs(), s.getIngestLastPublishAt())
+                        : null);
     }
 
     @Transactional
@@ -156,6 +167,21 @@ public class LiveStreamService {
         }
         if (req.timeZone() != null) {
             s.setTimeZone(zone(req.timeZone()).getId());
+        }
+        if (req.endOnInputLoss() != null) {
+            s.setEndOnInputLoss(req.endOnInputLoss());
+        }
+        if (req.inputGraceSeconds() != null) {
+            if (req.inputGraceSeconds() < 10 || req.inputGraceSeconds() > 3600) {
+                throw new IllegalArgumentException("Grace time must be between 10 seconds and 1 hour.");
+            }
+            s.setInputGraceSeconds(req.inputGraceSeconds());
+        }
+        if (req.srtLatencyMs() != null) {
+            if (req.srtLatencyMs() < 200 || req.srtLatencyMs() > 5000) {
+                throw new IllegalArgumentException("SRT latency must be between 200 and 5000 ms.");
+            }
+            s.setSrtLatencyMs(req.srtLatencyMs());
         }
         s = streams.save(s);
         reloadIfLive(s);
@@ -341,6 +367,17 @@ public class LiveStreamService {
                 checks.add(new Check("playlist", true, (videos.size() - ready) + " video(s) aren't ready and will be skipped.", "playlist"));
             } else {
                 checks.add(new Check("playlist", true, videos.size() + " video(s) ready.", "playlist"));
+            }
+        }
+
+        if (s.getSource() == LiveStream.Source.PHONE) {
+            if (!ingest.enabled()) {
+                checks.add(new Check("phone", false, "Phone streaming isn't available on this server yet.", "phone"));
+            } else if (s.getIngestLastPublishAt() == null) {
+                checks.add(new Check("phone", true, "Set up your phone app first (one QR scan). After you go live, start "
+                        + "streaming from the app; until it connects viewers see the BRB scene.", "phone"));
+            } else {
+                checks.add(new Check("phone", true, "Phone app set up. After you go live, start streaming from the app.", "phone"));
             }
         }
 
@@ -654,7 +691,15 @@ public class LiveStreamService {
         return new StudioSpec(s.getQualityHeight(), s.getOrientation() == LiveStream.Orientation.VERTICAL, s.getFps(),
                 s.getSource().name(), videos, s.getPlaybackOrder().name(), s.getLoopCount(), music,
                 s.getMusicOrder().name(), s.getAudioMode().name(), s.getVideoVolume(), s.getMusicVolume(),
-                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, null, false);
+                overlays, scenes, scene != null ? scene : StudioSpec.LIVE, s.getTimeZone(), resume, phone(s), false);
+    }
+
+    private StudioSpec.Phone phone(LiveStream s) {
+        if (s.getSource() != LiveStream.Source.PHONE || !ingest.enabled()) {
+            return null;
+        }
+        LiveStream withKey = s.getIngestKey() == null ? ingest.ensureKey(s) : s;
+        return new StudioSpec.Phone(withKey.getIngestKey(), null, s.isEndOnInputLoss() ? s.getInputGraceSeconds() : 0);
     }
 
     private static StudioSpec.Media mediaOf(MediaAsset m) {

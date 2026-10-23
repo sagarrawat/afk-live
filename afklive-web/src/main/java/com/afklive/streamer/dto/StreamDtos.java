@@ -18,7 +18,15 @@ public final class StreamDtos {
     /** Every field optional: only those present change. */
     public record UpdateStream(String name, String orientation, Integer qualityHeight, Integer fps,
                                String playbackOrder, Integer loopCount, String musicOrder, String audioMode,
-                               Double videoVolume, Double musicVolume, String timeZone) {
+                               Double videoVolume, Double musicVolume, String timeZone,
+                               Boolean endOnInputLoss, Integer inputGraceSeconds, Integer srtLatencyMs) {
+        /** Settings changes without the phone fields. */
+        public UpdateStream(String name, String orientation, Integer qualityHeight, Integer fps, String playbackOrder,
+                            Integer loopCount, String musicOrder, String audioMode, Double videoVolume, Double musicVolume,
+                            String timeZone) {
+            this(name, orientation, qualityHeight, fps, playbackOrder, loopCount, musicOrder, audioMode, videoVolume,
+                    musicVolume, timeZone, null, null, null);
+        }
     }
 
     public record MediaRef(Long id, String title, Double durationSeconds, Integer width, Integer height,
@@ -65,7 +73,13 @@ public final class StreamDtos {
                              double videoVolume, double musicVolume, String timeZone,
                              List<StudioSpec.OverlaySetting> overlays, List<StudioSpec.SceneSetting> scenes,
                              List<MediaRef> playlist, List<MediaRef> music, double totalRuntimeSeconds,
-                             List<TargetView> destinations, List<ScheduleView> schedules, LiveState live) {
+                             List<TargetView> destinations, List<ScheduleView> schedules, LiveState live,
+                             PhoneSettings phone) {
+    }
+
+    /** Phone streams: what happens when the signal drops, and the SRT buffer. */
+    public record PhoneSettings(boolean endOnInputLoss, int inputGraceSeconds, int srtLatencyMs,
+                                ZonedDateTime lastConnectedAt) {
     }
 
     public record StreamSummary(Long id, String name, String source, String orientation, int qualityHeight,

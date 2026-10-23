@@ -46,6 +46,9 @@ public final class NetworkSafety {
             throw new IllegalArgumentException("Stream destination is empty.");
         }
         String value = destination.trim();
+        if (value.length() > 600) {
+            throw new IllegalArgumentException("Stream address is too long (600 characters at most).");
+        }
         if (!value.contains("://")) {
             if (!BARE_KEY.matcher(value).matches()) {
                 throw new IllegalArgumentException("Stream key contains characters that aren't allowed.");

@@ -34,6 +34,7 @@ import java.util.Random;
 public class StudioBuilder {
 
     private final MediaCache cache;
+    private final IngestReader ingestReader;
     private final com.afklive.streamer.service.MediaProbe probe;
     /** Whether each file has an audio track, when the library knows (from upload) or a probe found out. */
     /**
@@ -188,7 +189,8 @@ public class StudioBuilder {
         boolean liveMusic = liveSetting == null || liveSetting.music();
         Feed liveVideo;
         if ("PHONE".equals(spec.source())) {
-            DecoderSource input = new DecoderSource(canvas, DecoderSource.Options.live(spec.phone().ingestUrl()),
+            String readUrl = spec.phone().ingestUrl() != null ? spec.phone().ingestUrl() : ingestReader.readUrl(spec.phone().ingestKey());
+            DecoderSource input = new DecoderSource(canvas, DecoderSource.Options.live(readUrl),
                     workDir, ffmpeg, "job" + jobId + "-phone").start();
             liveVideo = new LiveFeed(canvas, input, backgrounds.get(StudioSpec.BRB), LiveFeed.Settings.defaults(), null);
         } else {

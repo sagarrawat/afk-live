@@ -18,6 +18,13 @@ public interface LiveStreamRepository extends JpaRepository<LiveStream, Long> {
 
     long countByUserEmail(String email);
 
+    Optional<LiveStream> findByIngestKeyHash(String hash);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("UPDATE LiveStream s SET s.ingestLastPublishAt = :at WHERE s.id = :id")
+    int markIngestPublish(@Param("id") Long id, @Param("at") java.time.ZonedDateTime at);
+
     /** Locks the stream row: going live twice at once must create one run, not two. */
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM LiveStream s WHERE s.id = :id")

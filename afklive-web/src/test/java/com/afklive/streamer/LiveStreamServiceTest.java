@@ -29,6 +29,7 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     @Autowired StreamJobRepository jobs;
     @Autowired StreamCommandRepository commands;
     @Autowired LiveStreamRepository streams;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired com.afklive.streamer.service.StreamService streamService;
 
     /** Runs started here must not be left for the worker tests (same database) to pick up. */
@@ -195,6 +196,8 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
         assertThat(persisted.order()).isEqualTo("SHUFFLE");
         assertThat(persisted.overlays().getFirst().visible()).isFalse();
         assertThat(persisted.finishAfterPass()).isTrue();
+        // Spec updates made with a query are encrypted too (the column converter applies to the parameter).
+        assertThat(jdbc.queryForObject("SELECT spec FROM stream_jobs WHERE id = ?", String.class, job.getId())).startsWith("enc:v2:");
     }
 
     @Test

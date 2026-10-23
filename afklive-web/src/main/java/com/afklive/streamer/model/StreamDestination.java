@@ -17,6 +17,7 @@ public class StreamDestination {
     private String name;
 
     @Column(name = "stream_key", length = 1024)
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
     private String streamKey;
 
     private String type; // "RTMP", "YOUTUBE_AUTO"
