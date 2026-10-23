@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/changes/005-stream-workers.sql
   - include:
       file: db/changelog/changes/006-streams.sql
+  - include:
+      file: db/changelog/changes/007-phone-ingest.sql

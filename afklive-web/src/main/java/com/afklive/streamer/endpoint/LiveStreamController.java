@@ -28,6 +28,7 @@ public class LiveStreamController {
 
     private final LiveStreamService service;
     private final StreamScheduleService scheduleService;
+    private final com.afklive.streamer.service.IngestService ingest;
 
     private static String email(Principal principal) {
         if (principal == null) {
@@ -153,6 +154,45 @@ public class LiveStreamController {
     public ResponseEntity<Void> skip(@PathVariable Long id, Principal principal) {
         service.skip(email(principal), id);
         return ResponseEntity.accepted().build();
+    }
+
+    // ---- phone (MS-1)
+
+    /** Server, key, ready-made links and app guides for setting up the phone app. */
+    @GetMapping("/{id}/ingest")
+    public com.afklive.streamer.service.IngestService.Setup ingest(@PathVariable Long id, Principal principal) {
+        LiveStream s = phoneStream(id, principal);
+        return ingest.setup(ingest.ensureKey(s));
+    }
+
+    @PostMapping("/{id}/ingest/regenerate")
+    public com.afklive.streamer.service.IngestService.Setup regenerate(@PathVariable Long id, Principal principal) {
+        return ingest.setup(ingest.regenerate(phoneStream(id, principal)));
+    }
+
+    /** QR codes: {@code larix} (one-scan setup), {@code larix-srt}, {@code rtmp} (full URL with key) or {@code srt}. */
+    @GetMapping(value = "/{id}/ingest/qr.png", produces = "image/png")
+    public ResponseEntity<byte[]> ingestQr(@PathVariable Long id, @RequestParam(defaultValue = "larix") String type,
+                                           Principal principal) {
+        com.afklive.streamer.service.IngestService.Setup setup = ingest.setup(ingest.ensureKey(phoneStream(id, principal)));
+        String content = switch (type) {
+            case "larix" -> setup.larixLink();
+            case "larix-srt" -> setup.larixSrtLink();
+            case "rtmp" -> setup.rtmpUrl();
+            case "srt" -> setup.srtUrl();
+            default -> throw new IllegalArgumentException("QR type must be larix, larix-srt, rtmp or srt.");
+        };
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-store") // it contains the stream key
+                .body(ingest.qrPng(content, 360));
+    }
+
+    private LiveStream phoneStream(Long id, Principal principal) {
+        LiveStream s = service.get(email(principal), id);
+        if (s.getSource() != LiveStream.Source.PHONE) {
+            throw new IllegalArgumentException("This stream plays a playlist; phone setup is for phone streams.");
+        }
+        return s;
     }
 
     // ---- schedules

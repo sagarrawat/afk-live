@@ -32,7 +32,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> EXPENSIVE_PREFIXES = Set.of(
             "/api/start", "/api/stream/schedule", "/api/library/upload", "/api/upload",
             "/api/library/import", "/api/ai/", "/api/convert/optimize", "/api/convert/shorts",
-            "/api/library/merge", "/api/payment/initiate", "/api/auth/");
+            "/api/library/merge", "/api/payment/initiate", "/api/auth/", "/api/destinations/");
 
     /** Expensive endpoints matched exactly (their prefixes also cover cheap polling endpoints). */
     private static final Set<String> EXPENSIVE_EXACT = Set.of("/api/convert");

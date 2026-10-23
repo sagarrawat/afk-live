@@ -10,6 +10,12 @@ spring:
 app:
   storage:
     type: local
+  # Development only: a fixed key so local data stays readable across restarts. Never use in production.
+  encryption-key: ZGV2LWtleS1kZXYta2V5LWRldi1rZXktZGV2LWtleSE=
+  ingest:
+    public-host: localhost
+    read-pass: dev-read-pass
+    auth-secret: dev-auth-secret
 
 logging:
   level:

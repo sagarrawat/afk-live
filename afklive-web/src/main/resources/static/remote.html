@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>AFK Live Remote</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #14181d; --line: #252b33; --text: #e8ecf1; --muted: #8b95a1;
+    --accent: #5b8cff; --live: #e5484d; --green: #30a46c; --amber: #f5a524; --red: #e5484d;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  h1 { font-size: 17px; margin: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .04em; background: var(--line); color: var(--muted); }
+  .badge.live { background: var(--live); color: #fff; }
+  .badge.starting, .badge.stopping { background: var(--amber); color: #111; }
+  .num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button { min-height: 56px; border-radius: 12px; border: 1px solid var(--line); background: #1b2128; color: var(--text);
+           font: inherit; font-weight: 600; padding: 10px; touch-action: manipulation; }
+  button:active { transform: scale(.98); }
+  button.on { border-color: var(--accent); background: rgba(91,140,255,.18); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { background: transparent; border-color: var(--red); color: var(--red); }
+  button:disabled { opacity: .45; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 52px; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .toggle { width: 64px; min-height: 36px; border-radius: 999px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; background: var(--muted); }
+  .green { background: var(--green); } .amber { background: var(--amber); } .red { background: var(--red); }
+  .note { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+  #toast { position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); background: #222a33; border: 1px solid var(--line);
+           border-radius: 12px; padding: 12px 14px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <span id="badge" class="badge">…</span>
+  <h1 id="name">Loading…</h1>
+  <span id="uptime" class="num"></span>
+</header>
+
+<section id="input-box" hidden>
+  <h2>Phone signal</h2>
+  <div><span id="input-dot" class="dot"></span><span id="input-text"></span></div>
+</section>
+
+<section>
+  <h2>Scene</h2>
+  <div class="grid" id="scenes"></div>
+  <p class="note" id="scene-note"></p>
+</section>
+
+<section id="np-box" hidden>
+  <h2>Now playing</h2>
+  <div id="np"></div>
+  <p class="note" id="next"></p>
+  <div class="grid" style="margin-top:10px"><button id="skip">Skip ›</button></div>
+</section>
+
+<section id="overlays-box" hidden>
+  <h2>Overlays</h2>
+  <div id="overlays"></div>
+</section>
+
+<section>
+  <h2>Health</h2>
+  <div><span id="health-dot" class="dot"></span><span id="health-text">Not live</span></div>
+</section>
+
+<section>
+  <div class="grid">
+    <button id="golive" class="primary">Go live</button>
+    <button id="stop" class="danger">Stop</button>
+  </div>
+</section>
+
+<div id="toast"></div>
+
+<script>
+(() => {
+  const id = new URLSearchParams(location.search).get('stream');
+  const SCENES = [['STARTING', 'Starting soon'], ['LIVE', 'Live'], ['BRB', 'Be right back'], ['ENDING', 'Ending']];
+  let stream = null;
+
+  const $ = s => document.querySelector(s);
+  const cookie = n => (document.cookie.split('; ').find(c => c.startsWith(n + '=')) || '').split('=')[1];
+  const toast = msg => { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', 3500); };
+
+  async function api(path, method = 'GET', body) {
+    const headers = { 'Accept': 'application/json' };
+    if (method !== 'GET') { headers['Content-Type'] = 'application/json'; headers['X-XSRF-TOKEN'] = decodeURIComponent(cookie('XSRF-TOKEN') || ''); }
+    const res = await fetch('/api/streams/' + id + path, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+    if (res.status === 401 || res.redirected) { location.href = '/login'; return null; }
+    const data = res.status === 204 || res.status === 202 && !res.headers.get('content-type') ? null : await res.json().catch(() => null);
+    if (!res.ok) throw new Error((data && data.message) || 'Something went wrong');
+    return data;
+  }
+
+  const fmt = s => { s = Math.max(0, s | 0); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0, x = s % 60; return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); };
+
+  function render() {
+    const live = stream.live || {};
+    const state = live.state || 'DRAFT';
+    const on = state === 'LIVE' || state === 'STARTING' || state === 'STOPPING';
+    $('#name').textContent = stream.name;
+    const b = $('#badge'); b.textContent = state === 'LIVE' ? 'LIVE' : state.charAt(0) + state.slice(1).toLowerCase(); b.className = 'badge ' + state.toLowerCase();
+    $('#uptime').textContent = on ? fmt(live.uptimeSeconds) : '';
+    $('#golive').disabled = on; $('#stop').disabled = !on || state === 'STOPPING';
+
+    const scenes = $('#scenes'); scenes.innerHTML = '';
+    for (const [key, label] of SCENES) {
+      const btn = document.createElement('button'); btn.textContent = label; btn.disabled = !on;
+      if (live.scene === key) btn.classList.add('on');
+      btn.onclick = () => act(() => api('/scene', 'POST', { scene: key }), label + ' on air in a moment');
+      scenes.appendChild(btn);
+    }
+    $('#scene-note').textContent = on ? '' : 'Go live to switch scenes.';
+
+    const phone = stream.source === 'PHONE';
+    $('#input-box').hidden = !phone || !on;
+    if (phone && on) {
+      const ok = live.inputLive === true;
+      $('#input-dot').className = 'dot ' + (live.inputLive == null ? '' : ok ? 'green' : 'amber');
+      $('#input-text').textContent = live.inputLive == null ? 'Waiting for your phone…' : ok ? 'Receiving your phone' : 'Signal lost: viewers see Be right back';
+    }
+
+    const np = live.nowPlaying;
+    $('#np-box').hidden = !(on && np);
+    if (on && np) {
+      $('#np').textContent = np.title + '  ' + fmt(np.elapsed) + (np.duration ? ' / ' + fmt(np.duration) : '');
+      $('#next').textContent = np.next && np.next.length ? 'Next: ' + np.next.map(n => n.title).join(', ') : '';
+    }
+
+    const list = $('#overlays'); list.innerHTML = '';
+    const overlays = (stream.overlays || []);
+    $('#overlays-box').hidden = overlays.length === 0;
+    for (const o of overlays) {
+      const row = document.createElement('div'); row.className = 'row';
+      const label = document.createElement('span'); label.textContent = o.text || (o.type.charAt(0) + o.type.slice(1).toLowerCase());
+      const t = document.createElement('button'); t.className = 'toggle' + (o.visible ? ' on' : ''); t.textContent = o.visible ? 'On' : 'Off';
+      t.onclick = () => act(() => api('/overlays/' + encodeURIComponent(o.id) + '/visible', 'POST', { visible: !o.visible }), (o.visible ? 'Hidden' : 'Shown'));
+      row.append(label, t); list.appendChild(row);
+    }
+
+    const h = live.health;
+    $('#health-dot').className = 'dot ' + (h ? h.overall : '');
+    $('#health-text').textContent = !h ? (on ? 'Starting…' : 'Not live')
+      : h.overall === 'green' ? 'All good' : (h.metrics.concat(h.destinations.map(d => ({ level: d.level, explanation: d.name + ': ' + d.status.toLowerCase() })))
+          .filter(m => m.level !== 'green').map(m => m.explanation).join(' · ') || 'Check the stream');
+  }
+
+  async function act(fn, done) {
+    try { await fn(); toast(done); setTimeout(refresh, 600); } catch (e) { toast(e.message); }
+  }
+
+  async function refresh() {
+    try { const s = await api(''); if (s) { stream = s; render(); } } catch (e) { toast(e.message); }
+  }
+
+  $('#skip').onclick = () => act(() => api('/skip', 'POST'), 'Skipping to the next video');
+  $('#golive').onclick = () => act(() => api('/live', 'POST', {}), 'Going live…');
+  $('#stop').onclick = () => { if (confirmStop()) act(() => api('/stop', 'POST', { mode: 'NOW' }), 'Stopping'); };
+  // A second tap within 3 s confirms (no blocking dialog on phones mid-stream).
+  let armed = 0;
+  function confirmStop() { const now = Date.now(); if (now - armed < 3000) { armed = 0; return true; } armed = now; toast('Tap Stop again to end the stream'); return false; }
+
+  if (!id) { $('#name').textContent = 'Open this page from a stream'; return; }
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, 3000);
+})();
+</script>
+</body>
+</html>

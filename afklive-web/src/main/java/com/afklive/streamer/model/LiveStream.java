@@ -92,6 +92,32 @@ public class LiveStream {
     @JsonIgnore
     private String resumePosition;
 
+    /** Phone streams: SHA-256 of the ingest key, for the ingest server's lookups. */
+    @Column(name = "ingest_key_hash", length = 64)
+    @JsonIgnore
+    private String ingestKeyHash;
+
+    /** The ingest key itself, encrypted at rest; shown to the owner to set up their phone. */
+    @Column(name = "ingest_key", columnDefinition = "TEXT")
+    @Convert(converter = com.afklive.streamer.util.EncryptedStringConverter.class)
+    @JsonIgnore
+    private String ingestKey;
+
+    /** Last time the phone app connected (so the setup page can say "connected"). */
+    @Column(name = "ingest_last_publish_at")
+    private ZonedDateTime ingestLastPublishAt;
+
+    /** MS-2: end the stream if the phone stays away longer than the grace time (else BRB stays on). */
+    @Column(name = "end_on_input_loss", nullable = false)
+    private boolean endOnInputLoss = false;
+
+    @Column(name = "input_grace_seconds", nullable = false)
+    private int inputGraceSeconds = 120;
+
+    /** SRT buffer: 1000 ms default on 4G/5G, 2000 ms for unstable networks (latency NFR). */
+    @Column(name = "srt_latency_ms", nullable = false)
+    private int srtLatencyMs = 1000;
+
     @Column(name = "created_at", nullable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now();
 

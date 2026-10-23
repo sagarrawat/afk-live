@@ -21,6 +21,7 @@ public class DestinationController {
 
     private final StreamDestinationRepository destinationRepository;
     private final UserService userService;
+    private final com.afklive.streamer.service.DestinationTestService testService;
 
     @GetMapping
     public ResponseEntity<?> getDestinations(Principal principal) {
@@ -98,6 +99,19 @@ public class DestinationController {
                     if (body.containsKey("selected")) dest.setSelected((Boolean) body.get("selected"));
 
                     return ResponseEntity.ok(destinationRepository.save(dest));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /** MS-6: send a 10-second test to the platform and say whether it was accepted. */
+    @PostMapping("/{id}/test")
+    public ResponseEntity<?> testDestination(@PathVariable Long id, Principal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        String email = SecurityUtils.getEmail(principal);
+        return destinationRepository.findByIdAndUserEmail(id, email)
+                .<ResponseEntity<?>>map(dest -> {
+                    var result = testService.test(email, dest);
+                    return ResponseEntity.ok(new ApiResponse<>(result.ok(), result.message(), null));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }

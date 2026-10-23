@@ -52,3 +52,27 @@ worker as its own user and load `afklive-scripts/worker-egress.nft`, which block
 private, loopback and cloud-metadata addresses. Edit the allowed entries (database, DNS resolver, Loki, storage) for
 your setup first. The role, profiles and worker id are passed as `-D` properties in the units, so
 `afklive.env` can't accidentally override them.
+
+## Phone streaming: the ingest server
+
+Phones publish to an ingest server ([MediaMTX](https://github.com/bluenviron/mediamtx)); the worker
+running the stream reads the phone's feed from it and puts it in the cloud studio (BRB scene when the
+signal drops). Run it close to streamers (latency and continuity: an India region for Indian
+creators), on each worker host or on its own small server.
+
+1. Install the binary and `afklive-scripts/mediamtx.yml` under `/opt/afklive/ingest/`, and the unit
+   `afklive-scripts/systemd/afklive-ingest.service`. Open TCP 1935 (RTMP) and UDP 8890 (SRT) to the internet.
+2. In `mediamtx.yml` set `authHTTPAddress` to the web app with the shared secret.
+3. In `afklive.env` (web and workers):
+
+| Variable | Example | Meaning |
+| --- | --- | --- |
+| `INGEST_PUBLIC_HOST` | `ingest.afklive.com` | What creators put in their phone app; empty turns phone streams off |
+| `INGEST_RTMP_PORT` / `INGEST_SRT_PORT` | `1935` / `8890` | Public ports |
+| `INGEST_READ_URL` | `rtmp://10.0.0.5:1935/live/{key}?user={user}&pass={pass}` | Where workers read a phone's feed |
+| `INGEST_READ_USER` / `INGEST_READ_PASS` | `worker` / random | Workers' read credentials (checked by the web app) |
+| `INGEST_AUTH_SECRET` | random | Shared with `mediamtx.yml` |
+| `APP_ENCRYPTION_KEY` | `openssl rand -base64 32` | Encrypts stream keys and ingest keys at rest. **Set before the first deploy of this version**; keep it safe: without it stored keys can't be read |
+
+If the worker egress firewall is loaded and the ingest server is on a private address, add an accept
+rule for it (TCP 1935) in `worker-egress.nft`.
