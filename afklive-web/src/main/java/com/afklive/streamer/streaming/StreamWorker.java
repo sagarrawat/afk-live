@@ -357,6 +357,12 @@ public class StreamWorker {
                     if (runner != null) {
                         runner.setRelays(relayCommands(StreamSpec.destinationsFromJson(c.getPayload())));
                     }
+                } else if (c.getType() == com.afklive.streamer.model.StreamCommand.Type.RECONNECT) {
+                    StreamRunner runner = r.runner;
+                    if (runner != null) {
+                        runner.reconnectAll();
+                        streamService.addLog("[job " + r.id + "] reconnecting every destination, as asked");
+                    }
                 } else {
                     studioRuns.apply(r.studio, c);
                 }

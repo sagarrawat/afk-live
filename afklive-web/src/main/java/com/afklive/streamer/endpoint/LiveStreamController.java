@@ -163,6 +163,13 @@ public class LiveStreamController {
         return ResponseEntity.accepted().build();
     }
 
+    /** GL-5. */
+    @PostMapping("/{id}/reconnect")
+    public ResponseEntity<Void> reconnect(@PathVariable Long id, Principal principal) {
+        service.reconnect(email(principal), id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/skip")
     public ResponseEntity<Void> skip(@PathVariable Long id, Principal principal) {
         service.skip(email(principal), id);

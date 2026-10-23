@@ -52,12 +52,16 @@ class StreamRunnerTest {
     }
 
     static List<String> relayTo(Path file) {
-        return FFmpegCommandBuilder.buildRelayCommand("file://" + file);
+        // -y: a reconnect reopens the same file (a platform URL never asks to overwrite).
+        List<String> c = new ArrayList<>(FFmpegCommandBuilder.buildRelayCommand("file://" + file));
+        c.add(1, "-y");
+        return c;
     }
 
     static class Recorder implements StreamRunner.Listener {
         final CopyOnWriteArrayList<String> events = new CopyOnWriteArrayList<>();
         final Map<Integer, String> lastStatus = new ConcurrentHashMap<>();
+        final CopyOnWriteArrayList<String> statuses = new CopyOnWriteArrayList<>();
         final Map<Integer, Integer> restarts = new ConcurrentHashMap<>();
         final AtomicInteger progress = new AtomicInteger();
         final AtomicInteger encoderFailures = new AtomicInteger();
@@ -68,6 +72,7 @@ class StreamRunnerTest {
         @Override public void onProgress(StreamRunner.Progress p) { progress.incrementAndGet(); }
         @Override public void onDestination(int pos, String status, int r, String error) {
             lastStatus.put(pos, status);
+            statuses.add(pos + ":" + status);
             restarts.merge(pos, r, Math::max);
         }
         @Override public void onEncoderFailure(int r, String error) { encoderFailures.incrementAndGet(); }
@@ -176,6 +181,25 @@ class StreamRunnerTest {
         assertThat(rec.restarts.getOrDefault(0, 0)).as("first destination never reconnected").isZero();
         assertThat(probe(a)).contains("h264");
         assertThat(probe(b)).contains("h264");
+    }
+
+    @Test
+    void reconnectRedialsEveryDestinationAndLeavesTheEncoderAlone() throws Exception {
+        // GL-5: a creator's "reconnect" after a platform glitch.
+        Path out = dir.resolve("reconnect.flv");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(7, () -> realtimeEncoder(-1), List.of(relayTo(out)), rec, FAST);
+        runner.start();
+        TimeUnit.SECONDS.sleep(4);
+        runner.reconnectAll();
+        TimeUnit.SECONDS.sleep(7); // a relay reports LIVE after 3 s connected
+        assertThat(rec.lastStatus.get(0)).isEqualTo("LIVE");
+        runner.stop("Stopped by user");
+        assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+
+        assertThat(rec.events).containsExactly("encoder-started-0");
+        assertThat(rec.statuses).containsSubsequence("0:LIVE", "0:RECONNECTING", "0:LIVE");
+        assertThat(rec.restarts.getOrDefault(0, 0)).as("not counted as a failure").isZero();
     }
 
     private static String probe(Path file) throws Exception {

@@ -678,6 +678,12 @@ public class LiveStreamService {
     }
 
     @Transactional
+    /** GL-5: redial every destination; the picture and the playlist carry on. */
+    public void reconnect(String email, Long id) {
+        StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
+        command(job, StreamCommand.Type.RECONNECT, null);
+    }
+
     public void skip(String email, Long id) {
         StreamJob job = currentJob(get(email, id)).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         command(job, StreamCommand.Type.SKIP, null);

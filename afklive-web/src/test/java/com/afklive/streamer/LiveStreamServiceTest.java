@@ -322,6 +322,16 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void reconnectIsACommandForALiveStreamOnly() {
+        String email = newUser(PlanType.ESSENTIALS);
+        LiveStream s = ready(email);
+        assertThatThrownBy(() -> service.reconnect(email, s.getId())).hasMessageContaining("isn't live");
+        StreamJob job = service.goLive(email, s.getId(), null);
+        service.reconnect(email, s.getId());
+        assertThat(commands.findNew(List.of(job.getId()), 0)).extracting(StreamCommand::getType).containsExactly(StreamCommand.Type.RECONNECT);
+    }
+
+    @Test
     void stopAtUsesTheCreatorsTimeZone() {
         String email = newUser(PlanType.ESSENTIALS);
         LiveStream s = ready(email);

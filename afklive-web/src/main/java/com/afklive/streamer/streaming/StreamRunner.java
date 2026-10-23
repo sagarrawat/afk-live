@@ -174,6 +174,16 @@ public final class StreamRunner {
         relays = List.copyOf(next);
     }
 
+    /**
+     * GL-5: drop and redial every destination (a platform got stuck), without touching the encoder,
+     * so the playlist carries on where it is. Each relay restarts straight away, not after a backoff.
+     */
+    public void reconnectAll() {
+        for (Relay r : relays) {
+            r.reconnect();
+        }
+    }
+
     public boolean isRunning() {
         return supervisor != null && !finished.get();
     }
@@ -388,6 +398,7 @@ public final class StreamRunner {
         private volatile boolean draining;
         private volatile Process process;
         private volatile boolean restartRequested;
+        private volatile boolean reconnectRequested;
         /** Turned off while live: report OFF, not STOPPED. */
         volatile boolean removed;
 
@@ -415,6 +426,12 @@ public final class StreamRunner {
         private void clearQueue() {
             queue.clear();
             queuedBytes.set(0);
+        }
+
+        void reconnect() {
+            reconnectRequested = true;
+            clearQueue();
+            terminate(process);
         }
 
         void drainAndClose() {
@@ -490,6 +507,13 @@ public final class StreamRunner {
                     if (restartRequested) {
                         restartRequested = false;
                         error = "Destination couldn't keep up; reconnecting";
+                    }
+                    if (reconnectRequested) {
+                        // Asked for (GL-5): not a failure, so no backoff and no restart counted.
+                        reconnectRequested = false;
+                        listener.onDestination(position, "RECONNECTING", restarts, null);
+                        clearQueue();
+                        continue;
                     }
                     restarts++;
                     listener.onDestination(position, "RECONNECTING", restarts, error);

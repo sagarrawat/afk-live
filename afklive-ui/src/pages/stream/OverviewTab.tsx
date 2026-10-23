@@ -3,7 +3,7 @@ import { SkipForward, Smartphone, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HealthDot, isOnAir } from '@/components/status';
-import { Badge, Button, Panel, Toggle } from '@/components/ui';
+import { Badge, Button, Panel, Toggle, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
 import { clock, dateTime, duration } from '@/lib/format';
 import { useRuns, useUptime } from '@/lib/queries';
@@ -230,6 +230,16 @@ function HealthPanel({ stream: s }: { stream: StreamView }) {
   );
 }
 
+/** GL-5: redial every destination after a platform glitch; the picture and playlist carry on. */
+function ReconnectButton({ stream: s }: { stream: StreamView }) {
+  const { busy, run } = useAction();
+  return (
+    <Button size="sm" busy={busy} title="Drops and redials every destination. The playlist carries on where it is." onClick={() => run(() => post(`/api/streams/${s.id}/reconnect`), 'Reconnecting every destination.')}>
+      Reconnect destinations
+    </Button>
+  );
+}
+
 function DestinationsPanel({ stream: s }: { stream: StreamView }) {
   const onAir = isOnAir(s.live.state);
   const health = s.live.health?.destinations ?? [];
@@ -254,6 +264,9 @@ function DestinationsPanel({ stream: s }: { stream: StreamView }) {
               </span>
             </li>
           ))}
+          <li className="pt-1">
+            <ReconnectButton stream={s} />
+          </li>
         </ul>
       ) : enabled.length === 0 ? (
         <p className="text-muted">
