@@ -65,6 +65,11 @@ class AppShellTest extends PostgresIntegrationTest {
         mvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/index.html"));
         mvc.perform(get("/pricing")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/pricing.html"));
         mvc.perform(get("/features")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/for/lofi")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/for-lofi.html")); // MK-3
+        mvc.perform(get("/for/../../etc")).andExpect(status().is4xxClientError());
+        mvc.perform(get("/for/nope")).andExpect(status().isNotFound());
+        mvc.perform(get("/sitemap.xml")).andExpect(status().isOk()).andExpect(content().string(containsString("https://afklive.in/for/lofi")));
+        mvc.perform(get("/robots.txt")).andExpect(status().isOk());
         mvc.perform(get("/").with(user(email).roles("USER")))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio"));
         mvc.perform(get("/").with(user("ops@example.com").roles("ADMIN")))

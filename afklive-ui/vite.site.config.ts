@@ -1,5 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /** `<!-- include:header -->` pulls in site/partials/header.html, so pages share one header and footer. */
@@ -25,6 +25,12 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, 'site/index.html'),
         pricing: resolve(__dirname, 'site/pricing.html'),
+        // MK-3: the use-case pages (site/use-cases.py).
+        ...Object.fromEntries(
+          readdirSync(resolve(__dirname, 'site'))
+            .filter((f) => /^for-[a-z-]+\.html$/.test(f))
+            .map((f) => [f.replace('.html', ''), resolve(__dirname, 'site', f)]),
+        ),
       },
       output: {
         // Stable names: the Thymeleaf sign-in pages link the stylesheet directly.

@@ -22,6 +22,17 @@ public class HomeController {
         return "forward:/site/index.html";
     }
 
+    /** MK-3: the use-case pages (afklive-ui/site/use-cases.py). */
+    static final Set<String> USE_CASES = Set.of("lofi", "devotional", "mobile-gaming", "podcasts");
+
+    @GetMapping("/for/{slug}")
+    public String useCase(@org.springframework.web.bind.annotation.PathVariable String slug) {
+        if (!USE_CASES.contains(slug)) {
+            throw new com.afklive.streamer.exception.NotFoundException("Page not found.");
+        }
+        return "forward:/site/for-" + slug + ".html";
+    }
+
     @GetMapping("/terms")
     public String terms() {
         return "forward:/terms.html";
