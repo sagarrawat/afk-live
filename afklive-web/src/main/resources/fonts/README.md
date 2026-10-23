@@ -1,0 +1,5 @@
+# Fonts
+
+`Poppins-Medium.ttf`: Poppins, Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins).
+Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org). Used by the stream
+studio to draw text overlays; bundled so every worker renders text the same way.

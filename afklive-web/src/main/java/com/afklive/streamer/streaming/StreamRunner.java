@@ -53,6 +53,27 @@ public final class StreamRunner {
         void onFinished(String reason, boolean failed);
     }
 
+    /**
+     * Starts the encoder process whose stdout is the MPEG-TS program. A plain command for single-file
+     * streams; the studio, which feeds raw frames into the encoder it launches, for everything else.
+     */
+    public interface EncoderLauncher {
+        Process launch() throws IOException;
+
+        /** Called once the process has exited (or been killed), before any relaunch. */
+        default void ended(Process process) {
+        }
+
+        /** Why the program ended when the encoder exits normally (null: "Playlist finished"). */
+        default String finishReason() {
+            return null;
+        }
+
+        static EncoderLauncher command(Supplier<List<String>> command) {
+            return () -> new ProcessBuilder(command.get()).start();
+        }
+    }
+
     /** Encoder health, from FFmpeg's -progress output. */
     public record Progress(double fps, double bitrateKbps, double speed, long droppedFrames) {
     }
@@ -74,7 +95,7 @@ public final class StreamRunner {
     private static final Duration KILL_AFTER = Duration.ofSeconds(5);
 
     private final long jobId;
-    private final Supplier<List<String>> encoderCommand;
+    private final EncoderLauncher launcher;
     private final List<List<String>> relayCommands;
     private final Listener listener;
     private final Settings settings;
@@ -89,8 +110,13 @@ public final class StreamRunner {
 
     public StreamRunner(long jobId, Supplier<List<String>> encoderCommand, List<List<String>> relayCommands,
                         Listener listener, Settings settings) {
+        this(jobId, EncoderLauncher.command(encoderCommand), relayCommands, listener, settings);
+    }
+
+    public StreamRunner(long jobId, EncoderLauncher launcher, List<List<String>> relayCommands,
+                        Listener listener, Settings settings) {
         this.jobId = jobId;
-        this.encoderCommand = encoderCommand;
+        this.launcher = launcher;
         this.relayCommands = List.copyOf(relayCommands);
         this.listener = listener;
         this.settings = settings;
@@ -138,7 +164,8 @@ public final class StreamRunner {
                     break;
                 }
                 if (result.exitCode == 0) {
-                    finish("Playlist finished", false);
+                    String why = launcher.finishReason();
+                    finish(why != null ? why : "Playlist finished", false);
                     return;
                 }
 
@@ -177,7 +204,7 @@ public final class StreamRunner {
     }
 
     private RunResult runEncoderOnce(int restarts) throws IOException {
-        Process p = new ProcessBuilder(encoderCommand.get()).start();
+        Process p = launcher.launch();
         encoder = p;
         if (stopping.get()) {
             terminate(p);
@@ -226,6 +253,11 @@ public final class StreamRunner {
             }
             if (p.isAlive()) {
                 p.destroyForcibly();
+            }
+            try {
+                launcher.ended(p);
+            } catch (Exception e) {
+                log.warn("Encoder cleanup for job {} failed", jobId, e);
             }
             joinQuietly(stderr, Duration.ofSeconds(2));
         }
