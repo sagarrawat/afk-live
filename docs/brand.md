@@ -48,8 +48,13 @@ Health keeps its own colours: green, amber (`#FF8A34` on dark), red, always with
   a thin Dusk border. Regenerate them after UI changes rather than editing pixels.
 - Spot illustrations: flat shapes on a Night tile, Marigold for the subject, Mist and `#3A3F72` for
   lines, at most one On-air red accent. No gradients, no people, no stock photos.
-- The homepage's 24-hour dial (`site/src/dial.ts`) is the signature image: a day of one channel's
-  schedule in an unbroken ring.
+- The homepage's player is the signature image: what viewers see on YouTube, cycling through
+  niches. Its frames (`site/public/img/frame-*.webp`) are spot illustrations with the niche
+  templates' real overlays drawn by the studio's compositor (`SiteFrames.java`); regenerate them
+  with `afklive-ui/site/frames.sh`, never edit pixels. They're labelled "Example". Page words stay
+  out of images so they can be translated; only on-stream overlay text (Hindi where the template
+  is Hindi) is in the frames.
+- The unbroken line comes back in the reliability timeline: one night, nothing breaks it.
 
 ## Voice
 

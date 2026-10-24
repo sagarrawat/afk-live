@@ -3,162 +3,305 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AFK Live: stay live 24/7 on YouTube, from your videos or your phone</title>
-  <meta name="description" content="Upload once and stay live around the clock, or stream from your phone with overlays and a stream that survives bad signal. No PC, no YouTube sign-in. Free to start." />
+  <title>AFK Live: stay live on YouTube 24/7 while you sleep, from your videos or your phone</title>
+  <meta name="description" content="Your channel stays live while you sleep, with now playing, the clock and up next on screen. Upload once or stream from your phone. No PC left on. 10 free hours, no card, pay by UPI." />
   <link rel="canonical" href="https://afklive.in/" />
-  <meta property="og:title" content="AFK Live: your channel never goes offline" />
-  <meta property="og:description" content="Upload once and stay live around the clock, or stream from your phone with overlays and a stream that survives bad signal. Free to start." />
+  <meta property="og:title" content="AFK Live: your channel stays live while you sleep" />
+  <meta property="og:description" content="Upload once or stream from your phone, and stay live on YouTube around the clock with no PC left on. Templates for lofi, bhajans and aarti, study and phone gaming. Free to start." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://afklive.in/" />
+  <link rel="preload" as="image" href="/site/img/frame-lofi.webp" imagesrcset="/site/img/frame-lofi-640.webp 640w, /site/img/frame-lofi.webp 1280w" imagesizes="(min-width: 1024px) 680px, 100vw" />
 <!-- include:head -->
   <script type="module" src="./src/main.ts"></script>
 </head>
 <body>
 <!-- include:header -->
-<main>
-  <section class="night relative overflow-hidden">
-    <div class="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-20 pt-12 sm:px-6 md:pt-16 lg:grid-cols-[1.05fr_1fr] lg:gap-6 lg:pb-24">
-      <div>
-        <h1 class="[text-wrap:balance] text-[44px] font-extrabold leading-[0.98] tracking-[-0.035em] sm:text-[64px] lg:text-[72px]">Your channel never goes offline.</h1>
-        <p class="mt-6 max-w-xl text-lg text-muted sm:text-xl">Upload your videos once and stay live on YouTube around the clock. Or go live from your phone, with overlays added in the cloud and a stream that keeps running when your signal drops. No PC needed.</p>
-        <div class="mt-8 flex flex-wrap items-center gap-3">
-          <a href="/register" class="btn-primary h-12 px-7 text-[17px]">Start free</a>
-          <a href="/pricing" class="btn-secondary h-12 px-7 text-[17px]">See pricing</a>
+<main data-funnel-view>
+  <!-- Hero: what viewers see, not how it's built. The player is the one bold thing on the page. -->
+  <section class="night overflow-hidden">
+    <div class="hero mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 md:pt-12 lg:pb-24 lg:pt-16">
+      <div class="hero-copy">
+        <h1 class="hero-head text-[34px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-[46px] lg:text-[48px]">Your channel stays live while you sleep. You choose how it looks.</h1>
+        <div class="hero-cta mt-6 lg:mt-8">
+          <a href="/register" data-funnel="start" class="btn-primary h-12 w-full px-8 text-[17px] sm:w-auto">Start free</a>
+          <p class="mt-3 text-[15px] text-muted">10 free hours · No card · Pay by UPI</p>
         </div>
-        <p class="mt-4 text-sm text-muted">10 free hours every month. No card needed.</p>
+        <p class="hero-text mt-6 max-w-xl text-lg text-muted lg:mt-6">Upload your videos once, or stream from your phone. We keep it on air from our servers around the clock, with now playing, the clock and what’s next on screen. Your PC can be off. Send it to YouTube, Facebook, Twitch and Kick, several at once.</p>
       </div>
 
-      <figure data-dial class="relative mx-auto w-full max-w-[520px]">
-        <div data-dial-face class="aspect-square"></div>
-        <figcaption class="absolute inset-0 grid place-items-center text-center">
-          <div class="w-[52%]">
-            <p class="inline-flex items-center gap-1.5 rounded-full bg-live px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">Live</p>
-            <p data-dial-uptime class="tnum mt-2 text-[26px] font-bold leading-none tracking-tight sm:text-[34px]">3d 04:12:00</p>
-            <p class="mt-2 text-sm text-muted sm:text-[15px]">Now: <span data-dial-now>Lofi playlist on loop</span></p>
-            <p class="mt-1 text-xs text-muted/80">Your time: <span data-dial-clock class="tnum"></span></p>
+      <div class="hero-player" data-hero>
+        <figure class="player">
+          <div class="relative overflow-hidden rounded-t-[14px] bg-bg">
+            <img data-hero-img src="/site/img/frame-lofi.webp" srcset="/site/img/frame-lofi-640.webp 640w, /site/img/frame-lofi.webp 1280w" sizes="(min-width: 1024px) 680px, 100vw" width="1280" height="720" fetchpriority="high" alt="A lofi stream: a desk lamp and a rainy window at night, with &quot;Now playing: Rain on the window, lofi mix&quot; at the bottom and the time, 02:14, in the corner." class="block aspect-video w-full transition-opacity duration-150" />
+            <span class="absolute left-3 top-3 rounded-full bg-bg/80 px-2.5 py-0.5 text-xs font-medium text-ink backdrop-blur">Example</span>
           </div>
-        </figcaption>
-      </figure>
-    </div>
-    <div class="border-t border-line/60">
-      <p class="mx-auto max-w-6xl px-4 py-5 text-[15px] text-muted sm:px-6">Streams to YouTube, Facebook, Twitch, Kick, and any server that takes RTMP or SRT. Several at once, from one upload.</p>
+          <div class="player-bar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
+            <span class="flex items-center gap-1.5 text-[13px] font-semibold"><span class="h-2 w-2 rounded-full bg-live"></span>Live</span>
+            <span class="flex-1"></span>
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          </div>
+          <figcaption class="px-1 pt-3">
+            <p data-hero-title class="text-[17px] font-semibold leading-snug">Rainy night lofi, live 24/7</p>
+            <p class="mt-0.5 text-sm text-muted">An example. The words on screen are the <span data-hero-template>Lofi and chill</span> template, drawn by AFK Live.</p>
+          </figcaption>
+        </figure>
+        <div class="mt-5"><div role="tablist" aria-label="Example streams" class="hero-tabs">
+          <button role="tab" id="hero-lofi" data-niche="lofi" aria-selected="true">Lofi</button>
+          <button role="tab" id="hero-devotional" data-niche="devotional" aria-selected="false" tabindex="-1">Aarti <span lang="hi">आरती</span></button>
+          <button role="tab" id="hero-gaming" data-niche="gaming" aria-selected="false" tabindex="-1">Phone game</button>
+        </div></div>
+        <p data-proof hidden class="mt-4 flex items-start gap-2 text-[15px] text-muted"><span aria-hidden="true" class="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-live"></span><span data-proof-text></span></p>
+      </div>
     </div>
   </section>
 
-  <section aria-labelledby="who" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-    <h2 id="who" class="h-section max-w-2xl">For channels that should always be on</h2>
-    <ul class="mt-12 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
-      <li>
-        <!-- include:illo-lofi -->
-        <h3 class="mt-5 text-xl font-bold tracking-tight"><a href="/for/lofi" class="hover:underline">Lofi and music channels</a></h3>
-        <p class="mt-1 text-muted">A playlist that loops without gaps, day and night, with music under your visuals.</p>
-      </li>
-      <li>
-        <!-- include:illo-devotional -->
-        <h3 class="mt-5 text-xl font-bold tracking-tight"><a href="/for/devotional" class="hover:underline">Temples and prayer broadcasts</a></h3>
-        <p class="mt-1 text-muted">Aarti and bhajans on a daily schedule. It starts and stops on its own.</p>
-      </li>
-      <li>
-        <!-- include:illo-gaming -->
-        <h3 class="mt-5 text-xl font-bold tracking-tight"><a href="/for/mobile-gaming" class="hover:underline">Mobile gamers</a></h3>
-        <p class="mt-1 text-muted">Play on your phone; your logo, scenes and ticker are added in the cloud.</p>
-      </li>
-      <li>
-        <!-- include:illo-podcasts -->
-        <h3 class="mt-5 text-xl font-bold tracking-tight"><a href="/for/podcasts" class="hover:underline">Podcasts and reruns</a></h3>
-        <p class="mt-1 text-muted">Past episodes keep your channel live and discoverable between new ones.</p>
-      </li>
-    </ul>
-  </section>
-
-  <section id="playlists" class="border-t border-line bg-panel">
-    <div class="mx-auto grid max-w-6xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
+  <!-- What's your channel? One frame, five niches. Panels are plain HTML so they read without JS. -->
+  <section id="channels" aria-labelledby="channels-title" class="mx-auto max-w-6xl px-4 py-20 sm:px-6" data-niche-picker>
+    <h2 id="channels-title" class="h-section">What’s your channel?</h2>
+    <div role="tablist" aria-label="Kinds of channel" class="niche-tabs mt-8">
+      <button role="tab" id="tab-lofi" data-niche="lofi" aria-controls="panel-lofi" aria-selected="false" tabindex="-1">Lofi</button>
+      <button role="tab" id="tab-devotional" data-niche="devotional" aria-controls="panel-devotional" aria-selected="true">Devotional <span lang="hi">भक्ति</span></button>
+      <button role="tab" id="tab-gaming" data-niche="gaming" aria-controls="panel-gaming" aria-selected="false" tabindex="-1">Phone gaming</button>
+      <button role="tab" id="tab-podcasts" data-niche="podcasts" aria-controls="panel-podcasts" aria-selected="false" tabindex="-1">Podcasts</button>
+      <button role="tab" id="tab-study" data-niche="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study and sleep</button>
+    </div>
+    <div class="mt-8 grid items-start gap-8 lg:grid-cols-[1.35fr_1fr] lg:gap-12">
+      <img data-niche-img src="/site/img/frame-devotional.webp" srcset="/site/img/frame-devotional-640.webp 640w, /site/img/frame-devotional.webp 1280w" sizes="(min-width: 1024px) 620px, 100vw" width="1280" height="720" loading="lazy" alt="A temple stream at dusk: a lit aarti thali and marigold garlands, with the now-playing and up-next lines in Hindi and the time, 18:42." class="aspect-video w-full rounded-xl border border-[#2E325E] bg-[#10122A]" />
       <div>
-        <h2 class="h-section">Your videos, live around the clock</h2>
-        <p class="mt-5 text-lg text-muted">Upload once. AFK Live plays your playlist back to back with no gaps, loops it forever, and sends it to YouTube from our servers. Your laptop can be closed.</p>
-        <dl class="mt-8 space-y-5 text-[15px]">
-          <div class="grid grid-cols-[28px_1fr] gap-3">
-            <svg aria-hidden="true" class="mt-0.5 h-6 w-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
-            <div><dt class="font-semibold">Change it while live</dt><dd class="text-muted">Reorder, add or skip videos. Changes apply after the current video, so viewers never see a drop.</dd></div>
+        <div role="tabpanel" id="panel-lofi" aria-labelledby="tab-lofi" tabindex="0" class="niche-panel" hidden>
+          <h3>Lofi and music channels</h3>
+          <ul>
+            <li>Your playlist loops with no gaps, shuffled, one song blending into the next.</li>
+            <li>Now playing and a small clock in the corner, added for you.</li>
+            <li>Change the playlist while you’re live. Viewers never see a drop.</li>
+          </ul>
+          <a href="/for/lofi" class="link font-medium">How lofi channels use AFK Live</a>
+        </div>
+        <div role="tabpanel" id="panel-devotional" aria-labelledby="tab-devotional" tabindex="0" class="niche-panel">
+          <h3>Temples, bhajans and aarti</h3>
+          <ul>
+            <li>Aarti at fixed times on its own schedule: morning and evening, every day. We start and stop it.</li>
+            <li>Now playing and what’s next in Hindi or English, with the clock in your time zone.</li>
+            <li>Your order is kept, so the aarti sequence plays as it should.</li>
+          </ul>
+          <a href="/for/devotional" class="link font-medium">How temples use AFK Live</a>
+        </div>
+        <div role="tabpanel" id="panel-gaming" aria-labelledby="tab-gaming" tabindex="0" class="niche-panel" hidden>
+          <h3>Mobile gamers</h3>
+          <ul>
+            <li>No 50-subscriber wait. YouTube’s own app needs 50 subscribers to go live from a phone; streaming through AFK Live doesn’t.</li>
+            <li>Your clock, logo and scenes are added in the cloud, so your phone only pays for the game.</li>
+            <li>Signal drops? Viewers see Be right back with music, and you’re back the moment your phone reconnects.</li>
+          </ul>
+          <a href="/for/mobile-gaming" class="link font-medium">How mobile gamers use AFK Live</a>
+        </div>
+        <div role="tabpanel" id="panel-podcasts" aria-labelledby="tab-podcasts" tabindex="0" class="niche-panel" hidden>
+          <h3>Podcasts and reruns</h3>
+          <ul>
+            <li>Past episodes keep your channel live between new ones.</li>
+            <li>Now playing and up next show which episode is on.</li>
+            <li>Premiere a new episode at a set time. We start and stop it.</li>
+          </ul>
+          <a href="/for/podcasts" class="link font-medium">How podcasters use AFK Live</a>
+        </div>
+        <div role="tabpanel" id="panel-study" aria-labelledby="tab-study" tabindex="0" class="niche-panel" hidden>
+          <h3>Study, sleep and ambience</h3>
+          <ul>
+            <li>A big clock to study by, or a dim one that won’t light up a dark room.</li>
+            <li>Calm music shuffled, with long blends between tracks.</li>
+            <li>Live during study hours or every night, on a schedule you set once.</li>
+          </ul>
+          <a href="/for/lofi" class="link font-medium">How music and ambience channels use AFK Live</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- The PC-left-on calculator: honest numbers, stated assumptions, the formula shown. -->
+  <section id="pc" aria-labelledby="pc-title" class="border-y border-line bg-panel">
+    <div class="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1fr] lg:gap-16">
+      <div>
+        <h2 id="pc-title" class="h-section">Leaving your PC on costs more than you think</h2>
+        <p class="mt-5 text-lg text-muted">Streaming 24/7 from OBS means a PC that never sleeps. Here’s the electricity, worked out with numbers you can change.</p>
+        <ul class="mt-8 space-y-4 text-[16px]">
+          <li class="flex gap-3"><svg aria-hidden="true" class="mt-1 h-5 w-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg><span><strong class="font-semibold">A power cut ends your stream</strong> until someone is home to start it again.</span></li>
+          <li class="flex gap-3"><svg aria-hidden="true" class="mt-1 h-5 w-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.6a10 10 0 0 1 14 0M8.5 16.4a5 5 0 0 1 7 0M12 20h.01"/></svg><span><strong class="font-semibold">When the internet drops,</strong> YouTube ends the broadcast after about a minute. The next one has a new link, and its likes and viewers start again from zero.</span></li>
+          <li class="flex gap-3"><svg aria-hidden="true" class="mt-1 h-5 w-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span><strong class="font-semibold">Updates restart the PC</strong> at night, and the stream doesn’t come back on its own.</span></li>
+        </ul>
+      </div>
+
+      <div data-calc data-price="499" class="rounded-2xl border border-line bg-bg p-5 sm:p-7">
+        <p class="calc-sentence text-[19px] leading-[2.4] sm:text-[21px]">
+          My PC uses
+          <span class="whitespace-nowrap"><label class="calc-field"><span class="sr-only">Watts</span><input data-calc-input="watts" type="number" inputmode="numeric" min="10" max="2000" step="10" value="150" /></label> watts,</span>
+          it’s on
+          <span class="whitespace-nowrap"><label class="calc-field"><span class="sr-only">Hours a day</span><input data-calc-input="hoursPerDay" type="number" inputmode="numeric" min="1" max="24" step="1" value="24" /></label> hours a day,</span>
+          and power costs
+          <span class="whitespace-nowrap"><label class="calc-field calc-rupee"><span class="sr-only">Rupees per unit (kWh)</span><input data-calc-input="rupeesPerUnit" type="number" inputmode="decimal" min="1" max="50" step="0.5" value="8" /></label> a unit.</span>
+        </p>
+        <dl class="mt-6 space-y-4" aria-live="polite">
+          <div>
+            <div class="flex items-baseline justify-between gap-4"><dt class="text-[15px]">PC on, electricity a month</dt><dd data-calc-cost class="tnum display text-2xl font-extrabold">₹864</dd></div>
+            <div class="mt-1.5 h-2.5 rounded-full bg-raised"><div data-calc-bar-pc class="h-2.5 rounded-full bg-muted" style="width: 100%"></div></div>
           </div>
-          <div class="grid grid-cols-[28px_1fr] gap-3">
-            <svg aria-hidden="true" class="mt-0.5 h-6 w-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-            <div><dt class="font-semibold">Music under everything</dt><dd class="text-muted">Add a music playlist under your videos, or replace their sound.</dd></div>
-          </div>
-          <div class="grid grid-cols-[28px_1fr] gap-3">
-            <svg aria-hidden="true" class="mt-0.5 h-6 w-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>
-            <div><dt class="font-semibold">On a schedule</dt><dd class="text-muted">Live every morning at 6, weekdays only, or once for a premiere. We start and stop it.</dd></div>
-          </div>
-          <div class="grid grid-cols-[28px_1fr] gap-3">
-            <svg aria-hidden="true" class="mt-0.5 h-6 w-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
-            <div><dt class="font-semibold">Large files, no stress</dt><dd class="text-muted">10 GB uploads go up in parts and carry on where they stopped if your connection drops.</dd></div>
+          <div>
+            <div class="flex items-baseline justify-between gap-4"><dt class="text-[15px]">AFK Live Creator, PC off</dt><dd class="tnum display text-2xl font-extrabold"><span data-calc-price>₹499</span><span class="font-sans text-[15px] font-normal text-muted"> / month</span></dd></div>
+            <div class="mt-1.5 h-2.5 rounded-full bg-raised"><div data-calc-bar-plan class="h-2.5 rounded-full bg-accent" style="width: 58%"></div></div>
           </div>
         </dl>
-      </div>
-      <img src="/site/img/app-stream.webp" width="1280" height="800" loading="lazy" alt="The AFK Live stream page: what's playing, what's next, and whether every destination is healthy" class="w-full rounded-2xl border border-[#2E325E] shadow-[0_40px_80px_-40px_rgba(16,18,42,0.6)]" />
-    </div>
-  </section>
-
-  <section id="phone" class="night">
-    <div class="mx-auto grid max-w-6xl items-center gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[1fr_auto]">
-      <div>
-        <h2 class="h-section max-w-xl">Stream from your phone like you have a studio</h2>
-        <p class="mt-5 max-w-xl text-lg text-muted">Your phone sends one clean video to AFK Live. We add your logo, ticker, clock and scenes in the cloud, then send it on. Your battery and data only pay for the camera.</p>
-        <dl class="mt-10 grid gap-8 sm:grid-cols-2">
-          <div><dt class="font-semibold">Never drops</dt><dd class="mt-1 text-muted">Signal gone in a tunnel? Viewers see your Be right back scene with music, and you're back the moment your phone reconnects.</dd></div>
-          <div><dt class="font-semibold">Set up with a QR code</dt><dd class="mt-1 text-muted">Scan it into Larix, PRISM or Streamlabs on your phone. No typing server addresses.</dd></div>
-          <div><dt class="font-semibold">Switch scenes from anywhere</dt><dd class="mt-1 text-muted">Starting soon, Live, Be right back, Ending: one tap from a second phone.</dd></div>
-          <div><dt class="font-semibold">No 50-subscriber wait</dt><dd class="mt-1 text-muted">YouTube's own app needs 50 subscribers to go live from a phone. Streaming through AFK Live doesn't.</dd></div>
-        </dl>
-      </div>
-      <div class="relative mx-auto">
-        <div aria-hidden="true" class="absolute -inset-10 rounded-full bg-sun/10 blur-3xl"></div>
-        <img src="/site/img/app-mobile.webp" width="390" height="780" loading="lazy" alt="The stream page on a phone, showing the phone's connection and scene buttons" class="relative w-64 rounded-[34px] border-[7px] border-[#2E325E] sm:w-72" />
+        <p data-calc-verdict class="mt-5 text-[15px]">That’s ₹365 a month more than Creator, before the PC itself wears out.</p>
+        <p class="mt-4 border-t border-line pt-4 text-sm text-muted"><span class="font-medium text-ink">How it’s worked out:</span> <span data-calc-formula class="tnum">150 W × 24 h × 30 days ÷ 1000 = 108 units × ₹8 = ₹864</span>. A desktop running OBS and a browser usually draws 100 to 250 watts; a gaming PC more. Most Indian home tariffs are ₹5 to ₹10 a unit at the higher slabs: check your bill.</p>
       </div>
     </div>
   </section>
 
-  <section aria-labelledby="steps" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-    <h2 id="steps" class="h-section">Live in five minutes</h2>
-    <ol class="mt-12 grid gap-10 md:grid-cols-3">
-      <li class="border-t-2 border-ink pt-5"><span class="display tnum text-[40px] font-extrabold leading-none">1</span><h3 class="mt-4 text-xl font-bold tracking-tight">Choose what you stream</h3><p class="mt-1 text-muted">Your videos on repeat, or your phone's camera.</p></li>
-      <li class="border-t-2 border-ink pt-5"><span class="display tnum text-[40px] font-extrabold leading-none">2</span><h3 class="mt-4 text-xl font-bold tracking-tight">Add your content</h3><p class="mt-1 text-muted">Upload videos, or scan the QR code into your phone app.</p></li>
-      <li class="border-t-2 border-ink pt-5"><span class="display tnum text-[40px] font-extrabold leading-none">3</span><h3 class="mt-4 text-xl font-bold tracking-tight">Paste your YouTube stream key</h3><p class="mt-1 text-muted">From YouTube Studio's Go live page. Press Go live and you're on.</p></li>
+  <!-- Three real moments: the sequence a new creator goes through. -->
+  <section id="how" aria-labelledby="how-title" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+    <h2 id="how-title" class="h-section">Live in three steps</h2>
+    <ol class="mt-12 grid gap-12 md:grid-cols-3 md:gap-8">
+      <li>
+        <div class="moment" aria-hidden="true">
+          <div class="w-full rounded-xl border border-line bg-panel p-4 shadow-[0_20px_40px_-28px_rgba(16,18,42,0.5)]">
+            <div class="flex items-center gap-3">
+              <img src="/site/img/frame-lofi-640.webp" alt="" width="640" height="360" loading="lazy" class="h-10 w-[72px] shrink-0 rounded-md object-cover" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium">rainy-night-mix.mp4</p>
+                <p class="tnum text-xs text-muted">2.1 GB of 3.4 GB</p>
+              </div>
+            </div>
+            <div class="mt-3 h-1.5 rounded-full bg-raised"><div class="h-1.5 w-[62%] rounded-full bg-sun"></div></div>
+            <p class="mt-2 text-xs text-muted">Carries on where it stopped if your connection drops.</p>
+          </div>
+        </div>
+        <h3 class="step-title"><span class="step-n">1</span>Upload your videos</h3>
+        <p class="mt-1 text-muted">Once. Big files are fine, up to 10 GB each. Add music to play under them if you like.</p>
+      </li>
+      <li>
+        <div class="moment" aria-hidden="true">
+          <div class="mx-auto w-[150px] rounded-[26px] border-[5px] border-[#2E325E] bg-[#10122A] px-3 pb-4 pt-5 text-center text-[#EEF0FA]">
+            <p class="text-[11px] leading-tight">Scan with your streaming app</p>
+            <img src="/site/img/qr-example.svg" alt="" width="100" height="100" loading="lazy" class="mx-auto mt-2 h-[100px] w-[100px] rounded bg-white p-1.5" />
+            <p class="mt-2 text-[11px] text-[#9CA1C7]">Larix, PRISM or Streamlabs</p>
+          </div>
+        </div>
+        <h3 class="step-title"><span class="step-n">2</span>Or scan one code on your phone</h3>
+        <p class="mt-1 text-muted">Streaming from your phone? Scan the code into a free streaming app. Nothing to type.</p>
+      </li>
+      <li>
+        <div class="moment" aria-hidden="true">
+          <div class="w-full max-w-[300px]">
+            <div class="relative overflow-hidden rounded-xl">
+              <img src="/site/img/frame-devotional-640.webp" alt="" width="640" height="360" loading="lazy" class="block aspect-video w-full" />
+              <span class="absolute left-2 top-2 flex items-center gap-1 rounded bg-live px-1.5 py-0.5 text-xs font-semibold text-white"><span class="h-1.5 w-1.5 rounded-full bg-white"></span>Live</span>
+            </div>
+            <p class="mt-2 text-sm font-semibold"><span lang="hi">संध्या आरती</span>, live every evening</p>
+            <p class="text-xs text-muted">Your channel, on YouTube</p>
+          </div>
+        </div>
+        <h3 class="step-title"><span class="step-n">3</span>Press Go live</h3>
+        <p class="mt-1 text-muted">Copy your key from YouTube Studio once. Your channel shows as live, and stays live.</p>
+      </li>
     </ol>
+    <p class="mt-10 text-[15px] text-muted">Need a hand with YouTube Studio? <a href="/help/youtube-stream-key" class="link">Where to find your key</a>.</p>
   </section>
 
-  <section aria-labelledby="reliability" class="border-y border-line bg-panel">
-    <div class="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.4fr]">
-      <div>
-        <h2 id="reliability" class="h-section">Built to stay up when nobody's watching it</h2>
-        <img src="/site/img/app-home.webp" width="1280" height="560" loading="lazy" alt="All streams with their live state, uptime and what's playing" class="mt-10 hidden w-full rounded-xl border border-[#2E325E] lg:block" />
-      </div>
-      <dl class="grid content-start gap-10 sm:grid-cols-2">
-        <div><dt class="text-lg font-semibold">Automatic recovery</dt><dd class="mt-1 text-muted">If a server fails, another picks up your stream within a minute. If YouTube drops the connection, we reconnect on our own.</dd></div>
-        <div><dt class="text-lg font-semibold">Alerts that matter</dt><dd class="mt-1 text-muted">An email and an in-app alert if a stream is down for more than a minute, and another when it's back. Not one every minute.</dd></div>
-        <div><dt class="text-lg font-semibold">Health in plain words</dt><dd class="mt-1 text-muted">Green, amber or red for picture, sound and each destination, with what it means and what to do.</dd></div>
-        <div><dt class="text-lg font-semibold">YouTube-ready quality</dt><dd class="mt-1 text-muted">Encoded to YouTube's recommended settings, so your stream isn't flagged for low quality.</dd></div>
-        <div><dt class="text-lg font-semibold">Updates don't take you off air</dt><dd class="mt-1 text-muted">Streams run on their own servers. When we ship a new version of AFK Live, your stream doesn't notice.</dd></div>
-        <div><dt class="text-lg font-semibold">Your keys stay yours</dt><dd class="mt-1 text-muted">Stream keys are encrypted at rest and never shown in full again after you save them.</dd></div>
-      </dl>
+  <!-- Reliability as one night, not a feature grid. The line never breaks: that's the product. -->
+  <section id="reliability" aria-labelledby="reliability-title" class="night">
+    <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
+      <h2 id="reliability-title" class="h-section max-w-2xl">Built for the hours nobody’s watching it</h2>
+      <p class="mt-5 max-w-2xl text-lg text-muted">An example night, with the things that really go wrong, and what AFK Live does about each.</p>
+      <ol class="night-line mt-12">
+        <li>
+          <time class="tnum">23:40</time>
+          <h3>You go to sleep</h3>
+          <p>Your stream is live on our servers. There’s nothing to keep open.</p>
+        </li>
+        <li>
+          <time class="tnum">02:13</time>
+          <h3>A server fails</h3>
+          <p>Another one picks up your stream within a minute, from where it was. If YouTube drops the connection, we reconnect on our own.</p>
+        </li>
+        <li>
+          <time class="tnum">03:30</time>
+          <h3>We ship an update</h3>
+          <p>Your stream moves to the new version without going off air.</p>
+        </li>
+        <li>
+          <time class="tnum">04:05</time>
+          <h3>Your phone loses signal</h3>
+          <p>On a phone stream, viewers see Be right back with music, and you’re back the moment it reconnects.</p>
+          <img src="/site/img/frame-brb-640.webp" alt="The Be right back screen viewers see, with the clock still running." width="640" height="360" loading="lazy" class="mt-3 aspect-video w-full max-w-[220px] rounded-lg border border-line" />
+        </li>
+        <li>
+          <time class="tnum">07:00</time>
+          <h3>You wake up</h3>
+          <p>An email only if something was down for more than a minute, and another when it was back. Not one every minute.</p>
+        </li>
+      </ol>
+      <p data-incidents hidden class="mt-12 text-[15px] text-muted"><span data-incidents-text></span> <a href="/status" class="link">Live status</a></p>
     </div>
   </section>
 
   <section id="pricing" aria-labelledby="pricing-title" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
     <h2 id="pricing-title" class="h-section text-center">Simple pricing</h2>
-    <p class="mx-auto mt-4 max-w-xl text-center text-lg text-muted">Start free. Upgrade when you want 1080p, unlimited hours or more channels.</p>
+    <p class="mx-auto mt-4 max-w-xl text-center text-lg text-muted">Start free. Upgrade when you want 1080p, unlimited hours or more channels. Pay by UPI or card.</p>
     <div class="mt-10">
 <!-- include:pricing -->
+    </div>
+  </section>
+
+  <!--
+    Creators: real channels that stream with AFK Live, from site/src/creators.ts. Hidden while that list
+    is empty. Only public YouTube handles of creators who agreed; never emails, sample names, quotes or numbers.
+  -->
+  <section id="creators" data-creators aria-labelledby="creators-title" class="border-t border-line bg-panel" hidden>
+    <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+      <h2 id="creators-title" class="h-section">Channels that stay live with AFK Live</h2>
+      <ul class="mt-10 grid gap-8 md:grid-cols-3"></ul>
+    </div>
+  </section>
+
+  <section id="faq" aria-labelledby="faq-title" class="border-t border-line bg-panel">
+    <div class="mx-auto grid max-w-6xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[0.8fr_1.2fr]">
+      <h2 id="faq-title" class="h-section">Questions people ask first</h2>
+      <div class="faq">
+        <details>
+          <summary>Is a 24/7 live allowed on YouTube?</summary>
+          <p>Yes. No YouTube rule bans looped or pre-recorded lives. YouTube does ask that content isn’t repetitive or mass-produced, so give your stream variety: several videos shuffled, with now playing on screen. <a href="/help/loops-and-youtube-rules" class="link">Loops and YouTube’s rules</a></p>
+        </details>
+        <details>
+          <summary>Will my channel get monetised?</summary>
+          <p>We can’t promise that, and nobody honestly can: YouTube decides, by its own rules. A stream that stays up keeps collecting watch time; what you stream decides the rest. <a href="/help/loops-and-youtube-rules" class="link">What YouTube looks for</a></p>
+        </details>
+        <details>
+          <summary>Can I use any music?</summary>
+          <p>Use music you made, or music licensed for live streams. A copyrighted song can get your live interrupted, even with a licence, unless the owner has cleared your channel. No tool can tell you in advance whether a song will be claimed. <a href="/help/music-on-your-live" class="link">Music on your live</a></p>
+        </details>
+        <details>
+          <summary>Do I need to keep a PC on?</summary>
+          <p>No. Your videos are on our servers and stream from there, so you can close your laptop. For a phone stream, your phone sends the camera and we add the rest.</p>
+        </details>
+        <details>
+          <summary>What if my phone signal drops?</summary>
+          <p>Viewers see your Be right back screen with music instead of the stream ending, and you’re back as soon as your phone reconnects. <a href="/help/phone-streaming" class="link">Go live from your phone</a></p>
+        </details>
+        <details>
+          <summary>How do I pay?</summary>
+          <p>By UPI or card, in rupees, with a GST invoice for every payment. The free plan needs no card.</p>
+        </details>
+      </div>
     </div>
   </section>
 
   <section class="night">
     <div class="mx-auto flex max-w-6xl flex-col items-start gap-8 px-4 py-20 sm:px-6 md:flex-row md:items-center md:justify-between">
       <div class="flex items-center gap-5">
-        <img src="/site/brand/mark.svg" alt="" width="64" height="64" class="h-16 w-16" />
+        <img src="/site/brand/mark.svg" alt="" width="64" height="64" loading="lazy" class="h-16 w-16" />
         <h2 class="text-[30px] font-extrabold leading-tight tracking-[-0.03em] sm:text-[40px]">Go to sleep. Stay live.</h2>
       </div>
-      <a href="/register" class="btn-primary h-12 px-7 text-[17px]">Start free</a>
+      <a href="/register" data-funnel="start" class="btn-primary h-12 px-7 text-[17px]">Start free</a>
     </div>
   </section>
 </main>

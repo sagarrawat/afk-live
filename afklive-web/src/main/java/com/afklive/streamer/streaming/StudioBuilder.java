@@ -373,6 +373,23 @@ public class StudioBuilder {
             }
             image = cache.fetch(o.imageKey());
         }
+        return overlay(o, image);
+    }
+
+    /**
+     * A creator's overlay setting as the compositor draws it ({@code image}: the fetched file for IMAGE
+     * layers). Public so the site's example frames (SiteFramesTest) are drawn exactly as a stream is.
+     */
+    public static Overlay overlay(StudioSpec.OverlaySetting o, Path image) {
+        Overlay.Type type;
+        try {
+            type = Overlay.Type.valueOf(o.type());
+        } catch (Exception e) {
+            return null;
+        }
+        if (type == Overlay.Type.IMAGE && image == null) {
+            return null;
+        }
         Instant target = null;
         if (o.target() != null && !o.target().isBlank()) {
             try {

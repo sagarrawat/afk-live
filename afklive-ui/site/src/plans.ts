@@ -60,10 +60,16 @@ export function planCards(plans: PlanView[], cycle: 'MONTHLY' | 'YEARLY'): strin
     .join('');
 }
 
-export async function loadPlans(currency: 'INR' | 'USD'): Promise<PlanView[]> {
-  const r = await fetch(`/api/billing/plans?currency=${currency}`, { headers: { Accept: 'application/json' } });
-  if (!r.ok) throw new Error(String(r.status));
-  return r.json();
+const inFlight: Partial<Record<'INR' | 'USD', Promise<PlanView[]>>> = {};
+
+/** One request per currency per page: the pricing cards and the homepage calculator share it. */
+export function loadPlans(currency: 'INR' | 'USD'): Promise<PlanView[]> {
+  const p = (inFlight[currency] ??= fetch(`/api/billing/plans?currency=${currency}`, { headers: { Accept: 'application/json' } }).then((r) => {
+    if (!r.ok) throw new Error(String(r.status));
+    return r.json() as Promise<PlanView[]>;
+  }));
+  p.catch(() => delete inFlight[currency]);
+  return p;
 }
 
 /** INR for visitors in India, USD elsewhere (a guess from the time zone; the toggle switches). */

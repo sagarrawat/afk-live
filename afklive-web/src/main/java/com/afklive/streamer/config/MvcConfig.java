@@ -26,7 +26,7 @@ public class MvcConfig implements WebMvcConfigurer {
         registry.addViewController("/pricing").setViewName("forward:/site/pricing.html");
         // RE-7: the public status page (data from /api/public/status).
         registry.addViewController("/status").setViewName("forward:/site/status.html");
-        registry.addRedirectViewController("/features", "/#playlists");
+        registry.addRedirectViewController("/features", "/#how");
         registry.addViewController("/login").setViewName("login");
         registry.addViewController("/register").setViewName("register");
     }

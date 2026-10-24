@@ -50,6 +50,7 @@ class StatusPageTest extends PostgresIntegrationTest {
     @Autowired AdminActionRepository audit;
     @Autowired StatusService statusService;
     @Autowired StreamService streamService;
+    @Autowired com.afklive.streamer.repository.UsageRepository usage;
 
     MockMvc mvc;
     User customer;
@@ -119,6 +120,30 @@ class StatusPageTest extends PostgresIntegrationTest {
         assertThat(body).doesNotContain(customer.getEmail()).doesNotContain("Secretname").doesNotContain("Secret Lofi")
                 .doesNotContain("worker-private-name").doesNotContain("37.5").doesNotContain("streams\":1")
                 .doesNotContainIgnoringCase("count");
+    }
+
+    @Test
+    void theProofNumbersStayHiddenWhileSmallAndAreRoundedWhenShown() {
+        assertThat(StatusService.proof(1, 3600)).isEqualTo(new StatusService.Proof(null, null));
+        assertThat(StatusService.proof(StatusService.MIN_LIVE - 1, (StatusService.MIN_HOURS - 1) * 3600)).isEqualTo(new StatusService.Proof(null, null));
+        assertThat(StatusService.proof(12, 1_234L * 3600 + 1800)).isEqualTo(new StatusService.Proof(12L, 1_200L));
+    }
+
+    @Test
+    void oneLiveStreamIsNotAProofNumberButHoursStreamedAreOnceThereAreEnough() throws Exception {
+        workerReports("worker-proof", now());
+        StreamJob j = liveJob("worker-proof");
+        j.getDestinations().add(new com.afklive.streamer.model.StreamJobDestination(j, 0, "YouTube"));
+        j.getDestinations().get(0).setReach("ON");
+        jobs.save(j);
+        assertThat(jobs.countReachingSince(now().minusMinutes(1))).isGreaterThanOrEqualTo(1);
+        mvc.perform(get("/api/public/status"))
+                .andExpect(jsonPath("$.proof").exists())
+                .andExpect(jsonPath("$.proof.liveNow").value(org.hamcrest.Matchers.nullValue()));
+        usage.add(customer.getId(), "2026-01", (StatusService.MIN_HOURS + 50) * 3600);
+        fresh();
+        mvc.perform(get("/api/public/status"))
+                .andExpect(jsonPath("$.proof.hoursStreamed").isNumber());
     }
 
     @Test
