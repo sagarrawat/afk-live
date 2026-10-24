@@ -48,6 +48,9 @@ public class NotificationService {
         public static final String PLAN_LIMIT = "PLAN_LIMIT";
         public static final String CREDIT_LIMIT = "CREDIT_LIMIT";
         public static final String ITEM_FAILED = "ITEM_FAILED";
+        /** RE-10: the run has been slower than real time for a minute; viewers see slow playback. */
+        public static final String STREAM_SLOW = "STREAM_SLOW";
+        public static final String STREAM_SPEED_OK = "STREAM_SPEED_OK";
 
         private Types() {
         }

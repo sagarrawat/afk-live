@@ -213,6 +213,27 @@ frame rate, fit, loudness, bitrate), at the lowest priority.
 - Turn it on for a worker by setting `APP_STREAMING_COPYMODE=true` and restarting it; turn it off the
   same way. Streams in copy mode show `"mode":"copy"` in their now-playing data.
 
+## Capacity guard (GL-7, RE-10)
+
+**Before a stream goes live, pre-flight estimates the CPU its quality needs and compares it with what
+workers report as free; while it runs, a stream slower than real time for a minute alerts.**
+
+- The estimate (`CapacityEstimator`): about 0.5 of a CPU to encode 720p30, 1.0 for 1080p30, 2.0 for
+  1080p60 (scaled by frame rate; 1440p ≈ 1.8 and 2160p ≈ 4 per 30 fps), plus 0.1 for decoding; 0.01 for
+  a stream that plays by copy. Free capacity is the best worker with a free slot: 85 % of its CPUs minus
+  its current load, from `stream_workers` (workers report `cpus` since changeset 066; an older worker
+  counts as one CPU per stream slot). Calibrated on 24 Oct 2026 (4-vCPU afklive-1 fell behind at 92 %).
+- Not enough room: the creator sees a warning with "Use 720p 30 fps" (or the best lighter quality that
+  fits) and "Go live anyway". Only a quality more than one whole worker can give is refused. No worker
+  reporting load: no warning. Scheduled starts are never held back by the warning.
+- The web side counts copy mode only when it has `APP_STREAMING_COPYMODE=true` too; set it on web
+  instances with the same value as on workers, or copy-eligible streams are estimated at studio cost.
+- RE-10: the alert monitor (web) opens a `SLOW` row in `stream_incidents` when a run's `speed` stays
+  below 0.95 for 60 s, alerts the creator (at most once per stream in 6 hours), shows it on the stream
+  page and the Admin live row, and closes it when speed recovers. It doesn't count as downtime.
+- One live run per stream: `uq_stream_jobs_one_live_per_stream` (changeset 065). A second Go live while
+  the run is starting or live returns that run.
+
 ## Egress firewall (required in production)
 
 Destinations are validated to be public, but FFmpeg resolves hosts again when connecting. Run the
@@ -277,6 +298,50 @@ key from `APP_ENCRYPTION_OLD_KEYS` after that.
   open uploads are removed from storage, connected-channel tokens are deleted. Invoices stay for the
   tax records, detached from the account; B2C invoices (no GSTIN) lose the customer's name and address,
   B2B invoices keep the legal name, address and GSTIN that GST law requires.
+
+## Email (OPS-1)
+
+Email goes through ZeptoMail: set `ZEPTOMAIL_URL` and `ZEPTOMAIL_TOKEN` on the web app, and
+`APP_BASE_URL` to the public address (`https://afklive.in`): verification and reset links are built
+from it, never from the request. While either ZeptoMail variable is empty:
+
+- the web app logs `EMAIL IS OFF` at startup and Admin shows a red banner;
+- password sign-ups are verified at once (logged), and at startup any sign-up still waiting for a
+  verification email is verified too (accounts an admin disabled are left alone);
+- "Forgot password" says email is unavailable and points to support@afklive.in (or Google sign-in)
+  instead of claiming a link was sent. For someone who writes in, check who they are (the address they
+  write from, a payment id), then Admin > Users > the user > Emails > "Password reset link" (audited,
+  works once) and send them the link;
+- alerts and payment reminders still appear in the app, just not by email.
+
+Every send is recorded in `email_log` (time, kind, the recipient's account, sent or why not; never the
+address or body) and shown in Admin > Users > the user > Emails. "Send a test email" (Admin > Platform, or the
+banner) sends to your own address and is audited. Records older than 180 days are removed.
+
+## Errors and request ids (OPS-2)
+
+Every request gets an 8-character id: in each log line it writes (`[abcd2345]`), in the `X-Request-Id`
+header, on the error page as "Code: abcd2345", and in the app's message for an API server error.
+Only a server error (5xx) says "something went wrong on our side"; a 4xx says what happened. A creator who quotes a code can
+be found with a log search for it. A form opened before a deploy (expired security token) is not an
+error: sign-in forms open again with "This page expired", and the app gets a fresh token and retries.
+
+## Support view of a run (AD-6)
+
+Admin > Live streams (click the stream) or Admin > Users > the user > Stream runs opens the run: source
+files with size, frame rate and shape; the output profile; each destination's server, the key masked as
+the creator sees it (`••••` and the last four), its length and the same key check the app runs on save;
+the platform's last error, reconnects and, once the stream servers report it (RE-8), whether the
+platform is receiving; and the last 200 FFmpeg lines. "Send a test" runs the usual 10-second
+destination test with the run's address (not while that destination is live, one at a time per
+account, not counted against the creator's hourly tests), needs a reason and is audited.
+
+FFmpeg lines are captured on the worker (`JobLogs`): every line passes `Redact.line` before it is kept
+(stream URLs, every part of the run's destination addresses in plain and URL-encoded form, and named
+values such as `key=`, `streamid=`, `passphrase=`, `token=`), only the last 200 are kept in memory, and
+a background thread saves them to `stream_job_logs` every 10 s while there are new ones and once when
+the run stops (one row per run, replaced; removed after 14 days by the web app). A database outage only
+delays the save; it never touches the stream. Runs on workers older than this release have no log.
 
 ## Destination tests
 
@@ -343,6 +408,21 @@ presigned URL (ranged reads, no full download), stores a thumbnail and marks it 
 plain reason. Files aren't re-encoded: the studio re-encodes at playout anyway. A claim older than
 10 minutes is taken over, so a restart never leaves a file stuck. Web instances therefore need
 `ffmpeg`/`ffprobe` on PATH, like workers.
+
+After a video is Ready, the same instance checks whether it is one still picture (GR-9): six small
+grey frames grabbed with a seek each (5% to 95% of the length) and compared. The result goes in
+`media_assets.still_picture` (null when a frame couldn't be read, so the check never guesses). Videos
+uploaded before this are measured by the media sweeper, two a minute, videos in a playlist first.
+
+## Go-live check (GR-9)
+
+The stream check on a stream's Overview (`/api/streams/{id}/check`) reads only what AFK Live has: the
+playlist, overlays, the measured still-picture flag, the YouTube title and thumbnail the creator typed
+in (`streams.youtube_title`, `thumbnail_media_id`) and replies AFK Live posted (`engagement_activity`).
+It never blocks going live and never calls YouTube. Thumbnail contrast is measured once per image per
+web instance (in memory) from the library thumbnail. Once a week per stream that was live in the past
+seven days, one web instance (conditional update on `streams.check_weekly_at`) sends an in-app notice
+listing open flags; no email or push. `app.check.weekly-auto=false` turns the hourly pass off (tests).
 
 ## Push alerts (NT-1, MB-2)
 

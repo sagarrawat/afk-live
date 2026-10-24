@@ -59,7 +59,11 @@ public final class StreamDtos {
      */
     public record LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds,
                             ZonedDateTime stopAt, String scene, Boolean inputLive, Map<String, Object> nowPlaying,
-                            Health health, String endReason) {
+                            Health health, String endReason, ZonedDateTime slowSince) {
+        public LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds, ZonedDateTime stopAt,
+                         String scene, Boolean inputLive, Map<String, Object> nowPlaying, Health health, String endReason) {
+            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null);
+        }
     }
 
     /** {@code playlist}: the slot's own videos (SC-4); empty plays the stream's playlist. */
@@ -103,7 +107,15 @@ public final class StreamDtos {
     public record Check(String id, boolean ok, String message, String fix) {
     }
 
-    public record Preflight(boolean ok, List<Check> checks) {
+    /**
+     * {@code capacity} (GL-7): whether the chosen quality fits the servers' free capacity right now, an
+     * estimate; null when unknown. A quality that doesn't fit is a warning (the creator may go live
+     * anyway), not a failed check, unless it could never fit.
+     */
+    public record Preflight(boolean ok, List<Check> checks, com.afklive.streamer.service.CapacityEstimator.Estimate capacity) {
+        public Preflight(boolean ok, List<Check> checks) {
+            this(ok, checks, null);
+        }
     }
 
     /** GL-3: NOW, AT (local date-time in timeZone) or AFTER_PLAYLIST. */

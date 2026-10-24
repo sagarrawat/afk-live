@@ -65,21 +65,38 @@ public class UserService {
         }
     }
 
-    public void registerUser(String email, String password, String name, String baseUrl) {
+    /** What happened after a password sign-up. */
+    public enum Registration {
+        /** A verification link was emailed. */
+        VERIFICATION_SENT,
+        /** Email isn't set up, so the account was verified at once (OPS-1); the creator can sign in. */
+        READY
+    }
+
+    public Registration registerUser(String email, String password, String name, String baseUrl) {
         if (userRepository.findByEmail(email).isPresent()) {
             throw new IllegalArgumentException("User already exists");
         }
         User user = new User(email);
         user.setPassword(passwordEncoder.encode(password));
         user.setFullName(name);
+        user.setPlanType(PlanType.FREE); // Default to Free plan
+        if (!emailService.isConfigured()) {
+            // OPS-1: without email a verification link can never arrive; don't leave the account stuck.
+            user.setEnabled(true);
+            user.setVerificationToken(null);
+            User saved = userRepository.save(user);
+            log.warn("Email isn't set up: verified the new password sign-up (user {}) without an email check", saved.getId());
+            return Registration.READY;
+        }
         user.setEnabled(false); // Email verification required
         user.setVerificationToken(UUID.randomUUID().toString());
-        user.setPlanType(PlanType.FREE); // Default to Free plan
         user.setLastVerificationSentAt(java.time.LocalDateTime.now());
         userRepository.save(user);
 
         String link = baseUrl + "/verify-email?token=" + user.getVerificationToken();
         emailService.sendVerificationEmail(email, link);
+        return Registration.VERIFICATION_SENT;
     }
 
     public void resendVerification(String email, String baseUrl) {
@@ -88,6 +105,9 @@ public class UserService {
 
         if (user.isEnabled()) {
              throw new IllegalStateException("User already verified.");
+        }
+        if (!emailService.isConfigured()) {
+            throw new IllegalStateException("We can't send email right now. Write to support@afklive.in and we'll verify your account.");
         }
 
         if (user.getLastVerificationSentAt() != null &&
@@ -120,13 +140,21 @@ public class UserService {
         return false;
     }
 
-    public void requestPasswordReset(String email, String baseUrl) {
+    /**
+     * Emails a reset link if the account exists. Returns false, and changes nothing, when email isn't
+     * set up (OPS-1): the page then says so instead of claiming a link was sent.
+     */
+    public boolean requestPasswordReset(String email, String baseUrl) {
+        if (!emailService.isConfigured()) {
+            return false;
+        }
         userRepository.findByEmail(email).ifPresent(user -> {
             user.setResetToken(UUID.randomUUID().toString());
             userRepository.save(user);
             String link = baseUrl + "/reset-password?token=" + user.getResetToken();
             emailService.sendPasswordResetEmail(email, link);
         });
+        return true;
     }
 
     public boolean resetPassword(String token, String newPassword) {

@@ -126,6 +126,19 @@ public class LiveStream {
     @Column(name = "crossfade_seconds", nullable = false)
     private int crossfadeSeconds = 0;
 
+    /** GR-9: the title the creator uses on YouTube, typed into AFK Live so the go-live check can read it. */
+    @Column(name = "youtube_title", length = 100)
+    private String youtubeTitle;
+
+    /** GR-9: the thumbnail picture (an image in the library) the creator uses on YouTube. */
+    @Column(name = "thumbnail_media_id")
+    private Long thumbnailMediaId;
+
+    /** GR-9: comma-separated go-live check flags the creator chose to keep (dismissed). */
+    @Column(name = "check_dismissed", length = 500)
+    @JsonIgnore
+    private String checkDismissed;
+
     @Column(name = "created_at", nullable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now();
 
