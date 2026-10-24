@@ -25,6 +25,14 @@ cd "$SRC"
 echo "Building $(git rev-parse --short HEAD)"
 mvn -B -q package -pl afklive-web -am -DskipTests -DskipUiTests
 
+if [ -x /opt/afklive/scripts/web-deploy.sh ]; then
+  # OPS-4 is set up: the web app switches slots without downtime (see docs/operations.md).
+  /opt/afklive/scripts/web-deploy.sh afklive-web/target/app.jar
+  install -m 640 -o deploy -g afklive afklive-web/target/app.jar /opt/afklive/worker/app.jar
+  systemctl restart afklive-worker
+  echo "=== Deployed $(git rev-parse --short HEAD) ==="
+  exit 0
+fi
 install -m 640 -o deploy -g afklive afklive-web/target/app.jar /opt/afklive/app.jar
 install -m 640 -o deploy -g afklive afklive-web/target/app.jar /opt/afklive/worker/app.jar
 systemctl restart afklive
