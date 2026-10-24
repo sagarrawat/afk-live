@@ -7,6 +7,7 @@ import { ErrorNote, Segmented, Spinner } from '@/components/ui';
 import { get } from '@/lib/api';
 import { bytes } from '@/lib/format';
 import { CostLine, Incidents, Quota, type CostView } from '../Admin';
+import { CopiesPanel } from './CostPanel';
 import { HistoryChart } from './HistoryChart';
 import { useHistory } from './OverviewPage';
 import { EmailPanel } from './Support';
@@ -91,6 +92,7 @@ export function ServersPage() {
           <CostLine cost={cost.data} />
         </p>
       )}
+      <CopiesPanel />
       <div className="grid gap-6 xl:grid-cols-2">
         <div id="email" className="min-w-0">
           <EmailPanel />
