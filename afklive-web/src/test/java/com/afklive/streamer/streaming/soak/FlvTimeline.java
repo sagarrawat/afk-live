@@ -52,6 +52,8 @@ public final class FlvTimeline {
     private long audioTags;
     private long keyframes;
     private long midStreamHeaders;
+    private long changedHeaders;
+    private final List<String> headerEvents = new ArrayList<>();
     private long backwardsVideo;
     private long backwardsAudio;
     private long firstV = -1;
@@ -168,8 +170,17 @@ public final class FlvTimeline {
         }
         boolean config = raw[12] == 0; // AVCPacketType / AACPacketType 0 = sequence header
         if (config) {
-            if (video ? videoConfig != null : audioConfig != null) {
+            byte[] before = video ? videoConfig : audioConfig;
+            if (before != null) {
                 midStreamHeaders++;
+                boolean changed = !Arrays.equals(before, 11, before.length - 4, raw, 11, raw.length - 4);
+                if (changed) {
+                    changedHeaders++;
+                }
+                if (headerEvents.size() < 100) {
+                    headerEvents.add((video ? "video" : "audio") + "@" + String.format(java.util.Locale.ROOT, "%.1f",
+                            wall0 == 0 ? 0 : (now - wall0) / 1e9) + "s" + (changed ? " changed" : " same"));
+                }
             }
             if (video) {
                 videoConfig = raw;
@@ -331,18 +342,21 @@ public final class FlvTimeline {
         double wallSeconds = wall0 == 0 ? 0 : (lastFeedNanos - wall0) / 1e9;
         return new Stats(bytes, videoTags, audioTags, keyframes, midStreamHeaders, backwardsVideo, backwardsAudio,
                 maxVideoGapMs / 1000.0, maxAudioGapMs / 1000.0, videoGapsOverLimit, audioGapsOverLimit, avDrift, lagDrift,
-                lagEnd, stalls, maxStallNanos / 1e9, mediaSeconds, wallSeconds, List.copyOf(windows));
+                lagEnd, stalls, maxStallNanos / 1e9, mediaSeconds, wallSeconds, List.copyOf(windows), changedHeaders,
+                List.copyOf(headerEvents));
     }
 
     /**
      * @param avDriftMs   largest change in the audio-vs-video timeline offset after warm-up
      * @param lagDriftMs  largest change in media-minus-wall-clock after warm-up
      * @param lagEndMs    that change at the end of the run (signed: negative means the media fell behind real time)
+     * @param changedHeaders mid-stream sequence headers whose content differs from the one before
+     * @param headerEvents   each mid-stream sequence header: stream, when, and whether it changed
      */
     public record Stats(long bytes, long videoTags, long audioTags, long keyframes, long midStreamHeaders,
                         long backwardsVideo, long backwardsAudio, double maxVideoGapSeconds, double maxAudioGapSeconds,
                         long videoGapsOverLimit, long audioGapsOverLimit, long avDriftMs, long lagDriftMs, long lagEndMs,
                         long stalls, double maxStallSeconds, double mediaSeconds, double wallSeconds,
-                        List<Window> windows) {
+                        List<Window> windows, long changedHeaders, List<String> headerEvents) {
     }
 }

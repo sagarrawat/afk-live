@@ -205,6 +205,10 @@ less is enough for most content. Confirm on real gameplay and music footage befo
 - **Soak (OPS-6)** runs on staging, not on GitHub's paid minutes: a nightly 6-hour stream to a local
   file sink, checking memory, timestamps, A/V drift and reconnects, with results posted to a status
   row the PR check reads. A 72-hour run before major releases.
+- **Built (ops/soak-test):** `afklive-scripts/soak.sh` / `SoakTest` (tag `soak`, excluded from CI) runs
+  the worker's studio, copy mode, relays and stitcher into local TCP sinks and judges leaks, descriptors,
+  threads, every FLV timestamp, A/V drift, media-vs-clock pace, reconnects, encoder speed and studio↔copy
+  switches; see docs/operations.md, "Soak test (OPS-6)". Posting results to a PR check waits for staging.
 
 ## 11. Fleet: FO-7, FO-8 (later)
 

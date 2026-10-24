@@ -145,7 +145,9 @@ public final class SoakReport {
         checks.add(new Check("Timeline", "Media timeline kept pace with the clock", any, wallDrift <= Thresholds.MEDIA_VS_WALL_DRIFT_MS,
                 wallDrift + " ms", "≤ " + Thresholds.MEDIA_VS_WALL_DRIFT_MS + " ms"));
         checks.add(new Check("Timeline", "No stalls (2 s without data)", any, stalls == 0, String.valueOf(stalls), "0"));
-        checks.add(new Check("Timeline", "Sequence headers sent again mid-stream", false, true, String.valueOf(headers), "info"));
+        long changedHeaders = timelines.stream().mapToLong(r -> ((Number) r.getOrDefault("changedSequenceHeaders", 0L)).longValue()).sum();
+        checks.add(new Check("Timeline", "Sequence headers sent again mid-stream", false, true,
+                headers + " (" + changedHeaders + " with different content)", "info"));
         long badSamples = samples.stream().filter(s -> !Boolean.TRUE.equals(s.get("ok"))).count();
         checks.add(new Check("Timeline", "Samples decode cleanly and are continuous (ffprobe/ffmpeg)", !samples.isEmpty(),
                 badSamples == 0, (samples.size() - badSamples) + " of " + samples.size() + " clean", "all"));
@@ -165,6 +167,12 @@ public final class SoakReport {
                     "longest " + maxSeconds + " s", "≤ " + Thresholds.SWITCH_SECONDS + " s"));
             checks.add(new Check("Switches", "Playlist position jump at a switch", false, true,
                     "largest " + maxJump + " s (copy starts at a keyframe, up to 2 s back)", "info"));
+            double lagAtEnd = timelines.stream().mapToDouble(r -> ((Number) r.getOrDefault("mediaVsWallAtEndMs", 0L)).doubleValue())
+                    .average().orElse(0);
+            double perSwitch = ok == 0 ? 0 : lagAtEnd / ((double) ok / Math.max(1, streams.size()));
+            checks.add(new Check("Switches", "Media timeline moved against the clock per switch", false, true,
+                    String.format(Locale.ROOT, "%+.0f ms per switch (%+.0f ms at the end; + is ahead of real time)", perSwitch, lagAtEnd),
+                    "info"));
         }
 
         // Memory and resources.

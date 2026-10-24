@@ -273,7 +273,8 @@ public final class SoakHarness {
         List<ProcessSampler.Sample> series = new ArrayList<>();
         sampler.sample(Map.of(), true);
         int fds0 = ProcessSampler.fds();
-        int threads0 = ProcessSampler.threads();
+        List<String> names0 = threadNames();
+        int threads0 = names0.size();
 
         started = System.nanoTime();
         for (int k = 1; k <= cfg.streams(); k++) {
@@ -361,7 +362,12 @@ public final class SoakHarness {
         System.gc();
         Map<String, Object> afterStop = new LinkedHashMap<>();
         afterStop.put("fds", ProcessSampler.fds());
-        afterStop.put("threads", ProcessSampler.threads());
+        // JVM pools that start on first use and idle out later aren't leaks; anything else that stayed is.
+        List<String> stayed = newThreads(names0, threadNames());
+        List<String> unexpected = stayed.stream().filter(n -> JVM_POOLS.stream().noneMatch(n::contains)).toList();
+        afterStop.put("threads", threads0 + unexpected.size());
+        afterStop.put("threadsRaw", ProcessSampler.threads());
+        afterStop.put("newThreads", stayed);
         afterStop.put("ffmpegProcesses", ProcessSampler.ffmpegProcesses());
         afterStop.put("workDirLeftovers", leftovers());
         afterStop.put("cachePins", cachePins());
@@ -814,12 +820,34 @@ public final class SoakHarness {
         m.put("stalls", s.stalls());
         m.put("maxStallSeconds", round(s.maxStallSeconds(), 2));
         m.put("midStreamSequenceHeaders", s.midStreamHeaders());
+        m.put("changedSequenceHeaders", s.changedHeaders());
+        m.put("sequenceHeaderEvents", s.headerEvents());
         List<List<Object>> w = new ArrayList<>();
         for (FlvTimeline.Window x : s.windows()) {
             w.add(List.of(round(x.atSeconds(), 0), x.avMs(), x.lagMs()));
         }
         m.put("windows[atSeconds,avMs,lagMs]", w);
         return m;
+    }
+
+    /** Thread pools that start on first use and stay (or idle out after a minute): not a leak. */
+    static final List<String> JVM_POOLS = List.of("process reaper", "ForkJoinPool", "CompilerThread", "media-prefetch",
+            "Attach Listener", "Common-Cleaner", "Notification Thread", "surefire");
+
+    static List<String> threadNames() {
+        return Thread.getAllStackTraces().keySet().stream().filter(Thread::isAlive).map(Thread::getName).sorted().toList();
+    }
+
+    /** Names in {@code after} beyond those in {@code before} (as a multiset). */
+    static List<String> newThreads(List<String> before, List<String> after) {
+        List<String> left = new ArrayList<>(before);
+        List<String> out = new ArrayList<>();
+        for (String n : after) {
+            if (!left.remove(n)) {
+                out.add(n);
+            }
+        }
+        return out;
     }
 
     private int leftovers() {
