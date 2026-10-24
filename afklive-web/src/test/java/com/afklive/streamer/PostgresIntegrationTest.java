@@ -46,5 +46,6 @@ public abstract class PostgresIntegrationTest {
         // Tests process library files explicitly (MediaProcessor.process / sweep).
         registry.add("app.media.auto-process", () -> "false");
         registry.add("app.check.weekly-auto", () -> "false"); // GoLiveCheckServiceTest drives the weekly check itself
+        registry.add("app.first-live.auto", () -> "false"); // FirstLiveTest drives the sweep itself
     }
 }
