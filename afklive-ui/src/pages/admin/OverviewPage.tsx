@@ -113,7 +113,7 @@ export function OverviewPage() {
     <div className="space-y-6">
       <h1 className="font-display text-xl font-bold">Overview</h1>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section aria-labelledby="attention-h" className="min-w-0 rounded-md border border-line bg-panel">
+        <section aria-labelledby="attention-h" className="min-w-0 self-start rounded-md border border-line bg-panel">
           <header className="flex items-baseline justify-between gap-3 border-b border-line px-4 py-3">
             <h2 id="attention-h" className="text-md font-semibold">
               Needs attention now

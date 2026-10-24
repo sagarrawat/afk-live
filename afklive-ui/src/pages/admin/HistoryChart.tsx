@@ -94,33 +94,42 @@ export function HistoryChart({
           ) : (
             <>
               <span className={clsx('font-semibold', s.now >= 90 ? 'text-bad' : s.now >= 75 ? 'text-warn' : 'text-ink')}>{pct(s.now)}</span>
-              <span className="text-muted">
-                {' '}
-                now, avg {pct(s.average)}, peak {pct(s.peak)}
-              </span>
+              {!compact && (
+                <span className="text-muted">
+                  {' '}
+                  now, avg {pct(s.average)}, peak {pct(s.peak)}
+                </span>
+              )}
             </>
           )}
         </span>
       </figcaption>
-      <div className={clsx('relative mt-1', !compact && 'pl-8')}>
-        {!compact && (
-          <>
-            <span aria-hidden className="tnum absolute left-0 top-0 -translate-y-1/2 text-[10px] text-muted">
-              100%
-            </span>
-            <span aria-hidden className="tnum absolute bottom-0 left-0 translate-y-1/2 text-[10px] text-muted">
-              0
-            </span>
-          </>
-        )}
-        <svg role="img" aria-label={words} viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" className="block w-full overflow-visible" style={{ height: h }}>
+      <div className={clsx('mt-1', !compact && 'pl-8')}>
+        <div className="relative">
+          {!compact && (
+            <>
+              <span aria-hidden className="tnum absolute -left-8 top-0 -translate-y-1/2 text-[10px] text-muted">
+                100%
+              </span>
+              <span aria-hidden className="tnum absolute -left-8 bottom-0 translate-y-1/2 text-[10px] text-muted">
+                0
+              </span>
+            </>
+          )}
+          <svg role="img" aria-label={words} viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" className="block w-full overflow-visible" style={{ height: h }}>
           <rect x={0} y={0} width={W} height={h} className="fill-raised/40" />
           <line x1={0} x2={W} y1={h * 0.1} y2={h * 0.1} className="stroke-bad/50" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
           {!compact && <line x1={0} x2={W} y1={h * 0.5} y2={h * 0.5} className="stroke-line" vectorEffect="non-scaling-stroke" />}
           {paths.map((d, i) => (
             <path key={i} d={d} fill="none" className={metric === 'cpu' ? 'stroke-ink' : 'stroke-muted'} strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           ))}
-        </svg>
+          </svg>
+        </div>
+        {compact && s.now != null && (
+          <p className="tnum mt-1 text-[11px] text-muted">
+            avg {pct(s.average)}, peak {pct(s.peak)}
+          </p>
+        )}
         {!compact && (
           <div aria-hidden className="tnum mt-1 flex justify-between text-[10px] text-muted">
             <span>{hhmm(new Date(from).toISOString(), hours > 24)}</span>

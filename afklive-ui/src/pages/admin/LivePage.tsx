@@ -30,7 +30,7 @@ export function Reach({ d, compact }: { d: DestinationHealth; compact?: boolean 
         <span className={clsx('shrink-0', word === 'Not reaching' ? 'font-medium text-bad' : word === 'On' ? 'text-ok' : 'text-muted')}>{word}</span>
       </span>
       {why && (
-        <span className={clsx('block text-xs text-muted', compact ? 'line-clamp-2' : 'max-w-[18rem] truncate')} title={why}>
+        <span className={clsx('block text-xs text-muted', compact ? 'line-clamp-2' : 'max-w-[10rem] truncate')} title={why}>
           {why}
         </span>
       )}
@@ -73,7 +73,7 @@ export function Actions({ run, onAct, phone }: { run: RunRef; onAct: (a: Act) =>
   const stop = (e: MouseEvent) => (e.stopPropagation(), e.preventDefault(), onAct({ run, kind: 'stop' }));
   const move = (e: MouseEvent) => (e.stopPropagation(), e.preventDefault(), onAct({ run, kind: 'move' }));
   return (
-    <span className={clsx('flex items-center', phone ? 'justify-between' : 'justify-end gap-3')}>
+    <span className={clsx('flex items-center', phone ? 'justify-between' : 'justify-end gap-2')}>
       <Button size="sm" variant="secondary" onClick={move} disabled={!run.worker} aria-label={`Move ${run.name}`}>
         Move
       </Button>
@@ -154,16 +154,16 @@ export function LivePage() {
         <table className="w-full text-sm">
           <thead className="border-b border-line text-left text-xs text-muted">
             <tr>
-              <th className="px-3 py-2 font-medium">Health</th>
-              <th className="px-3 py-2 font-medium">Stream</th>
-              <th className="px-3 py-2 text-right font-medium">Up</th>
-              <th className="px-3 py-2 text-right font-medium">Speed</th>
-              <th className="px-3 py-2 text-right font-medium">FPS</th>
-              <th className="px-3 py-2 font-medium">Quality</th>
-              <th className="px-3 py-2 font-medium">Plan</th>
-              <th className="px-3 py-2 font-medium">Platforms</th>
-              <th className="px-3 py-2 font-medium">Worker</th>
-              <th className="px-3 py-2">
+              <th className="px-2.5 py-2 font-medium">Health</th>
+              <th className="px-2.5 py-2 font-medium">Stream</th>
+              <th className="px-2.5 py-2 text-right font-medium">Up</th>
+              <th className="px-2.5 py-2 text-right font-medium">Speed</th>
+              <th className="px-2.5 py-2 text-right font-medium">FPS</th>
+              <th className="px-2.5 py-2 font-medium">Quality</th>
+              <th className="px-2.5 py-2 font-medium">Plan</th>
+              <th className="px-2.5 py-2 font-medium">Platforms</th>
+              <th className="px-2.5 py-2 font-medium">Worker</th>
+              <th className="sticky right-0 bg-panel px-2.5 py-2">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
@@ -171,41 +171,45 @@ export function LivePage() {
           <tbody className="divide-y divide-line">
             {rows.map((r) => (
               <tr key={r.jobId} tabIndex={0} onClick={() => open(r)} onKeyDown={onKey(r)} className="cursor-pointer align-top hover:bg-raised/60 focus-visible:bg-raised/60">
-                <td className="whitespace-nowrap px-3 py-2">
+                <td className="whitespace-nowrap px-2.5 py-2">
                   <HealthDot level={r.health} withText />
                 </td>
-                <td className="max-w-[16rem] px-3 py-2">
+                <td className="max-w-[14rem] px-2.5 py-2">
                   <Link to={`/studio/admin/runs/${r.jobId}`} onClick={(e) => e.stopPropagation()} className="block truncate font-medium hover:underline">
                     {r.streamName}
                   </Link>
                   <Link to={`/studio/admin/users/${r.userId}`} onClick={(e) => e.stopPropagation()} className="block truncate text-xs text-muted hover:underline">
                     {r.userEmail}
                   </Link>
-                  {r.problem && <span className="mt-0.5 block text-xs text-warn">{r.problem}</span>}
+                  {r.problem && (
+                    <span className="mt-0.5 line-clamp-2 text-xs text-warn" title={r.problem}>
+                      {r.problem}
+                    </span>
+                  )}
                   {!r.problem && r.lastError && <span className="mt-0.5 block truncate text-xs text-muted" title={r.lastError}>{r.lastError}</span>}
                 </td>
-                <td className="tnum whitespace-nowrap px-3 py-2 text-right">{timecode(r.uptimeSeconds)}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
+                <td className="tnum whitespace-nowrap px-2.5 py-2 text-right">{timecode(r.uptimeSeconds)}</td>
+                <td className="whitespace-nowrap px-2.5 py-2 text-right">
                   <Speed r={r} />
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
+                <td className="whitespace-nowrap px-2.5 py-2 text-right">
                   <Fps r={r} />
                 </td>
-                <td className="tnum whitespace-nowrap px-3 py-2">{r.quality ?? '–'}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-muted">{r.plan}</td>
-                <td className="px-3 py-2">
-                  <span className="flex min-w-[10rem] flex-col gap-1">
+                <td className="tnum whitespace-nowrap px-2.5 py-2">{r.quality ?? '–'}</td>
+                <td className="whitespace-nowrap px-2.5 py-2 text-xs text-muted">{r.plan}</td>
+                <td className="px-2.5 py-2">
+                  <span className="flex min-w-[8rem] flex-col gap-1">
                     {(r.destinationHealth ?? []).map((d, i) => (
                       <Reach key={i} d={d} />
                     ))}
                     {(r.destinationHealth ?? []).length === 0 && <span className="text-muted">None</span>}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2">
+                <td className="whitespace-nowrap px-2.5 py-2">
                   <span className="block">{r.worker ?? 'Unassigned'}</span>
-                  <span className="tnum text-xs text-muted">{r.heartbeatAgeSeconds == null ? '' : `reported ${r.heartbeatAgeSeconds}s ago`}</span>
+                  <span className="tnum text-xs text-muted">{r.heartbeatAgeSeconds == null ? '' : `${r.heartbeatAgeSeconds}s ago`}</span>
                 </td>
-                <td className="whitespace-nowrap px-3 py-2">
+                <td className="sticky right-0 whitespace-nowrap bg-panel px-2.5 py-2 shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.5)]">
                   <Actions run={ref(r)} onAct={setAct} />
                 </td>
               </tr>
