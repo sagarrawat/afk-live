@@ -2,8 +2,6 @@ package com.afklive.streamer.repository;
 
 import com.afklive.streamer.model.User;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,10 +19,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByVerificationToken(String token);
     Optional<User> findByResetToken(String token);
 
-    // Used in EngagementService for cron
-    // Fetches users with settings enabled, eager loading channels and settings
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.channels LEFT JOIN FETCH u.settings s WHERE s.autoReplyEnabled = true")
-    Slice<User> findByAutoReplyEnabledTrue(Pageable pageable);
 
 
     @Modifying
@@ -55,6 +49,22 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query(value = "SELECT COALESCE(used_storage_bytes, 0) FROM users WHERE id = :id", nativeQuery = true)
     long usedStorage(@Param("id") Long id);
+
+    /** GR-18: free days saved for the next paid period (users.bonus_days isn't mapped on the entity on purpose). */
+    @Modifying
+    @Query(value = "UPDATE users SET bonus_days = bonus_days + :days WHERE id = :id", nativeQuery = true)
+    int addBonusDays(@Param("id") Long id, @Param("days") int days);
+
+    /** The saved free days, locked until the caller's transaction ends (read, then {@link #clearBonusDays}). */
+    @Query(value = "SELECT bonus_days FROM users WHERE id = :id FOR UPDATE", nativeQuery = true)
+    int lockBonusDays(@Param("id") Long id);
+
+    @Modifying
+    @Query(value = "UPDATE users SET bonus_days = 0 WHERE id = :id", nativeQuery = true)
+    int clearBonusDays(@Param("id") Long id);
+
+    @Query(value = "SELECT bonus_days FROM users WHERE id = :id", nativeQuery = true)
+    int bonusDays(@Param("id") Long id);
 
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM User u WHERE u.id = :id")

@@ -63,7 +63,7 @@ class StreamLimitTest {
         when(planService.getPlanConfig(any())).thenReturn(config(PlanType.FREE));
 
         try {
-             streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 720, null, null, null, false, null, false);
+             streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 720, null, null, null, false, null);
         } catch (Exception e) {
              // Ignore other exceptions, just ensure it's not the capacity one
              if (e.getMessage().contains("Platform capacity reached")) {
@@ -83,7 +83,7 @@ class StreamLimitTest {
         when(userService.getOrCreateUser(username)).thenReturn(user);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
-            streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 720, null, null, null, false, null, false);
+            streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 720, null, null, null, false, null);
         });
 
         assert(ex.getMessage().contains("Platform capacity reached"));
@@ -103,7 +103,7 @@ class StreamLimitTest {
         when(planService.getPlanConfig(any())).thenReturn(config(PlanType.ESSENTIALS));
 
         try {
-             streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 1080, null, null, null, false, null, false);
+             streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 1080, null, null, null, false, null);
         } catch (Exception e) {
              // Ignore other exceptions
              if (e.getMessage().contains("Platform capacity reached")) {

@@ -142,7 +142,7 @@ class AppShellTest extends PostgresIntegrationTest {
         mvc.perform(get("/api/me").with(user(email).roles("USER"))).andExpect(jsonPath("$.dismissedHints[0]").value("youtube-side"));
         // The card also shows for the whole of a first go-live: every go-live is a job.
         User u = users.findByEmail(email).orElseThrow();
-        jobs.save(new StreamJob(u, "k", null, null, null, false, 0, "First", null, null, java.time.ZonedDateTime.now(), "YouTube", false));
+        jobs.save(new StreamJob(u, "k", null, null, null, false, 0, "First", null, null, java.time.ZonedDateTime.now(), "YouTube"));
         mvc.perform(get("/api/me").with(user(email).roles("USER"))).andExpect(jsonPath("$.goLives").value(1));
     }
 

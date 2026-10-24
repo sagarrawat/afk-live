@@ -134,8 +134,7 @@ public class StreamController {
 
             String overlayTemplate = request.getParameter("overlayTemplate");
 
-            String autoReplyStr = request.getParameter("autoReplyEnabled");
-            boolean autoReplyEnabled = (autoReplyStr != null && !autoReplyStr.trim().isEmpty()) ? Boolean.parseBoolean(autoReplyStr) : false;
+            // An "autoReplyEnabled" parameter from old clients is ignored: AFK Live never replies in chat by itself (AI-3).
 
             if (musicFile != null && !musicFile.isEmpty()) {
                 // If a music file is uploaded directly, save it to the user's directory and use its name
@@ -145,7 +144,7 @@ public class StreamController {
 
             List<String> streamKeysList = java.util.Arrays.asList(streamKeysArr);
 
-            return ResponseEntity.ok(streamService.startStream(email, streamKeysList, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate, autoReplyEnabled));
+            return ResponseEntity.ok(streamService.startStream(email, streamKeysList, videoKey, musicName, musicVolume, loopCount, watermarkFile, muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled, overlayTemplate));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(ApiResponse.error("Error: " + e.getMessage()));
         }

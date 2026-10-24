@@ -82,7 +82,7 @@ class ReferralTest extends PostgresIntegrationTest {
         assertThat(s.joined()).isEqualTo(1);
         assertThat(s.waitingForFirstLive()).isEqualTo(1);
         assertThat(s.credited()).isZero();
-        assertThat(s.payoutsLive()).as("no payout until RE-8 confirms a first live").isFalse();
+        assertThat(s.payoutsLive()).as("payouts run (FirstLiveTest covers the credit itself)").isTrue();
         assertThat(jdbc.queryForObject("SELECT status FROM referrals WHERE referred_id = ?", String.class, joined.getId())).isEqualTo("JOINED");
     }
 

@@ -1,6 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { ListVideo, Smartphone, Upload as UploadIcon } from 'lucide-react';
+import { CircleCheck, ListVideo, Loader2, Smartphone, TriangleAlert, Upload as UploadIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { destinationUrl, readKey } from '@/components/AddDestination';
@@ -14,7 +14,7 @@ import { HELP, YOUTUBE_STUDIO_LIVE } from '@/lib/help';
 import { fitNotes, frameRateNote, suggestedShape, VERTICAL_ON_YOUTUBE, type Orientation } from '@/lib/shape';
 import { browserTimeZone } from '@/lib/format';
 import { keys, useInvalidate, useMe, useStream } from '@/lib/queries';
-import type { Destination, MediaItem, StreamView } from '@/lib/types';
+import type { Destination, LiveState, MediaItem, StreamView } from '@/lib/types';
 import { useUploads } from '@/lib/uploads-context';
 import { PhoneTab } from './stream/PhoneTab';
 
@@ -304,19 +304,86 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
             {me?.plan.id === 'FREE' && ' The Free plan includes 10 hours a month at 720p.'}
           </p>
           <TestNote state={tests[added.id]} platform="YOUTUBE" className="mt-3" />
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <GoLiveButton stream={s} />
-            <Button variant="ghost" onClick={() => onFinish(`/studio/streams/${s.id}`)}>
-              Not yet, open the stream
-            </Button>
-          </div>
-          {s.live.state !== 'DRAFT' && s.live.state !== 'ENDED' && (
-            <Button className="mt-4" onClick={() => onFinish(`/studio/streams/${s.id}`)}>
-              Watch it start
-            </Button>
+          {firstLiveStep(s.live).step === 'off' ? (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <GoLiveButton stream={s} />
+              <Button variant="ghost" onClick={() => onFinish(`/studio/streams/${s.id}`)}>
+                Not yet, open the stream
+              </Button>
+            </div>
+          ) : (
+            <FirstLiveProof live={s.live} onFinish={onFinish} streamId={s.id} />
           )}
         </>
       )}
     </Panel>
+  );
+}
+
+/**
+ * ON-8: where the first go-live is, in the setup's terms. "on" once YouTube has been receiving the
+ * stream steadily (RE-8 "On YouTube"); "problem" with the reason in plain words while it isn't.
+ */
+export function firstLiveStep(live: LiveState): { step: 'off' | 'waiting' | 'on' | 'problem' | 'stopped'; message?: string | null } {
+  if (live.state === 'DRAFT') return { step: 'off' };
+  if (live.state === 'ENDED' || live.state === 'ERROR') return live.endReason ? { step: 'stopped', message: live.endReason } : { step: 'off' };
+  const destinations = live.health?.destinations ?? [];
+  const youtube = destinations.find((d) => d.platform === 'YouTube') ?? destinations[0];
+  if (youtube?.reach === 'ON') return { step: 'on' };
+  if (youtube?.reach === 'NOT_REACHING') return { step: 'problem', message: youtube.message };
+  return { step: 'waiting' };
+}
+
+/** ON-8: after Go live, the setup waits for proof that YouTube receives the stream, then says so. */
+export function FirstLiveProof({ live, streamId, onFinish }: { live: LiveState; streamId: number; onFinish: (to: string) => void }) {
+  const { step, message } = firstLiveStep(live);
+  const open = () => onFinish(`/studio/streams/${streamId}`);
+  if (step === 'on') {
+    return (
+      <div role="status" className="mt-6 rounded-md border border-ok/40 bg-ok/10 p-4">
+        <p className="flex items-center gap-2 text-md font-semibold">
+          <CircleCheck className="h-5 w-5 shrink-0 text-ok" aria-hidden /> You're live on YouTube
+        </p>
+        <p className="mt-1 text-muted">YouTube is receiving your stream. It can take a minute before viewers see it. You're all set.</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="primary" onClick={open}>
+            Open my stream
+          </Button>
+          <a href={YOUTUBE_STUDIO_LIVE} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+            See it in YouTube Studio
+          </a>
+        </div>
+      </div>
+    );
+  }
+  if (step === 'problem' || step === 'stopped') {
+    return (
+      <div role="alert" className="mt-6 rounded-md border border-warn/40 bg-warn/10 p-4">
+        <p className="flex items-center gap-2 text-md font-semibold">
+          <TriangleAlert className="h-5 w-5 shrink-0 text-warn" aria-hidden /> {step === 'stopped' ? 'The stream stopped' : "YouTube isn't receiving it yet"}
+        </p>
+        {message && <p className="mt-1 break-words">{message}</p>}
+        <p className="mt-1 text-muted">{step === 'stopped' ? 'Fix the problem, then go live again.' : "We keep trying. Most often the stream key is wrong or YouTube's live dashboard isn't open yet."}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="primary" onClick={() => onFinish(`/studio/streams/${streamId}/destinations`)}>
+            Check the stream key
+          </Button>
+          <Button variant="ghost" onClick={open}>
+            Open my stream
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div role="status" className="mt-6 rounded-md border border-line p-4">
+      <p className="flex items-center gap-2 font-medium">
+        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-accent" aria-hidden /> Checking that YouTube is receiving your stream
+      </p>
+      <p className="mt-1 text-sm text-muted">This usually takes under a minute. You can leave this page; the stream keeps going.</p>
+      <Button className="mt-4" variant="ghost" onClick={open}>
+        Open my stream
+      </Button>
+    </div>
   );
 }

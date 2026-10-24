@@ -254,47 +254,6 @@ public class User {
         }
     }
 
-    // Delegate methods for backward compatibility
-    @JsonIgnore
-    public boolean isAutoReplyEnabled() {
-        return settings != null && settings.isAutoReplyEnabled();
-    }
-
-    public void setAutoReplyEnabled(boolean autoReplyEnabled) {
-        if (settings == null) settings = new UserSettings(this);
-        settings.setAutoReplyEnabled(autoReplyEnabled);
-    }
-
-    @JsonIgnore
-    public boolean isDeleteNegativeComments() {
-        return settings != null && settings.isDeleteNegativeComments();
-    }
-
-    public void setDeleteNegativeComments(boolean deleteNegativeComments) {
-        if (settings == null) settings = new UserSettings(this);
-        settings.setDeleteNegativeComments(deleteNegativeComments);
-    }
-
-    @JsonIgnore
-    public boolean isAutoReplyUnrepliedEnabled() {
-        return settings != null && settings.isAutoReplyUnrepliedEnabled();
-    }
-
-    public void setAutoReplyUnrepliedEnabled(boolean autoReplyUnrepliedEnabled) {
-        if (settings == null) settings = new UserSettings(this);
-        settings.setAutoReplyUnrepliedEnabled(autoReplyUnrepliedEnabled);
-    }
-
-    @JsonIgnore
-    public String getAutoReplyUnrepliedMessage() {
-        return settings != null ? settings.getAutoReplyUnrepliedMessage() : null;
-    }
-
-    public void setAutoReplyUnrepliedMessage(String autoReplyUnrepliedMessage) {
-        if (settings == null) settings = new UserSettings(this);
-        settings.setAutoReplyUnrepliedMessage(autoReplyUnrepliedMessage);
-    }
-
     public java.util.List<SocialChannel> getChannels() {
         return channels;
     }

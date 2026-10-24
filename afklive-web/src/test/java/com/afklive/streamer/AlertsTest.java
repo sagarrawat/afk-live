@@ -67,7 +67,7 @@ class AlertsTest extends PostgresIntegrationTest {
     }
 
     private StreamJob liveJob(String status, ZonedDateTime now) {
-        StreamJob j = new StreamJob(owner, "k", null, null, null, true, 0, "Lofi radio", null, null, now.minusMinutes(10), "YouTube", false);
+        StreamJob j = new StreamJob(owner, "k", null, null, null, true, 0, "Lofi radio", null, null, now.minusMinutes(10), "YouTube");
         j.setStatus(status);
         j.setDesiredState(StreamStates.RUN);
         j.setWorkerId("w1");

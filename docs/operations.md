@@ -36,6 +36,13 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 - A worker that can't reach the database for 30 s stops its streams, before anyone else may take them over (45 s).
 - A stop asked for while the stream's worker is gone is completed by the web app.
 - Billing starts when the stream is first on air, not while its files download.
+- **First live confirmed (ON-8).** Every 30 s each web instance runs one conditional update that sets
+  `users.first_live_at` for accounts that have none yet and whose stream a platform received: the earliest
+  `REACHED` timeline line of any of their runs, or now for a destination `ON` in a live run (in case that line
+  was lost). `WHERE first_live_at IS NULL ... RETURNING` means one instance claims each account. It's the
+  activation metric (the admin funnel's first-live step) and triggers the invite credit. `app.first-live.auto=false`
+  turns the sweep off (tests). Accounts that reached a platform before this shipped are backfilled by the first
+  sweep with their historical time, and their invites are credited then.
 - **"Live" means the platform is receiving (RE-8).** The worker counts the bytes each relay actually takes from
   the encoder (a relay that can't open its output exits; one whose connection hangs stops reading). A destination
   is `ON` after 10 s of steady sending and `NOT_REACHING` after two 10 s windows without it (one reconnect never
@@ -576,8 +583,13 @@ text; until then a worker draws those characters as boxes, exactly as before.
 ## Referrals (GR-18)
 
 `?ref=CODE` on any GET sets an `afk_ref` cookie (30 days, first invite wins, HttpOnly). Email and
-Google sign-ups read it and add a `referrals` row (one per new account, never self). Nothing is paid
-yet: the free month for both sides waits for RE-8's confirmed first live (see `ReferralService`).
+Google sign-ups read it and add a `referrals` row (one per new account, never self). When the invited
+creator's first live is confirmed (ON-8, below), the same sweep credits the referral: a conditional update
+moves it `JOINED` → `CREDITED` (sets `confirmed_live_at`, `credited_at`) and, in the same transaction,
+`BillingService.addFreeDays` gives each side 30 days (a paid plan's period is extended, like an admin
+extension; on Free the days go to `users.bonus_days` and join the next paid period, shown on its invoice
+line) and an `admin_actions` row (`REFERRAL_CREDIT`, by `system`) records both outcomes. Both creators
+get an in-app notice after it commits. A referral whose inviter or invited account is disabled waits.
 `users.credit_line` (off by default) appends "Streamed 24/7 with AFK Live: <link>" only to descriptions
 AFK Live already writes (the classic start flow's broadcast update); never to overlays.
 
@@ -590,11 +602,31 @@ uploaded before this are measured by the media sweeper, two a minute, videos in 
 
 The stream check on a stream's Overview (`/api/streams/{id}/check`) reads only what AFK Live has: the
 playlist, overlays, the measured still-picture flag, the YouTube title and thumbnail the creator typed
-in (`streams.youtube_title`, `thumbnail_media_id`) and replies AFK Live posted (`engagement_activity`).
+in (`streams.youtube_title`, `thumbnail_media_id`) and replies AFK Live posted in the past
+(`engagement_activity`, history only: nothing writes to it since automatic replies were removed, see below).
 It never blocks going live and never calls YouTube. Thumbnail contrast is measured once per image per
 web instance (in memory) from the library thumbnail. Once a week per stream that was live in the past
 seven days, one web instance (conditional update on `streams.check_weekly_at`) sends an in-app notice
 listing open flags; no email or push. `app.check.weekly-auto=false` turns the hourly pass off (tests).
+
+## Automatic replies removed (AI-3)
+
+AFK Live never posts in YouTube chat, replies to comments or deletes comments by itself. YouTube's spam
+policy and API Developer Policies (III.I.2, III.E.3.d) forbid automated chat and comments without the
+creator's consent for each action. `EngagementService` (an AI reply to every live chat message, and
+comment replies and deletes by sentiment) is gone, with the `/api/engagement/settings` endpoints and the
+per-run auto-reply flag. What remains: reading comments, reply drafts (`/api/engagement/suggest`, posts
+nothing), a reply the creator writes and sends (`POST /api/comments/{id}/reply`), the history of replies
+posted before (`/api/engagement/activity`, `/revert`) and the GR-9 repeated-reply flag, which now only
+explains (no fix). JobRunr ids `live-engagement-job` and `general-engagement-job` are still deleted at
+startup.
+
+Expand-then-contract: the release before this one maps these columns, so they stay for now and nothing
+writes them. **Contract step** (a later release, once no instance runs the previous version): one
+changeset that drops `stream_jobs.auto_reply_enabled`, `stream_jobs.last_page_token`,
+`stream_jobs.live_chat_id`, and `user_settings.auto_reply_enabled`,
+`delete_negative_comments`, `auto_reply_unreplied_enabled`, `auto_reply_unreplied_message`. Keep
+`engagement_activity` while GR-9 or the activity history reads it; `processed_comments` can go then too.
 
 ## Push alerts (NT-1, MB-2)
 

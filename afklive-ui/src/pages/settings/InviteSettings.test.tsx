@@ -43,6 +43,13 @@ describe('Invite creators (GR-18)', () => {
     expect(screen.getByText(/added once we can confirm the creator's first live reached YouTube/)).toBeInTheDocument();
   });
 
+  it('once payouts run, says how the free month is given and shows saved days', async () => {
+    summary = { ...summary, payoutsLive: true, credited: 1, freeDaysSaved: 30 };
+    show();
+    expect(await screen.findByText(/On Free, it's saved and added when you start a paid plan\. You have 30 free days saved\./)).toBeInTheDocument();
+    expect(screen.queryByText(/coming soon/)).not.toBeInTheDocument();
+  });
+
   it('keeps the credit line off until the creator turns it on, and says it is never on screen', async () => {
     show();
     const toggle = await screen.findByRole('switch', { name: 'Add the credit line' });

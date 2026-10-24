@@ -102,12 +102,11 @@ public class StreamService {
             String description,
             String privacy,
             boolean overlayEnabled,
-            String overlayTemplate,
-            boolean autoReplyEnabled
+            String overlayTemplate
     ) throws IOException {
         return startStream(username, streamKeys, videoKey, musicName, musicVolume, loopCount, watermarkFile,
                 muteVideoAudio, streamMode, streamQuality, title, description, privacy, overlayEnabled,
-                overlayTemplate, autoReplyEnabled, null);
+                overlayTemplate, null);
     }
 
     public ApiResponse<StreamResponse> startStream(
@@ -126,7 +125,6 @@ public class StreamService {
             String privacy,
             boolean overlayEnabled,
             String overlayTemplate,
-            boolean autoReplyEnabled,
             Long scheduledStreamId
     ) throws IOException {
         if (streamMode == null || streamMode.isBlank()) {
@@ -224,8 +222,7 @@ public class StreamService {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
         StreamJob job = new StreamJob(user, validKeys.get(0), videoKey, musicName, musicVolume, true, 0,
                 title, description, privacy, now,
-                destinations.stream().map(StreamSpec.Destination::name).collect(Collectors.joining(", ")),
-                autoReplyEnabled);
+                destinations.stream().map(StreamSpec.Destination::name).collect(Collectors.joining(", ")));
         job.setLastBillingTime(now);
         job.setStatus(StreamStates.STARTING);
         job.setDesiredState(StreamStates.RUN);

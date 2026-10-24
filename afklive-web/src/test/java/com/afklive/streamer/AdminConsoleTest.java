@@ -86,7 +86,7 @@ class AdminConsoleTest extends PostgresIntegrationTest {
 
     private StreamJob liveJob(User u, Long streamId) {
         StreamJob job = new StreamJob(u, "key", "video.mp4", null, null, true, 0,
-                "Run " + tag, "d", "private", ZonedDateTime.now(ZoneOffset.UTC).minusHours(1), "YouTube", false);
+                "Run " + tag, "d", "private", ZonedDateTime.now(ZoneOffset.UTC).minusHours(1), "YouTube");
         job.setStatus("LIVE");
         job.setDesiredState("RUN");
         job.setWorkerId("con-worker");

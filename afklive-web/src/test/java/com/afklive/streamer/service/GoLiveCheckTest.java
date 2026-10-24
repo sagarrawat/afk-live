@@ -63,7 +63,9 @@ class GoLiveCheckTest {
         Flag f = GoLiveCheck.run(three).getFirst();
         assertThat(f.id()).isEqualTo(GoLiveCheck.REPEATED_MESSAGE);
         assertThat(f.detail()).contains("“Thanks for watching!” 3 times");
-        assertThat(f.fix()).isEqualTo(GoLiveCheck.Fix.STOP_REPLIES);
+        // AFK Live can't post replies by itself any more (AI-3): the flag explains, there is nothing to switch off.
+        assertThat(f.fix()).isEqualTo(GoLiveCheck.Fix.NONE);
+        assertThat(f.detail()).contains("gone for good").doesNotContain("Stop automatic replies");
     }
 
     @Test

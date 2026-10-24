@@ -152,6 +152,30 @@ class BillingServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void freeDaysAreSavedOnFreeAndJoinTheNextPaidPeriodOnce() {
+        User u = account();
+        BillingService.FreeDays saved = billing.addFreeDays(u.getId(), 30);
+        assertThat(saved.extended()).isFalse();
+        assertThat(saved.saved()).isEqualTo(30);
+        assertThat(users.findById(u.getId()).orElseThrow().getPlanType()).as("no plan given away").isEqualTo(PlanType.FREE);
+
+        ZonedDateTime before = now();
+        PaymentAudit paid = pay(u, "ESSENTIALS", "MONTHLY");
+        Subscription s = sub(u);
+        assertThat(s.getCurrentPeriodEnd()).isAfterOrEqualTo(before.plusMonths(1).plusDays(30)).isBefore(now().plusMonths(1).plusDays(31));
+        assertThat(users.bonusDays(u.getId())).isZero();
+        assertThat(invoices.findByPaymentOrderId(paid.getTransactionId()).orElseThrow().getTotal()).as("price unchanged").isEqualTo(49_900);
+
+        // On a paid plan, free days extend the current period instead.
+        ZonedDateTime end = sub(u).getCurrentPeriodEnd();
+        BillingService.FreeDays extended = billing.addFreeDays(u.getId(), 30);
+        assertThat(extended.extended()).isTrue();
+        assertThat(sub(u).getCurrentPeriodEnd()).isEqualTo(end.plusDays(30));
+        assertThat(users.findById(u.getId()).orElseThrow().getPlanExpiration()).isNotNull();
+        assertThat(users.bonusDays(u.getId())).isZero();
+    }
+
+    @Test
     void applyingTheSamePaymentTwiceIssuesOneInvoice() {
         User u = account();
         PaymentAudit paid = pay(u, "ESSENTIALS", "MONTHLY");
