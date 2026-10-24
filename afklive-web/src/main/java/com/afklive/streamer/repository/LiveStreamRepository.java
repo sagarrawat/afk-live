@@ -56,10 +56,10 @@ public interface LiveStreamRepository extends JpaRepository<LiveStream, Long> {
             nativeQuery = true)
     int claimWeeklyCheck(@Param("id") Long id, @Param("now") java.time.ZonedDateTime now, @Param("before") java.time.ZonedDateTime before);
 
-    /** GR-9 fix: stops automatic live-chat replies on the user's running streams (a targeted update; nothing else changes). */
+    /** GR-9 fix: stops automatic live-chat replies on the user's runs (a targeted update; nothing else on a run changes). */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
-    @Query("UPDATE StreamJob j SET j.autoReplyEnabled = false WHERE j.user.id = :userId AND j.isLive = true AND j.autoReplyEnabled = true")
+    @Query("UPDATE StreamJob j SET j.autoReplyEnabled = false WHERE j.user.id = :userId AND j.autoReplyEnabled = true")
     int stopLiveAutoReplies(@Param("userId") Long userId);
 
     /** Starts the next run from the top (the playlist finished). */

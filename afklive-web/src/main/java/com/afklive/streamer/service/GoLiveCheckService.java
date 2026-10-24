@@ -213,7 +213,7 @@ public class GoLiveCheckService {
         u.setAutoReplyEnabled(false);
         users.save(u);
         int jobs = streams.stopLiveAutoReplies(u.getId());
-        log.info("Go-live check: automatic replies stopped for user {} ({} running stream(s))", u.getId(), jobs);
+        log.info("Go-live check: automatic replies stopped for user {} ({} run(s))", u.getId(), jobs);
     }
 
     // ------------------------------------------------------------------ helpers
