@@ -92,7 +92,7 @@ class StatusPageTest extends PostgresIntegrationTest {
 
     private StreamJob liveJob(String worker) {
         StreamJob job = new StreamJob(customer, "key", "video.mp4", null, null, true, 0,
-                "Secret Lofi Channel", "d", "private", now().minusHours(1), "YouTube", false);
+                "Secret Lofi Channel", "d", "private", now().minusHours(1), "YouTube");
         job.setStatus("LIVE");
         job.setDesiredState("RUN");
         job.setWorkerId(worker);

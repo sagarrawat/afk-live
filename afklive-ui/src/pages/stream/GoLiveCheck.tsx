@@ -11,7 +11,8 @@ import { keys } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 
 /** GR-9: what the check endpoint returns (GoLiveCheckService.CheckView). */
-export type CheckFix = 'ADD_OVERLAYS' | 'USE_TITLE' | 'STOP_REPLIES' | 'OPEN_PLAYLIST' | 'EDIT_TITLE' | 'EDIT_THUMBNAIL';
+/** NONE: nothing to change here, the flag only explains (AFK Live never replies in chat by itself, AI-3). */
+export type CheckFix = 'ADD_OVERLAYS' | 'USE_TITLE' | 'OPEN_PLAYLIST' | 'EDIT_TITLE' | 'EDIT_THUMBNAIL' | 'NONE';
 
 export interface CheckFlag {
   id: string;
@@ -44,7 +45,7 @@ export function checkHelp(path: string | null | undefined): HelpArticle | null {
 }
 
 /** Fixes that change something here in one tap; the rest open the place to fix it. */
-const SERVER_FIXES: CheckFix[] = ['ADD_OVERLAYS', 'USE_TITLE', 'STOP_REPLIES'];
+const SERVER_FIXES: CheckFix[] = ['ADD_OVERLAYS', 'USE_TITLE'];
 
 /**
  * GR-9: the stream check, on the stream's page. It flags only what we can see for certain, each with
@@ -75,8 +76,7 @@ export function GoLiveCheckCard({ stream: s }: { stream: StreamView }) {
 
   const fix = (f: CheckFlag) => {
     if (SERVER_FIXES.includes(f.fix)) {
-      const done =
-        f.fix === 'ADD_OVERLAYS' ? 'Added a clock and now playing.' : f.fix === 'USE_TITLE' ? 'Title updated. Copy it into YouTube Studio.' : 'Automatic replies are off.';
+      const done = f.fix === 'ADD_OVERLAYS' ? 'Added a clock and now playing.' : 'Title updated. Copy it into YouTube Studio.';
       return apply(() => post<CheckView>(`/api/streams/${s.id}/check/${f.id}/fix`), done);
     }
     setFocus(f.fix === 'EDIT_THUMBNAIL' ? 'thumbnail' : 'title');
@@ -110,7 +110,7 @@ export function GoLiveCheckCard({ stream: s }: { stream: StreamView }) {
               stream={s}
               busy={busy}
               onFix={() => fix(f)}
-              onKeep={() => apply(() => post<CheckView>(`/api/streams/${s.id}/check/${f.id}/dismiss`), 'Kept as it is.')}
+              onKeep={() => apply(() => post<CheckView>(`/api/streams/${s.id}/check/${f.id}/dismiss`), f.fix === 'NONE' ? undefined : 'Kept as it is.')}
             />
           ))}
         </ul>
@@ -178,7 +178,7 @@ function FlagRow({ flag: f, stream: s, busy, onFix, onKeep }: { flag: CheckFlag;
       <p className="font-medium">{f.title}</p>
       <p className="mt-0.5 text-sm text-muted">{f.detail}</p>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-        {f.fix === 'OPEN_PLAYLIST' ? (
+        {f.fix === 'NONE' ? null : f.fix === 'OPEN_PLAYLIST' ? (
           <Link to={`/studio/streams/${s.id}/playlist`} className={buttonClass('secondary', 'sm')}>
             {f.fixLabel}
           </Link>
@@ -188,8 +188,9 @@ function FlagRow({ flag: f, stream: s, busy, onFix, onKeep }: { flag: CheckFlag;
             {f.fixLabel}
           </Button>
         )}
-        <Button size="sm" variant="ghost" disabled={busy} onClick={onKeep}>
-          Keep as it is
+        {/* An explain-only flag: "Got it" files it with the kept ones. */}
+        <Button size="sm" variant={f.fix === 'NONE' ? 'secondary' : 'ghost'} disabled={busy} onClick={onKeep}>
+          {f.fix === 'NONE' ? f.fixLabel || 'Got it' : 'Keep as it is'}
         </Button>
         {help && (
           <HelpLink to={help} className="text-sm">

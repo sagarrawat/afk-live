@@ -9,7 +9,6 @@ import com.afklive.streamer.repository.EngagementActivityRepository;
 import com.afklive.streamer.repository.LiveStreamRepository;
 import com.afklive.streamer.repository.MediaAssetRepository;
 import com.afklive.streamer.repository.StreamItemRepository;
-import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.streaming.StudioSpec;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
@@ -50,20 +49,18 @@ public class GoLiveCheckService {
     private final StreamItemRepository items;
     private final MediaAssetRepository media;
     private final EngagementActivityRepository engagement;
-    private final UserRepository users;
     private final FileStorageService storage;
     /** Thumbnail contrast by media id: a library file never changes, so each is measured once per instance. */
     private final Map<Long, Double> contrastCache = new ConcurrentHashMap<>();
 
     public GoLiveCheckService(LiveStreamService streamService, LiveStreamRepository streams, StreamItemRepository items,
-                              MediaAssetRepository media, EngagementActivityRepository engagement, UserRepository users,
+                              MediaAssetRepository media, EngagementActivityRepository engagement,
                               FileStorageService storage) {
         this.streamService = streamService;
         this.streams = streams;
         this.items = items;
         this.media = media;
         this.engagement = engagement;
-        this.users = users;
         this.storage = storage;
     }
 
@@ -186,7 +183,9 @@ public class GoLiveCheckService {
                     streams.save(s);
                 }
             }
-            case GoLiveCheck.REPEATED_MESSAGE -> stopReplies(s.getUser());
+            case GoLiveCheck.REPEATED_MESSAGE -> {
+                // A no-op for a page loaded before this release: automatic replies no longer exist (AI-3).
+            }
             default -> throw new IllegalArgumentException("This one is fixed from its own screen.");
         }
         return view(streamService.get(email, id));
@@ -206,14 +205,6 @@ public class GoLiveCheckService {
                 music ? "Now playing: {track}" : "Now playing: {title}", null, null, "#FFFFFF", "#99000000", 1, null, null, 0, null));
         // Through the stream service: validated, saved, and applied to a running stream between frames.
         streamService.setOverlays(email, s.getId(), list);
-    }
-
-    private void stopReplies(User user) {
-        User u = users.findById(user.getId()).orElseThrow();
-        u.setAutoReplyEnabled(false);
-        users.save(u);
-        int jobs = streams.stopLiveAutoReplies(u.getId());
-        log.info("Go-live check: automatic replies stopped for user {} ({} run(s))", u.getId(), jobs);
     }
 
     // ------------------------------------------------------------------ helpers

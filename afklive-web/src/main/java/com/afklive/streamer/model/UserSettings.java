@@ -19,12 +19,9 @@ public class UserSettings {
     @JsonIgnore
     private User user;
 
-    private boolean autoReplyEnabled = false;
-    private boolean deleteNegativeComments = false;
-    private boolean autoReplyUnrepliedEnabled = false;
-
-    @Column(columnDefinition = "TEXT")
-    private String autoReplyUnrepliedMessage;
+    // The automatic-reply settings (auto_reply_enabled, delete_negative_comments,
+    // auto_reply_unreplied_enabled, auto_reply_unreplied_message) are no longer mapped: AFK Live never
+    // posts or deletes on YouTube by itself (AI-3). The columns are dropped in a later release.
 
     public UserSettings(User user) {
         this.user = user;

@@ -166,16 +166,13 @@ class GoLiveCheckServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void repeatedRepliesAreFlaggedAndTheFixStopsAutomaticReplies() {
+    void repliesPostedBeforeTheRemovalStillShowAndTheOldFixChangesNothing() {
         String email = newUser();
         LiveStream s = stream(email, 3, false);
         User u = users.findByEmail(email).orElseThrow();
-        u.setAutoReplyEnabled(true);
-        users.save(u);
         StreamJob job = new StreamJob(u, "k", null, null, null, true, 0, "Lofi radio", null, null,
-                ZonedDateTime.now(ZoneId.of("UTC")), "YouTube", false);
+                ZonedDateTime.now(ZoneId.of("UTC")), "YouTube");
         job.setStreamId(s.getId());
-        job.setAutoReplyEnabled(true);
         job.setDesiredState("STOP"); // not for the worker tests sharing this database
         job = jobs.save(job);
         for (int i = 0; i < 3; i++) {
@@ -188,11 +185,14 @@ class GoLiveCheckServiceTest extends PostgresIntegrationTest {
         }
         assertThat(open(checks.check(email, s.getId()))).containsExactly(GoLiveCheck.REPEATED_MESSAGE);
 
-        checks.fix(email, s.getId(), GoLiveCheck.REPEATED_MESSAGE);
-        assertThat(users.findByEmail(email).orElseThrow().isAutoReplyEnabled()).isFalse();
+        // A page loaded before this release may still send the old "stop automatic replies" fix: a no-op.
+        CheckView v = checks.fix(email, s.getId(), GoLiveCheck.REPEATED_MESSAGE);
+        assertThat(v.flags()).anySatisfy(f -> {
+            assertThat(f.id()).isEqualTo(GoLiveCheck.REPEATED_MESSAGE);
+            assertThat(f.fix()).isEqualTo("NONE");
+        });
         StreamJob after = jobs.findById(job.getId()).orElseThrow();
-        assertThat(after.isAutoReplyEnabled()).isFalse();
-        assertThat(after.getDesiredState()).as("nothing else on the run changes").isEqualTo("STOP");
+        assertThat(after.getDesiredState()).as("nothing on the run changes").isEqualTo("STOP");
         jobs.delete(after);
     }
 
@@ -205,7 +205,7 @@ class GoLiveCheckServiceTest extends PostgresIntegrationTest {
         User u = users.findByEmail(email).orElseThrow();
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
         for (LiveStream s : List.of(flagged, fine)) {
-            StreamJob j = new StreamJob(u, "k", null, null, null, false, 0, s.getName(), null, null, now.minusDays(2), "YouTube", false);
+            StreamJob j = new StreamJob(u, "k", null, null, null, false, 0, s.getName(), null, null, now.minusDays(2), "YouTube");
             j.setStreamId(s.getId());
             j.setEndTime(now.minusDays(1));
             j.setStatus("ENDED");

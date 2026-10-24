@@ -271,7 +271,7 @@ class SupportOpsTest extends PostgresIntegrationTest {
     private StreamJob run(boolean live, List<StreamSpec.Destination> destinations, StudioSpec studio) {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
         StreamSpec spec = StreamSpec.studio(customer.getEmail(), null, studio, destinations);
-        StreamJob job = new StreamJob(customer, "k", "video", null, null, live, 0, "My stream", null, null, now, "YouTube", false);
+        StreamJob job = new StreamJob(customer, "k", "video", null, null, live, 0, "My stream", null, null, now, "YouTube");
         job.setStatus(live ? StreamStates.LIVE : StreamStates.ENDED);
         job.setDesiredState(live ? StreamStates.RUN : StreamStates.STOP);
         job.setSpec(spec.toJson());

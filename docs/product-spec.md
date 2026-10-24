@@ -12,7 +12,7 @@ Oct 22, 2026 · @sagar
 
 - **Live in 5 minutes.** A guided first run (connect YouTube, upload, press Go Live) with no stream keys, encoders or settings to understand. Most 24/7 tools assume the user already knows RTMP.
 - **India-first pricing, global-ready.** INR prices, UPI and Indian cards at checkout, GST invoices, and a lower entry price than USD-only competitors. USD pricing and card checkout for everyone else.
-- **AI that runs the channel while you sleep.** Titles, descriptions and tracklists written for each broadcast; chat auto-replies and moderation within rules the creator sets; a weekly report on what worked.
+- **AI that prepares the channel while you sleep.** Titles, descriptions and tracklists drafted for each broadcast for the creator to approve; moderation within rules the creator sets; a weekly report on what worked. AI never speaks for the creator: it doesn't post chat messages, replies or comments by itself (YouTube's spam policy and API Developer Policies III.I.2 forbid automated chat and comments).
 - **Reliability you can see.** A health panel, an uptime record and instant alerts, so creators trust us with a channel that earns them money.
 
 **What we are not building (for now):** a browser studio with live guests, a full video editor, or a general social-media scheduler. Each pulls focus away from 24/7 playout.
@@ -266,7 +266,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | --- | --- | --- | --- |
 | AI-1 | As Arjun, I want titles, descriptions and tags written from my video's name and a short brief so that every broadcast is search-friendly | Generate 3 options; edit before use; language selectable (English, Hindi first) | P1 |
 | AI-2 | As a creator, I want thumbnail ideas generated from a frame of my video so that I don't need a designer | Pick a frame; add generated text; export at YouTube's size | P2 |
-| AI-3 | As a creator, I want opt-in chat auto-replies within rules I set so that viewers get answers while I sleep | Off by default; tone, topics and frequency limits; every reply logged and reviewable | P1 |
+| AI-3 | As a creator who is live from my phone, I want suggested replies to a chat message so that I can answer viewers quickly | **No automatic replies**: AFK Live never posts a chat message, reply or comment by itself, on any stream. Suggestions are drafts for one message at a time; the creator edits and taps send for each one (YouTube API Developer Policies III.E.3.d: express consent before each action). Every sent reply is logged. Future work: staged behind GR-3 (connecting a channel) and EX-3 (chat quota; posting costs 20 units a message) | P3 |
 | AI-4 | As a creator, I want spam and abuse in chat hidden by rules I approve so that the chat stays clean | Off by default; hides (never deletes) unless the creator enables deletion; review queue | P2 |
 | AI-5 | As a creator, I want a weekly AI summary of my streams so that I know what to improve | Email and in-app: hours live, peak viewers, top items, suggestions | P2 |
 

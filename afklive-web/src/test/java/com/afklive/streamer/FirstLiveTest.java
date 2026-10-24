@@ -75,7 +75,7 @@ class FirstLiveTest extends PostgresIntegrationTest {
     }
 
     private StreamJob run(User u, boolean live) {
-        StreamJob job = jobs.save(new StreamJob(u, "key", "video.mp4", null, null, live, 0, "t", "d", "private", now(), "YouTube", false));
+        StreamJob job = jobs.save(new StreamJob(u, "key", "video.mp4", null, null, live, 0, "t", "d", "private", now(), "YouTube"));
         if (live) {
             liveJobs.add(job.getId());
         }

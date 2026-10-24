@@ -36,8 +36,11 @@ public final class GoLiveCheck {
     public static final String HELP_TITLES = "/help/titles-and-thumbnails";
     public static final String HELP_MUSIC = "/help/music-on-your-live";
 
-    /** What the one-tap fix does; the app maps each to a button or a link. */
-    public enum Fix { ADD_OVERLAYS, USE_TITLE, STOP_REPLIES, OPEN_PLAYLIST, EDIT_TITLE, EDIT_THUMBNAIL }
+    /**
+     * What the one-tap fix does; the app maps each to a button or a link. NONE: nothing left to change in
+     * AFK Live, the flag only explains (the app shows "Got it" instead of a fix).
+     */
+    public enum Fix { ADD_OVERLAYS, USE_TITLE, OPEN_PLAYLIST, EDIT_TITLE, EDIT_THUMBNAIL, NONE }
 
     /** POLICY: the inauthentic-content or spam patterns YouTube names. FOUND: being found in search and on phones. */
     public enum Kind { POLICY, FOUND }
@@ -94,10 +97,13 @@ public final class GoLiveCheck {
                     Fix.ADD_OVERLAYS, "Add a clock and now playing", null, HELP_LOOPS));
         }
         if (in.repeatedReply() != null && in.repeatedReply().times() >= 3) {
+            // History only: AFK Live no longer posts replies by itself (AI-3), so there is nothing to switch off.
             flags.add(new Flag(REPEATED_MESSAGE, Kind.POLICY, "The same reply was posted " + in.repeatedReply().times() + " times",
-                    "AFK Live's automatic replies posted “" + shorten(in.repeatedReply().text(), 80) + "” "
-                            + in.repeatedReply().times() + " times this week. YouTube counts repeated identical messages as spam.",
-                    Fix.STOP_REPLIES, "Stop automatic replies", null, HELP_LOOPS));
+                    "AFK Live's old automatic replies posted “" + shorten(in.repeatedReply().text(), 80) + "” "
+                            + in.repeatedReply().times() + " times this week. YouTube counts repeated identical messages as "
+                            + "spam. Automatic replies are gone for good, so this won't happen again. You can delete those "
+                            + "replies in YouTube Studio.",
+                    Fix.NONE, "Got it", null, HELP_LOOPS));
         }
         String title = in.youtubeTitle() == null ? "" : in.youtubeTitle().strip();
         if (!title.isEmpty()) {

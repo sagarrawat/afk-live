@@ -184,7 +184,7 @@ class WorkerHandoverIntegrationTest extends PostgresIntegrationTest {
 
     private StreamJob job(User owner, String spec, int destinationCount) {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
-        StreamJob job = new StreamJob(owner, "k", "video", null, null, true, 0, null, null, null, now, "File", false);
+        StreamJob job = new StreamJob(owner, "k", "video", null, null, true, 0, null, null, null, now, "File");
         job.setLastBillingTime(now);
         job.setStatus(StreamStates.STARTING);
         job.setDesiredState(StreamStates.RUN);

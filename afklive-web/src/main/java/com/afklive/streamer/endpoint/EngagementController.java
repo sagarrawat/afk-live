@@ -18,6 +18,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Comments on the creator's YouTube channel, read-only, plus the history of replies AFK Live posted in
+ * the past. AFK Live never posts or deletes anything on YouTube by itself (AI-3; YouTube's spam policy
+ * and API Developer Policies III.I.2 / III.E.3.d): the automatic reply and auto-delete settings are gone.
+ * {@code /suggest} only drafts text; posting stays a separate action the creator takes per comment
+ * ({@code POST /api/comments/{id}/reply}). {@code /revert} lets a creator delete a reply AFK Live posted earlier.
+ */
 @RestController
 @RequestMapping("/api/engagement")
 @RequiredArgsConstructor
@@ -70,44 +77,6 @@ public class EngagementController {
     public ResponseEntity<?> getReplySuggestions(@RequestParam String text, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(Map.of("suggestions", aiService.generateReplySuggestions(text)));
-    }
-
-    @GetMapping("/settings")
-    public ResponseEntity<?> getSettings(Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).build();
-        User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
-
-        // Use a generic Map to allow null values for strings if needed, though Map.of requires non-nulls.
-        // Using a mutable map or checking nulls is safer.
-        java.util.Map<String, Object> response = new java.util.HashMap<>();
-        response.put("autoReplyEnabled", user.isAutoReplyEnabled());
-        response.put("deleteNegativeComments", user.isDeleteNegativeComments());
-        response.put("autoReplyUnrepliedEnabled", user.isAutoReplyUnrepliedEnabled());
-        response.put("autoReplyUnrepliedMessage", user.getAutoReplyUnrepliedMessage());
-
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/settings")
-    public ResponseEntity<?> updateSettings(@RequestBody Map<String, Object> payload, Principal principal) {
-        if (principal == null) return ResponseEntity.status(401).build();
-        User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
-
-        if (payload.containsKey("autoReplyEnabled")) {
-            user.setAutoReplyEnabled((Boolean) payload.get("autoReplyEnabled"));
-        }
-        if (payload.containsKey("deleteNegativeComments")) {
-            user.setDeleteNegativeComments((Boolean) payload.get("deleteNegativeComments"));
-        }
-        if (payload.containsKey("autoReplyUnrepliedEnabled")) {
-            user.setAutoReplyUnrepliedEnabled((Boolean) payload.get("autoReplyUnrepliedEnabled"));
-        }
-        if (payload.containsKey("autoReplyUnrepliedMessage")) {
-            user.setAutoReplyUnrepliedMessage((String) payload.get("autoReplyUnrepliedMessage"));
-        }
-
-        userService.saveUser(user);
-        return ResponseEntity.ok(Map.of("success", true));
     }
 
     @GetMapping("/activity")

@@ -244,8 +244,9 @@ ARTICLES = [
                       "name of the song that's playing. Better still, use a short looping animation."),
             ]),
             ("3. The same reply posted again and again", [
-                ("p", "If AFK Live's automatic replies post the same words three or more times in a week, that's the repeated identical "
-                      "message the spam policy names. The fix turns automatic replies off; you can turn them back on later."),
+                ("p", "Posting the same words three or more times in a week is the repeated identical message the spam policy names. "
+                      "AFK Live no longer replies in chat or to comments for you: anything posted on your channel is something you "
+                      "chose to send. If replies AFK Live posted in the past show up in the check, you can delete them in YouTube Studio."),
             ]),
             ("Keeping a flag", [
                 ("p", "Every flag can be kept as it is (for example, a stream that really is one long video). Kept flags stay listed "

@@ -2,8 +2,6 @@ package com.afklive.streamer.repository;
 
 import com.afklive.streamer.model.User;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,10 +19,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByVerificationToken(String token);
     Optional<User> findByResetToken(String token);
 
-    // Used in EngagementService for cron
-    // Fetches users with settings enabled, eager loading channels and settings
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.channels LEFT JOIN FETCH u.settings s WHERE s.autoReplyEnabled = true")
-    Slice<User> findByAutoReplyEnabledTrue(Pageable pageable);
 
 
     @Modifying

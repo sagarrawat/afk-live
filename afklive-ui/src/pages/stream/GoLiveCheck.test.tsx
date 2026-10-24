@@ -138,6 +138,26 @@ describe('Stream check card (GR-9)', () => {
     expect(screen.getByRole('button', { name: 'Check it again' })).toBeInTheDocument();
   });
 
+  it('replies posted before automatic replies were removed only explain, with nothing to switch off (AI-3)', async () => {
+    const repeated: CheckFlag = {
+      ...still,
+      id: 'repeated-message',
+      title: 'The same reply was posted 3 times',
+      detail: 'Automatic replies are gone for good, so this won’t happen again.',
+      fix: 'NONE',
+      fixLabel: 'Got it',
+    };
+    view = { ...base, flags: [repeated], open: 1 };
+    show();
+    const row = (await screen.findByText('The same reply was posted 3 times')).closest('li')!;
+    expect(within(row).queryByRole('button', { name: /automatic replies/i })).toBeNull();
+    expect(within(row).queryByRole('button', { name: 'Keep as it is' })).toBeNull();
+    await userEvent.click(within(row).getByRole('button', { name: 'Got it' }));
+    await waitFor(() => expect(calls).toContainEqual(['POST', '/api/streams/4/check/repeated-message/dismiss', {}]));
+    expect(calls.some(([, url]) => url.endsWith('/fix'))).toBe(false);
+    expect(await screen.findByText('Nothing to fix')).toBeInTheDocument();
+  });
+
   it('a long suggested title wraps instead of running off a phone screen', async () => {
     view = {
       ...base,

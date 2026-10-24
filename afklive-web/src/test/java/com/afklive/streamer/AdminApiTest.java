@@ -76,7 +76,7 @@ class AdminApiTest extends PostgresIntegrationTest {
 
     private StreamJob liveJob(String worker) {
         StreamJob job = new StreamJob(customer, "key", "video.mp4", null, null, true, 0,
-                "Lofi 24/7", "d", "private", ZonedDateTime.now(ZoneId.of("UTC")).minusHours(1), "YouTube", false);
+                "Lofi 24/7", "d", "private", ZonedDateTime.now(ZoneId.of("UTC")).minusHours(1), "YouTube");
         job.setStatus("LIVE");
         job.setDesiredState("RUN");
         job.setWorkerId(worker);
