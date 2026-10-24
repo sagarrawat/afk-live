@@ -338,8 +338,8 @@ class SupportOpsTest extends PostgresIntegrationTest {
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     /**
-     * RE-8 status shows when the worker reports it (reach, reach_reason from feature/truth-of-live), and the view
-     * works without those columns (main today). The positive case reads a table shaped like that branch's, so
+     * RE-8 status shows when the worker reports it (reach, reach_reason), and the view works while it hasn't
+     * (a worker of the previous release) or without those columns. The positive case reads a table shaped like that branch's, so
      * this test never changes the shared schema.
      */
     @Test

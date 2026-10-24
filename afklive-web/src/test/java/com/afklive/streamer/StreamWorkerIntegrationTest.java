@@ -60,6 +60,7 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
     @Autowired com.afklive.streamer.repository.MediaAssetRepository mediaRepository;
     @Autowired com.afklive.streamer.service.PlayoutCopies playoutCopies;
     @Autowired com.afklive.streamer.streaming.MediaCache mediaCache;
+    @Autowired com.afklive.streamer.repository.StreamEventRepository eventRepository;
 
     /** A separate worker process, as far as coordination goes (own id, own first pass). */
     private StreamWorker newWorker(String id) {
@@ -183,7 +184,15 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
         assertThat(live.getFps()).isPositive();
         // The relay writes once it has probed the stream (a few seconds after the encoder starts).
         tickUntil(() -> Files.exists(out) && out.toFile().length() > 0, Duration.ofSeconds(20));
-        tickUntil(() -> "LIVE".equals(jobs.findById(id).orElseThrow().getDestinations().get(0).getStatus()), Duration.ofSeconds(15));
+        // RE-8: LIVE / "on" once the destination has been taking the stream steadily for 10 s.
+        tickUntil(() -> "LIVE".equals(jobs.findById(id).orElseThrow().getDestinations().get(0).getStatus()), Duration.ofSeconds(30));
+        tickUntil(() -> "ON".equals(jobs.findById(id).orElseThrow().getDestinations().get(0).getReach()), Duration.ofSeconds(5));
+        // FO-3: what it sent comes with the heartbeat; RE-9: the timeline says it reached the destination.
+        worker.bytesEvery(Duration.ZERO);
+        tickUntil(() -> jobs.findById(id).orElseThrow().getDestinations().get(0).getBytesSent() > 100_000, Duration.ofSeconds(10));
+        worker.bytesEvery(Duration.ofSeconds(30));
+        assertThat(eventRepository.findAllByJobIdOrderByIdAsc(id)).extracting(com.afklive.streamer.model.StreamEvent::getKind)
+                .contains(com.afklive.streamer.model.StreamEvent.Kinds.REACHED);
 
         // The web app asks to stop; the worker (alive, so not ended directly) carries it out.
         streamService.stopStream(id, owner.getEmail());

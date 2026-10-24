@@ -16,6 +16,7 @@ import type { Uptime,
   StorageView,
   StreamSummary,
   StreamView,
+  TimelineEvent,
   UploadView,
 } from './types';
 import { isOnAir } from '@/components/status';
@@ -26,6 +27,7 @@ export const keys = {
   stream: (id: number) => ['streams', id] as const,
   runs: (id: number) => ['streams', id, 'runs'] as const,
   uptime: (id: number) => ['streams', id, 'uptime'] as const,
+  timeline: (id: number) => ['streams', id, 'timeline'] as const,
   quality: ['quality-options'] as const,
   destinations: ['destinations'] as const,
   media: (q: Record<string, unknown>) => ['media', q] as const,
@@ -55,6 +57,10 @@ export const useStream = (id: number) =>
 export const useUptime = (id: number) => useQuery({ queryKey: keys.uptime(id), queryFn: () => get<Uptime>(`/api/streams/${id}/uptime`), refetchInterval: 60_000 });
 
 export const useRuns = (id: number) => useQuery({ queryKey: keys.runs(id), queryFn: () => get<RunView[]>(`/api/streams/${id}/runs`) });
+
+/** RE-9: destination events of recent runs; refreshed while on air. */
+export const useTimeline = (id: number, live: boolean) =>
+  useQuery({ queryKey: keys.timeline(id), queryFn: () => get<TimelineEvent[]>(`/api/streams/${id}/timeline`), refetchInterval: live ? 15_000 : false });
 
 export const useQualityOptions = () => useQuery({ queryKey: keys.quality, queryFn: () => get<QualityOption[]>('/api/streams/quality-options') });
 

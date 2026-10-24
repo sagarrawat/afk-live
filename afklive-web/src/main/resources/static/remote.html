@@ -22,6 +22,7 @@
   .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .04em; background: var(--line); color: var(--muted); }
   .badge.live { background: var(--live); color: #fff; }
   .badge.starting, .badge.stopping { background: var(--amber); color: #111; }
+  .badge.unreached { background: transparent; border: 1px solid var(--red); color: var(--red); }
   .num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
@@ -92,6 +93,7 @@
 (() => {
   const id = new URLSearchParams(location.search).get('stream');
   const SCENES = [['STARTING', 'Starting soon'], ['LIVE', 'Live'], ['BRB', 'Be right back'], ['ENDING', 'Ending']];
+  const REACH = { ALL: 'LIVE', SOME: 'Live with problems', NONE: 'Not reaching anyone', CONNECTING: 'Connecting' };
   let stream = null;
 
   const $ = s => document.querySelector(s);
@@ -115,7 +117,11 @@
     const state = live.state || 'DRAFT';
     const on = state === 'LIVE' || state === 'STARTING' || state === 'STOPPING';
     $('#name').textContent = stream.name;
-    const b = $('#badge'); b.textContent = state === 'LIVE' ? 'LIVE' : state.charAt(0) + state.slice(1).toLowerCase(); b.className = 'badge ' + state.toLowerCase();
+    // RE-8: "Live" only while a platform is really receiving the stream.
+    const reach = state === 'LIVE' ? live.reach : null;
+    const b = $('#badge');
+    b.textContent = reach ? REACH[reach] : state === 'LIVE' ? 'LIVE' : state.charAt(0) + state.slice(1).toLowerCase();
+    b.className = 'badge ' + (reach === 'NONE' ? 'unreached' : reach === 'CONNECTING' ? 'starting' : state.toLowerCase());
     $('#uptime').textContent = on ? fmt(live.uptimeSeconds) : '';
     $('#golive').disabled = on; $('#stop').disabled = !on || state === 'STOPPING';
 
@@ -157,7 +163,7 @@
     const h = live.health;
     $('#health-dot').className = 'dot ' + (h ? h.overall : '');
     $('#health-text').textContent = !h ? (on ? 'Starting…' : 'Not live')
-      : h.overall === 'green' ? 'All good' : (h.metrics.concat(h.destinations.map(d => ({ level: d.level, explanation: d.name + ': ' + d.status.toLowerCase() })))
+      : h.overall === 'green' ? 'All good' : (h.metrics.concat(h.destinations.map(d => ({ level: d.level, explanation: d.message || d.name + ': ' + d.status.toLowerCase() })))
           .filter(m => m.level !== 'green').map(m => m.explanation).join(' · ') || 'Check the stream');
   }
 
@@ -170,7 +176,29 @@
   }
 
   $('#skip').onclick = () => act(() => api('/skip', 'POST'), 'Skipping to the next video');
-  $('#golive').onclick = () => act(() => api('/live', 'POST', {}), 'Going live…');
+  // GL-1: test destinations that haven't passed recently; a failure says why, and a second tap goes live anyway.
+  let anyway = 0;
+  $('#golive').onclick = async () => {
+    if (Date.now() - anyway < 8000) { anyway = 0; return act(() => api('/live', 'POST', {}), 'Going live…'); }
+    const btn = $('#golive'); btn.disabled = true;
+    try {
+      let c = null;
+      try { c = await api('/destination-checks', 'POST'); } catch (e) { c = null; } // can't check: don't block
+      const until = Date.now() + 60000;
+      while (c && !c.ready && c.checks.some(x => x.state === 'TESTING') && Date.now() < until) {
+        toast(c.checks.filter(x => x.state === 'TESTING').map(x => x.message).join(' '));
+        await new Promise(r => setTimeout(r, 1500));
+        c = await api('/destination-checks');
+      }
+      const failed = c && !c.ready ? c.checks.filter(x => x.state !== 'PASSED' && x.state !== 'SKIPPED') : [];
+      if (failed.length) {
+        anyway = Date.now();
+        toast(failed.map(x => x.name + ': ' + x.message).join(' ') + ' Tap Go live again to start anyway.');
+        return;
+      }
+      await act(() => api('/live', 'POST', {}), 'Going live…');
+    } catch (e) { toast(e.message); } finally { btn.disabled = false; refresh(); }
+  };
   $('#stop').onclick = () => { if (confirmStop()) act(() => api('/stop', 'POST', { mode: 'NOW' }), 'Stopping'); };
   // A second tap within 3 s confirms (no blocking dialog on phones mid-stream).
   let armed = 0;

@@ -13,6 +13,7 @@ import com.afklive.streamer.service.YouTubeService;
 import com.afklive.streamer.streaming.Handover;
 import com.afklive.streamer.streaming.IngestRouting;
 import com.afklive.streamer.streaming.StreamPreparer;
+import com.afklive.streamer.streaming.StreamRunner;
 import com.afklive.streamer.streaming.StreamSpec;
 import com.afklive.streamer.streaming.StreamStates;
 import com.afklive.streamer.streaming.StreamWorker;
@@ -139,6 +140,9 @@ class WorkerHandoverIntegrationTest extends PostgresIntegrationTest {
         });
         w.setHandoverSettings(new Handover.Settings(timeout, Duration.ofSeconds(3), Duration.ofSeconds(6)));
         w.returnToPrimary(false, Duration.ZERO);
+        // RE-8 with shorter windows (2 s steady = on, two 5 s windows = not reaching), in the same proportion to
+        // a reconnect's few seconds as production's 10 s / 2 x 10 s, so handovers fit these tests' timeouts.
+        w.setRunnerSettings(StreamRunner.Settings.defaults().withReach(Duration.ofSeconds(2), Duration.ofSeconds(5)));
         workers.add(w);
         return w;
     }
@@ -294,6 +298,8 @@ class WorkerHandoverIntegrationTest extends PostgresIntegrationTest {
         StreamWorker oldWorker = worker("w-old", ytPrimary, ytBackup, Duration.ofSeconds(40));
         StreamWorker newWorker = worker("w-new", ytPrimary, ytBackup, Duration.ofSeconds(40));
         newWorker.returnToPrimary(true, Duration.ofSeconds(1));
+        oldWorker.bytesEvery(Duration.ZERO);
+        newWorker.bytesEvery(Duration.ZERO);
         runUntil(() -> onAir(id) && ytPrimary.receiving() && other.receiving(), Duration.ofSeconds(60), oldWorker);
         // Play long enough to be well into the video.
         runFor(Duration.ofSeconds(8), oldWorker);
@@ -301,6 +307,20 @@ class WorkerHandoverIntegrationTest extends PostgresIntegrationTest {
         // Nothing is offered until the old worker drains; the new one just waits.
         runFor(Duration.ofSeconds(1), oldWorker, newWorker);
         assertThat(newWorker.runningCount()).isZero();
+        // RE-8: every destination is on before the move, and must never read otherwise during or after it.
+        runUntil(() -> row(id).getDestinations().stream().allMatch(d -> "ON".equals(d.getReach())), Duration.ofSeconds(15), oldWorker);
+        java.util.Set<String> reachSeen = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        java.util.concurrent.atomic.AtomicBoolean sampling = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Thread sampler = Thread.ofPlatform().daemon(true).start(() -> {
+            while (sampling.get()) {
+                try {
+                    row(id).getDestinations().forEach(d -> reachSeen.add(d.getPosition() + ":" + d.getReach()));
+                    Thread.sleep(200);
+                } catch (Exception e) {
+                    return;
+                }
+            }
+        });
         long drainedAt = System.nanoTime();
         oldWorker.drain();
         runUntil(() -> "w-new".equals(row(id).getWorkerId()) && oldWorker.runningCount() == 0, Duration.ofSeconds(60),
@@ -354,6 +374,15 @@ class WorkerHandoverIntegrationTest extends PostgresIntegrationTest {
         assertThat(oldWorker.runningCount()).isZero();
         assertThat(newWorker.runningCount()).isEqualTo(1);
         runUntil(() -> row(id).getDestinations().stream().allMatch(d -> "LIVE".equals(d.getStatus())), Duration.ofSeconds(10), newWorker);
+        sampling.set(false);
+        sampler.join(2000);
+        // RE-8: through the handover, the backup ingest and the move back to the primary, both stayed "on"
+        // (no "Connecting" blip, no false "Not reaching"), and the new owner reports what they sent.
+        assertThat(reachSeen).containsExactlyInAnyOrder("0:ON", "1:ON");
+        long before = row(id).getDestinations().get(1).getBytesSent();
+        runFor(Duration.ofSeconds(2), newWorker);
+        assertThat(row(id).getDestinations().get(1).getBytesSent()).as("FO-3: bytes carry on growing on the new owner")
+                .isGreaterThan(before).isGreaterThan(0);
 
         streamService.stopStream(id, owner.getEmail());
         runUntil(() -> !row(id).isLive(), Duration.ofSeconds(30), newWorker, oldWorker);

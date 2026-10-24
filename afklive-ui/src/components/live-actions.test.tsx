@@ -3,9 +3,9 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { makeQueryClient } from '@/App';
-import type { CapacityEstimate, Preflight } from '@/lib/types';
+import type { CapacityEstimate, DestinationChecks, Preflight } from '@/lib/types';
 import { ToastProvider } from './ui';
-import { GoLiveButton, SlowNotice } from './live-actions';
+import { checksTitle, GoLiveButton, SlowNotice } from './live-actions';
 
 const stream = { id: 7, name: 'Night drive', source: 'PLAYLIST' as const, live: { state: 'DRAFT' as const, uptimeSeconds: 0 } };
 
@@ -136,5 +136,122 @@ describe('running slower than real time (RE-10)', () => {
       </MemoryRouter>,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+// ------------------------------------------------------------------ GL-1: destination tests before going live
+
+const passed: DestinationChecks = { ready: true, checks: [{ destinationId: 1, name: 'Main channel', platform: 'YouTube', state: 'PASSED', message: 'Worked in a test in the last 24 hours.' }] };
+const testing: DestinationChecks = { ready: false, checks: [{ destinationId: 1, name: 'Main channel', platform: 'YouTube', state: 'TESTING', message: 'Sending a 10-second test to YouTube…' }] };
+const failed: DestinationChecks = {
+  ready: false,
+  checks: [{ destinationId: 1, name: 'Main channel', platform: 'YouTube', state: 'FAILED', message: 'YouTube refused the stream key. Copy the key again from YouTube and save it.' }],
+};
+
+/**
+ * Answers the destination checks with each of {@code answers} in turn (the last one repeats), the pre-flight
+ * with {@code preflight}; records every call as "METHOD url" with its body.
+ */
+function mockChecks(answers: (DestinationChecks | 'error')[], preflight: unknown = { ok: true, checks: [] }) {
+  const calls: Call[] = [];
+  let i = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.endsWith('/destination-checks')) {
+        const a = answers[Math.min(i++, answers.length - 1)];
+        return a === 'error' ? respond(500, { message: 'boom' }) : respond(200, a);
+      }
+      if (url.endsWith('/preflight')) return respond(200, preflight);
+      return respond(200, url.endsWith('/live') ? { success: true } : {});
+    }),
+  );
+  return calls;
+}
+
+const wentLive = (calls: Call[]) => calls.filter((c) => c.method === 'POST' && c.url === '/api/streams/7/live');
+
+describe('Go live checks the destinations first (GL-1)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('goes straight live when every destination passed a test recently', async () => {
+    const calls = mockChecks([passed]);
+    show();
+    await userEvent.click(screen.getByRole('button', { name: 'Go live' }));
+    await waitFor(() => expect(wentLive(calls)).toHaveLength(1));
+    expect(calls[0].url).toBe('/api/streams/7/destination-checks');
+    expect(screen.queryByText('Checking your destinations')).not.toBeInTheDocument();
+  });
+
+  it('shows the test while it runs and goes live by itself when it passes', async () => {
+    const calls = mockChecks([testing, passed]);
+    show();
+    await userEvent.click(screen.getByRole('button', { name: 'Go live' }));
+    expect(await screen.findByText('Checking your destinations')).toBeInTheDocument();
+    expect(screen.getByText('Sending a 10-second test to YouTube…')).toBeInTheDocument();
+    expect(wentLive(calls)).toHaveLength(0);
+    await waitFor(() => expect(wentLive(calls)).toHaveLength(1), { timeout: 4000 });
+    expect(calls.some((c) => c.method === 'GET' && c.url === '/api/streams/7/destination-checks')).toBe(true);
+    await waitFor(() => expect(screen.queryByText('Checking your destinations')).not.toBeInTheDocument());
+  });
+
+  it('blocks on a failure with the reason, Fix key and Go live anyway', async () => {
+    const calls = mockChecks([failed]);
+    show();
+    await userEvent.click(screen.getByRole('button', { name: 'Go live' }));
+    expect(await screen.findByText('Not reaching YouTube')).toBeInTheDocument();
+    expect(screen.getByText('YouTube refused the stream key. Copy the key again from YouTube and save it.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Fix key' })).toHaveAttribute('href', '/studio/streams/7/destinations');
+    expect(wentLive(calls)).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Go live anyway' }));
+    await waitFor(() => expect(wentLive(calls)).toHaveLength(1));
+    expect(wentLive(calls)[0].body).toEqual({}); // no capacity warning was shown: nothing to override
+  });
+
+  it('never stands in the way when the check itself fails', async () => {
+    const calls = mockChecks(['error']);
+    show();
+    await userEvent.click(screen.getByRole('button', { name: 'Go live' }));
+    await waitFor(() => expect(wentLive(calls)).toHaveLength(1));
+  });
+
+  it('shows a failed test and the capacity warning in one dialog; one answer covers both (GL-1 + GL-7)', async () => {
+    const calls = mockChecks([failed], { ok: true, checks: [], capacity: busy });
+    show();
+    await userEvent.click(screen.getByRole('button', { name: 'Go live' }));
+    expect(await screen.findByText('Before you go live')).toBeInTheDocument();
+    expect(screen.getByText('YouTube refused the stream key. Copy the key again from YouTube and save it.')).toBeInTheDocument();
+    expect(screen.getByText(/would run slower than real time/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Fix key' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use 720p 30 fps' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Go live anyway' }));
+    await waitFor(() => expect(wentLive(calls)).toHaveLength(1));
+    expect(wentLive(calls)[0].body).toEqual({ anyway: true });
+  });
+
+  it('passing tests never skip the capacity warning', async () => {
+    const calls = mockChecks([testing, passed], { ok: true, checks: [], capacity: busy });
+    show();
+    await userEvent.click(screen.getByRole('button', { name: 'Go live' }));
+    expect(await screen.findByText('Checking your destinations')).toBeInTheDocument();
+    expect(screen.getByText(/would run slower than real time/)).toBeInTheDocument(); // both, in one dialog
+    await waitFor(() => expect(screen.queryByText('Sending a 10-second test to YouTube…')).not.toBeInTheDocument(), { timeout: 4000 });
+    expect(screen.getByText('This quality may not keep up right now')).toBeInTheDocument();
+    expect(wentLive(calls)).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Use 720p 30 fps' }));
+    await waitFor(() => expect(wentLive(calls)).toHaveLength(1));
+    expect(wentLive(calls)[0].body).toEqual({});
+  });
+
+  it('titles the dialog by what is happening', () => {
+    expect(checksTitle(testing)).toBe('Checking your destinations');
+    expect(checksTitle(failed)).toBe('Not reaching YouTube');
+    expect(checksTitle({ ready: false, checks: [failed.checks[0], { ...failed.checks[0], destinationId: 2, name: 'My server', platform: null }] })).toBe(
+      "Some destinations can't be reached",
+    );
+    expect(checksTitle({ ready: false, checks: [{ ...failed.checks[0], platform: null, name: 'My server' }] })).toBe('Not reaching My server');
   });
 });

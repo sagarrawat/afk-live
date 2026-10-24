@@ -32,4 +32,6 @@ public interface StreamIncidentRepository extends JpaRepository<StreamIncident, 
     List<StreamIncident> findAllByKindAndResolvedAtIsNull(String kind);
 
     List<StreamIncident> findAllByJobIdInAndKindOrderByStartedAtDesc(java.util.Collection<Long> jobIds, String kind);
+
+    List<StreamIncident> findAllByJobIdInAndKindInOrderByStartedAtDesc(java.util.Collection<Long> jobIds, java.util.Collection<String> kinds);
 }

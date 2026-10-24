@@ -1,11 +1,11 @@
-import { CheckCircle2, CircleAlert, Gauge, Play, Square } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { CheckCircle2, CircleAlert, Gauge, Loader2, Play, Square } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, patch, post } from '@/lib/api';
+import { ApiError, get, patch, post } from '@/lib/api';
 import { appLink } from '@/lib/links';
 import { keys, useInvalidate } from '@/lib/queries';
-import type { CapacityEstimate, LiveState, Preflight, Quality, StreamSummary, StreamView } from '@/lib/types';
-import { Button, Dialog, Field, Input, Segmented, useAction, useToast } from './ui';
+import type { CapacityEstimate, DestinationChecks, LiveState, Preflight, Quality, StreamSummary, StreamView } from '@/lib/types';
+import { Button, buttonClass, Dialog, Field, Input, Segmented, useAction, useToast } from './ui';
 import { isOnAir } from './status';
 
 type AnyStream = Pick<StreamView | StreamSummary, 'id' | 'name' | 'live' | 'source'>;
@@ -36,66 +36,92 @@ export function PreflightList({ preflight, streamId, onNavigate }: { preflight: 
 /** GL-7: "1080p 60 fps" for a quality. */
 export const qualityLabel = (q: Quality) => `${q.height}p ${q.fps} fps`;
 
-/**
- * GL-7: everything is ready, but by our estimate the servers can't keep up with this quality right
- * now. One tap takes the lighter quality that fits; the creator may also go live anyway.
- */
-export function CapacityWarning({
-  capacity,
-  busy,
-  onUseSuggestion,
-  onGoAnyway,
-  onCancel,
-}: {
-  capacity: CapacityEstimate;
-  busy: boolean;
-  onUseSuggestion: (q: Quality) => void;
-  onGoAnyway: () => void;
-  onCancel: () => void;
-}) {
-  const s = capacity.suggestion;
+/** GL-1: each destination's test before going live, in plain words. */
+export function DestinationChecksList({ checks }: { checks: DestinationChecks }) {
   return (
-    <Dialog
-      open
-      onClose={onCancel}
-      title="This quality may not keep up right now"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-          <Button variant="secondary" onClick={onGoAnyway} disabled={busy}>
-            Go live anyway
-          </Button>
-          {s && (
-            <Button variant="primary" busy={busy} onClick={() => onUseSuggestion(s)}>
-              Use {qualityLabel(s)}
-            </Button>
+    <ul className="space-y-2.5">
+      {checks.checks.map((c) => (
+        <li key={c.destinationId} className="flex items-start gap-2.5">
+          {c.state === 'TESTING' ? (
+            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted" aria-label="Testing" />
+          ) : c.state === 'FAILED' ? (
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-bad" aria-label="Not reaching" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-label="Ready" />
           )}
-        </>
-      }
-    >
-      <div className="space-y-3">
-        <p>{capacity.message}</p>
-        <p className="text-sm text-muted">
-          This is an estimate: about {capacity.needCpus.toFixed(1)} processor cores needed
-          {capacity.freeCpus != null ? `, ${capacity.freeCpus.toFixed(1)} free on our servers right now` : ''}. Going live anyway can work if
-          a server frees up; if it doesn&apos;t, we&apos;ll tell you and you can lower the quality then.
-        </p>
-      </div>
-    </Dialog>
+          <span className="min-w-0">
+            <span className="block font-medium">{c.name}</span>
+            <span className={c.state === 'FAILED' ? 'block text-sm text-bad' : 'block text-sm text-muted'}>{c.message}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-/** GL-1: one press goes live; if a pre-flight check fails, say which and where to fix it. */
+/** The destinations part of the dialog's title: what is happening, or which platform can't be reached. */
+export function checksTitle(checks: DestinationChecks): string {
+  if (checks.checks.some((c) => c.state === 'TESTING')) return 'Checking your destinations';
+  const failed = checks.checks.filter((c) => c.state === 'FAILED');
+  if (failed.length === 1) return `Not reaching ${failed[0].platform ?? failed[0].name}`;
+  return "Some destinations can't be reached";
+}
+
+/** How often the dialog asks how the tests are going. */
+export const CHECK_POLL_MS = 1500;
+
+const CAPACITY_TITLE = 'This quality may not keep up right now';
+
+/** A checks answer we can use (an older server, or a failed request, gives none: nothing to wait for). */
+function usable(c: unknown): DestinationChecks | null {
+  return c && typeof c === 'object' && Array.isArray((c as DestinationChecks).checks) ? (c as DestinationChecks) : null;
+}
+
+/** GL-7: the capacity part of the dialog, in plain words and labelled as an estimate. */
+function CapacityText({ capacity }: { capacity: CapacityEstimate }) {
+  return (
+    <div className="space-y-3">
+      <p>{capacity.message}</p>
+      <p className="text-sm text-muted">
+        This is an estimate: about {capacity.needCpus.toFixed(1)} processor cores needed
+        {capacity.freeCpus != null ? `, ${capacity.freeCpus.toFixed(1)} free on our servers right now` : ''}. Going live anyway can work if a
+        server frees up; if it doesn&apos;t, we&apos;ll tell you and you can lower the quality then.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * One press goes live. Before that, in one dialog:
+ * <ul>
+ *   <li>GL-1: each destination that hasn't passed a test in 24 hours (or whose key changed) gets a
+ *       10-second test; a failure shows the reason, "Fix key" and "Go live anyway";</li>
+ *   <li>GL-7: a quality the servers can't keep up with right now shows the estimate, the lighter quality
+ *       that fits, and "Go live anyway".</li>
+ * </ul>
+ * Neither check overrides the other: passing the tests still respects the capacity warning, and the
+ * creator's "anyway" (or the lighter quality) after seeing both goes live. A failed pre-flight check
+ * (nothing to play, plan limits) shows the list and where to fix it, as before.
+ */
 export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream; size?: 'sm' | 'md'; scene?: string }) {
   const [preflight, setPreflight] = useState<Preflight | null>(null);
+  const [checks, setChecks] = useState<DestinationChecks | null>(null);
   const [capacity, setCapacity] = useState<CapacityEstimate | null>(null);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // A double tap lands before React re-renders the button as busy: guard the request itself.
   const inFlight = useRef(false);
+  const openRef = useRef(false);
   const toast = useToast();
   const invalidate = useInvalidate();
+
+  const close = () => {
+    openRef.current = false;
+    setOpen(false);
+    setChecks(null);
+    setCapacity(null);
+  };
+
   const go = async (opts: { anyway?: boolean; quality?: Quality } = {}) => {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -105,16 +131,19 @@ export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream
         await patch(`/api/streams/${stream.id}`, { qualityHeight: opts.quality.height, fps: opts.quality.fps });
       }
       await post(`/api/streams/${stream.id}/live`, { ...(scene ? { scene } : {}), ...(opts.anyway ? { anyway: true } : {}) });
-      setCapacity(null);
+      close();
       toast(`${stream.name} is starting. It's usually live within 15 seconds.`, 'ok');
       await invalidate([...keys.streams], [...keys.stream(stream.id)]);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.body && typeof e.body === 'object' && 'preflight' in e.body) {
         const pf = (e.body as { preflight: Preflight }).preflight;
         if (pf.ok && pf.capacity && !pf.capacity.fits) {
+          // The capacity warning joins the same dialog (with what the destination tests said, if anything).
           setCapacity(pf.capacity);
+          openRef.current = true;
+          setOpen(true);
         } else {
-          setCapacity(null);
+          close();
           setPreflight(pf);
         }
       } else {
@@ -126,23 +155,124 @@ export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream
       setBusy(false);
     }
   };
+
+  const press = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    let c: DestinationChecks | null = null;
+    let pf: Preflight | null = null;
+    try {
+      // Both at once: the destination tests (GL-1) and the pre-flight with its capacity estimate (GL-7).
+      const [checked, preflighted] = await Promise.allSettled([
+        post<DestinationChecks>(`/api/streams/${stream.id}/destination-checks`),
+        get<Preflight>(`/api/streams/${stream.id}/preflight`),
+      ]);
+      c = checked.status === 'fulfilled' ? usable(checked.value) : null; // can't check: never stand in the way
+      pf = preflighted.status === 'fulfilled' && preflighted.value && typeof preflighted.value === 'object' ? preflighted.value : null;
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+    if (pf && pf.ok === false && Array.isArray(pf.checks)) {
+      setPreflight(pf);
+      return;
+    }
+    const cap = pf?.ok && pf.capacity && !pf.capacity.fits ? pf.capacity : null;
+    if ((c && !c.ready) || cap) {
+      setChecks(c && !c.ready ? c : null);
+      setCapacity(cap);
+      openRef.current = true;
+      setOpen(true);
+      return;
+    }
+    await go();
+  };
+
+  // While a test runs, ask again. When every test passed: go live by itself, unless the capacity
+  // warning still needs the creator's answer (then the dialog stays, with that part only).
+  useEffect(() => {
+    if (!open || !checks || !checks.checks.some((c) => c.state === 'TESTING')) return;
+    const t = setTimeout(async () => {
+      try {
+        const next = usable(await get<DestinationChecks>(`/api/streams/${stream.id}/destination-checks`));
+        if (!openRef.current) return;
+        if (!next || next.ready) {
+          setChecks(null);
+          if (!capacity) await go();
+        } else {
+          setChecks(next);
+        }
+      } catch {
+        if (openRef.current) setChecks({ ...checks });
+      }
+    }, CHECK_POLL_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, checks, capacity, stream.id]);
+
+  const testing = !!checks?.checks.some((c) => c.state === 'TESTING');
+  const destFailed = !!checks && !testing && !checks.ready;
+  const suggestion = capacity?.suggestion;
+  const title = testing ? 'Checking your destinations' : destFailed && capacity ? 'Before you go live' : destFailed && checks ? checksTitle(checks) : CAPACITY_TITLE;
   return (
     <>
-      <Button variant="live" size={size} busy={busy} onClick={() => go()} icon={<Play className="h-4 w-4" />}>
+      <Button variant="live" size={size} busy={busy} onClick={press} icon={<Play className="h-4 w-4" />}>
         Go live
       </Button>
+      <Dialog
+        open={open}
+        onClose={close}
+        title={title}
+        footer={
+          testing ? (
+            <Button variant="ghost" onClick={close}>
+              Cancel
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={close} disabled={busy}>
+                Cancel
+              </Button>
+              <Button variant="secondary" onClick={() => go({ anyway: !!capacity })} disabled={busy}>
+                Go live anyway
+              </Button>
+              {suggestion && (
+                <Button variant={destFailed ? 'secondary' : 'primary'} busy={busy} onClick={() => go({ quality: suggestion })}>
+                  Use {qualityLabel(suggestion)}
+                </Button>
+              )}
+              {destFailed && (
+                <Link to={`/studio/streams/${stream.id}/destinations`} onClick={close} className={buttonClass('primary')}>
+                  Fix key
+                </Link>
+              )}
+            </>
+          )
+        }
+      >
+        <div className="space-y-4">
+          {checks && (
+            <div className="space-y-3">
+              <DestinationChecksList checks={checks} />
+              {testing ? (
+                <p className="text-sm text-muted">We send a short test to each destination that hasn&apos;t been checked in the last day. It goes live by itself when they pass.</p>
+              ) : (
+                <p className="text-sm text-muted">If you go live anyway, the stream starts but this destination won&apos;t show it until the key is fixed.</p>
+              )}
+            </div>
+          )}
+          {capacity && (
+            <div className={checks ? 'border-t border-line pt-4' : undefined}>
+              {checks && <p className="mb-2 font-medium">{CAPACITY_TITLE}</p>}
+              <CapacityText capacity={capacity} />
+            </div>
+          )}
+        </div>
+      </Dialog>
       <Dialog open={!!preflight} onClose={() => setPreflight(null)} title={`${stream.name} can't go live yet`} footer={<Button onClick={() => setPreflight(null)}>Close</Button>}>
         {preflight && <PreflightList preflight={preflight} streamId={stream.id} onNavigate={() => setPreflight(null)} />}
       </Dialog>
-      {capacity && (
-        <CapacityWarning
-          capacity={capacity}
-          busy={busy}
-          onUseSuggestion={(q) => go({ quality: q })}
-          onGoAnyway={() => go({ anyway: true })}
-          onCancel={() => setCapacity(null)}
-        />
-      )}
     </>
   );
 }

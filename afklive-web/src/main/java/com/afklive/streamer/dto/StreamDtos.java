@@ -47,7 +47,14 @@ public final class StreamDtos {
     public record Metric(String name, String value, String level, String explanation) {
     }
 
-    public record DestinationHealth(String name, String status, String level, String error, int restarts) {
+    /**
+     * One destination while live. {@code reach} (RE-8): ON once the platform has been receiving steadily,
+     * CONNECTING, or NOT_REACHING; {@code message} says it in plain words ("On YouTube", "Not reaching
+     * YouTube. YouTube refused the stream key. ..."); {@code error} is the platform's raw answer, for the
+     * health detail; {@code platform}: "YouTube", ... or null for a server we don't know.
+     */
+    public record DestinationHealth(String name, String status, String level, String error, int restarts,
+                                    String platform, String reach, String message) {
     }
 
     /** RE-3: green / amber / red per metric, each with a plain-language explanation. */
@@ -55,14 +62,17 @@ public final class StreamDtos {
     }
 
     /**
-     * GL-2: DRAFT, STARTING, LIVE, STOPPING, ENDED or ERROR.
+     * GL-2: DRAFT, STARTING, LIVE, STOPPING, ENDED or ERROR. {@code slowSince} (RE-10): running slower than
+     * real time since then. {@code reach} (RE-8), while LIVE: ALL (every destination that has been checked is
+     * receiving: "Live"), SOME ("Live with problems"), NONE ("Not reaching anyone") or CONNECTING (none
+     * confirmed yet, none given up on); null otherwise.
      */
     public record LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds,
                             ZonedDateTime stopAt, String scene, Boolean inputLive, Map<String, Object> nowPlaying,
-                            Health health, String endReason, ZonedDateTime slowSince) {
+                            Health health, String endReason, ZonedDateTime slowSince, String reach) {
         public LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds, ZonedDateTime stopAt,
                          String scene, Boolean inputLive, Map<String, Object> nowPlaying, Health health, String endReason) {
-            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null);
+            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null, null);
         }
     }
 
@@ -137,5 +147,17 @@ public final class StreamDtos {
     }
 
     public record Uptime(List<UptimeWindow> windows, List<Outage> outages) {
+    }
+
+    /**
+     * RE-9: one line on a stream's timeline. {@code kind}: REACHED, RECONNECTING, NOT_REACHING or RECOVERED;
+     * {@code level}: green, amber or red; {@code repeats}: how many times it happened, the last at {@code lastAt}.
+     */
+    public record TimelineEvent(Long id, Long jobId, ZonedDateTime at, ZonedDateTime lastAt, String kind, String name,
+                                String message, int repeats, String level) {
+    }
+
+    /** GL-1: each destination's test before going live; {@code ready} when none failed and none is still testing. */
+    public record DestinationChecks(boolean ready, List<com.afklive.streamer.service.DestinationTestService.Check> checks) {
     }
 }

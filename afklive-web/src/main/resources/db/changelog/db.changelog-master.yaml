@@ -46,6 +46,12 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/045-profile-copies.sql
   - include:
+      file: db/changelog/changes/060-destination-reach.sql
+  - include:
+      file: db/changelog/changes/061-stream-events.sql
+  - include:
+      file: db/changelog/changes/062-destination-tests-latest.sql
+  - include:
       file: db/changelog/changes/065-one-live-run-per-stream.sql
   - include:
       file: db/changelog/changes/066-worker-cpus.sql

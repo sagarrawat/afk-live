@@ -416,7 +416,9 @@ public class SupportService {
             }
             jdbc.query("SELECT position, reach, reach_reason FROM " + reachTable + " WHERE job_id = ?",
                     rs -> {
-                        out.put(rs.getInt(1), new Reach(rs.getString(2), rs.getString(3)));
+                        if (rs.getString(2) != null) { // not reported (yet, or by a worker of the previous release)
+                            out.put(rs.getInt(1), new Reach(rs.getString(2), rs.getString(3)));
+                        }
                     }, jobId);
         } catch (Exception e) {
             log.debug("Reach of run {} unavailable: {}", jobId, e.getMessage());

@@ -36,6 +36,18 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 - A worker that can't reach the database for 30 s stops its streams, before anyone else may take them over (45 s).
 - A stop asked for while the stream's worker is gone is completed by the web app.
 - Billing starts when the stream is first on air, not while its files download.
+- **"Live" means the platform is receiving (RE-8).** The worker counts the bytes each relay actually takes from
+  the encoder (a relay that can't open its output exits; one whose connection hangs stops reading). A destination
+  is `ON` after 10 s of steady sending and `NOT_REACHING` after two 10 s windows without it (one reconnect never
+  flips it, a reconnect loop does); `stream_job_destinations.reach` / `reach_reason` hold it. The badge is Live /
+  Live with problems / Not reaching anyone. Every destination not reaching for 60 s opens an `UNREACHED` incident
+  (counts as an outage in uptime) and alerts; one destination not reaching for 5 min alerts on its own (at most
+  hourly). Reconnects, not-reaching and recoveries are on the run's timeline (`stream_events`, one line per repeated
+  reason). `stream_job_destinations.bytes_sent` is written with the heartbeat every 30 s (for FO-3 cost metering).
+  In a handover (OPS-3) the new copy reports nothing until it owns the run, then writes its reach; a destination
+  that was `ON` starts `ON` there (so the move shows no "Connecting" or false "Not reaching"), the move back to
+  YouTube's primary ingest carries the state over to the new connection, and bytes carry on from the old owner's
+  last count (it writes it just before handing over).
 
 ## Web deploys without downtime (OPS-4)
 
@@ -484,6 +496,11 @@ delays the save; it never touches the stream. Runs on workers older than this re
 
 "Test" on a destination runs on a stream worker (behind its egress firewall), at most two at a time
 per worker; a test no worker picks up fails after two minutes with an explanation.
+
+Go live (GL-1) first tests each enabled destination that hasn't passed a test in the last 24 hours with its
+current key (`POST /api/streams/{id}/destination-checks`, then poll the `GET`); a failure blocks with the reason,
+"Fix key" and "Go live anyway". A test never runs against a key a live run uses: the check skips it, and a running
+test stops within a second when a run on its key goes live. Scheduled starts don't run the test.
 
 ## Billing
 

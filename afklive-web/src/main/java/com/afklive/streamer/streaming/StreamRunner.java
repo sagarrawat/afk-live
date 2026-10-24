@@ -44,7 +44,20 @@ public final class StreamRunner {
         default void onProgress(Progress progress) {
         }
 
+        /**
+         * The relay process: CONNECTING, RECONNECTING, LIVE (this attempt has been sending steadily for
+         * {@link Settings#confirmAfter()}), STOPPED, or OFF when turned off while live.
+         */
         default void onDestination(int position, String status, int restarts, String error) {
+        }
+
+        /**
+         * RE-8: whether the platform is receiving: {@link #ON} once the relay has been sending steadily for
+         * {@link Settings#confirmAfter()}, {@link #NOT_REACHING} after two bad windows (see {@link Reach}),
+         * {@link #CONNECTING} before either. {@code reason} is the relay's last error (raw FFmpeg text, or
+         * {@link #STALLED}), null when nothing failed. Called on changes only, from the runner's reach thread.
+         */
+        default void onReach(int position, String reach, String reason) {
         }
 
         default void onEncoderFailure(int restarts, String error) {
@@ -97,14 +110,44 @@ public final class StreamRunner {
      * Timing and limits; defaults suit production, tests shorten them.
      *
      * @param relayBufferBytes per-destination buffer; about 5 s at 6 Mbps by default
+     * @param confirmAfter     RE-8: a destination is "on" once its relay has been sending steadily this long
+     * @param reachWindow      RE-8: two of these in a row without a steady stretch make a destination "not reaching"
      */
     public record Settings(Duration initialBackoff, Duration maxBackoff, Duration stableAfter,
-                           int maxEncoderFailures, Duration failureWindow, long relayBufferBytes) {
+                           int maxEncoderFailures, Duration failureWindow, long relayBufferBytes,
+                           Duration confirmAfter, Duration reachWindow) {
+        public Settings(Duration initialBackoff, Duration maxBackoff, Duration stableAfter,
+                        int maxEncoderFailures, Duration failureWindow, long relayBufferBytes) {
+            this(initialBackoff, maxBackoff, stableAfter, maxEncoderFailures, failureWindow, relayBufferBytes,
+                    CONFIRM_AFTER, REACH_WINDOW);
+        }
+
         public static Settings defaults() {
             return new Settings(Duration.ofSeconds(1), Duration.ofSeconds(30), Duration.ofSeconds(60),
                     10, Duration.ofMinutes(10), 4L * 1024 * 1024);
         }
+
+        /** The same, with other RE-8 timings (tests). */
+        public Settings withReach(Duration confirm, Duration window) {
+            return new Settings(initialBackoff, maxBackoff, stableAfter, maxEncoderFailures, failureWindow,
+                    relayBufferBytes, confirm, window);
+        }
     }
+
+    /** RE-8 states of a destination, as {@link Listener#onReach} reports them. */
+    public static final String ON = "ON";
+    public static final String CONNECTING = "CONNECTING";
+    public static final String NOT_REACHING = "NOT_REACHING";
+    /** RE-8: "On YouTube" only after the relay has been sending steadily for this long. */
+    public static final Duration CONFIRM_AFTER = Duration.ofSeconds(10);
+    /** RE-8: one bad window; two in a row (20 s without a steady stretch) make a destination "not reaching". */
+    public static final Duration REACH_WINDOW = Duration.ofSeconds(10);
+    /** The longest pause in sending that still counts as steady (pipes and the encoder deliver in bursts). */
+    static final Duration STEADY_GAP = Duration.ofSeconds(2);
+    /** The reason when a relay runs but the platform stopped taking data (its connection hangs). */
+    public static final String STALLED = "The platform stopped taking the stream";
+    /** The reason when a relay was restarted because it fell behind. */
+    public static final String FELL_BEHIND = "Destination couldn't keep up; reconnecting";
 
     private static final int CHUNK = 64 * 1024;
     private static final Duration KILL_AFTER = Duration.ofSeconds(5);
@@ -123,6 +166,12 @@ public final class StreamRunner {
     private volatile Process encoder;
     private volatile List<Relay> relays = List.of();
     private Thread supervisor;
+    /** RE-8 per destination position; survives relay (and encoder) restarts, not turning it off. */
+    private final java.util.concurrent.ConcurrentHashMap<Integer, Reach> reaches = new java.util.concurrent.ConcurrentHashMap<>();
+    /** OPS-3: initial reach per position for a run handed over from another worker (see {@link #seedReach}). */
+    private final java.util.concurrent.ConcurrentHashMap<Integer, String> seeds = new java.util.concurrent.ConcurrentHashMap<>();
+    /** FO-3: bytes each destination's relays took from us (and so sent on), for the whole run. Never reset. */
+    private final java.util.concurrent.ConcurrentHashMap<Integer, AtomicLong> sent = new java.util.concurrent.ConcurrentHashMap<>();
 
     // ------------------------------------------------ seamless mode (FO-2)
     /**
@@ -171,6 +220,38 @@ public final class StreamRunner {
             return;
         }
         supervisor = platformThread("stream-" + jobId, seamless ? this::superviseSeamless : this::superviseEncoder);
+        platformThread("reach-" + jobId, this::watchReach);
+    }
+
+    /**
+     * FO-3: bytes sent per destination position since the run started on this worker (every attempt and
+     * reconnect). Measured where the relay takes them from us, so what a platform didn't take isn't counted.
+     */
+    public java.util.Map<Integer, Long> bytesSent() {
+        java.util.Map<Integer, Long> out = new java.util.HashMap<>();
+        sent.forEach((k, v) -> out.put(k, v.get()));
+        return out;
+    }
+
+    /**
+     * OPS-3: before {@link #start}, the reach each destination had on the worker this run is handed over
+     * from. A destination that was "on" starts "on" here (and has two windows to be steady), so a planned
+     * move never shows "Connecting" or "Not reaching" for a destination the platform kept receiving.
+     */
+    public StreamRunner seedReach(java.util.Map<Integer, String> reach) {
+        reach.forEach((k, v) -> {
+            if (v != null) {
+                seeds.put(k, v);
+            }
+        });
+        return this;
+    }
+
+    /** RE-8: each destination's current reach ({@link #ON}, {@link #CONNECTING} or {@link #NOT_REACHING}). */
+    public java.util.Map<Integer, String> reach() {
+        java.util.Map<Integer, String> out = new java.util.HashMap<>();
+        reaches.forEach((k, v) -> out.put(k, v.state));
+        return out;
     }
 
     /** Turns on seamless mode (before {@link #start}): producers can be swapped live; see {@link #handOff}. */
@@ -280,6 +361,7 @@ public final class StreamRunner {
             } else {
                 r.removed = true;
                 r.shutdown();
+                reaches.remove(r.position, r.reach); // turned off or changed: a new key starts over
             }
         }
         for (int i = 0; i < commands.size(); i++) {
@@ -350,7 +432,7 @@ public final class StreamRunner {
                 if (now.stream().noneMatch(r -> r.position == e.getKey())) {
                     return false; // nothing there to replace
                 }
-                Relay r = new Relay(e.getKey(), e.getValue());
+                Relay r = new Relay(e.getKey(), e.getValue(), true);
                 r.silent = true; // not this destination's state until it takes over
                 added.add(r);
             }
@@ -386,6 +468,10 @@ public final class StreamRunner {
                 }
                 for (Relay r : added) {
                     r.silent = false;
+                    // RE-8: the new connection carries on the destination's state ("on" stays on, no blip).
+                    Reach old = reaches.get(r.position);
+                    r.reach.carryOn(old);
+                    reaches.put(r.position, r.reach);
                     while (commands.size() <= r.position) {
                         commands.add(null);
                     }
@@ -826,10 +912,24 @@ public final class StreamRunner {
         volatile boolean silent;
         /** When the running relay process started (0: none running). */
         volatile long runningSinceNanos;
+        /**
+         * RE-8: shared by every relay of this position until it is turned off. A relay connecting alongside
+         * (OPS-3 make-before-break) has its own until it takes over (see {@link #replaceRelays}).
+         */
+        final Reach reach;
+        /** FO-3: every byte this position's relay processes took from us (all of them: it is all traffic). */
+        private final AtomicLong sentBytes;
 
         Relay(int position, List<String> command) {
+            this(position, command, false);
+        }
+
+        Relay(int position, List<String> command, boolean alongside) {
             this.position = position;
             this.command = command;
+            this.sentBytes = sent.computeIfAbsent(position, p -> new AtomicLong());
+            this.reach = alongside ? new Reach(position, System.nanoTime(), null)
+                    : reaches.computeIfAbsent(position, p -> new Reach(p, System.nanoTime(), seeds.remove(p)));
         }
 
         void start() {
@@ -849,6 +949,7 @@ public final class StreamRunner {
         }
 
         void offer(byte[] chunk) {
+            reach.fed();
             if (!accepting) {
                 return; // no relay running right now: drop, don't build a backlog
             }
@@ -930,13 +1031,16 @@ public final class StreamRunner {
                         Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readLines(p.getErrorStream(), errLines,
                                 line -> listener.onLogLine("dest " + (position + 1), line)));
                         Thread writer = platformThread("relay-in-" + jobId + "-" + position, () -> write(p));
+                        int attempt = reach.attemptStarted();
                         boolean reportedLive = false;
                         while (!p.waitFor(200, TimeUnit.MILLISECONDS)) {
-                            if (!reportedLive && Duration.ofNanos(System.nanoTime() - startedAt).toSeconds() >= 3) {
+                            if (!reportedLive && reach.confirmed(attempt)) {
+                                // RE-8: LIVE means this attempt has been sending steadily, not just that FFmpeg runs.
                                 report("LIVE", restarts, null);
                                 reportedLive = true;
                             }
                         }
+                        reach.attemptEnded();
                         accepting = false;
                         runningSinceNanos = 0;
                         joinQuietly(writer, Duration.ofSeconds(1));
@@ -951,6 +1055,7 @@ public final class StreamRunner {
                         break;
                     } finally {
                         accepting = false;
+                        reach.attemptEnded();
                         runningSinceNanos = 0;
                     }
                     if (down.get() || draining) {
@@ -958,7 +1063,10 @@ public final class StreamRunner {
                     }
                     if (restartRequested) {
                         restartRequested = false;
-                        error = "Destination couldn't keep up; reconnecting";
+                        error = FELL_BEHIND;
+                    }
+                    if (!reconnectRequested) {
+                        reach.failed(error);
                     }
                     if (reconnectRequested) {
                         // Asked for (GL-5): not a failure, so no backoff and no restart counted.
@@ -1000,12 +1108,220 @@ public final class StreamRunner {
                     if (chunk != null) {
                         queuedBytes.addAndGet(-chunk.length);
                         in.write(chunk);
+                        sentBytes.addAndGet(chunk.length); // FO-3: the relay took it
+                        reach.took(chunk.length); // RE-8
                     } else if (draining) {
                         break; // input ended and everything queued has been written: EOF
                     }
                 }
             } catch (IOException | InterruptedException ignored) {
                 // relay process ended or we're shutting down
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- RE-8: is the platform receiving?
+
+    /**
+     * Whether one destination's platform is receiving, judged from what its relay takes from us: a relay
+     * that can't open its output exits, and one whose connection hangs stops reading (its pipe fills up),
+     * so either way the bytes stop. Steady means bytes flowing with no pause over {@link #STEADY_GAP}.
+     * <ul>
+     *   <li>{@link #ON} after {@link Settings#confirmAfter()} steady;</li>
+     *   <li>{@link #NOT_REACHING} once two windows ({@link Settings#reachWindow()} each) pass without a
+     *       confirmed steady stretch: from the start, or from when an "on" destination lost it. One
+     *       reconnect (a few seconds' gap, then steady again) never flips it; a reconnect loop does.</li>
+     * </ul>
+     */
+    final class Reach {
+        final int position;
+        /** Bytes this destination's relays took (this connection's, for one connecting alongside). */
+        private final AtomicLong taken = new AtomicLong();
+        /** Written by relay threads. */
+        private volatile boolean attemptUp;
+        private final java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        private volatile String lastError;
+        /** When the stream last had data for this destination (0: not yet). */
+        private volatile long lastFed;
+        /** The attempt whose steady stretch reached {@link Settings#confirmAfter()} (0: none yet). */
+        private volatile int confirmedAttempt;
+        volatile String state = CONNECTING;
+        volatile String reportedReason;
+        /** Took over from another connection of the same destination (OPS-3): nothing new to say. */
+        volatile boolean carried;
+        // Evaluation state: the reach thread only.
+        private long lastSent;
+        private long lastGrowth;
+        private long steadySince;
+        private int steadyAttempt;
+        private long since;
+        private long troubleSince;
+
+        /** {@code seed}: the state to start in (OPS-3: a run handed over from another worker keeps "on"). */
+        Reach(int position, long now, String seed) {
+            this.position = position;
+            this.since = now;
+            if (ON.equals(seed)) {
+                this.state = ON;
+            }
+        }
+
+        void took(int bytes) {
+            taken.addAndGet(bytes);
+        }
+
+        /**
+         * OPS-3: this connection replaces {@code old} (make-before-break): keep its state, and give it two
+         * windows to be steady here (it is already sending, so it normally is at once).
+         */
+        void carryOn(Reach old) {
+            carried = true;
+            if (old != null) {
+                state = old.state;
+                reportedReason = old.reportedReason;
+                lastError = old.lastError;
+            }
+            since = System.nanoTime();
+            troubleSince = 0;
+        }
+
+        int attemptStarted() {
+            int a = attempts.incrementAndGet();
+            attemptUp = true;
+            return a;
+        }
+
+        void attemptEnded() {
+            attemptUp = false;
+        }
+
+        /** The stream had data for this destination (whether or not its relay could take it). */
+        void fed() {
+            lastFed = System.nanoTime();
+        }
+
+        void failed(String error) {
+            if (error != null) {
+                // FFmpeg prefixes lines with object addresses ("[rtmp @ 0x55d0...]") that differ per process.
+                lastError = error.replaceAll("@ 0x[0-9a-fA-F]+", "@");
+            }
+        }
+
+        boolean confirmed(int attempt) {
+            return confirmedAttempt == attempt;
+        }
+
+        /** One look; returns true when what should be reported changed. */
+        boolean evaluate(long now) {
+            long s = taken.get();
+            int attempt = attempts.get();
+            boolean up = attemptUp;
+            if (s > lastSent) {
+                lastSent = s;
+                lastGrowth = now;
+                if (steadySince == 0 && up) {
+                    steadySince = now;
+                    steadyAttempt = attempt;
+                }
+            }
+            boolean steady = up && steadySince != 0 && steadyAttempt == attempt
+                    && now - lastGrowth <= STEADY_GAP.toNanos();
+            if (!steady) {
+                steadySince = 0;
+            }
+            boolean confirmedNow = steady && now - steadySince >= settings.confirmAfter().toNanos();
+            if (confirmedNow) {
+                confirmedAttempt = attempt;
+            }
+            long twoWindows = settings.reachWindow().multipliedBy(2).toNanos();
+            long fedAt = lastFed;
+            if (fedAt == 0 || now - fedAt > STEADY_GAP.toNanos()) {
+                // Nothing to send (the encoder is starting or restarting): our side, not the platform's.
+                // The windows only count while there is something to deliver.
+                since = now;
+                troubleSince = 0;
+            }
+            String next = state;
+            switch (state) {
+                case ON -> {
+                    if (confirmedNow) {
+                        troubleSince = 0;
+                    } else if (!steady && troubleSince == 0) {
+                        troubleSince = now; // first bad moment; it has two windows to be steady again
+                    }
+                    if (troubleSince != 0 && now - troubleSince >= twoWindows) {
+                        next = NOT_REACHING;
+                    }
+                }
+                case CONNECTING -> {
+                    if (confirmedNow) {
+                        next = ON;
+                    } else if (now - since >= twoWindows) {
+                        next = NOT_REACHING;
+                    }
+                }
+                default -> {
+                    if (confirmedNow) {
+                        next = ON;
+                    }
+                }
+            }
+            if (!next.equals(state)) {
+                since = now;
+                troubleSince = 0;
+                if (ON.equals(next)) {
+                    lastError = null;
+                }
+            }
+            String reason = ON.equals(next) ? null : reason(up);
+            boolean changed = !next.equals(state) || NOT_REACHING.equals(next) && !java.util.Objects.equals(reason, reportedReason);
+            state = next;
+            reportedReason = reason;
+            return changed;
+        }
+
+        /** Why it isn't receiving: the relay's last error, or that a running relay stopped sending. */
+        private String reason(boolean up) {
+            String e = lastError;
+            if (e != null) {
+                return e;
+            }
+            return up && lastGrowth != 0 ? STALLED : null;
+        }
+    }
+
+    /** The reach thread: looks at every destination twice a second until the stream ends. */
+    private void watchReach() {
+        // What was last said per position: a connection that replaces another (OPS-3) says nothing new
+        // unless its state differs; a destination turned off and on again starts over.
+        java.util.Map<Integer, Reach> announced = new java.util.HashMap<>();
+        java.util.Map<Integer, String> said = new java.util.HashMap<>();
+        while (!finished.get() && !stopping.get()) {
+            long now = System.nanoTime();
+            for (Reach r : reaches.values()) {
+                try {
+                    boolean fresh = announced.get(r.position) != r;
+                    if (r.evaluate(now) || fresh) {
+                        announced.put(r.position, r);
+                        String what = r.state + "|" + r.reportedReason;
+                        String before = said.put(r.position, what);
+                        if (!what.equals(before) || (fresh && !r.carried)) {
+                            listener.onReach(r.position, r.state, r.reportedReason);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Reach check for job {} failed", jobId, e);
+                }
+            }
+            announced.values().removeIf(r -> reaches.get(r.position) == null);
+            said.keySet().removeIf(pos -> !reaches.containsKey(pos));
+            try {
+                if (stopSignal.await(500, TimeUnit.MILLISECONDS)) {
+                    return;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
             }
         }
     }

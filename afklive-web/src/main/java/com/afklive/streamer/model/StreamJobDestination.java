@@ -37,6 +37,17 @@ public class StreamJobDestination {
     @Column(columnDefinition = "TEXT")
     private String lastError;
     private ZonedDateTime updatedAt;
+    /**
+     * RE-8: ON (the platform has been receiving steadily), CONNECTING or NOT_REACHING; null from a worker of
+     * the previous release or when turned off. {@link #reachReason}: the relay's last error, keys redacted.
+     */
+    @Column(length = 20)
+    private String reach;
+    @Column(name = "reach_reason", columnDefinition = "TEXT")
+    private String reachReason;
+    /** FO-3: bytes this destination actually sent during the run (every reconnect), reported with the heartbeat. */
+    @Column(name = "bytes_sent", nullable = false)
+    private long bytesSent;
 
     public StreamJobDestination(StreamJob job, int position, String name) {
         this.job = job;
