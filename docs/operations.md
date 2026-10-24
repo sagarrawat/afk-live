@@ -271,7 +271,10 @@ lowest priority.
   mechanism restarts a crashed producer without dropping destinations.
 - Turn it on for a worker by setting `APP_STREAMING_COPYMODE=true` and restarting it; turn it off the
   same way. Streams in copy mode show `"mode":"copy"` in their now-playing data.
-- **Before turning it on**, run the copy-mode soak below for 6 hours and get a pass.
+- **Before turning it on**, run the copy-mode soak below for 6 hours and get a pass. Known blocker
+  (first soak, Oct 2026): every studio↔copy hand-off moves the media timeline about 150 ms *ahead* of
+  real time (≈ 120 ms to the studio, ≈ 200 ms to copy) and nothing takes it back, so 56 switches gave
+  +4.2 s and the "kept pace with the clock" check fails. Everything else passed. Fix the hand-off first.
 
 ## Soak test (OPS-6)
 
