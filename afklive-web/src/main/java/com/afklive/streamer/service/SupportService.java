@@ -249,7 +249,7 @@ public class SupportService {
      * on {@code stream_job_destinations}). Read by column name so this works before and after those columns
      * exist: without them every destination simply has no reach.
      */
-    record Reach(String reach, String reason) {
+    public record Reach(String reach, String reason) {
     }
 
     public record RunDetail(Long jobId, Long streamId, String streamName, Long userId, String userEmail, String plan,
@@ -404,21 +404,29 @@ public class SupportService {
                 "AAC 128 kbps, 44.1 kHz stereo", "Every 2 s");
     }
 
-    Map<Integer, Reach> reachOf(long jobId) {
+    /** Where the worker writes RE-8 reach. */
+    private volatile String reachTable = "stream_job_destinations";
+
+    /** For tests: read reach from a table shaped like feature/truth-of-live's; returns the previous one. */
+    public String reachTable(String table) {
+        String before = reachTable;
+        reachTable = table;
+        return before;
+    }
+
+    public Map<Integer, Reach> reachOf(long jobId) {
         Map<Integer, Reach> out = new HashMap<>();
         try {
-            jdbc.query("SELECT * FROM stream_job_destinations WHERE job_id = ?", rs -> {
-                java.sql.ResultSetMetaData md = rs.getMetaData();
-                boolean hasReach = false;
-                boolean hasReason = false;
-                for (int c = 1; c <= md.getColumnCount(); c++) {
-                    hasReach |= "reach".equalsIgnoreCase(md.getColumnName(c));
-                    hasReason |= "reach_reason".equalsIgnoreCase(md.getColumnName(c));
-                }
-                if (hasReach) {
-                    out.put(rs.getInt("position"), new Reach(rs.getString("reach"), hasReason ? rs.getString("reach_reason") : null));
-                }
-            }, jobId);
+            // Explicit columns, never SELECT *: a cached plan must not change shape when a migration adds columns.
+            Integer columns = jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
+                    + "AND table_name = ? AND column_name IN ('reach', 'reach_reason')", Integer.class, reachTable);
+            if (columns == null || columns < 2) {
+                return out;
+            }
+            jdbc.query("SELECT position, reach, reach_reason FROM " + reachTable + " WHERE job_id = ?",
+                    rs -> {
+                        out.put(rs.getInt(1), new Reach(rs.getString(2), rs.getString(3)));
+                    }, jobId);
         } catch (Exception e) {
             log.debug("Reach of run {} unavailable: {}", jobId, e.getMessage());
         }

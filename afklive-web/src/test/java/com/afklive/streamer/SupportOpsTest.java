@@ -338,23 +338,32 @@ class SupportOpsTest extends PostgresIntegrationTest {
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     /**
-     * RE-8 status shows when the worker reports it (columns from feature/truth-of-live), and the view works
-     * without those columns. Added here if missing, as that branch's changeset would.
+     * RE-8 status shows when the worker reports it (reach, reach_reason from feature/truth-of-live), and the view
+     * works without those columns (main today). The positive case reads a table shaped like that branch's, so
+     * this test never changes the shared schema.
      */
     @Test
     void aRunShowsWhetherThePlatformIsReceivingWhenTheWorkerReportsIt() throws Exception {
         StreamJob job = run(true, List.of(new StreamSpec.Destination("YouTube", "rtmp://a.rtmp.youtube.com/live2/" + KEY)), playlist());
         try {
-            mvc.perform(get("/api/admin/jobs/" + job.getId()).with(admin())).andExpect(status().isOk());
-            jdbc.execute("ALTER TABLE stream_job_destinations ADD COLUMN IF NOT EXISTS reach VARCHAR(20)");
-            jdbc.execute("ALTER TABLE stream_job_destinations ADD COLUMN IF NOT EXISTS reach_reason TEXT");
-            jdbc.update("UPDATE stream_job_destinations SET reach = 'NOT_REACHING', reach_reason = ? WHERE job_id = ?",
-                    "Error opening output rtmp://a.rtmp.youtube.com/live2/" + KEY + ": Connection refused", job.getId());
-            String body = mvc.perform(get("/api/admin/jobs/" + job.getId()).with(admin()))
-                    .andExpect(jsonPath("$.destinations[0].reach").value("NOT_REACHING"))
-                    .andExpect(jsonPath("$.destinations[0].reachReason").value(containsString("Connection refused")))
-                    .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
-            assertThat(body).doesNotContain(KEY);
+            mvc.perform(get("/api/admin/jobs/" + job.getId()).with(admin()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.destinations[0].reach").value(org.hamcrest.Matchers.nullValue()));
+            assertThat(support.reachOf(job.getId())).isEmpty();
+
+            jdbc.execute("CREATE TABLE IF NOT EXISTS test_reach_destinations (job_id BIGINT, position INT, reach VARCHAR(20), reach_reason TEXT)");
+            jdbc.update("INSERT INTO test_reach_destinations VALUES (?, 0, 'NOT_REACHING', ?)", job.getId(),
+                    "Error opening output rtmp://a.rtmp.youtube.com/live2/" + KEY + ": Connection refused");
+            String table = support.reachTable("test_reach_destinations");
+            try {
+                String body = mvc.perform(get("/api/admin/jobs/" + job.getId()).with(admin()))
+                        .andExpect(jsonPath("$.destinations[0].reach").value("NOT_REACHING"))
+                        .andExpect(jsonPath("$.destinations[0].reachReason").value(containsString("Connection refused")))
+                        .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+                assertThat(body).doesNotContain(KEY);
+            } finally {
+                support.reachTable(table);
+            }
         } finally {
             jobs.findById(job.getId()).ifPresent(j -> {
                 j.setLive(false);
