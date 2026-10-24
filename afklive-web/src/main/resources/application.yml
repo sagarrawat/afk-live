@@ -60,10 +60,16 @@ spring:
           batch_size: 50
           order_inserts: true
           order_updates: true
+  lifecycle:
+    # OPS-4: how long a stopping web instance waits for requests in flight (a 16 MB upload part on a slow
+    # phone connection). The slot unit's TimeoutStopSec covers this plus the drain below.
+    timeout-per-shutdown-phase: ${WEB_SHUTDOWN_TIMEOUT:60s}
+  # OPS-4: sign-ins live in PostgreSQL (Spring Session JDBC), so both web slots see the same sessions and a
+  # deploy signs nobody out. CSRF tokens are in a cookie, not the session.
   session:
-    store-type: jdbc
     jdbc:
-      initialize-schema: always
+      # The tables come from Liquibase (080-spring-session.sql), like every other table.
+      initialize-schema: never
     timeout: PT720H
   mail:
     host: ${SMTP_HOST:localhost}
@@ -194,7 +200,33 @@ app:
     # Username/password set for the webhook in the PhonePe dashboard (verifies callbacks)
     callback-username: ${PHONEPE_CALLBACK_USERNAME:}
     callback-password: ${PHONEPE_CALLBACK_PASSWORD:}
+  web:
+    # OPS-4: on stop, report "not ready" for this long while still serving, so Caddy's health check moves
+    # new requests to the other slot before this one closes its port. 0 = stop at once (dev, tests); the
+    # slot units set WEB_SHUTDOWN_DRAIN=5s.
+    shutdown-drain: ${WEB_SHUTDOWN_DRAIN:0s}
+
+# OPS-4: only the health probes, for the deploy script and Caddy's active health checks. Answered only to
+# requests made on this machine (ActuatorSecurityConfig); Caddy also answers /actuator* with 404.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      show-components: never
+  health:
+    # Email goes through ZeptoMail's API; an unused SMTP check would only report DOWN.
+    mail:
+      enabled: false
+
 server:
+  # OPS-4: on stop, refuse new connections and let requests in flight finish (up to the timeout above).
+  shutdown: graceful
   forward-headers-strategy: native
   error:
     # Don't leak exception messages or stack details to clients in production.

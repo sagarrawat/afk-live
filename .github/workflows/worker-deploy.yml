@@ -17,13 +17,27 @@ on:
           - handover
           - restart
         default: handover
+      ref:
+        description: 'Commit SHA, tag or branch to deploy (empty = the branch chosen above, normally main)'
+        type: string
+        required: false
+        default: ''
 
 jobs:
   deploy-worker:
     runs-on: ubuntu-latest
+    # Never at the same time as a web deploy (OPS-4): both may start a second JVM. Waits for the other.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Show what is being deployed
+        run: git log -1 --format='Deploying %H (%s)'
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4

@@ -1,5 +1,12 @@
 name: Afklive-web CI & CD
 
+# Deploys the web app on every push to main.
+#
+# OPS-4: by default the new version starts next to the running one and takes over when it is ready, so
+# nobody sees an error (afklive-scripts/web-deploy.sh; one-time server setup in docs/operations.md, "Web
+# deploys without downtime"). Until that setup is done on the server, this falls back to the old restart.
+# "restart" (manual runs only) is the old way on purpose: the web app restarts and the site answers with
+# errors for about a minute; use it if the script refuses (it says why and changes nothing).
 on:
   push:
     branches: [ main ]
@@ -8,11 +15,25 @@ on:
       - 'afklive-ui/**'
       - 'pom.xml'
   workflow_dispatch:
+    inputs:
+      method:
+        description: 'zero-downtime = start the new version next to the old one (default); restart = old way, about a minute of errors'
+        type: choice
+        options:
+          - zero-downtime
+          - restart
+        default: zero-downtime
 
 jobs:
   # JOB 1: Deploy Web App to DigitalOcean
   deploy-web:
     runs-on: ubuntu-latest
+    # One deploy on the server at a time, web or worker: each starts a second JVM for a while, and both at
+    # once may not fit in memory (docs/operations.md). A run waits for the other to finish; while one runs,
+    # a newer queued run replaces an older queued one.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,7 +57,7 @@ jobs:
       - name: Build Web Module
         run: mvn -B clean package -pl afklive-web -am -DskipTests -DskipUiTests
 
-      # Fix: Path is now inside the sub-module
+      # Next to, never over, the jar the running web app uses.
       - name: Copy JAR to DigitalOcean VM
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -44,14 +65,31 @@ jobs:
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           source: "afklive-web/target/app.jar"
-          target: "/opt/afklive/"
+          target: "/opt/afklive/incoming/web/"
           strip_components: 2
 
-      - name: Restart Server
+      - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          METHOD: ${{ inputs.method || 'zero-downtime' }}
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
+          envs: METHOD
+          command_timeout: 15m
           script: |
-            sudo systemctl restart afklive
+            set -e
+            JAR=/opt/afklive/incoming/web/app.jar
+            if [ -x /opt/afklive/scripts/web-deploy.sh ]; then
+              if [ "$METHOD" = restart ]; then
+                sudo /opt/afklive/scripts/web-deploy.sh --restart "$JAR"
+              else
+                sudo /opt/afklive/scripts/web-deploy.sh "$JAR"
+              fi
+            else
+              echo "Zero-downtime deploys aren't set up on this server yet (docs/operations.md); restarting the old way (about a minute of errors)."
+              install -m 0644 "$JAR" /opt/afklive/app.jar.new
+              mv -f /opt/afklive/app.jar.new /opt/afklive/app.jar
+              sudo systemctl restart afklive
+            fi

@@ -19,23 +19,32 @@ type Json = Record<string, unknown> | unknown[] | string | number | boolean | nu
 
 export async function api<T>(path: string, init: RequestInit & { json?: Json } = {}): Promise<T> {
   const { json, ...rest } = init;
-  const headers = new Headers(rest.headers);
-  headers.set('Accept', 'application/json');
   const method = (rest.method ?? 'GET').toUpperCase();
-  if (json !== undefined) {
-    headers.set('Content-Type', 'application/json');
+  const send = () => {
+    const headers = new Headers(rest.headers);
+    headers.set('Accept', 'application/json');
+    if (json !== undefined) {
+      headers.set('Content-Type', 'application/json');
+    }
+    if (method !== 'GET' && method !== 'HEAD') {
+      const token = csrfToken();
+      if (token) headers.set('X-XSRF-TOKEN', token);
+    }
+    return fetch(path, {
+      ...rest,
+      method,
+      headers,
+      credentials: 'same-origin',
+      body: json !== undefined ? JSON.stringify(json) : rest.body,
+    });
+  };
+  let res = await send();
+  if (res.status === 403 && isExpiredToken(await peek(res))) {
+    // OPS-2: the page's security token expired (a deploy, or a sign-in in another tab). Fetch a fresh
+    // one and try once more, so nobody sees an error for it.
+    await fetch('/api/auth/csrf', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    res = await send();
   }
-  if (method !== 'GET' && method !== 'HEAD') {
-    const token = csrfToken();
-    if (token) headers.set('X-XSRF-TOKEN', token);
-  }
-  const res = await fetch(path, {
-    ...rest,
-    method,
-    headers,
-    credentials: 'same-origin',
-    body: json !== undefined ? JSON.stringify(json) : rest.body,
-  });
   if (res.status === 401 || (res.redirected && new URL(res.url).pathname === '/login')) {
     window.location.href = '/login';
     throw new ApiError('Signed out', 401);
@@ -53,6 +62,20 @@ export async function api<T>(path: string, init: RequestInit & { json?: Json } =
     throw new ApiError(errorMessage(body, res.status), res.status, body);
   }
   return body as T;
+}
+
+/** A response's JSON, read without using the response up. */
+async function peek(res: Response): Promise<unknown> {
+  try {
+    return await res.clone().json();
+  } catch {
+    return undefined;
+  }
+}
+
+/** The server's "this page expired" answer (an expired security token), not a real refusal. */
+export function isExpiredToken(body: unknown): boolean {
+  return !!body && typeof body === 'object' && (body as { code?: unknown }).code === 'csrf';
 }
 
 export function errorMessage(body: unknown, status: number): string {

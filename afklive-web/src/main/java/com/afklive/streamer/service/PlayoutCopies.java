@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Playout copies: a library video prepared once at the size and frame rate a stream actually uses.
@@ -58,6 +59,9 @@ public class PlayoutCopies {
     private final String role;
     private final boolean auto;
     private final Map<String, Remembered> remembered = new ConcurrentHashMap<>();
+    /** The copy this instance is making now, so stopping can hand it back (OPS-4: every deploy stops a web slot). */
+    private final AtomicReference<Working> working = new AtomicReference<>();
+    private volatile boolean stopping;
     private final ScheduledExecutorService preparer = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "playout-copies");
         t.setDaemon(true);
@@ -98,9 +102,34 @@ public class PlayoutCopies {
         }, 1, 1, TimeUnit.MINUTES);
     }
 
+    /**
+     * Hands the copy in progress back (PENDING) before this instance exits, so the other web slot picks it
+     * up within a minute instead of after the 8-hour stale-claim timeout; then stops its FFmpeg. Fenced on
+     * the claim time, so a copy another instance has taken over meanwhile is left alone.
+     */
     @PreDestroy
     void stop() {
+        stopping = true;
         preparer.shutdownNow();
+        Working w = working.getAndSet(null);
+        if (w == null) {
+            return;
+        }
+        try {
+            if (jdbc.update("UPDATE media_playout_copies SET status = 'PENDING', claimed_at = NULL WHERE id = ? AND status = 'WORKING' AND claimed_at = ?",
+                    w.id(), Timestamp.from(w.claimedAt())) == 1) {
+                log.info("Stopping: copy {} handed back for another instance to make", w.id());
+            }
+        } catch (Exception e) {
+            log.warn("Couldn't hand copy {} back on stop: {}", w.id(), e.getMessage());
+        }
+        Process p = w.process().get();
+        if (p != null) {
+            p.destroyForcibly();
+        }
+    }
+
+    private record Working(long id, Instant claimedAt, AtomicReference<Process> process) {
     }
 
     // ------------------------------------------------------------------ deciding
@@ -205,6 +234,9 @@ public class PlayoutCopies {
 
     /** Claims and makes one requested copy; false when there's nothing to do. Public so tests can drive it. */
     public boolean prepareNext() {
+        if (stopping) {
+            return false;
+        }
         Instant claimedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         List<Map<String, Object>> claimed = jdbc.queryForList(
                 "UPDATE media_playout_copies SET status = 'WORKING', claimed_at = ? WHERE id = ("
@@ -217,6 +249,16 @@ public class PlayoutCopies {
         }
         Map<String, Object> c = claimed.getFirst();
         long id = ((Number) c.get("id")).longValue();
+        Working current = new Working(id, claimedAt, new AtomicReference<>());
+        working.set(current);
+        try {
+            return make(c, id, claimedAt, current);
+        } finally {
+            working.compareAndSet(current, null);
+        }
+    }
+
+    private boolean make(Map<String, Object> c, long id, Instant claimedAt, Working current) {
         List<Map<String, Object>> media = jdbc.queryForList("SELECT s3_key, fps, has_audio FROM media_assets WHERE id = ?", c.get("media_id"));
         if (media.isEmpty()) {
             jdbc.update("DELETE FROM media_playout_copies WHERE id = ?", id);
@@ -242,6 +284,10 @@ public class PlayoutCopies {
                     ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio)
                     : command(storage.readLocation(original), out, w, h, fps, sourceFps);
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            current.process().set(p);
+            if (stopping) {
+                p.destroyForcibly(); // stop() ran between the claim and the start
+            }
             String log = new String(p.getInputStream().readAllBytes());
             if (p.waitFor() != 0 || Files.size(out) == 0) {
                 reason = log.isBlank() ? "FFmpeg exited with " + p.exitValue() : last(log, 500);

@@ -144,6 +144,8 @@ public class SecurityConfig {
                 )
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+                        // OPS-2: an expired form says so instead of showing a server error.
+                        .accessDeniedHandler(new com.afklive.streamer.security.FriendlyAccessDeniedHandler())
                 );
 
         return http.build();

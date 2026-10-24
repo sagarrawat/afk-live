@@ -1,0 +1,31 @@
+# Web app, deploy slot %i (a or b). OPS-4: a deploy starts the new version in the idle slot next to the
+# running one, waits until it is ready, then stops the old one, which first reports "not ready" for 5 s
+# (Caddy moves new requests to the new slot) and then finishes the requests in flight. Nobody sees an error.
+# Driven by afklive-scripts/web-deploy.sh; one-time setup in docs/operations.md ("Web deploys without downtime").
+#
+# Each slot has its own localhost port (/opt/afklive/web-slot-%i.env sets WEB_HTTP_PORT: 8080 for a, 8090
+# for b; the worker slots use 8081/8082), its own jar and its own log folder, so installing a new version
+# never touches the files of the process that is running. Only one slot is enabled at a time (the deploy
+# script enables the new one and disables the old one), so a reboot starts just the current version.
+[Unit]
+Description=AFK Live web app (slot %i)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=afklive
+WorkingDirectory=/opt/afklive
+EnvironmentFile=/opt/afklive/afklive.env
+EnvironmentFile=/opt/afklive/web-slot-%i.env
+# Role, profiles, address, port and drain are -D properties: they win over anything in afklive.env.
+# Heap: two of these run side by side for a minute or two during a deploy, next to the worker (see
+# docs/operations.md, memory). Caddy is the only client, so the app listens on localhost only.
+ExecStart=/usr/bin/java -Xmx1g -Dapp.streaming.role=web -Dspring.profiles.active=loki -Dserver.address=127.0.0.1 -Dserver.port=${WEB_HTTP_PORT} -Dapp.web.shutdown-drain=5s -DAFKLIVE_LOG_DIR=logs/web-%i -jar /opt/afklive/web/slots/%i/app.jar
+# Stop = 5 s "not ready" + up to 60 s for requests in flight (WEB_SHUTDOWN_TIMEOUT) + closing. systemd's
+# SIGTERM starts that graceful stop; it only kills the process after this long.
+TimeoutStopSec=90
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

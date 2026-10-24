@@ -13,7 +13,7 @@ Every workstream follows the repo rules in `CLAUDE.md` and the FinOps rules in t
   drop a release later.
 - **Changeset numbers per branch** to avoid clashes while work runs in parallel: 022 playout copies,
   025–029 truth of live, 030–034 worker handover, 035–039 support and email, 040–044 onboarding,
-  045–049 cost metering.
+  045–049 cost metering, 080–084 zero-downtime web deploys.
 - **Two deploy batches.** Web-only changes ship first. Worker changes ship together, after the
   handover is installed, so that batch is the first uninterrupted worker deploy.
 - **Feature switches** for anything that changes a live stream's behaviour (`app.*` properties with
@@ -62,6 +62,10 @@ old slot with graceful shutdown so in-flight requests finish.
 **Tests**: readiness only on localhost, graceful shutdown configured, script `--dry-run` and
 shellcheck. The server setup (units, Caddyfile) is applied by hand once, from `docs/operations.md`.
 **Ships** with the web batch; the GitHub workflow keeps the old restart path behind an input.
+*Built* (branch `ops/web-zero-downtime-v2`): sessions moved to PostgreSQL (they had silently been in
+memory since Spring Boot 4), alerts deduped across instances under an advisory lock, a stopping slot
+hands its playout copy back; rehearsed end to end with real Caddy and two real JVMs. Operations and the
+one-time setup: `docs/operations.md`, "Web deploys without downtime".
 
 ## 3. Zero-interruption worker deploys: OPS-3 (branch `feature/worker-handover`)
 

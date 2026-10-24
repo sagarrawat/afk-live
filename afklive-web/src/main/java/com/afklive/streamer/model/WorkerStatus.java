@@ -30,6 +30,8 @@ public class WorkerStatus {
     private Long memoryUsedBytes;
     @Column(name = "memory_total_bytes")
     private Long memoryTotalBytes;
+    /** GL-7: CPUs the worker can use (null from workers that predate it). */
+    private Integer cpus;
     /** OPS-3: set while this worker hands its streams to a new version (null: not draining). */
     @Column(name = "draining_since")
     private ZonedDateTime drainingSince;

@@ -159,6 +159,64 @@ class AlertsTest extends PostgresIntegrationTest {
         assertThat(types()).containsExactly(NotificationService.Types.PHONE_LOST);
     }
 
+    @Autowired com.afklive.streamer.service.LiveStreamService liveStreams;
+    @Autowired com.afklive.streamer.service.AdminService admin;
+
+    @Test
+    void aRunSlowerThanRealTimeForAMinuteAlertsOnceWithTheFix() {
+        // RE-10, production 24 Oct 2026: 1080p60 ran at 0.8x for hours and nothing told anyone.
+        ZonedDateTime t = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
+        owner.setPlanType(PlanType.AGENCY);
+        owner = users.save(owner);
+        LiveStream s = liveStreams.create(owner.getEmail(), new com.afklive.streamer.dto.StreamDtos.CreateStream("Night drive", null, null, 1080, 60));
+        StreamJob job = liveJob(StreamStates.LIVE, t);
+        job.setStreamId(s.getId());
+        job.setSpeed(0.9); // a dip that clears within the minute isn't reported
+        job.setHeartbeatAt(t.plusSeconds(600)); // the worker keeps reporting throughout
+        jobs.save(job);
+        monitor.check(t);
+        setSpeed(job, 1.0);
+        monitor.check(t.plusSeconds(30));
+        setSpeed(job, 0.8);
+        monitor.check(t.plusSeconds(40));
+        monitor.check(t.plusSeconds(90));
+        assertThat(types()).isEmpty();
+
+        monitor.check(t.plusSeconds(101)); // slow for 61 s
+        List<Notification> list = notifications.findTop50ByUserIdOrderByCreatedAtDesc(owner.getId());
+        assertThat(list).extracting(Notification::getType).containsExactly(NotificationService.Types.STREAM_SLOW);
+        assertThat(list.getFirst().getTitle()).isEqualTo("Night drive is running slower than real time");
+        assertThat(list.getFirst().getBody()).contains("1080p 60 fps", "0.80x", "play slowly", "720p 30 fps");
+        assertThat(list.getFirst().getLink()).isEqualTo("/streams/" + s.getId() + "/settings");
+        monitor.check(t.plusSeconds(130));
+        assertThat(types()).hasSize(1); // not repeated while it stays slow
+
+        // Recorded where creators and admins look: the stream's live state and the admin console.
+        assertThat(liveStreams.view(owner.getEmail(), s.getId()).live().slowSince().toInstant()).isEqualTo(t.plusSeconds(40).toInstant());
+        assertThat(admin.liveStreams(owner.getEmail(), null, null)).singleElement()
+                .satisfies(r -> assertThat(r.problem()).contains("Slower than real time (0.80x)", "720p 30 fps"));
+
+        // Back to real time: the all-clear in the app (no email), and the incident closes.
+        setSpeed(job, 1.0);
+        monitor.check(t.plusSeconds(160));
+        assertThat(types()).containsExactly(NotificationService.Types.STREAM_SPEED_OK, NotificationService.Types.STREAM_SLOW);
+        assertThat(incidents.findAllByJobIdAndResolvedAtIsNull(job.getId())).isEmpty();
+        assertThat(liveStreams.view(owner.getEmail(), s.getId()).live().slowSince()).isNull();
+
+        // Slow again within hours: back on the record, but the creator isn't emailed twice.
+        setSpeed(job, 0.8);
+        monitor.check(t.plusSeconds(200));
+        monitor.check(t.plusSeconds(270));
+        assertThat(incidents.findAllByJobIdAndResolvedAtIsNull(job.getId())).extracting(StreamIncident::getKind).containsExactly("SLOW");
+        assertThat(types()).filteredOn(NotificationService.Types.STREAM_SLOW::equals).hasSize(1);
+    }
+
+    private void setSpeed(StreamJob job, double speed) {
+        StreamJob j = jobs.findById(job.getId()).orElseThrow();
+        j.setSpeed(speed);
+        jobs.save(j);
+    }
+
     @Test
     void aFileTheWorkerSkippedIsReportedOnceADay() {
         // PL-7: the worker lists skipped files with its heartbeat; the creator hears about each once.

@@ -127,6 +127,7 @@ public class MediaProcessor {
                 process(id);
             }
             backfillLoudness();
+            backfillStill();
         } catch (Exception e) {
             log.error("Media sweep failed", e);
         }
@@ -166,6 +167,9 @@ public class MediaProcessor {
         if (r.status == MediaStatus.READY && Boolean.TRUE.equals(r.hasAudio)) {
             measureLoudness(assetId, a.getS3Key());
         }
+        if (r.status == MediaStatus.READY && a.getContentType() == MediaAsset.ContentType.VIDEO && r.duration != null) {
+            measureStill(assetId, a.getS3Key(), r.duration);
+        }
         return true;
     }
 
@@ -184,6 +188,30 @@ public class MediaProcessor {
     void backfillLoudness() {
         for (Long id : assets.findNeedingLoudness(org.springframework.data.domain.PageRequest.of(0, 2))) {
             assets.findById(id).ifPresent(a -> measureLoudness(id, a.getS3Key()));
+        }
+    }
+
+    /** GR-9: whether the video is one still picture start to end (null when it couldn't be measured). */
+    void measureStill(Long assetId, String key, double duration) {
+        Boolean still = null;
+        try {
+            still = probe.stillPicture(storage.readLocation(key), duration);
+        } catch (Exception e) {
+            log.warn("Media {} couldn't be checked for a still picture: {}", assetId, e.getMessage());
+        }
+        assets.setStillPicture(assetId, still);
+    }
+
+    /** GR-9: videos processed before the still check, a couple per sweep (videos in a playlist first). */
+    void backfillStill() {
+        for (Long id : assets.findNeedingStillCheck(org.springframework.data.domain.PageRequest.of(0, 2))) {
+            assets.findById(id).ifPresent(a -> {
+                if (a.getDurationSeconds() == null || a.getDurationSeconds() <= 0) {
+                    assets.setStillPicture(id, null);
+                } else {
+                    measureStill(id, a.getS3Key(), a.getDurationSeconds());
+                }
+            });
         }
     }
 

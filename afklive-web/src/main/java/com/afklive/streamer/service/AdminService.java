@@ -75,13 +75,14 @@ public class AdminService {
     private final FileStorageService storage;
     private final AppConfigService appConfig;
     private final PlanConfigRepository planConfigs;
+    private final com.afklive.streamer.repository.StreamIncidentRepository incidents;
 
     public AdminService(StreamJobRepository jobs, LiveStreamRepository streams, UserRepository users,
                         SubscriptionRepository subscriptions, PaymentAuditRepository payments, InvoiceRepository invoices,
                         UsageRepository usage, PlanService plans, StreamService streamService, AdminActionRepository audit,
                         NotificationService notifications, WorkerStatusRepository workerStatus, QuotaAuditRepository quota,
                         SupportTicketRepository tickets, FileStorageService storage, AppConfigService appConfig,
-                        PlanConfigRepository planConfigs,
+                        PlanConfigRepository planConfigs, com.afklive.streamer.repository.StreamIncidentRepository incidents,
                         @Value("${app.youtube.daily-quota:10000}") int dailyQuota,
                         @Value("${app.admin.monthly-server-cost:}") String monthlyServerCost,
                         @Value("${app.admin.server-cost-currency:INR}") String serverCostCurrency) {
@@ -89,6 +90,7 @@ public class AdminService {
         this.storage = storage;
         this.appConfig = appConfig;
         this.planConfigs = planConfigs;
+        this.incidents = incidents;
         this.workerStatus = workerStatus;
         this.quota = quota;
         this.dailyQuota = dailyQuota;
@@ -112,25 +114,38 @@ public class AdminService {
     public record LiveRow(Long jobId, Long streamId, String streamName, String userEmail, Long userId, String plan,
                           String worker, Long heartbeatAgeSeconds, String status, String health, long uptimeSeconds,
                           String nowPlaying, Boolean inputLive, int restarts, Double bitrateKbps, Double fps, Double speed,
-                          String lastError, int destinations, List<StreamDtos.DestinationHealth> destinationHealth) {
+                          String lastError, int destinations, List<StreamDtos.DestinationHealth> destinationHealth,
+                          ZonedDateTime slowSince, String problem) {
     }
 
     public List<LiveRow> liveStreams(String q, String health, String worker) {
         ZonedDateTime now = now();
         List<LiveRow> out = new ArrayList<>();
         Map<Long, Optional<LiveStream>> streamCache = new HashMap<>();
+        // RE-10: runs slower than real time for a minute or more, with the fix.
+        Map<Long, ZonedDateTime> slow = new HashMap<>();
+        for (var i : incidents.findAllByKindAndResolvedAtIsNull(AlertMonitor.SLOW)) {
+            slow.put(i.getJobId(), i.getStartedAt());
+        }
         for (StreamJob j : jobs.findAllByIsLiveTrue()) {
             Optional<LiveStream> s = j.getStreamId() == null ? Optional.empty()
                     : streamCache.computeIfAbsent(j.getStreamId(), streams::findById);
             int height = s.map(LiveStream::getQualityHeight).orElse(1080);
             int fps = s.map(LiveStream::getFps).orElse(30);
             StreamDtos.Health h = StreamHealth.of(j, height, fps);
+            ZonedDateTime slowSince = slow.get(j.getId());
+            String problem = slowSince == null ? null : String.format(Locale.ROOT,
+                    "Slower than real time (%s) since %s UTC: viewers see slow playback. Fix: %s.",
+                    j.getSpeed() == null ? "speed unknown" : String.format(Locale.ROOT, "%.2fx", j.getSpeed()),
+                    slowSince.withZoneSameInstant(java.time.ZoneOffset.UTC).toLocalTime().withNano(0),
+                    height <= 720 && fps <= 30 ? "move it to a less busy worker"
+                            : "lower it to 720p 30 fps (now " + height + "p " + fps + " fps), or move it to a less busy worker");
             Long age = j.getHeartbeatAt() == null ? null : Duration.between(j.getHeartbeatAt(), now).getSeconds();
             LiveRow row = new LiveRow(j.getId(), j.getStreamId(), s.map(LiveStream::getName).orElse(j.getTitle()),
                     j.getUser().getEmail(), j.getUser().getId(), j.getUser().getPlanType().name(), j.getWorkerId(), age,
                     j.getStatus(), h.overall(), j.getStartTime() == null ? 0 : Math.max(0, Duration.between(j.getStartTime(), now).getSeconds()),
                     j.getNowPlaying(), j.getInputLive(), j.getRestarts(), j.getBitrateKbps(), j.getFps(), j.getSpeed(), j.getLastError(),
-                    h.destinations().size(), h.destinations());
+                    h.destinations().size(), h.destinations(), slowSince, problem);
             if (q != null && !q.isBlank()) {
                 String needle = q.trim().toLowerCase(Locale.ROOT);
                 boolean match = row.userEmail().toLowerCase(Locale.ROOT).contains(needle)
