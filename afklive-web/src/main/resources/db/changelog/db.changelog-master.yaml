@@ -46,4 +46,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/045-profile-copies.sql
   - include:
+      file: db/changelog/changes/065-one-live-run-per-stream.sql
+  - include:
+      file: db/changelog/changes/066-worker-cpus.sql
+  - include:
       file: db/changelog/changes/075-support-ops.sql

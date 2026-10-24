@@ -28,6 +28,8 @@ interface LiveRow {
   restarts: number;
   bitrateKbps?: number | null;
   lastError?: string | null;
+  /** RE-10: what's wrong and the fix, e.g. running slower than real time. */
+  problem?: string | null;
 }
 interface WorkerRow {
   worker: string;
@@ -205,6 +207,11 @@ function LiveStreams() {
                   <span className="tnum text-xs text-muted">{r.heartbeatAgeSeconds == null ? '' : `${r.heartbeatAgeSeconds}s ago`}</span>
                 </td>
                 <td className="max-w-[240px] px-3 py-2 text-muted">
+                  {r.problem && (
+                    <span className="block whitespace-normal text-warn" title={r.problem}>
+                      {r.problem}
+                    </span>
+                  )}
                   <span className="block truncate">{r.lastError || r.nowPlaying || '–'}</span>
                   <span className="tnum text-xs">
                     {r.bitrateKbps ? `${Math.round(r.bitrateKbps)} kbps` : ''} {r.restarts ? `${r.restarts} restarts` : ''}

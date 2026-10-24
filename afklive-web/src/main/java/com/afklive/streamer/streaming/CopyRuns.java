@@ -86,7 +86,7 @@ public class CopyRuns {
      * mixes live rules it out: overlays, a music bed or changed video volume, the phone, another scene,
      * or an end-after-this-pass request.
      */
-    static String ineligible(StudioSpec s, String scene) {
+    public static String ineligible(StudioSpec s, String scene) {
         if (s == null || !"PLAYLIST".equals(s.source()) || s.videos() == null || s.videos().isEmpty()) {
             return "not a playlist";
         }

@@ -65,6 +65,27 @@ frame rate, fit, loudness, bitrate), at the lowest priority.
 - Turn it on for a worker by setting `APP_STREAMING_COPYMODE=true` and restarting it; turn it off the
   same way. Streams in copy mode show `"mode":"copy"` in their now-playing data.
 
+## Capacity guard (GL-7, RE-10)
+
+**Before a stream goes live, pre-flight estimates the CPU its quality needs and compares it with what
+workers report as free; while it runs, a stream slower than real time for a minute alerts.**
+
+- The estimate (`CapacityEstimator`): about 0.5 of a CPU to encode 720p30, 1.0 for 1080p30, 2.0 for
+  1080p60 (scaled by frame rate; 1440p ≈ 1.8 and 2160p ≈ 4 per 30 fps), plus 0.1 for decoding; 0.01 for
+  a stream that plays by copy. Free capacity is the best worker with a free slot: 85 % of its CPUs minus
+  its current load, from `stream_workers` (workers report `cpus` since changeset 066; an older worker
+  counts as one CPU per stream slot). Calibrated on 24 Oct 2026 (4-vCPU afklive-1 fell behind at 92 %).
+- Not enough room: the creator sees a warning with "Use 720p 30 fps" (or the best lighter quality that
+  fits) and "Go live anyway". Only a quality more than one whole worker can give is refused. No worker
+  reporting load: no warning. Scheduled starts are never held back by the warning.
+- The web side counts copy mode only when it has `APP_STREAMING_COPYMODE=true` too; set it on web
+  instances with the same value as on workers, or copy-eligible streams are estimated at studio cost.
+- RE-10: the alert monitor (web) opens a `SLOW` row in `stream_incidents` when a run's `speed` stays
+  below 0.95 for 60 s, alerts the creator (at most once per stream in 6 hours), shows it on the stream
+  page and the Admin live row, and closes it when speed recovers. It doesn't count as downtime.
+- One live run per stream: `uq_stream_jobs_one_live_per_stream` (changeset 065). A second Go live while
+  the run is starting or live returns that run.
+
 ## Egress firewall (required in production)
 
 Destinations are validated to be public, but FFmpeg resolves hosts again when connecting. Run the
