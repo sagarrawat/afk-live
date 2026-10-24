@@ -52,4 +52,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/075-support-ops.sql
   - include:
+      file: db/changelog/changes/080-spring-session.sql
+  - include:
       file: db/changelog/changes/085-go-live-check.sql

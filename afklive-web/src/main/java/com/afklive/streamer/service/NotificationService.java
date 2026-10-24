@@ -6,7 +6,10 @@ import com.afklive.streamer.repository.NotificationRepository;
 import com.afklive.streamer.repository.UserRepository;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.ZoneId;
@@ -20,6 +23,10 @@ import java.util.concurrent.Executors;
  * Alerts for creators (NT-1, NT-2, SC-5): stored for the in-app list and emailed when the creator
  * allows it. Repeats are suppressed with a dedupe key and a window ("not repeated more than daily").
  * Emails go out on a background thread so detection never waits on the mail service.
+ * <p>
+ * OPS-4: several web instances run the same checks (two during every deploy), so "sent within the
+ * window?" and the insert happen under a transaction-scoped lock on the user and key: when two
+ * instances raise the same alert at the same moment, the second waits, sees the first, and skips.
  */
 @Service
 @Slf4j
@@ -53,17 +60,25 @@ public class NotificationService {
     private final UserRepository users;
     private final EmailService email;
     private final PushService push;
+    private final JdbcTemplate jdbc;
+    private final TransactionTemplate tx;
     private final ExecutorService mailer = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "alert-mailer");
         t.setDaemon(true);
         return t;
     });
 
-    public NotificationService(NotificationRepository notifications, UserRepository users, EmailService email, PushService push) {
+    /** Scopes the advisory locks below to alerts (first key of pg_advisory_xact_lock(int, int)). */
+    private static final int DEDUPE_LOCK_SPACE = 0x4146_4b4e; // "AFKN"
+
+    public NotificationService(NotificationRepository notifications, UserRepository users, EmailService email, PushService push,
+                               JdbcTemplate jdbc, PlatformTransactionManager txManager) {
         this.notifications = notifications;
         this.users = users;
         this.email = email;
         this.push = push;
+        this.jdbc = jdbc;
+        this.tx = new TransactionTemplate(txManager);
     }
 
     /** One alert to send. {@code dedupeKey} + {@code dedupeWindow}: skip if the same key was sent within the window. */
@@ -82,9 +97,25 @@ public class NotificationService {
 
     public Optional<Notification> notify(User user, Alert a) {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
-        if (a.dedupeKey() != null && a.dedupeWindow() != null
-                && notifications.existsByUserIdAndDedupeKeyAndCreatedAtAfter(user.getId(), a.dedupeKey(), now.minus(a.dedupeWindow()))) {
+        Notification stored = tx.execute(status -> store(user, a, now));
+        if (stored == null) {
             return Optional.empty();
+        }
+        deliver(user, a, stored);
+        return Optional.of(stored);
+    }
+
+    /** Inserts the alert unless the same key was stored within its window; null when it was. */
+    private Notification store(User user, Alert a, ZonedDateTime now) {
+        boolean deduped = a.dedupeKey() != null && a.dedupeWindow() != null;
+        if (deduped) {
+            // Held until this transaction ends: a second instance raising the same alert waits here, then sees this row.
+            jdbc.query("SELECT pg_advisory_xact_lock(?, hashtext(?))", rs -> null,
+                    DEDUPE_LOCK_SPACE, user.getId() + ":" + trim(a.dedupeKey(), 200));
+            if (notifications.existsByUserIdAndDedupeKeyAndCreatedAtAfter(user.getId(), trim(a.dedupeKey(), 200),
+                    now.minus(a.dedupeWindow()))) {
+                return null;
+            }
         }
         Notification n = new Notification();
         n.setUserId(user.getId());
@@ -96,7 +127,10 @@ public class NotificationService {
         n.setLink(a.link());
         n.setDedupeKey(a.dedupeKey() == null ? null : trim(a.dedupeKey(), 200));
         n.setCreatedAt(now);
-        n = notifications.save(n);
+        return notifications.saveAndFlush(n);
+    }
+
+    private void deliver(User user, Alert a, Notification n) {
         log.info("Alert {} for user {}: {}", a.type(), user.getId(), a.title());
         AlertPreferences.Channels channels = AlertPreferences.forType(user.getAlertPreferences(), a.type());
         if (a.emailIt() && user.isEmailAlerts() && channels.email()) {
@@ -121,7 +155,6 @@ public class NotificationService {
             String url = a.link() == null ? "/studio" : a.link().startsWith("/studio") ? a.link() : "/studio" + a.link();
             mailer.submit(() -> push.send(userId, a.title(), a.body(), url, a.dedupeKey() != null ? a.dedupeKey() : a.type()));
         }
-        return Optional.of(n);
     }
 
     public List<Notification> latest(Long userId) {

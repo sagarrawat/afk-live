@@ -8,6 +8,10 @@ on:
 jobs:
   deploy-worker:
     runs-on: ubuntu-latest
+    # Never at the same time as a web deploy (OPS-4): both may start a second JVM. Waits for the other.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

@@ -6,7 +6,7 @@ AFK Live runs as two processes from the same jar:
 
 | Service | Role | What it does | Deployed |
 | --- | --- | --- | --- |
-| `afklive` | `STREAMING_ROLE=web` | Website and API, billing, scheduled starts/stops | On every push to `main` (GitHub Actions) |
+| `afklive-web@a` / `@b` (was `afklive`) | `STREAMING_ROLE=web` | Website and API, billing, scheduled starts/stops | On every push to `main` (GitHub Actions), without downtime (OPS-4, below) |
 | `afklive-worker` | profile `worker` | Runs live streams (FFmpeg) | Manually: **Actions → Deploy stream worker** |
 
 They share only the PostgreSQL database. The web app records what should stream; workers claim
@@ -36,6 +36,154 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 - A worker that can't reach the database for 30 s stops its streams, before anyone else may take them over (45 s).
 - A stop asked for while the stream's worker is gone is completed by the web app.
 - Billing starts when the stream is first on air, not while its files download.
+
+## Web deploys without downtime (OPS-4)
+
+**A web deploy starts the new version next to the running one and switches over when it is ready;
+nobody sees an error and nobody is signed out.** Design: `docs/roadmap.md` ("Zero-downtime deploys")
+and `docs/engineering-plan.md` §2.
+
+```
+            ┌──► 127.0.0.1:8080  afklive-web@a  (old version: serving, then 5 s "not ready", then stops)
+Caddy ──────┤      health check: /actuator/health/readiness, every second
+            └──► 127.0.0.1:8090  afklive-web@b  (new version: starting ... ready ... serving)
+```
+
+How a deploy runs (`afklive-scripts/web-deploy.sh`, called by the **Afklive-web CI & CD** workflow on
+every push to `main`):
+
+1. The new jar goes into the idle slot (`/opt/afklive/web/slots/<a|b>/app.jar`) and that slot starts.
+   The running slot keeps serving. The script first refuses (and changes nothing) if a worker deploy is
+   running, both web slots are already up, or less than 1.8 GB of memory is available.
+2. The script waits for the new slot's readiness probe (about 70–110 s: startup and Liquibase migrations).
+   A new version that exits or isn't ready within 5 minutes is stopped; the old one was never touched.
+3. After 3 s (Caddy checks every second) the old slot is stopped: it answers its readiness probe with
+   503 for 5 s (`WEB_SHUTDOWN_DRAIN`) while still serving, so Caddy moves new requests; then it stops
+   accepting connections and finishes the requests in flight (up to 60 s, `WEB_SHUTDOWN_TIMEOUT`). A
+   request that still meets a closed port is retried by Caddy on the other slot.
+4. The new slot becomes the one that starts at boot; the old jar stays in its slot for `--rollback`.
+
+Rehearsed before merging with the real jar twice, the real Caddyfile and the real script (systemd
+replaced by a stand-in), on a 2-core 8 GB machine: two switches under continuous traffic, 137,626
+requests, no errors, the signed-in visitor stayed signed in throughout.
+
+**What makes two versions side by side safe:**
+
+- **Migrations are expand-then-contract.** For about two minutes the old version runs against the
+  database the new one migrated. A changeset only adds (tables, nullable or defaulted columns, indexes);
+  the next release starts using it; a release after that drops what nothing reads any more. Never
+  rename or drop in the release that stops using something.
+- **Sign-ins are stored in PostgreSQL** (Spring Session JDBC, `spring_session` tables), so both slots
+  share them. A session attribute a new version can't read (a library upgrade changed a class) counts
+  as signed out for that visitor instead of an error page; remember-me signs them back in. CSRF tokens
+  are in a cookie. Remember-me cookies need `REMEMBER_ME_KEY` set (otherwise each slot makes up its own
+  key). The release that brings this signs everyone out once, because sessions were in memory before
+  (Spring Boot 4 had stopped auto-configuring the JDBC store).
+- **Every background job claims its work in the database**, so the two slots never do it twice:
+
+| Job (web side) | Every | Why two instances are safe |
+| --- | --- | --- |
+| Alerts (`AlertMonitor`) | 30 s | An incident opens and closes with one conditional update. Alerts with a dedupe key are inserted under a lock on user and key, so two instances raising the same alert send it once. Each instance times "bad for 60 s" itself, so right after a deploy an alert can come up to a minute later |
+| Usage metering, free-hours stop | 1 min | Each slice is added with an update fenced on `last_billing_time`; stopping is idempotent |
+| Scheduled stops, abandoned stops | 15 s | Stop requests are idempotent; ending a run is one conditional update |
+| Stream schedules | 20 s | Each occurrence is claimed (`claimOccurrence`) in the transaction that starts it |
+| Old scheduled streams (JobRunr) | 1 min | JobRunr runs a recurring job on one server; each stream is claimed too |
+| Billing period ends | hourly | One subscription at a time under a row lock, state re-read after the lock |
+| Account deletion | hourly | The user row is locked; deletion is idempotent |
+| Abandoned uploads | 30 min | Row lock per upload |
+| New media processing | 1 min | Claimed per file; a claim older than 10 minutes is taken over. The loudness backfill may measure one file twice during the overlap (same result) |
+| Playout copies | 1 min | `FOR UPDATE SKIP LOCKED` claim. A slot that stops mid-copy hands it back at once (otherwise it waited out the 8-hour stale claim) |
+| Clean-ups (commands, old alerts, unplayed copies, expired sessions) | various | Conditional or idempotent deletes |
+| Stored-secret re-encryption, plan defaults | startup | Conditional updates; only the starting slot runs them |
+
+- **Per-instance memory only holds conveniences**: rate-limit counters, the plan cache (an admin plan
+  edit made during the switch reaches only one slot until the old one stops: don't edit plans during a
+  deploy), the status page cache (15 s).
+
+**Never run a web deploy and a worker deploy at the same time.** Each starts a second JVM (a worker
+handover also runs extra encodes). Both workflows share the GitHub concurrency group
+`production-deploy`, so one waits for the other (a queued run can be replaced by a newer queued one of
+either workflow: re-run the worker deploy if that happens), and the web script refuses while both
+worker slots are up.
+
+**Memory** (7.8 GB droplet). Measured in the rehearsal: a web slot at `-Xmx1g` uses 0.6–0.9 GB
+resident; allow 1.3 GB after long uptime. Budget:
+
+| | Web | Worker | PostgreSQL, Caddy, MediaMTX, OS | Left for encodes (FFmpeg) |
+| --- | --- | --- | --- | --- |
+| Normal | 1 × ~1.3 GB | 1 × ~0.9 GB | ~1.2 GB | ~4.4 GB (~0.25 GB per studio stream, little in copy mode) |
+| Web deploy (about 2 min) | 2 × ~1.3 GB | 1 × ~0.9 GB | ~1.2 GB | ~3.1 GB |
+| Worker handover (OPS-3) | 1 × ~1.3 GB | 2 × ~0.9 GB | ~1.2 GB | ~3.5 GB, with one extra encode at a time |
+| Both at once (never) | 2 × ~1.3 GB | 2 × ~0.9 GB | ~1.2 GB | ~2.2 GB, plus an extra encode: live streams at risk |
+
+Heap sizes stay as they were (web `-Xmx1g`, worker `-Xmx512m`): the deploy script's 1.8 GB check
+(`MIN_FREE_MB`) stops a web deploy before it could squeeze streams. If it refuses often, check
+`free -m` and the worker's stream count before lowering anything.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `WEB_HTTP_PORT` | `8080` (Spring default) | Per slot, in `/opt/afklive/web-slot-a.env` (8080) and `-b.env` (8090). Worker slots use 8081/8082 |
+| `WEB_SHUTDOWN_DRAIN` | `0s` | How long a stopping web app reports "not ready" while still serving. The slot unit sets 5 s (`-Dapp.web.shutdown-drain`) |
+| `WEB_SHUTDOWN_TIMEOUT` | `60s` | How long a stopping web app waits for requests in flight. The unit's `TimeoutStopSec=90` covers drain + this |
+| Script: `READY_TIMEOUT`, `MIN_FREE_MB`, `SETTLE_SECONDS` | 300 s, 1800 MB, 3 s | Environment of `web-deploy.sh` |
+
+The readiness probe (`/actuator/health/readiness`, also `/liveness`) answers only requests made on
+the server itself; through Caddy it is 404 (and the app answers 403 to anything forwarded). Nothing
+else from the actuator is exposed.
+
+Useful: `web-deploy.sh --status`; `web-deploy.sh --dry-run /path/app.jar` (prints the steps, changes
+nothing, no sudo); `sudo web-deploy.sh --rollback` (switches back to the previous version, without
+downtime: it is still installed in the idle slot); `journalctl -u afklive-web@b -f`. Logs are also in
+`/opt/afklive/logs/web-a` and `web-b`. If the script says both slots run (a deploy was interrupted),
+look at `--status`, stop the slot that isn't the one you want (`systemctl stop afklive-web@a`), retry.
+
+### One-time server setup (by hand, after this release is live)
+
+The first deploy after merging restarts the old way, because the server isn't set up yet (the workflow
+log says so). Do these steps **after** that, while the new version runs in `afklive.service`, as root.
+No step interrupts the site:
+
+```sh
+# 0. The running version must answer the readiness probe; otherwise Caddy (step 1) would mark it down.
+curl -s http://127.0.0.1:8080/actuator/health/readiness        # must print {"status":"UP"}
+#    Both slots must sign remember-me cookies with the same key (empty = a random key per process):
+grep -q '^REMEMBER_ME_KEY=.\+' /opt/afklive/afklive.env || echo "REMEMBER_ME_KEY=$(openssl rand -hex 32)" >> /opt/afklive/afklive.env
+
+# 1. Caddy: both slot ports with health checks. Only 8080 (afklive.service) answers for now; that's fine.
+#    Replace afk.live with your domain in the file first.
+cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.before-ops4
+cp afklive-scripts/caddy/Caddyfile /etc/caddy/Caddyfile
+caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+
+# 2. Phone streaming: MediaMTX must reach the web app through Caddy, never one slot's port. In
+#    /opt/afklive/ingest/mediamtx.yml:  authHTTPAddress: http://127.0.0.1:8079/internal/ingest/auth?secret=...
+systemctl restart afklive-ingest      # phones reconnect on their own
+
+# 3. Slot units, their ports and jar folders
+cp afklive-scripts/systemd/afklive-web@.service /etc/systemd/system/
+echo "WEB_HTTP_PORT=8080" > /opt/afklive/web-slot-a.env
+echo "WEB_HTTP_PORT=8090" > /opt/afklive/web-slot-b.env
+install -d -o root -g afklive -m 0755 /opt/afklive/web /opt/afklive/web/slots /opt/afklive/web/slots/a /opt/afklive/web/slots/b
+systemctl daemon-reload
+
+# 4. The deploy script (root-owned; the deploy user may run only this with sudo)
+install -d -m 0755 /opt/afklive/scripts
+install -o root -g root -m 0755 afklive-scripts/web-deploy.sh /opt/afklive/scripts/
+echo "DEPLOY_USER ALL=(root) NOPASSWD: /opt/afklive/scripts/web-deploy.sh" > /etc/sudoers.d/afklive-web-deploy
+chmod 0440 /etc/sudoers.d/afklive-web-deploy && visudo -c   # DEPLOY_USER: the user in the DO_USER secret
+
+# 5. Rehearse (prints what will happen, changes nothing), then move from afklive.service to slot b
+/opt/afklive/scripts/web-deploy.sh --dry-run /opt/afklive/app.jar
+/opt/afklive/scripts/web-deploy.sh /opt/afklive/app.jar
+/opt/afklive/scripts/web-deploy.sh --status                    # running: b, ready: yes (port 8090)
+```
+
+From then on every push deploys without downtime, alternating between slots a and b (the workflow
+uploads to `/opt/afklive/incoming/web/`). Re-run step 4 whenever the script changes. The old
+`afklive.service` stays installed but disabled. To undo: `systemctl enable --now afklive` (it takes
+port 8080, so first `systemctl disable --now afklive-web@a` if a runs), then
+`systemctl disable --now afklive-web@b`, restore `/etc/caddy/Caddyfile.before-ops4` and reload Caddy,
+put MediaMTX back, remove `/opt/afklive/scripts/web-deploy.sh` (the workflow then restarts the old way).
 
 ## Worker settings
 
@@ -105,7 +253,9 @@ creators), on each worker host or on its own small server.
    `afklive-scripts/systemd/afklive-ingest.service`. Open TCP 1935 (RTMP) and UDP 8890 (SRT) to the internet.
 2. In `mediamtx.yml` set `authHTTPAddress` to the web app with the shared secret. **Use HTTPS (or a
    private network) for it**: every auth call carries the secret and the phone's stream key. Don't log
-   query strings for `/internal/ingest/auth` on any proxy in front of the web app.
+   query strings for `/internal/ingest/auth` on any proxy in front of the web app. On the web app's own
+   server use Caddy's local listener `http://127.0.0.1:8079/...`, never a web slot's port (each web
+   deploy stops one slot; see "Web deploys without downtime").
 3. In `afklive.env` (web and workers):
 
 | Variable | Example | Meaning |
