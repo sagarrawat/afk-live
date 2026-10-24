@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
+import { nowPlayingTitle } from '../../lib/now-playing';
 import { MailWarning } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -360,7 +361,7 @@ export function RunPage({ id }: { id: number }) {
               {d.droppedFrames ? `, ${d.droppedFrames} frames dropped` : ''}, {d.restarts} restart{d.restarts === 1 ? '' : 's'}
             </span>
           </Row>
-          {d.nowPlaying && <Row label="Now playing">{d.nowPlaying}</Row>}
+          {nowPlayingTitle(d.nowPlaying) && <Row label="Now playing">{nowPlayingTitle(d.nowPlaying)}</Row>}
           {d.inputLive != null && <Row label="Phone input">{d.inputLive ? 'Receiving' : 'Not receiving'}</Row>}
           {d.lastError && (
             <Row label="Last error">

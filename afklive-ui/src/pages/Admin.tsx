@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { nowPlayingTitle } from '../lib/now-playing';
 import { Download, Paperclip, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
@@ -214,7 +215,7 @@ function LiveStreams() {
                       {r.problem}
                     </span>
                   )}
-                  <span className="block truncate">{r.lastError || r.nowPlaying || '–'}</span>
+                  <span className="block truncate">{r.lastError || nowPlayingTitle(r.nowPlaying) || '–'}</span>
                   <span className="tnum text-xs">
                     {r.bitrateKbps ? `${Math.round(r.bitrateKbps)} kbps` : ''} {r.restarts ? `${r.restarts} restarts` : ''}
                   </span>
