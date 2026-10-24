@@ -300,4 +300,47 @@ class StreamRunnerTest {
         assertThat(rec.failed).isFalse();
         TsStitcherTest.assertContinuous(TsStitcherTest.probe(out), 4);
     }
+
+    // ------------------------------------------------------------- stopping never blocks (October 2026 freeze)
+
+    @Test
+    void stoppingAProcessWhoseInputPipeIsFullNeverBlocks() throws Exception {
+        // Production: an encoder fell behind, the studio's writer blocked on its full stdin (holding the stream's
+        // lock), and Process.destroy() waited for that lock to close stdin: the worker's loop froze for minutes.
+        Process p = new ProcessBuilder("sleep", "30").start();
+        java.io.OutputStream in = p.getOutputStream();
+        Thread writer = Thread.ofPlatform().daemon(true).start(() -> {
+            byte[] chunk = new byte[1 << 16];
+            try {
+                while (true) {
+                    in.write(chunk);
+                }
+            } catch (java.io.IOException e) {
+                // broken pipe once the process is gone
+            }
+        });
+        Thread.sleep(500); // the pipe is full now and the writer is blocked inside write()
+        assertThat(writer.isAlive()).isTrue();
+        long started = System.nanoTime();
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(3), () -> StreamRunner.terminate(p));
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(2000);
+        assertThat(p.waitFor(5, TimeUnit.SECONDS)).as("the process got the signal").isTrue();
+        writer.join(5000);
+        assertThat(writer.isAlive()).as("the blocked writer was released").isFalse();
+    }
+
+    @Test
+    void stoppingAStreamWhoseDestinationStoppedReadingReturnsAtOnce() throws Exception {
+        Recorder rec = new Recorder();
+        // A destination that never reads: its relay writer ends up blocked on a full pipe.
+        StreamRunner runner = new StreamRunner(40, () -> realtimeEncoder(5), List.of(List.of("sleep", "60")), rec,
+                new StreamRunner.Settings(Duration.ofSeconds(30), Duration.ofSeconds(30), Duration.ofSeconds(60), 3,
+                        Duration.ofMinutes(1), 64L * 1024 * 1024));
+        runner.start();
+        Thread.sleep(3000);
+        long started = System.nanoTime();
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(3), () -> runner.stop("test"));
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(2000);
+        assertThat(runner.awaitFinished(Duration.ofSeconds(30))).isTrue();
+    }
 }
