@@ -126,7 +126,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 
 ## User stories
 
-**There are 165 stories across 24 epics: 67 P0, 61 P1 and 37 P2. P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
+**There are 164 stories across 24 epics: 67 P0, 60 P1, 36 P2 and 1 P3 (AI-3, parked). P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
 
 ### 1. Onboarding and account
 
@@ -276,7 +276,8 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | --- | --- | --- | --- |
 | CH-1 | As a creator, I want to read and reply to live chat from AFK Live so that I engage without opening each platform | YouTube chat in the stream page; reply box; Super Chats highlighted | P1 |
 | CH-2 | As a creator, I want chat from all platforms in one feed so that I see every viewer | YouTube, Twitch, Kick merged with platform icons | P2 |
-| CH-3 | As a creator, I want to pin a message or post a timed message so that viewers see links and calls to action | Pinned message; repeating message every N minutes | P2 |
+
+CH-3 (pinned and timed messages, "repeating message every N minutes") was dropped in October 2026: automatic repeated chat messages conflict with YouTube's spam policy. Its ID is not reused.
 
 ### 14. Analytics
 
@@ -388,10 +389,10 @@ Stories that fix today's code (the free upgrade endpoint, seeded admin, broken s
 | --- | --- | --- | --- |
 | FO-1 | As the operator, I want each library video prepared once at the size and frame rate a stream uses so that live streams don't shrink a 1080p60 file every second | A copy is requested when a stream plays a bigger or faster video and made in the background at the lowest priority; playout switches at the next item without a restart; copies are deleted with their file and don't count toward the creator's storage; decoding drops frames before scaling | P0 |
 | FO-2 | As the operator, I want playlists without live overlays to stream by copy, not re-encode, so that a 24/7 stream costs almost no CPU | Prepared files at the stream profile are concatenated with stream copy when no live overlay, scene or phone input is in use; switching to a feature that needs encoding moves the stream to the studio at the next item without a disconnect | P1 |
-| FO-3 | As an admin, I want cost per stream-hour including bandwidth so that prices follow real cost | Admin shows server cost and traffic cost per stream-hour per plan and resolution, from measured CPU and bytes sent; monthly projection | P1 |
+| FO-3 | As an admin, I want cost per stream-hour including bandwidth so that prices follow real cost | Admin shows server cost and traffic cost per stream-hour per plan and resolution, from measured CPU and bytes sent; monthly projection. Built: admin Billing shows cost per stream-hour overall, by plan and by quality, GB sent, the month-end projection and each plan's margin (average account and full use) against its price before GST, with every input shown; server cost is shared equally per hour because CPU is measured per server, not per stream | P1 |
 | FO-4 | As the operator, I want each profile to send no more bits than YouTube needs so that traffic costs stay low without hurting quality | Bitrate per profile set from YouTube's recommended range and a measured quality check; a change shows its traffic saving in FO-3 | P1 |
-| FO-5 | As an admin, I want a traffic budget with alerts so that a bandwidth overage never surprises us | Outbound traffic per worker and per account tracked monthly against the included transfer; alert at 70% and 90% | P1 |
-| FO-6 | As the operator, I want playout copies nobody plays deleted so that storage doesn't grow forever | Copies not played for 30 days are deleted and made again when needed; storage per account and for copies shown in admin | P2 |
+| FO-5 | As an admin, I want a traffic budget with alerts so that a bandwidth overage never surprises us | Outbound traffic per worker and per account tracked monthly against the included transfer; alert at 70% and 90%. Built: admins get one alert per threshold per month (claimed across web instances), and the admin overview flags it from 70% | P1 |
+| FO-6 | As the operator, I want playout copies nobody plays deleted so that storage doesn't grow forever | Copies not played for 30 days are deleted and made again when needed; storage per account and for copies shown in admin. Built: the web sweeper deletes playout and profile copies unplayed for 30 days, never a copy of a video a live run plays; admin Servers shows copy count and storage | P2 |
 | FO-7 | As the operator, I want workers added and removed with load so that we pay for capacity only when streams need it | A scheduler adds a worker above 75% of fleet capacity and drains one (OPS-3) below 40%; never below one; every change logged with its cost | P2 |
 | FO-8 | As the operator, I want 24/7 playout on servers whose traffic is included so that bandwidth stops being the main cost | A second worker pool in a region with included traffic; 24/7 playlist streams placed there, phone streams stay near India; placement shown in admin | P2 |
 
@@ -426,7 +427,7 @@ Why and in what order: `docs/growth-plan.md` (research in `docs/research/youtube
 3. **v1, competitive** (47 P1 stories): multistream presets on one encode, live playlist edits, crossfade; overlays, AI titles, health and uptime views; schedule calendar, USD checkout, teams, installable app with push. *Gate: 5% of free accounts upgrade within 30 days.*
 3a. **Trust** (after the first real users, October 2026): "Live" means live on the platform (RE-8, DS-8, GL-1, GL-6, ON-8), deploys never interrupt anyone (OPS-3, OPS-4), email and support work (OPS-1, OPS-2, AD-6), a stream costs half the CPU (FO-1), and a quality the servers can't sustain is caught before and during a run (GL-7, RE-10). Order, sizes and evidence: `docs/roadmap.md`. *Gate: zero interrupted streams across three worker deploys; activation measured as "first live confirmed".*
 3b. **Growth** (after Trust): run experiments EX-1 to EX-6 first, then Growth v1: continuity score (GR-1), go-live check (GR-9), niche templates (GR-8), scheduled lives (GR-2) and phone lives that grow (GR-15), plus our own acquisition loop (GR-18); the rest is parked with triggers. Order and evidence: `docs/growth-plan.md`. *Gate: experiment EX-0 shows most beta channels gaining live watch hours and subscribers over their own baseline, with zero policy strikes.*
-4. **v2, pull ahead** (28 P2 stories): overlay templates and visualizer, multichat, client reports; public API, webhooks, MCP server, backup streams; Hindi UI, music library, stings.
+4. **v2, pull ahead** (27 P2 stories): overlay templates and visualizer, multichat, client reports; public API, webhooks, MCP server, backup streams; Hindi UI, music library, stings.
 
 The MVP is the highlighted phase: everything a music channel or temple broadcaster needs to stay live unattended. Gate numbers are proposed and should be set against real data from the beta.
 

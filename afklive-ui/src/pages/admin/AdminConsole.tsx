@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui';
 import { useMe } from '@/lib/queries';
 import { Audit, FunnelPanel, Plans, RevenuePanel, TicketPage, Tickets, UserPage } from '../Admin';
 import { AdminSearch } from './AdminSearch';
+import { CostPanel } from './CostPanel';
 import { LivePage } from './LivePage';
 import { OverviewPage, useAttention } from './OverviewPage';
 import { ServersPage } from './ServersPage';
@@ -94,6 +95,7 @@ function Section() {
         <div className="space-y-6">
           <h1 className="font-display text-xl font-bold">Billing</h1>
           <RevenuePanel />
+          <CostPanel />
           <Plans />
         </div>
       );

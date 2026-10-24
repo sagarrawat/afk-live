@@ -146,9 +146,12 @@ SSIM drop of 0.001–0.002. Both presets write identical SPS/PPS, so existing pr
 valid; copies now record their preset so a later change to another preset family re-makes them.
 A per-encoder thread cap measured no saving and stays off by default.
 
-**FO-6 (next, small):** record when a copy was last played (written at most every 10 minutes from the
-worker's lookup), delete copies unplayed for 30 days in the web sweeper, and show copy storage in
-admin. Copies are made again on demand, so deletion is always safe.
+**FO-6 (built, PR feature/cost-metering):** workers record when a copy was last played (at most every
+10 minutes, from #163/#167); the web sweeper deletes playout and profile copies unplayed for 30 days with
+their files, conditionally on the row as read so two web instances never both delete one, and never a
+copy of a video a live run plays (copy mode looks its copies up only when a run starts, so a 24/7 run
+would otherwise look unplayed). Copy sizes are recorded; admin Servers shows count and storage. Copies
+are made again on demand.
 
 ## 7. Copy-mode playout: FO-2 (built: PR feature/copy-mode, off by default)
 
@@ -169,7 +172,7 @@ FFmpeg's concat demuxer and stream copy into the same relays. That is about 0.05
 pass before turning it on. **Ships** behind `app.streaming.copy-mode` (default off), first for
 admin-chosen streams.
 
-## 8. Cost metering and budgets: FO-3, FO-5 (branch `feature/cost-metering`)
+## 8. Cost metering and budgets: FO-3, FO-5 (built: PR `feature/cost-metering`, web only)
 
 **Approach.** Bytes sent per destination (from workstream 1) plus CPU per worker (already reported
 every 30 s) give cost per stream-hour:
@@ -183,6 +186,14 @@ The bill and included transfer are environment settings (`APP_MONTHLY_SERVER_COS
 `APP_INCLUDED_TRANSFER_GB` and `APP_TRANSFER_PRICE_PER_GB`). Admin shows the cost per plan and
 resolution and a month-end projection. FO-5 alerts admins at 70% and 90% of included transfer. No new
 service: the numbers come from rows the app already writes.
+
+**As built.** `CostModel` (pure arithmetic, unit-tested) and `CostMeter` (loads runs, bytes, plans and
+CPU samples). GB and hours are projected to month end from the month so far; a run spanning two months
+counts in each by its time. Server cost is shared equally per stream-hour because CPU is measured per
+server, not per stream; traffic cost is shared by the GB each plan or quality sent, and the panel also
+shows the marginal cost once included transfer is used up. Defaults: 5,000 GB included (one DigitalOcean
+4 vCPU / 8 GiB droplet) and $0.01 per GB (₹0.85 for INR). FO-5 claims `transfer_alerts (month,
+threshold)` so two web instances alert once.
 
 ## 9. Bitrates: FO-4 (next, small, measured first)
 

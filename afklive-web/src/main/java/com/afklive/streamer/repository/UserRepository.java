@@ -73,4 +73,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** AD-3: find by email or name (lower-case needle). */
     @Query("SELECT u FROM User u WHERE LOWER(u.email) LIKE CONCAT('%', :q, '%') OR LOWER(COALESCE(u.fullName, '')) LIKE CONCAT('%', :q, '%')")
     org.springframework.data.domain.Page<User> search(@Param("q") String q, org.springframework.data.domain.Pageable pageable);
+
+    /** FO-5: accounts with this role (admins get the traffic budget alerts). */
+    java.util.List<User> findAllByRole(String role);
 }

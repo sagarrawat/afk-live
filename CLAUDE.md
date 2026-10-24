@@ -4,7 +4,7 @@ Cloud 24/7 live streaming for small creators: upload once, stay live on YouTube 
 without a PC, plus a cloud studio for creators who stream from their phone.
 
 **Read `docs/product-spec.md` before any feature work.** It holds the vision, personas, design
-direction, 163 user stories with IDs (ON-1, PL-3, GR-1, ...), the release plan and the
+direction, 164 user stories with IDs (ON-1, PL-3, GR-1, ...), the release plan and the
 non-functional requirements (continuity, quality, latency, cost). Reference story IDs in PRs.
 
 ## Repository layout

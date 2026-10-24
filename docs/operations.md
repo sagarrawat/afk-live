@@ -113,6 +113,8 @@ requests, no errors, the signed-in visitor stayed signed in throughout.
 | New media processing | 1 min | Claimed per file; a claim older than 10 minutes is taken over. The loudness backfill may measure one file twice during the overlap (same result) |
 | Playout copies | 1 min | `FOR UPDATE SKIP LOCKED` claim. A slot that stops mid-copy hands it back at once (otherwise it waited out the 8-hour stale claim) |
 | Clean-ups (commands, old alerts, unplayed copies, expired sessions) | various | Conditional or idempotent deletes |
+| Unplayed copies (FO-6) | 1 min | Each delete is conditional on the row as read (status, file, age), so only one slot deletes a copy and its file; never a copy of a video a live run plays |
+| Traffic budget alerts (FO-5) | 10 min | The `transfer_alerts (month, threshold)` insert is the claim: only the slot whose insert lands alerts admins |
 | Stored-secret re-encryption, plan defaults | startup | Conditional updates; only the starting slot runs them |
 
 - **Per-instance memory only holds conveniences**: rate-limit counters, the plan cache (an admin plan
@@ -668,6 +670,53 @@ Linked from the site footer, the app's account menu and Help page, and every ema
 | `APP_MONTHLY_SERVER_COST` | empty | The monthly bill for all servers, a plain number. Admin divides it by the last 30 days' stream hours (all runs, from `stream_jobs`). Empty: no estimate |
 | `APP_SERVER_COST_CURRENCY` | `INR` | Currency of the number above |
 | `APP_YOUTUBE_DAILY_QUOTA` | 10000 | The Google Cloud project's YouTube Data API units per day; Admin > Platform shows today's use (resets at midnight Pacific) |
+| `APP_INCLUDED_TRANSFER_GB` | empty = 5000 | Outbound transfer included in the server bill each month, in GB (GiB, as DigitalOcean counts). The default is one DigitalOcean 4 vCPU / 8 GiB droplet (Basic or CPU-optimized: 5,000 GiB). DigitalOcean pools transfer across a team's droplets, so with more servers set the sum. `0`: nothing included (every GB is paid; no budget alerts) |
+| `APP_TRANSFER_PRICE_PER_GB` | empty = DigitalOcean's $0.01 | Price of a GB beyond the included transfer, in `APP_SERVER_COST_CURRENCY`. Empty: 0.01 for USD, 0.85 for INR (at 85 rupees to the dollar; set it if the rate has moved), unknown for other currencies |
+| `APP_TRANSFER_ALERTS_AUTO` | `true` | Web instances check the traffic budget every 10 minutes (FO-5); `false` turns the check off |
+
+### Cost per stream-hour (FO-3)
+
+Admin, Billing, "Cost per stream-hour (estimate)" works out, for the current UTC month:
+
+```
+server cost per stream-hour  = APP_MONTHLY_SERVER_COST / stream-hours projected to month end
+traffic cost for the month   = max(0, GB projected to month end − included GB) × price per GB
+traffic cost per stream-hour = traffic cost for the month / stream-hours projected to month end
+```
+
+- **GB sent** is the sum of bytes each destination actually sent (`stream_job_destinations.bytes_sent`,
+  written by workers with the heartbeat). A run that spans two months counts in each in proportion to its
+  time. Workers older than the release that measures bytes report nothing, so traffic shows as zero
+  (the panel says so) until the worker batch is deployed.
+- **Stream-hours** are every run's time this month (`stream_jobs`; a run without an end time ends at its
+  last heartbeat).
+- **Projection**: the month so far, scaled to the whole month.
+- **By plan** uses each account's plan now; **by quality** uses the run's own height and frame rate.
+  Server cost is shared equally per stream-hour (CPU is measured per server, not per stream; the panel
+  shows the measured average CPU per stream from `worker_samples`). Traffic cost is shared by the GB each
+  group sent; hovering it shows the cost per hour once the included transfer is used up.
+- **Margin per plan** compares the plan's monthly price before 18% GST with its cost: for the average
+  account (the plan's projected hours over its accounts) and at full use (every included hour, 24/7 for
+  30 days when unlimited).
+
+### Traffic budget alerts (FO-5)
+
+Every 10 minutes a web instance adds up this month's GB sent. At 70% and at 90% of
+`APP_INCLUDED_TRANSFER_GB`, every enabled ADMIN account gets one alert (in-app, email and push as their
+alert settings allow) linking to admin Billing: once per threshold per month, across all web instances
+(claimed in `transfer_alerts`). Passing both between two checks sends only the 90% one. The admin
+Overview lists it under "needs attention" from 70% (red from 90%) for the rest of the month.
+
+### Prepared copies clean-up (FO-6)
+
+Playout copies (smaller files the studio decodes) and profile copies (stream-ready files for copy mode)
+are made on demand and deleted by the web sweeper (every minute, 50 at a time) when nobody has played them
+for 30 days, or, never played, 30 days after they were made; failed ones go after 30 days too. The stored
+file goes with the row. A copy of a video that any live run plays (its stream's items, a schedule slot's
+list, or a key in the run's spec) is never deleted, because copy mode only looks its copies up when a run
+starts. A deleted copy is made again the next time a stream needs it. Copy sizes are recorded when made
+(older copies are measured from storage a few a minute); admin Servers shows how many there are, their
+storage by kind, and how many are due for deletion.
 
 Worker CPU and memory are the machine's (or container's), since FFmpeg runs as child processes;
 memory "used" leaves out reclaimable page cache (`MemAvailable`).

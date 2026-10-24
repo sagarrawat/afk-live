@@ -24,25 +24,25 @@ Written 23 October 2026, after the first real users. Sizes: S (a day or two), M 
 
 | # | Story | Size | Depends on | Status |
 | --- | --- | --- | --- | --- |
-| 1 | OPS-1 Email works, or we say so | S | — | PR in progress |
-| 2 | OPS-2 Friendly expired-form and error pages | S | — | PR in progress |
-| 3 | DS-8 Refuse a server address as a stream key; test on save | S | — | PR #162 |
-| 4 | FO-1 Playout copies + fps before scale + busy-worker check | M | — | PR #163 |
-| 5 | RE-8 "Live" means the platform is receiving | M | — | PR in progress |
-| 6 | GL-1 (finish) Pre-flight tests the destination | S | DS-8 | PR in progress |
-| 7 | GL-6 Explain YouTube's side of going live | S | — | PR in progress |
-| 8 | OPS-4 Web deploys without downtime | M | — | PR in progress |
-| 9 | OPS-3 Worker deploys without interrupting streams | L | — | PR in progress |
-| 10 | AD-6 Admin support view of a stream | M | RE-8 | PR in progress |
-| 11 | RE-9 Destination events on the timeline; per-destination alerts | S | RE-8 | PR in progress |
-| 12 | ST-6 Shape and frame rate from the video | S | DS-8 | PR in progress |
-| 13 | MK-4 Help articles for real tickets | S | GL-6 | PR in progress |
-| 14 | ON-8 Setup ends with proof that it worked | M | RE-8, GL-1 | PR in progress |
-| 15 | FO-3 Cost per stream-hour including bandwidth | S | — | Next |
-| 16 | FO-2 Copy mode for playlists without live overlays | L | FO-1 | Next |
-| 17 | FO-4 Right-size bitrates per profile | S | FO-3 | Next |
-| 18 | FO-5 Bandwidth budget and alerts | S | FO-3 | Next |
-| 19 | FO-6 Clean up playout copies nobody plays | S | FO-1 | Next |
+| 1 | OPS-1 Email works, or we say so | S | — | Merged #176 |
+| 2 | OPS-2 Friendly expired-form and error pages | S | — | Merged #176 |
+| 3 | DS-8 Refuse a server address as a stream key; test on save | S | — | Merged #162 |
+| 4 | FO-1 Playout copies + fps before scale + busy-worker check | M | — | Merged #163; worker deploy pending |
+| 5 | RE-8 "Live" means the platform is receiving | M | — | Merged #172; worker deploy pending |
+| 6 | GL-1 (finish) Pre-flight tests the destination | S | DS-8 | Merged #172; worker deploy pending |
+| 7 | GL-6 Explain YouTube's side of going live | S | — | Merged #165 |
+| 8 | OPS-4 Web deploys without downtime | M | — | Merged #174 |
+| 9 | OPS-3 Worker deploys without interrupting streams | L | — | Merged #171; installed by the next (restart) worker deploy |
+| 10 | AD-6 Admin support view of a stream | M | RE-8 | Merged #176 (admin console #182) |
+| 11 | RE-9 Destination events on the timeline; per-destination alerts | S | RE-8 | Merged #172; worker deploy pending |
+| 12 | ST-6 Shape and frame rate from the video | S | DS-8 | Merged #165 |
+| 13 | MK-4 Help articles for real tickets | S | GL-6 | Merged #165 |
+| 14 | ON-8 Setup ends with proof that it worked | M | RE-8, GL-1 | Merged #180 |
+| 15 | FO-3 Cost per stream-hour including bandwidth | S | — | PR `feature/cost-metering` (web only) |
+| 16 | FO-2 Copy mode for playlists without live overlays | L | FO-1 | Merged #167 (+ encoder preset #177), off by default; worker deploy pending |
+| 17 | FO-4 Right-size bitrates per profile | S | FO-3 | Next (measure first) |
+| 18 | FO-5 Bandwidth budget and alerts | S | FO-3 | PR `feature/cost-metering` (web only) |
+| 19 | FO-6 Clean up playout copies nobody plays | S | FO-1 | PR `feature/cost-metering` (web only; last-played tracking shipped in #163/#167) |
 | 20 | OPS-5 Staging on the production droplet | M | OPS-4 | Next |
 | 21 | OPS-6 Nightly soak test | M | — | Next |
 | 22 | FO-7 Add and remove workers on load | L | OPS-3, FO-3 | Later |
@@ -50,9 +50,11 @@ Written 23 October 2026, after the first real users. Sizes: S (a day or two), M 
 | 24 | MS-7 Cloud recording of phone streams | M | FO-1 | Later |
 | 25 | BI-4 USD card checkout | M | Provider decision | Later |
 
-Releases: items 1–13 are the "Trust" release; deploy them in two batches, web-only first (1, 2, 3, 7,
-8, 12, 13), then the worker batch (4, 5, 6, 9, 11) once OPS-3 is on the server, so the worker batch is
-itself the first uninterrupted worker deploy. AD-6 goes with whichever batch it needs.
+Releases: items 1–14 are the "Trust" release, all merged (#160–#182). The web-only batch (1, 2, 3, 7, 8,
+10, 12, 13, 14) deploys with each merge. The worker batch (4, 5, 6, 9, 11, plus FO-2 off by default and
+the encoder preset) is waiting for one deploy with method `restart`, which installs OPS-3; every worker
+deploy after it hands streams over without interruption. Until then workers report no bytes sent, so
+FO-3 shows traffic as zero. FO-3, FO-5 and FO-6 are web-only and need no worker deploy.
 
 ## Zero-downtime deploys without new servers
 

@@ -147,6 +147,14 @@ app:
     # Admin shows it divided by the last 30 days' stream hours. Empty: no cost estimate.
     monthly-server-cost: ${APP_MONTHLY_SERVER_COST:}
     server-cost-currency: ${APP_SERVER_COST_CURRENCY:INR}
+    # FO-3 / FO-5: outbound transfer included in the server bill each month, in GB (GiB, as DigitalOcean counts).
+    # Empty: 5000 (one DigitalOcean 4 vCPU / 8 GiB droplet; DigitalOcean pools it across your droplets, so set the
+    # sum). 0: nothing included (every GB is paid, no budget alerts). Admins are alerted at 70% and 90%.
+    included-transfer-gb: ${APP_INCLUDED_TRANSFER_GB:}
+    # Price of a GB beyond the included transfer, in the currency above. Empty: DigitalOcean's $0.01
+    # (0.85 when the currency is INR, at 85 rupees to the dollar); no default for other currencies.
+    transfer-price-per-gb: ${APP_TRANSFER_PRICE_PER_GB:}
+    transfer-alerts-auto: ${APP_TRANSFER_ALERTS_AUTO:true}
   youtube:
     # YT-4: the Google Cloud project's YouTube Data API units per day (10,000 unless Google raised it).
     daily-quota: ${APP_YOUTUBE_DAILY_QUOTA:10000}
