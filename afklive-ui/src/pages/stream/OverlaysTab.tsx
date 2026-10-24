@@ -8,6 +8,7 @@ import { put } from '@/lib/api';
 import { browserTimeZone } from '@/lib/format';
 import type { Overlay, Scene, StreamView } from '@/lib/types';
 import { overlayName } from './OverviewTab';
+import { TemplatePicker } from './Templates';
 import { useStreamUpdate } from './useStreamUpdate';
 
 const SCENE_LABEL: Record<string, string> = { STARTING: 'Starting soon', LIVE: 'Live', BRB: 'Be right back', ENDING: 'Ending' };
@@ -60,7 +61,8 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
               onChange={setScene}
               options={[...(s.source === 'PLAYLIST' ? [{ value: 'ALL', label: 'All' }] : []), ...Object.entries(SCENE_LABEL).map(([value, label]) => ({ value, label }))]}
             />
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <TemplatePicker stream={s} disabled={dirty} />
               {dirty && (
                 <Button size="sm" variant="ghost" onClick={() => setLayers(s.overlays)}>
                   Undo changes

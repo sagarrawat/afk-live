@@ -67,6 +67,7 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
     private final Canvas canvas;
     private final Path workDir;
     private final String ffmpeg;
+    private final com.afklive.streamer.service.EncoderSettings encoder;
     private final Listener listener;
     private final long endAfterInputLostMillis;
     private final OverlayCompositor overlays;
@@ -200,13 +201,16 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
     }
 
     /**
+     * @param encoder                 x264 preset and threads; must match the profile copies copy mode hands over to
      * @param endAfterInputLostMillis end the stream when a live input has been down this long (0 = never)
      */
-    public Studio(Canvas canvas, Path workDir, String ffmpeg, List<Scene> sceneList, String initialScene,
-                  List<Overlay> global, long endAfterInputLostMillis, Listener listener) {
+    public Studio(Canvas canvas, Path workDir, String ffmpeg, com.afklive.streamer.service.EncoderSettings encoder,
+                  List<Scene> sceneList, String initialScene, List<Overlay> global, long endAfterInputLostMillis,
+                  Listener listener) {
         this.canvas = canvas;
         this.workDir = workDir;
         this.ffmpeg = ffmpeg;
+        this.encoder = java.util.Objects.requireNonNull(encoder, "encoder");
         this.listener = listener == null ? new Listener() { } : listener;
         this.endAfterInputLostMillis = endAfterInputLostMillis;
         this.overlays = new OverlayCompositor(canvas);
@@ -335,7 +339,7 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
                 "-thread_queue_size", "4096", "-probesize", "32", "-analyzeduration", "0",
                 "-f", "s16le", "-ar", String.valueOf(canvas.sampleRate()), "-ac", "2", "-i", audioFifo.toString(),
                 "-map", "0:v", "-map", "1:a"));
-        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvas.width(), canvas.height()), canvas.fps()));
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvas.width(), canvas.height()), canvas.fps(), encoder));
         cmd.addAll(List.of("-f", "mpegts", "-mpegts_flags", "+resend_headers", "-muxdelay", "0", "pipe:1"));
         return cmd;
     }

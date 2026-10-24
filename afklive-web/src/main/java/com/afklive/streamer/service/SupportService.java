@@ -390,16 +390,7 @@ public class SupportService {
             heightClass = spec.maxHeight() > 0 ? spec.maxHeight() : 720;
         }
         Canvas c = Canvas.of(heightClass, vertical, fps);
-        Integer kbps = null;
-        List<String> args = FFmpegCommandBuilder.liveEncodeArgs(Math.min(c.width(), c.height()), fps);
-        int i = args.indexOf("-b:v");
-        if (i >= 0 && i + 1 < args.size()) {
-            try {
-                kbps = Integer.parseInt(args.get(i + 1).replace("k", ""));
-            } catch (NumberFormatException ignored) {
-                // leave unknown
-            }
-        }
+        int kbps = FFmpegCommandBuilder.liveVideoKbps(Math.min(c.width(), c.height()), fps);
         return new Output(c.width(), c.height(), fps, vertical ? "Vertical" : "Landscape", spec.studio() != null ? kbps : null,
                 "AAC 128 kbps, 44.1 kHz stereo", "Every 2 s");
     }

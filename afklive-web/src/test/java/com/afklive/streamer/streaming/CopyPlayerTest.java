@@ -1,5 +1,6 @@
 package com.afklive.streamer.streaming;
 
+import com.afklive.streamer.service.EncoderSettings;
 import com.afklive.streamer.service.FFmpegCommandBuilder;
 import com.afklive.streamer.service.PlayoutCopies;
 import com.afklive.streamer.streaming.studio.PlaylistFeed;
@@ -31,7 +32,7 @@ class CopyPlayerTest {
         s.getInputStream().readAllBytes();
         assertThat(s.waitFor()).isZero();
         Path out = dir.resolve(name + ".ts");
-        List<String> cmd = PlayoutCopies.profileCommand(src.toString(), out, 320, 180, 30, "FIT", -2, true);
+        List<String> cmd = PlayoutCopies.profileCommand(src.toString(), out, 320, 180, 30, "FIT", -2, true, EncoderSettings.DEFAULT_PRESET);
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
         String log = new String(p.getInputStream().readAllBytes());
         assertThat(p.waitFor()).as(log).isZero();
@@ -114,6 +115,6 @@ class CopyPlayerTest {
     void theCopyProcessOnlyCopies() {
         List<String> cmd = CopyPlayer.command("ffmpeg", Path.of("x.ffconcat"));
         assertThat(cmd).containsSequence("-c", "copy").contains("-re").doesNotContain("libx264");
-        assertThat(FFmpegCommandBuilder.liveEncodeArgs(180, 30)).contains("libx264"); // what the profile copy used
+        assertThat(FFmpegCommandBuilder.liveEncodeArgs(180, 30, EncoderSettings.DEFAULT)).contains("libx264"); // what the profile copy used
     }
 }

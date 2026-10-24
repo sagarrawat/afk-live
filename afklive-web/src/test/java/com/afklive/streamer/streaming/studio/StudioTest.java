@@ -70,7 +70,7 @@ class StudioTest {
         PlaylistFeed playlist = new PlaylistFeed(CANVAS, List.of(a, b, c), PlaylistFeed.Order.IN_ORDER, 1, null,
                 StudioFixtures.factory(dir), false, new Random(1));
         Overlay title = Overlay.text("np", "Now playing: {title}", 0.05, 0.05, 0.08, 0xffffff, 0x99000000);
-        Studio studio = new Studio(CANVAS, dir.resolve("w1"), "ffmpeg",
+        Studio studio = new Studio(CANVAS, dir.resolve("w1"), "ffmpeg", com.afklive.streamer.service.EncoderSettings.DEFAULT,
                 List.of(new Studio.Scene("main", playlist, null, 1.0, 0, List.of(title), null)),
                 "main", List.of(Overlay.clock("clock", "Asia/Kolkata", 0.8, 0.05, 0.06)), 0, null);
         Path out = dir.resolve("playlist.flv");
@@ -114,7 +114,7 @@ class StudioTest {
                 PlaylistFeed.Order.IN_ORDER, 0, null, StudioFixtures.factory(dir), true, new Random(1));
         List<Boolean> switches = new CopyOnWriteArrayList<>();
         List<Long> switchTimes = new CopyOnWriteArrayList<>();
-        Studio studio = new Studio(CANVAS, dir.resolve("w2"), "ffmpeg", List.of(
+        Studio studio = new Studio(CANVAS, dir.resolve("w2"), "ffmpeg", com.afklive.streamer.service.EncoderSettings.DEFAULT, List.of(
                 new Studio.Scene("live", new LiveFeed(CANVAS, input.start(), brbPicture, LiveFeed.Settings.defaults(), null),
                         null, 1.0, 0, List.of(), "brb"),
                 new Studio.Scene("brb", brbPicture, brbMusic, 0, 0.8,
@@ -202,7 +202,7 @@ class StudioTest {
 
     @Test
     void aClosedStudioRefusesToLaunchAnEncoder() throws Exception {
-        Studio studio = new Studio(CANVAS, dir.resolve("w3"), "ffmpeg",
+        Studio studio = new Studio(CANVAS, dir.resolve("w3"), "ffmpeg", com.afklive.streamer.service.EncoderSettings.DEFAULT,
                 List.of(new Studio.Scene("s", StillFeed.color(CANVAS, 0), null, 0, 0, List.of(), null)), "s", List.of(), 0, null);
         studio.close();
         org.assertj.core.api.Assertions.assertThatThrownBy(studio::launch).isInstanceOf(java.io.IOException.class);

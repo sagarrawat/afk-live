@@ -199,6 +199,40 @@ put MediaMTX back, remove `/opt/afklive/scripts/web-deploy.sh` (the workflow the
 | `STREAMING_HANDOVER_TIMEOUT_SECONDS` | `60` | A new copy not on air everywhere within this time is abandoned; the old worker keeps the stream |
 | `STREAMING_HANDOVER_READY_SECONDS` | `5` | How long the new copy must be live everywhere it publishes before the old one stops |
 | `STREAMING_HANDOVER_RETURN_TO_PRIMARY` | `true` | After a handover, move YouTube destinations from the backup ingest back to the primary (make-before-break, same encoder) |
+| `APP_STREAMING_X264PRESET` | `superfast` | x264 speed preset of the live encoder (below). Set the same value on workers and web |
+| `APP_STREAMING_X264THREADS` | `0` | Threads per live encoder; `0` lets x264 decide (below) |
+
+## Live encoder
+
+Every studio stream (overlays, scenes, phone input, or a playlist not in copy mode) has one x264
+encoder. Fixed, because YouTube requires it: constant bitrate with filler (720p 4 Mbps, 1080p 6 Mbps,
+60 fps ×1.5), a keyframe every 2 s, AAC 128 kbps 44.1 kHz stereo. Configurable by environment, read at
+start (restart the process to change it):
+
+- **`APP_STREAMING_X264PRESET`** (default `superfast`): one of `ultrafast`, `superfast`, `veryfast`,
+  `faster`, `fast`, `medium`. Anything else is logged as a warning and `superfast` is used. Measured on
+  720x1280 30 fps footage (encoder CPU per second of video): grainy 0.57 → 0.32 cores from veryfast to
+  superfast with SSIM 0.888 → 0.887; typical 0.59 → 0.39 (0.9764 → 0.9749); easy 0.21 → 0.14.
+  `ultrafast` is visibly worse (SSIM 0.944 on typical footage); slower than `veryfast` costs more CPU
+  than its quality gain is worth at these bitrates.
+- **`APP_STREAMING_X264THREADS`** (default `0`, auto): caps threads per encoder (1–16). Two and four
+  encoders in parallel used the same total CPU (within noise) with caps of 1, 2, 3 or auto, so there's
+  no default cap. A cap only bounds latency spikes on a crowded worker; it doesn't save CPU.
+- The worker logs `Live encoder: x264 preset …, threads …` at start.
+
+**Presets and copy mode.** Copy mode hands a stream between a profile copy and the studio encoder
+without reconnecting, so both must write the same H.264 parameter sets. Presets fall into families
+with byte-identical SPS/PPS (checked against real x264 by `EncoderSettingsFfmpegTest`): `superfast`
+and `veryfast` are one family; `ultrafast`, `faster`, `fast` and `medium` are each their own. Each
+profile copy records the preset it was made with (`media_playout_copies.x264_preset`, empty = made
+with `veryfast` before this setting existed). A worker plays only copies of its own family; a ready
+copy of another family is made again with the worker's preset unless a worker played it within the
+hour. So:
+
+- Switching between `superfast` and `veryfast` needs nothing else: every existing copy stays valid.
+- Switching to another family re-encodes each profile copy once, in the background, as streams ask
+  for them (those streams use the studio meanwhile). Set it on all workers in the same deploy, or
+  workers on different families keep the copy for whichever is playing it.
 
 ## Copy mode (FO-2)
 
@@ -206,7 +240,8 @@ put MediaMTX back, remove `/opt/afklive/scripts/web-deploy.sh` (the workflow the
 of about 0.6.** A stream qualifies when it is a playlist with no overlays, no music bed, normal video
 volume, no phone input and is on its LIVE scene. For each video the web side prepares a *profile copy*
 once (`media_playout_copies`, kind `PROFILE`): the file encoded exactly as the stream sends it (canvas,
-frame rate, fit, loudness, bitrate), at the lowest priority.
+frame rate, fit, loudness, bitrate, and the requesting worker's x264 preset; see "Live encoder"), at the
+lowest priority.
 
 - A qualifying stream starts in copy mode when its copies are ready; otherwise it starts in the studio
   and moves to copy mode within a minute of its copies being ready.
@@ -510,6 +545,24 @@ presigned URL (ranged reads, no full download), stores a thumbnail and marks it 
 plain reason. Files aren't re-encoded: the studio re-encodes at playout anyway. A claim older than
 10 minutes is taken over, so a restart never leaves a file stuck. Web instances therefore need
 `ffmpeg`/`ffprobe` on PATH, like workers.
+
+## Templates and overlay fonts (GR-8)
+
+Niche templates (`NicheTemplates`, `POST /api/streams/{id}/template`) are applied through
+`LiveStreamService.setOverlays/setScenes/update/setPresentation` and `StreamScheduleService.create`, so
+a live stream picks them up between frames like any edit. Template layers have ids starting `tpl-`.
+Overlay text that Poppins can't draw falls back to the Noto Sans fonts bundled in the jar
+(`resources/fonts`, about 1.4 MB, SIL OFL); characters no bundled font has (emoji) are left out instead
+of drawn as boxes. The fonts are drawn by workers, so **workers need the new jar** for Indian-script
+text; until then a worker draws those characters as boxes, exactly as before.
+
+## Referrals (GR-18)
+
+`?ref=CODE` on any GET sets an `afk_ref` cookie (30 days, first invite wins, HttpOnly). Email and
+Google sign-ups read it and add a `referrals` row (one per new account, never self). Nothing is paid
+yet: the free month for both sides waits for RE-8's confirmed first live (see `ReferralService`).
+`users.credit_line` (off by default) appends "Streamed 24/7 with AFK Live: <link>" only to descriptions
+AFK Live already writes (the classic start flow's broadcast update); never to overlays.
 
 After a video is Ready, the same instance checks whether it is one still picture (GR-9): six small
 grey frames grabbed with a seek each (5% to 95% of the length) and compared. The result goes in

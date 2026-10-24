@@ -1,5 +1,6 @@
 package com.afklive.streamer.streaming;
 
+import com.afklive.streamer.service.EncoderSettings;
 import com.afklive.streamer.service.FFmpegCommandBuilder;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -24,10 +25,14 @@ public class TsStitcherTest {
     static byte[] wrapping;
 
     static byte[] encode(String name, String video, double freq, String... extra) throws Exception {
+        return encode(EncoderSettings.DEFAULT, name, video, freq, extra);
+    }
+
+    static byte[] encode(EncoderSettings encoder, String name, String video, double freq, String... extra) throws Exception {
         Path out = dir.resolve(name + ".ts");
         List<String> cmd = new ArrayList<>(List.of("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", video, "-f", "lavfi",
                 "-i", "sine=f=" + freq + ":r=44100", "-t", "4"));
-        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(360, 30));
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(360, 30, encoder));
         cmd.addAll(List.of(extra));
         cmd.addAll(List.of("-f", "mpegts", "-mpegts_flags", "+resend_headers", out.toString()));
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
@@ -170,6 +175,49 @@ public class TsStitcherTest {
         String log = new String(p.getInputStream().readAllBytes());
         assertThat(p.waitFor()).as(log).isZero();
         assertContinuous(probe(flv), 8);
+    }
+
+    @Test
+    void aVeryfastProfileCopyAndASuperfastStudioFollowEachOtherCleanly() throws Exception {
+        // During and after the rollout of the superfast default, copy mode plays profile copies made with veryfast
+        // and hands over to (and back from) a studio encoding with superfast: copy -> studio -> copy.
+        byte[] copy = encode(new EncoderSettings("veryfast", 0), "copy-vf", "testsrc2=size=640x360:rate=30", 440);
+        byte[] studio = encode(new EncoderSettings("superfast", 0), "studio-sf", "testsrc=size=640x360:rate=30", 880);
+        assertThat(EncoderSettingsFfmpegTest.parameterSets(studio))
+                .as("same SPS/PPS, so decoders and the FLV relay's sequence header stay valid")
+                .isEqualTo(EncoderSettingsFfmpegTest.parameterSets(copy));
+        List<Integer> switched = new ArrayList<>();
+        int half = (copy.length / 2 / TsStitcher.PACKET) * TsStitcher.PACKET + 77;
+        Path out = run("mixed", s -> {
+            s.expect(1);
+            feedInChunks(s, 1, copy, 0, half);
+            s.expect(2);
+            feedInChunks(s, 2, studio, 0, studio.length);  // held while the copy plays on
+            feedInChunks(s, 1, copy, half, copy.length);    // studio takes over at the copy's next frame
+            s.ended(1);
+            s.ended(2);
+            s.expect(3);
+            feedInChunks(s, 3, copy, 0, copy.length);       // and back to copy mode
+        }, switched);
+        assertThat(switched).containsExactly(2, 3);
+        assertContinuous(probe(out), 2 + 4 + 4);
+        Process decode = new ProcessBuilder("ffmpeg", "-v", "error", "-i", out.toString(), "-f", "null", "-").redirectErrorStream(true).start();
+        String errors = new String(decode.getInputStream().readAllBytes());
+        assertThat(decode.waitFor()).isZero();
+        assertThat(errors.lines().count()).as(errors).isLessThan(5);
+
+        // What a YouTube destination gets: the relay copies the stitched programme into FLV.
+        Path flv = dir.resolve("mixed.flv");
+        List<String> relay = new ArrayList<>(FFmpegCommandBuilder.buildRelayCommand("file://" + flv));
+        relay.set(relay.indexOf("pipe:0"), out.toString());
+        Process p = new ProcessBuilder(relay).redirectErrorStream(true).start();
+        String log = new String(p.getInputStream().readAllBytes());
+        assertThat(p.waitFor()).as(log).isZero();
+        assertContinuous(probe(flv), 10);
+        Process decodeFlv = new ProcessBuilder("ffmpeg", "-v", "error", "-i", flv.toString(), "-f", "null", "-").redirectErrorStream(true).start();
+        String flvErrors = new String(decodeFlv.getInputStream().readAllBytes());
+        assertThat(decodeFlv.waitFor()).isZero();
+        assertThat(flvErrors.lines().count()).as(flvErrors).isLessThan(5);
     }
 
     @Test

@@ -38,6 +38,10 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
     private final CustomUserDetailsService customUserDetailsService;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
+    /** GR-18: records a Google sign-up that arrived through an invite link (optional so tests can build the handler bare). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.afklive.streamer.service.ReferralService referralService;
+
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
         OAuth2AuthenticationToken token = (OAuth2AuthenticationToken) authentication;
@@ -127,6 +131,9 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             user.setPlanType(PlanType.FREE);
         }
         userRepository.save(user);
+        if (userOpt.isEmpty() && referralService != null) {
+            referralService.recordSignup(email, request);
+        }
 
         // Update Security Context with app roles (ROLE_USER/ROLE_ADMIN) from DB
         List<GrantedAuthority> authorities = AuthorityUtils.createAuthorityList(user.getRole());
