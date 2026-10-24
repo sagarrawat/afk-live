@@ -13,6 +13,12 @@ HERE = pathlib.Path(__file__).resolve().parent
 PAGES = [
     {
         "slug": "lofi",
+        "template": ("Lofi and chill", [
+            "A now-playing line with the track's name, bottom left",
+            "A small clock in your time zone",
+            "Starting soon, be right back and thanks-for-watching screens",
+            "Videos and songs shuffled, with a 4-second blend between tracks",
+        ], []),
         "illo": "illo-lofi",
         "title": "24/7 lofi and music channels",
         "h1": "A 24/7 music channel, without a computer left on",
@@ -35,6 +41,12 @@ PAGES = [
     },
     {
         "slug": "devotional",
+        "template": ("Bhajans and aarti", [
+            "Now playing and what's next, in Hindi or English",
+            "The clock in your time zone",
+            "Your order kept, for an aarti sequence",
+            "Screens for before, during a break and after, in saffron",
+        ], ["Morning and evening aarti (5:30 to 7 am, 6:30 to 8 pm)", "All-day bhajans with a midday pause (5 am to 1 pm, 4 to 10 pm)"]),
         "illo": "illo-devotional",
         "title": "Temples and devotional channels",
         "h1": "Aarti and bhajans live every day, right on time",
@@ -57,6 +69,11 @@ PAGES = [
     },
     {
         "slug": "mobile-gaming",
+        "template": ("Phone gaming", [
+            "Starting soon, be right back and thanks-for-watching screens",
+            "A small clock while you play",
+            "Words on screen in Hindi or English, or retype them in Tamil, Telugu, Bengali and more",
+        ], ["Evening session (8 to 10 pm)"]),
         "illo": "illo-gaming",
         "title": "Mobile gaming streams",
         "h1": "Stream from your phone with overlays, like a PC setup",
@@ -114,6 +131,25 @@ def page(p):
         f'      <li class="border-t-2 border-ink pt-5"><span class="display tnum text-[40px] font-extrabold leading-none">{i}</span>'
         f'<h3 class="mt-4 text-xl font-bold tracking-tight">{esc(t)}</h3><p class="mt-1 text-muted">{esc(d)}</p></li>'
         for i, (t, d) in enumerate(p["steps"], 1))
+    template = ""
+    if p.get("template"):
+        name, layers, presets = p["template"]
+        items = "\n".join(f'        <li>{esc(i)}</li>' for i in layers)
+        sched = ""
+        if presets:
+            sched = ('\n      <p class="mt-6 font-semibold">Schedules you can start from</p>\n      <ul class="mt-2 list-disc space-y-1 pl-5 text-muted">\n'
+                     + "\n".join(f'        <li>{esc(x)}</li>' for x in presets) + "\n      </ul>")
+        template = f"""
+  <section aria-labelledby="template" class="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+    <div class="rounded-lg border border-line p-6 sm:p-8">
+      <h2 id="template" class="text-2xl font-bold tracking-tight">Start from the {esc(name)} template</h2>
+      <p class="mt-2 max-w-2xl text-muted">One tap in the studio sets up the look below. Your own logo and text stay, and you can change everything after.</p>
+      <ul class="mt-5 list-disc space-y-1 pl-5">
+{items}
+      </ul>{sched}
+    </div>
+  </section>
+"""
     faq = "\n".join(
         f'        <div class="border-b border-line py-5"><dt class="font-semibold">{esc(q)}</dt><dd class="mt-1.5 text-muted">{esc(a)}</dd></div>'
         for q, a in p["faq"])
@@ -165,6 +201,7 @@ def page(p):
     </dl>
   </section>
 
+{template}
   <section aria-labelledby="steps" class="border-y border-line bg-panel">
     <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
       <h2 id="steps" class="h-section">Set it up once</h2>

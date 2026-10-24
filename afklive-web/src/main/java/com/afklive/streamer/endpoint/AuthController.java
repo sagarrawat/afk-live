@@ -17,6 +17,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class AuthController {
 
     private final UserService userService;
+    private final com.afklive.streamer.service.ReferralService referralService;
 
     // GET /login is in SignInStepController (it also offers to keep an account scheduled for deletion).
 
@@ -39,6 +40,7 @@ public class AuthController {
                     .build()
                     .toUriString();
             userService.registerUser(email, password, name, baseUrl);
+            referralService.recordSignup(email, request); // GR-18: arrived through an invite link (never fails the sign-up)
             model.addAttribute("success", "Registration successful. Please check your email to verify your account.");
             return "login";
         } catch (Exception e) {
