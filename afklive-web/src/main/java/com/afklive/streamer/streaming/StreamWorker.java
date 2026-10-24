@@ -146,6 +146,14 @@ public class StreamWorker {
         this.copyRuns = copyRuns;
     }
 
+    /** AD-6: keeps each run's last FFmpeg lines (keys removed) for the admin console; null in bare tests. */
+    private volatile JobLogs jobLogs;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setJobLogs(JobLogs jobLogs) {
+        this.jobLogs = jobLogs;
+    }
+
     /** For tests: how often studio runs are checked for moving to copy mode. */
     public void copyCheckEvery(Duration every) {
         this.copyCheckEvery = every;
@@ -639,6 +647,10 @@ public class StreamWorker {
     }
 
     private void cleanup(Running r, boolean ended) {
+        JobLogs logs = jobLogs;
+        if (logs != null) {
+            logs.close(r.id, ended ? "ended: " + r.finishPending : "stopped on " + workerId);
+        }
         CopyRuns.Handle copy = r.copy;
         if (copy != null) {
             r.copy = null;
@@ -780,6 +792,14 @@ public class StreamWorker {
             }
             if (safeError != null) {
                 streamService.addLog("[job " + id + " dest " + position + "] " + safeError);
+            }
+        }
+
+        @Override
+        public void onLogLine(String source, String line) {
+            JobLogs logs = jobLogs;
+            if (logs != null) {
+                logs.line(id, spec, source, line);
             }
         }
 

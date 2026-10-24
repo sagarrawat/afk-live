@@ -18,6 +18,7 @@
         <h1 class="display text-[28px] font-extrabold tracking-[-0.02em]">Enter your code</h1>
         <p class="mt-1 text-muted">Open your authenticator app and enter the 6-digit code for AFK Live.</p>
         <form th:action="@{/login/2fa}" method="post" class="mt-6 space-y-4">
+            <p th:if="${param.expired}" class="note-bad" role="alert">This page expired. Please try again.</p>
             <p th:if="${error}" class="note-bad" role="alert" th:text="${error}"></p>
             <div>
                 <label for="code" class="label">Code</label>

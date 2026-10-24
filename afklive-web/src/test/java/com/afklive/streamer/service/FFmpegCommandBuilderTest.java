@@ -118,6 +118,27 @@ class FFmpegCommandBuilderTest {
     }
 
     @Test
+    void theLiveEncoderUsesTheConfiguredPresetAndKeepsYouTubesMinimums() {
+        List<String> args = FFmpegCommandBuilder.liveEncodeArgs(720, 30, EncoderSettings.DEFAULT);
+        assertThat(args).containsSequence("-c:v", "libx264", "-preset", "superfast").doesNotContain("-threads:v", "veryfast");
+        // Constant bitrate with filler, keyframe every 2 s, AAC 44.1 kHz: unchanged by the preset.
+        assertThat(args).containsSequence("-b:v", "4000k", "-minrate", "4000k", "-maxrate", "4000k", "-bufsize", "8000k")
+                .containsSequence("-x264-params", "nal-hrd=cbr:force-cfr=1")
+                .containsSequence("-g", "60", "-keyint_min", "60", "-sc_threshold", "0")
+                .containsSequence("-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2");
+        assertThat(FFmpegCommandBuilder.liveEncodeArgs(1080, 30, EncoderSettings.DEFAULT)).containsSequence("-b:v", "6000k");
+        assertThat(FFmpegCommandBuilder.liveEncodeArgs(1080, 60, EncoderSettings.DEFAULT))
+                .containsSequence("-b:v", "9000k").containsSequence("-g", "120", "-keyint_min", "120");
+        assertThat(FFmpegCommandBuilder.liveVideoKbps(1080, 30)).isGreaterThanOrEqualTo(5000);
+    }
+
+    @Test
+    void aThreadCapAppliesToTheVideoEncoderOnly() {
+        List<String> args = FFmpegCommandBuilder.liveEncodeArgs(720, 30, new EncoderSettings("veryfast", 2));
+        assertThat(args).containsSequence("-preset", "veryfast", "-threads:v", "2").doesNotContain("-threads");
+    }
+
+    @Test
     void aStillPictureStillGoesOutAtTheTargetBitrate() throws Exception {
         // Found on production: a meeting recording (little motion) went out at ~0.4 Mbps against a 4 Mbps
         // target, and YouTube Studio warned "lower than the recommended bitrate".
@@ -125,7 +146,7 @@ class FFmpegCommandBuilderTest {
         java.nio.file.Path out = java.nio.file.Files.createTempDirectory("cbr").resolve("out.ts");
         java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of("ffmpeg", "-y", "-v", "error",
                 "-f", "lavfi", "-i", "color=c=gray:s=1280x720:r=30", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "6"));
-        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(720, 30));
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(720, 30, EncoderSettings.DEFAULT));
         cmd.addAll(java.util.List.of("-f", "mpegts", out.toString()));
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
         String log = new String(p.getInputStream().readAllBytes());

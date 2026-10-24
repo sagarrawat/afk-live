@@ -35,6 +35,7 @@
         </div>
         <form th:action="@{/register}" method="post" class="space-y-4" onsubmit="return checkPassword()">
             <p id="js-error" class="note-bad hidden" role="alert"></p>
+            <p th:if="${param.expired}" class="note-bad" role="alert">This page expired. Please try again.</p>
             <p th:if="${error}" class="note-bad" role="alert" th:text="${error}"></p>
             <div>
                 <label for="name" class="label">Your name</label>

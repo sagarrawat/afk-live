@@ -157,6 +157,92 @@ public class MediaProbe {
         }
     }
 
+    static final int STILL_W = 64;
+    static final int STILL_H = 36;
+    /** Where frames are sampled, as fractions of the length. */
+    static final double[] STILL_SAMPLES = {0.05, 0.2, 0.4, 0.6, 0.8, 0.95};
+
+    /**
+     * GR-9: whether a video is one still picture from start to end (a "static image" video). Grabs a
+     * small grey frame at six points from start to end (a seek each, no full decode) and compares
+     * them. True only when every frame matches the first; null when any frame can't be read, so the
+     * go-live check never guesses.
+     */
+    public Boolean stillPicture(String file, double durationSeconds) {
+        if (durationSeconds <= 0) {
+            return null;
+        }
+        List<byte[]> frames = new java.util.ArrayList<>();
+        for (double f : STILL_SAMPLES) {
+            byte[] frame = greyFrame(file, durationSeconds * f);
+            if (frame == null) {
+                return null;
+            }
+            frames.add(frame);
+        }
+        return sameFrames(frames);
+    }
+
+    /**
+     * Every frame matches the first: on average within one grey level, and no pixel off by more than
+     * 16 (a small moving element, a ticking clock or rain changes some pixel by far more at this size;
+     * compression noise averages out when 1080p is shrunk to 64x36).
+     */
+    static boolean sameFrames(List<byte[]> frames) {
+        byte[] first = frames.getFirst();
+        for (byte[] f : frames) {
+            if (f.length != first.length) {
+                return false;
+            }
+            long sum = 0;
+            int max = 0;
+            for (int i = 0; i < f.length; i++) {
+                int d = Math.abs((f[i] & 0xff) - (first[i] & 0xff));
+                sum += d;
+                max = Math.max(max, d);
+            }
+            if (max > 16 || sum > first.length) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static byte[] greyFrame(String file, double atSeconds) {
+        List<String> command = List.of(com.afklive.streamer.service.FFmpegCommandBuilder.ffmpegBinary(), "-hide_banner", "-nostdin",
+                "-loglevel", "error", "-ss", String.format(java.util.Locale.ROOT, "%.2f", Math.max(0, atSeconds)), "-i", file,
+                "-frames:v", "1", "-an", "-vf", "scale=" + STILL_W + ":" + STILL_H + ":flags=area,format=gray",
+                "-f", "rawvideo", "-y");
+        Path out = null;
+        try {
+            out = java.nio.file.Files.createTempFile("still-", ".gray");
+            List<String> cmd = new java.util.ArrayList<>(command);
+            cmd.add(out.toString());
+            // Output goes to a file, so a stalled read from storage can't block us past the timeout.
+            Process process = new ProcessBuilder(cmd).redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            if (!process.waitFor(60, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            byte[] bytes = java.nio.file.Files.readAllBytes(out);
+            return process.exitValue() == 0 && bytes.length == STILL_W * STILL_H ? bytes : null;
+        } catch (IOException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        } finally {
+            if (out != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(out);
+                } catch (IOException ignored) {
+                    // temp file
+                }
+            }
+        }
+    }
+
     /** The last "time=HH:MM:SS.xx" in FFmpeg's progress output, in seconds. */
     static double parseLastTime(String log) {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("time=(\\d+):(\\d{2}):(\\d{2}(?:\\.\\d+)?)").matcher(log);

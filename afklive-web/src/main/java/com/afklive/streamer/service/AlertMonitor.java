@@ -52,6 +52,12 @@ public class AlertMonitor {
     static final String DEST = "DEST";
     static final String PHONE = "PHONE";
     static final String STARTING = "STARTING";
+    /** RE-10: encoding slower than real time (YouTube receives the stream slower than it plays). */
+    static final String SLOW = "SLOW";
+    /** Below this speed for {@link #DOWN_AFTER}, a run is "slower than real time". */
+    static final double SLOW_SPEED = 0.95;
+    /** At most one slow-stream alert per stream in this window, however often it dips and recovers. */
+    static final Duration SLOW_ALERT_WINDOW = Duration.ofHours(6);
 
     private final StreamJobRepository jobs;
     private final StreamIncidentRepository incidents;
@@ -156,6 +162,15 @@ public class AlertMonitor {
                 }
             }
 
+            // RE-10: on air but encoding slower than real time (production, 24 Oct 2026: 1080p60 at 0.8x on a
+            // busy worker; viewers saw slow playback and nothing told anyone).
+            boolean slow = !starting && !down && job.getSpeed() != null && job.getSpeed() < SLOW_SPEED;
+            condition(seen, job, SLOW, "", slow, now, DOWN_AFTER,
+                    () -> notifier.notify(email, slowAlert(job, name, link)),
+                    () -> notifier.notify(email, new NotificationService.Alert(NotificationService.Types.STREAM_SPEED_OK,
+                            Notification.Level.SUCCESS, streamId, name + " is running in real time again",
+                            "Viewers see it at normal speed.", link, null, null, false)));
+
             // Phone streams: BRB has been on for a while (the stream itself is fine).
             condition(seen, job, PHONE, "", Boolean.FALSE.equals(job.getInputLive()) && !starting, now, PHONE_LOST_AFTER,
                     () -> notifier.notify(email, alert(NotificationService.Types.PHONE_LOST, Notification.Level.WARNING, streamId,
@@ -234,6 +249,23 @@ public class AlertMonitor {
         } catch (Exception e) {
             return List.of();
         }
+    }
+
+    /** RE-10: what's wrong and the fix, in plain words, with the stream's own quality. */
+    private NotificationService.Alert slowAlert(StreamJob job, String name, String link) {
+        Long streamId = job.getStreamId();
+        String quality = streamId == null ? null : streams.findById(streamId)
+                .map(s -> s.getQualityHeight() + "p " + s.getFps() + " fps").orElse(null);
+        String speed = String.format(java.util.Locale.ROOT, "%.2fx", job.getSpeed());
+        String fix = "720p 30 fps".equals(quality)
+                ? "Remove overlays you don't need, or contact support so we move it to a less busy server."
+                : "Lower the quality to 720p 30 fps: stop the stream, change it in Settings, and go live again.";
+        return new NotificationService.Alert(NotificationService.Types.STREAM_SLOW, Notification.Level.WARNING, streamId,
+                name + " is running slower than real time",
+                "The server can't keep up" + (quality == null ? "" : " with " + quality) + " (running at " + speed
+                        + "), so viewers see the stream play slowly. " + fix,
+                streamId == null ? "/studio" : "/streams/" + streamId + "/settings",
+                "SLOW:" + (streamId != null ? streamId : "job" + job.getId()), SLOW_ALERT_WINDOW, true);
     }
 
     private NotificationService.Alert alert(String type, Notification.Level level, Long streamId, String title, String body, String link) {

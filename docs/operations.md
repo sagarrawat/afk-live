@@ -6,7 +6,7 @@ AFK Live runs as two processes from the same jar:
 
 | Service | Role | What it does | Deployed |
 | --- | --- | --- | --- |
-| `afklive` | `STREAMING_ROLE=web` | Website and API, billing, scheduled starts/stops | On every push to `main` (GitHub Actions) |
+| `afklive-web@a` / `@b` (was `afklive`) | `STREAMING_ROLE=web` | Website and API, billing, scheduled starts/stops | On every push to `main` (GitHub Actions), without downtime (OPS-4, below) |
 | `afklive-worker` | profile `worker` | Runs live streams (FFmpeg) | Manually: **Actions → Deploy stream worker** |
 
 They share only the PostgreSQL database. The web app records what should stream; workers claim
@@ -37,6 +37,154 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 - A stop asked for while the stream's worker is gone is completed by the web app.
 - Billing starts when the stream is first on air, not while its files download.
 
+## Web deploys without downtime (OPS-4)
+
+**A web deploy starts the new version next to the running one and switches over when it is ready;
+nobody sees an error and nobody is signed out.** Design: `docs/roadmap.md` ("Zero-downtime deploys")
+and `docs/engineering-plan.md` §2.
+
+```
+            ┌──► 127.0.0.1:8080  afklive-web@a  (old version: serving, then 5 s "not ready", then stops)
+Caddy ──────┤      health check: /actuator/health/readiness, every second
+            └──► 127.0.0.1:8090  afklive-web@b  (new version: starting ... ready ... serving)
+```
+
+How a deploy runs (`afklive-scripts/web-deploy.sh`, called by the **Afklive-web CI & CD** workflow on
+every push to `main`):
+
+1. The new jar goes into the idle slot (`/opt/afklive/web/slots/<a|b>/app.jar`) and that slot starts.
+   The running slot keeps serving. The script first refuses (and changes nothing) if a worker deploy is
+   running, both web slots are already up, or less than 1.8 GB of memory is available.
+2. The script waits for the new slot's readiness probe (about 70–110 s: startup and Liquibase migrations).
+   A new version that exits or isn't ready within 5 minutes is stopped; the old one was never touched.
+3. After 3 s (Caddy checks every second) the old slot is stopped: it answers its readiness probe with
+   503 for 5 s (`WEB_SHUTDOWN_DRAIN`) while still serving, so Caddy moves new requests; then it stops
+   accepting connections and finishes the requests in flight (up to 60 s, `WEB_SHUTDOWN_TIMEOUT`). A
+   request that still meets a closed port is retried by Caddy on the other slot.
+4. The new slot becomes the one that starts at boot; the old jar stays in its slot for `--rollback`.
+
+Rehearsed before merging with the real jar twice, the real Caddyfile and the real script (systemd
+replaced by a stand-in), on a 2-core 8 GB machine: two switches under continuous traffic, 137,626
+requests, no errors, the signed-in visitor stayed signed in throughout.
+
+**What makes two versions side by side safe:**
+
+- **Migrations are expand-then-contract.** For about two minutes the old version runs against the
+  database the new one migrated. A changeset only adds (tables, nullable or defaulted columns, indexes);
+  the next release starts using it; a release after that drops what nothing reads any more. Never
+  rename or drop in the release that stops using something.
+- **Sign-ins are stored in PostgreSQL** (Spring Session JDBC, `spring_session` tables), so both slots
+  share them. A session attribute a new version can't read (a library upgrade changed a class) counts
+  as signed out for that visitor instead of an error page; remember-me signs them back in. CSRF tokens
+  are in a cookie. Remember-me cookies need `REMEMBER_ME_KEY` set (otherwise each slot makes up its own
+  key). The release that brings this signs everyone out once, because sessions were in memory before
+  (Spring Boot 4 had stopped auto-configuring the JDBC store).
+- **Every background job claims its work in the database**, so the two slots never do it twice:
+
+| Job (web side) | Every | Why two instances are safe |
+| --- | --- | --- |
+| Alerts (`AlertMonitor`) | 30 s | An incident opens and closes with one conditional update. Alerts with a dedupe key are inserted under a lock on user and key, so two instances raising the same alert send it once. Each instance times "bad for 60 s" itself, so right after a deploy an alert can come up to a minute later |
+| Usage metering, free-hours stop | 1 min | Each slice is added with an update fenced on `last_billing_time`; stopping is idempotent |
+| Scheduled stops, abandoned stops | 15 s | Stop requests are idempotent; ending a run is one conditional update |
+| Stream schedules | 20 s | Each occurrence is claimed (`claimOccurrence`) in the transaction that starts it |
+| Old scheduled streams (JobRunr) | 1 min | JobRunr runs a recurring job on one server; each stream is claimed too |
+| Billing period ends | hourly | One subscription at a time under a row lock, state re-read after the lock |
+| Account deletion | hourly | The user row is locked; deletion is idempotent |
+| Abandoned uploads | 30 min | Row lock per upload |
+| New media processing | 1 min | Claimed per file; a claim older than 10 minutes is taken over. The loudness backfill may measure one file twice during the overlap (same result) |
+| Playout copies | 1 min | `FOR UPDATE SKIP LOCKED` claim. A slot that stops mid-copy hands it back at once (otherwise it waited out the 8-hour stale claim) |
+| Clean-ups (commands, old alerts, unplayed copies, expired sessions) | various | Conditional or idempotent deletes |
+| Stored-secret re-encryption, plan defaults | startup | Conditional updates; only the starting slot runs them |
+
+- **Per-instance memory only holds conveniences**: rate-limit counters, the plan cache (an admin plan
+  edit made during the switch reaches only one slot until the old one stops: don't edit plans during a
+  deploy), the status page cache (15 s).
+
+**Never run a web deploy and a worker deploy at the same time.** Each starts a second JVM (a worker
+handover also runs extra encodes). Both workflows share the GitHub concurrency group
+`production-deploy`, so one waits for the other (a queued run can be replaced by a newer queued one of
+either workflow: re-run the worker deploy if that happens), and the web script refuses while both
+worker slots are up.
+
+**Memory** (7.8 GB droplet). Measured in the rehearsal: a web slot at `-Xmx1g` uses 0.6–0.9 GB
+resident; allow 1.3 GB after long uptime. Budget:
+
+| | Web | Worker | PostgreSQL, Caddy, MediaMTX, OS | Left for encodes (FFmpeg) |
+| --- | --- | --- | --- | --- |
+| Normal | 1 × ~1.3 GB | 1 × ~0.9 GB | ~1.2 GB | ~4.4 GB (~0.25 GB per studio stream, little in copy mode) |
+| Web deploy (about 2 min) | 2 × ~1.3 GB | 1 × ~0.9 GB | ~1.2 GB | ~3.1 GB |
+| Worker handover (OPS-3) | 1 × ~1.3 GB | 2 × ~0.9 GB | ~1.2 GB | ~3.5 GB, with one extra encode at a time |
+| Both at once (never) | 2 × ~1.3 GB | 2 × ~0.9 GB | ~1.2 GB | ~2.2 GB, plus an extra encode: live streams at risk |
+
+Heap sizes stay as they were (web `-Xmx1g`, worker `-Xmx512m`): the deploy script's 1.8 GB check
+(`MIN_FREE_MB`) stops a web deploy before it could squeeze streams. If it refuses often, check
+`free -m` and the worker's stream count before lowering anything.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `WEB_HTTP_PORT` | `8080` (Spring default) | Per slot, in `/opt/afklive/web-slot-a.env` (8080) and `-b.env` (8090). Worker slots use 8081/8082 |
+| `WEB_SHUTDOWN_DRAIN` | `0s` | How long a stopping web app reports "not ready" while still serving. The slot unit sets 5 s (`-Dapp.web.shutdown-drain`) |
+| `WEB_SHUTDOWN_TIMEOUT` | `60s` | How long a stopping web app waits for requests in flight. The unit's `TimeoutStopSec=90` covers drain + this |
+| Script: `READY_TIMEOUT`, `MIN_FREE_MB`, `SETTLE_SECONDS` | 300 s, 1800 MB, 3 s | Environment of `web-deploy.sh` |
+
+The readiness probe (`/actuator/health/readiness`, also `/liveness`) answers only requests made on
+the server itself; through Caddy it is 404 (and the app answers 403 to anything forwarded). Nothing
+else from the actuator is exposed.
+
+Useful: `web-deploy.sh --status`; `web-deploy.sh --dry-run /path/app.jar` (prints the steps, changes
+nothing, no sudo); `sudo web-deploy.sh --rollback` (switches back to the previous version, without
+downtime: it is still installed in the idle slot); `journalctl -u afklive-web@b -f`. Logs are also in
+`/opt/afklive/logs/web-a` and `web-b`. If the script says both slots run (a deploy was interrupted),
+look at `--status`, stop the slot that isn't the one you want (`systemctl stop afklive-web@a`), retry.
+
+### One-time server setup (by hand, after this release is live)
+
+The first deploy after merging restarts the old way, because the server isn't set up yet (the workflow
+log says so). Do these steps **after** that, while the new version runs in `afklive.service`, as root.
+No step interrupts the site:
+
+```sh
+# 0. The running version must answer the readiness probe; otherwise Caddy (step 1) would mark it down.
+curl -s http://127.0.0.1:8080/actuator/health/readiness        # must print {"status":"UP"}
+#    Both slots must sign remember-me cookies with the same key (empty = a random key per process):
+grep -q '^REMEMBER_ME_KEY=.\+' /opt/afklive/afklive.env || echo "REMEMBER_ME_KEY=$(openssl rand -hex 32)" >> /opt/afklive/afklive.env
+
+# 1. Caddy: both slot ports with health checks. Only 8080 (afklive.service) answers for now; that's fine.
+#    Replace afk.live with your domain in the file first.
+cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.before-ops4
+cp afklive-scripts/caddy/Caddyfile /etc/caddy/Caddyfile
+caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+
+# 2. Phone streaming: MediaMTX must reach the web app through Caddy, never one slot's port. In
+#    /opt/afklive/ingest/mediamtx.yml:  authHTTPAddress: http://127.0.0.1:8079/internal/ingest/auth?secret=...
+systemctl restart afklive-ingest      # phones reconnect on their own
+
+# 3. Slot units, their ports and jar folders
+cp afklive-scripts/systemd/afklive-web@.service /etc/systemd/system/
+echo "WEB_HTTP_PORT=8080" > /opt/afklive/web-slot-a.env
+echo "WEB_HTTP_PORT=8090" > /opt/afklive/web-slot-b.env
+install -d -o root -g afklive -m 0755 /opt/afklive/web /opt/afklive/web/slots /opt/afklive/web/slots/a /opt/afklive/web/slots/b
+systemctl daemon-reload
+
+# 4. The deploy script (root-owned; the deploy user may run only this with sudo)
+install -d -m 0755 /opt/afklive/scripts
+install -o root -g root -m 0755 afklive-scripts/web-deploy.sh /opt/afklive/scripts/
+echo "DEPLOY_USER ALL=(root) NOPASSWD: /opt/afklive/scripts/web-deploy.sh" > /etc/sudoers.d/afklive-web-deploy
+chmod 0440 /etc/sudoers.d/afklive-web-deploy && visudo -c   # DEPLOY_USER: the user in the DO_USER secret
+
+# 5. Rehearse (prints what will happen, changes nothing), then move from afklive.service to slot b
+/opt/afklive/scripts/web-deploy.sh --dry-run /opt/afklive/app.jar
+/opt/afklive/scripts/web-deploy.sh /opt/afklive/app.jar
+/opt/afklive/scripts/web-deploy.sh --status                    # running: b, ready: yes (port 8090)
+```
+
+From then on every push deploys without downtime, alternating between slots a and b (the workflow
+uploads to `/opt/afklive/incoming/web/`). Re-run step 4 whenever the script changes. The old
+`afklive.service` stays installed but disabled. To undo: `systemctl enable --now afklive` (it takes
+port 8080, so first `systemctl disable --now afklive-web@a` if a runs), then
+`systemctl disable --now afklive-web@b`, restore `/etc/caddy/Caddyfile.before-ops4` and reload Caddy,
+put MediaMTX back, remove `/opt/afklive/scripts/web-deploy.sh` (the workflow then restarts the old way).
+
 ## Worker settings
 
 | Variable | Default | Meaning |
@@ -46,6 +194,40 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 | `STREAMING_WORK_DIR` | `data/worker` | Where each stream's files are downloaded; cleaned up when it ends |
 | `APP_STREAMING_COPYMODE` | `false` | FO-2 copy mode (below). Set on workers; the web side always prepares the copies workers ask for |
 | `APP_STREAMING_WORKER_MAXCPUTOCLAIM` | `0.85` | Above this machine CPU (0–1) a worker leaves new streams to others for 45 s, then starts them anyway |
+| `APP_STREAMING_X264PRESET` | `superfast` | x264 speed preset of the live encoder (below). Set the same value on workers and web |
+| `APP_STREAMING_X264THREADS` | `0` | Threads per live encoder; `0` lets x264 decide (below) |
+
+## Live encoder
+
+Every studio stream (overlays, scenes, phone input, or a playlist not in copy mode) has one x264
+encoder. Fixed, because YouTube requires it: constant bitrate with filler (720p 4 Mbps, 1080p 6 Mbps,
+60 fps ×1.5), a keyframe every 2 s, AAC 128 kbps 44.1 kHz stereo. Configurable by environment, read at
+start (restart the process to change it):
+
+- **`APP_STREAMING_X264PRESET`** (default `superfast`): one of `ultrafast`, `superfast`, `veryfast`,
+  `faster`, `fast`, `medium`. Anything else is logged as a warning and `superfast` is used. Measured on
+  720x1280 30 fps footage (encoder CPU per second of video): grainy 0.57 → 0.32 cores from veryfast to
+  superfast with SSIM 0.888 → 0.887; typical 0.59 → 0.39 (0.9764 → 0.9749); easy 0.21 → 0.14.
+  `ultrafast` is visibly worse (SSIM 0.944 on typical footage); slower than `veryfast` costs more CPU
+  than its quality gain is worth at these bitrates.
+- **`APP_STREAMING_X264THREADS`** (default `0`, auto): caps threads per encoder (1–16). Two and four
+  encoders in parallel used the same total CPU (within noise) with caps of 1, 2, 3 or auto, so there's
+  no default cap. A cap only bounds latency spikes on a crowded worker; it doesn't save CPU.
+- The worker logs `Live encoder: x264 preset …, threads …` at start.
+
+**Presets and copy mode.** Copy mode hands a stream between a profile copy and the studio encoder
+without reconnecting, so both must write the same H.264 parameter sets. Presets fall into families
+with byte-identical SPS/PPS (checked against real x264 by `EncoderSettingsFfmpegTest`): `superfast`
+and `veryfast` are one family; `ultrafast`, `faster`, `fast` and `medium` are each their own. Each
+profile copy records the preset it was made with (`media_playout_copies.x264_preset`, empty = made
+with `veryfast` before this setting existed). A worker plays only copies of its own family; a ready
+copy of another family is made again with the worker's preset unless a worker played it within the
+hour. So:
+
+- Switching between `superfast` and `veryfast` needs nothing else: every existing copy stays valid.
+- Switching to another family re-encodes each profile copy once, in the background, as streams ask
+  for them (those streams use the studio meanwhile). Set it on all workers in the same deploy, or
+  workers on different families keep the copy for whichever is playing it.
 
 ## Copy mode (FO-2)
 
@@ -53,7 +235,8 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 of about 0.6.** A stream qualifies when it is a playlist with no overlays, no music bed, normal video
 volume, no phone input and is on its LIVE scene. For each video the web side prepares a *profile copy*
 once (`media_playout_copies`, kind `PROFILE`): the file encoded exactly as the stream sends it (canvas,
-frame rate, fit, loudness, bitrate), at the lowest priority.
+frame rate, fit, loudness, bitrate, and the requesting worker's x264 preset; see "Live encoder"), at the
+lowest priority.
 
 - A qualifying stream starts in copy mode when its copies are ready; otherwise it starts in the studio
   and moves to copy mode within a minute of its copies being ready.
@@ -64,6 +247,27 @@ frame rate, fit, loudness, bitrate), at the lowest priority.
   mechanism restarts a crashed producer without dropping destinations.
 - Turn it on for a worker by setting `APP_STREAMING_COPYMODE=true` and restarting it; turn it off the
   same way. Streams in copy mode show `"mode":"copy"` in their now-playing data.
+
+## Capacity guard (GL-7, RE-10)
+
+**Before a stream goes live, pre-flight estimates the CPU its quality needs and compares it with what
+workers report as free; while it runs, a stream slower than real time for a minute alerts.**
+
+- The estimate (`CapacityEstimator`): about 0.5 of a CPU to encode 720p30, 1.0 for 1080p30, 2.0 for
+  1080p60 (scaled by frame rate; 1440p ≈ 1.8 and 2160p ≈ 4 per 30 fps), plus 0.1 for decoding; 0.01 for
+  a stream that plays by copy. Free capacity is the best worker with a free slot: 85 % of its CPUs minus
+  its current load, from `stream_workers` (workers report `cpus` since changeset 066; an older worker
+  counts as one CPU per stream slot). Calibrated on 24 Oct 2026 (4-vCPU afklive-1 fell behind at 92 %).
+- Not enough room: the creator sees a warning with "Use 720p 30 fps" (or the best lighter quality that
+  fits) and "Go live anyway". Only a quality more than one whole worker can give is refused. No worker
+  reporting load: no warning. Scheduled starts are never held back by the warning.
+- The web side counts copy mode only when it has `APP_STREAMING_COPYMODE=true` too; set it on web
+  instances with the same value as on workers, or copy-eligible streams are estimated at studio cost.
+- RE-10: the alert monitor (web) opens a `SLOW` row in `stream_incidents` when a run's `speed` stays
+  below 0.95 for 60 s, alerts the creator (at most once per stream in 6 hours), shows it on the stream
+  page and the Admin live row, and closes it when speed recovers. It doesn't count as downtime.
+- One live run per stream: `uq_stream_jobs_one_live_per_stream` (changeset 065). A second Go live while
+  the run is starting or live returns that run.
 
 ## Egress firewall (required in production)
 
@@ -84,7 +288,9 @@ creators), on each worker host or on its own small server.
    `afklive-scripts/systemd/afklive-ingest.service`. Open TCP 1935 (RTMP) and UDP 8890 (SRT) to the internet.
 2. In `mediamtx.yml` set `authHTTPAddress` to the web app with the shared secret. **Use HTTPS (or a
    private network) for it**: every auth call carries the secret and the phone's stream key. Don't log
-   query strings for `/internal/ingest/auth` on any proxy in front of the web app.
+   query strings for `/internal/ingest/auth` on any proxy in front of the web app. On the web app's own
+   server use Caddy's local listener `http://127.0.0.1:8079/...`, never a web slot's port (each web
+   deploy stops one slot; see "Web deploys without downtime").
 3. In `afklive.env` (web and workers):
 
 | Variable | Example | Meaning |
@@ -127,6 +333,50 @@ key from `APP_ENCRYPTION_OLD_KEYS` after that.
   open uploads are removed from storage, connected-channel tokens are deleted. Invoices stay for the
   tax records, detached from the account; B2C invoices (no GSTIN) lose the customer's name and address,
   B2B invoices keep the legal name, address and GSTIN that GST law requires.
+
+## Email (OPS-1)
+
+Email goes through ZeptoMail: set `ZEPTOMAIL_URL` and `ZEPTOMAIL_TOKEN` on the web app, and
+`APP_BASE_URL` to the public address (`https://afklive.in`): verification and reset links are built
+from it, never from the request. While either ZeptoMail variable is empty:
+
+- the web app logs `EMAIL IS OFF` at startup and Admin shows a red banner;
+- password sign-ups are verified at once (logged), and at startup any sign-up still waiting for a
+  verification email is verified too (accounts an admin disabled are left alone);
+- "Forgot password" says email is unavailable and points to support@afklive.in (or Google sign-in)
+  instead of claiming a link was sent. For someone who writes in, check who they are (the address they
+  write from, a payment id), then Admin > Users > the user > Emails > "Password reset link" (audited,
+  works once) and send them the link;
+- alerts and payment reminders still appear in the app, just not by email.
+
+Every send is recorded in `email_log` (time, kind, the recipient's account, sent or why not; never the
+address or body) and shown in Admin > Users > the user > Emails. "Send a test email" (Admin > Platform, or the
+banner) sends to your own address and is audited. Records older than 180 days are removed.
+
+## Errors and request ids (OPS-2)
+
+Every request gets an 8-character id: in each log line it writes (`[abcd2345]`), in the `X-Request-Id`
+header, on the error page as "Code: abcd2345", and in the app's message for an API server error.
+Only a server error (5xx) says "something went wrong on our side"; a 4xx says what happened. A creator who quotes a code can
+be found with a log search for it. A form opened before a deploy (expired security token) is not an
+error: sign-in forms open again with "This page expired", and the app gets a fresh token and retries.
+
+## Support view of a run (AD-6)
+
+Admin > Live streams (click the stream) or Admin > Users > the user > Stream runs opens the run: source
+files with size, frame rate and shape; the output profile; each destination's server, the key masked as
+the creator sees it (`••••` and the last four), its length and the same key check the app runs on save;
+the platform's last error, reconnects and, once the stream servers report it (RE-8), whether the
+platform is receiving; and the last 200 FFmpeg lines. "Send a test" runs the usual 10-second
+destination test with the run's address (not while that destination is live, one at a time per
+account, not counted against the creator's hourly tests), needs a reason and is audited.
+
+FFmpeg lines are captured on the worker (`JobLogs`): every line passes `Redact.line` before it is kept
+(stream URLs, every part of the run's destination addresses in plain and URL-encoded form, and named
+values such as `key=`, `streamid=`, `passphrase=`, `token=`), only the last 200 are kept in memory, and
+a background thread saves them to `stream_job_logs` every 10 s while there are new ones and once when
+the run stops (one row per run, replaced; removed after 14 days by the web app). A database outage only
+delays the save; it never touches the stream. Runs on workers older than this release have no log.
 
 ## Destination tests
 
@@ -211,6 +461,21 @@ Google sign-ups read it and add a `referrals` row (one per new account, never se
 yet: the free month for both sides waits for RE-8's confirmed first live (see `ReferralService`).
 `users.credit_line` (off by default) appends "Streamed 24/7 with AFK Live: <link>" only to descriptions
 AFK Live already writes (the classic start flow's broadcast update); never to overlays.
+
+After a video is Ready, the same instance checks whether it is one still picture (GR-9): six small
+grey frames grabbed with a seek each (5% to 95% of the length) and compared. The result goes in
+`media_assets.still_picture` (null when a frame couldn't be read, so the check never guesses). Videos
+uploaded before this are measured by the media sweeper, two a minute, videos in a playlist first.
+
+## Go-live check (GR-9)
+
+The stream check on a stream's Overview (`/api/streams/{id}/check`) reads only what AFK Live has: the
+playlist, overlays, the measured still-picture flag, the YouTube title and thumbnail the creator typed
+in (`streams.youtube_title`, `thumbnail_media_id`) and replies AFK Live posted (`engagement_activity`).
+It never blocks going live and never calls YouTube. Thumbnail contrast is measured once per image per
+web instance (in memory) from the library thumbnail. Once a week per stream that was live in the past
+seven days, one web instance (conditional update on `streams.check_weekly_at`) sends an in-app notice
+listing open flags; no email or push. `app.check.weekly-auto=false` turns the hourly pass off (tests).
 
 ## Push alerts (NT-1, MB-2)
 
