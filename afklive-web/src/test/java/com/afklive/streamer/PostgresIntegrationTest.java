@@ -45,5 +45,6 @@ public abstract class PostgresIntegrationTest {
         registry.add("app.ingest.auth-secret", () -> "test-auth-secret");
         // Tests process library files explicitly (MediaProcessor.process / sweep).
         registry.add("app.media.auto-process", () -> "false");
+        registry.add("app.check.weekly-auto", () -> "false"); // GoLiveCheckServiceTest drives the weekly check itself
     }
 }

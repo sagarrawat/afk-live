@@ -44,6 +44,24 @@ public interface LiveStreamRepository extends JpaRepository<LiveStream, Long> {
     @Query("UPDATE LiveStream s SET s.resumePosition = :position WHERE s.id = :id")
     int saveResumePositionForTest(@Param("id") Long id, @Param("position") String position);
 
+    /** GR-9 weekly check: streams live now or at some point since {@code since}. */
+    @Query("SELECT s.id FROM LiveStream s WHERE EXISTS (SELECT 1 FROM StreamJob j WHERE j.streamId = s.id "
+            + "AND (j.isLive = true OR j.endTime > :since)) ORDER BY s.id")
+    List<Long> findIdsLiveSince(@Param("since") java.time.ZonedDateTime since);
+
+    /** GR-9: claims this week's check for one stream; 1 for the instance that should send it, 0 for the rest. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query(value = "UPDATE streams SET check_weekly_at = :now WHERE id = :id AND (check_weekly_at IS NULL OR check_weekly_at < :before)",
+            nativeQuery = true)
+    int claimWeeklyCheck(@Param("id") Long id, @Param("now") java.time.ZonedDateTime now, @Param("before") java.time.ZonedDateTime before);
+
+    /** GR-9 fix: stops automatic live-chat replies on the user's running streams (a targeted update; nothing else changes). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("UPDATE StreamJob j SET j.autoReplyEnabled = false WHERE j.user.id = :userId AND j.isLive = true AND j.autoReplyEnabled = true")
+    int stopLiveAutoReplies(@Param("userId") Long userId);
+
     /** Starts the next run from the top (the playlist finished). */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
