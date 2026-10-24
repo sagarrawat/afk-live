@@ -268,7 +268,12 @@ public class BillingService {
         s.setCurrency(audit.getCurrency() == null ? "INR" : audit.getCurrency());
         s.setStatus(Subscription.Status.ACTIVE);
         s.setCurrentPeriodStart(start);
-        s.setCurrentPeriodEnd(end(start, cycle));
+        // GR-18: free days earned through invites while on no paid plan join this period, once.
+        int bonus = users.lockBonusDays(u.getId());
+        if (bonus > 0) {
+            users.clearBonusDays(u.getId());
+        }
+        s.setCurrentPeriodEnd(end(start, cycle).plusDays(Math.max(0, bonus)));
         s.setCancelAtPeriodEnd(false);
         s.setPendingPlan(null);
         s.setPendingCycle(null);
@@ -276,13 +281,58 @@ public class BillingService {
         subscriptions.save(s);
         setPlan(u, plan, s.getCurrentPeriodEnd());
         String what = plans.getPlanConfig(plan).getDisplayName() + " plan, " + cycle.name().toLowerCase()
-                + (audit.getCredit() > 0 ? " (credit for unused time: " + InvoiceService.money(audit.getCredit(), s.getCurrency()) + ")" : "");
+                + (audit.getCredit() > 0 ? " (credit for unused time: " + InvoiceService.money(audit.getCredit(), s.getCurrency()) + ")" : "")
+                + (bonus > 0 ? ", plus " + bonus + " free days from invites" : "");
         Invoice inv = invoices.issue(u.getId(), audit.getTransactionId(), "AFK Live " + what, s.getCurrentPeriodStart(),
                 s.getCurrentPeriodEnd(), s.getCurrency(), audit.getAmount());
         notifications.notify(u, new NotificationService.Alert("PAYMENT_RECEIVED", Notification.Level.SUCCESS, null,
                 "Payment received: " + plans.getPlanConfig(plan).getDisplayName(),
                 "You're on " + what + " until " + day(s.getCurrentPeriodEnd()) + ". Invoice " + inv.getNumber() + " is in Billing.",
                 "/settings#billing", null, null, true));
+    }
+
+    // ------------------------------------------------------------------ free days (GR-18)
+
+    /**
+     * What {@link #addFreeDays} did: {@code until} is the new end of the paid period, or null when the
+     * days were saved for the next paid period ({@code saved} days are now waiting).
+     */
+    public record FreeDays(int days, ZonedDateTime until, int saved) {
+        public boolean extended() {
+            return until != null;
+        }
+    }
+
+    /**
+     * Gives an account free days without a payment, joining the caller's transaction: on a paid plan
+     * (active, or past due within grace) the current period is extended, the same way an admin
+     * extension works; on no paid plan the days are saved on the account and added to the next period
+     * it pays for ({@link #applyPaid}). Never changes a price.
+     */
+    @Transactional
+    public FreeDays addFreeDays(Long userId, int days) {
+        if (days < 1 || days > 366) {
+            throw new IllegalArgumentException("Free days must be between 1 and 366.");
+        }
+        Optional<Subscription> paid = subscriptions.lockByUserId(userId).filter(x -> x.getStatus() != Subscription.Status.CANCELED);
+        if (paid.isEmpty()) {
+            users.addBonusDays(userId, days);
+            return new FreeDays(days, null, users.bonusDays(userId));
+        }
+        Subscription s = paid.get();
+        User u = users.lockById(userId).orElseThrow();
+        ZonedDateTime base = s.getCurrentPeriodEnd() == null || s.getCurrentPeriodEnd().isBefore(now()) ? now() : s.getCurrentPeriodEnd();
+        s.setCurrentPeriodEnd(base.plusDays(days));
+        s.setStatus(Subscription.Status.ACTIVE);
+        s.setRenewalRemindedAt(null);
+        subscriptions.save(s);
+        setPlan(u, s.getPlanType(), s.getCurrentPeriodEnd());
+        return new FreeDays(days, s.getCurrentPeriodEnd(), 0);
+    }
+
+    /** "24 Dec 2026", as billing messages write dates. */
+    public static String dayOf(ZonedDateTime at) {
+        return day(at);
     }
 
     // ------------------------------------------------------------------ end-of-period changes (BI-5)

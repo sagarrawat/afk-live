@@ -49,6 +49,7 @@ class SiteFunnelTest extends PostgresIntegrationTest {
     @Autowired StreamEventRepository events;
     @Autowired StreamService streamService;
     @Autowired SiteFunnelService funnel;
+    @Autowired com.afklive.streamer.service.FirstLiveService firstLive;
 
     MockMvc mvc;
 
@@ -125,6 +126,7 @@ class SiteFunnelTest extends PostgresIntegrationTest {
                 ZonedDateTime.now(ZoneId.of("UTC")), "YouTube");
         job = jobs.save(job);
         events.save(new StreamEvent(job.getId(), ZonedDateTime.now(ZoneId.of("UTC")), StreamEvent.Kinds.REACHED, 0, "YouTube", null));
+        firstLive.recordFirstLives(); // ON-8: the step reads "first live confirmed", recorded by the web's sweep
 
         mvc.perform(get("/api/admin/funnel").param("days", "7").with(user("admin@example.com").roles("ADMIN")))
                 .andExpect(status().isOk())

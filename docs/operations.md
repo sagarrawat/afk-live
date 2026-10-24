@@ -36,6 +36,13 @@ web app ── StreamJob (spec, desired state) ──► database ◄── hear
 - A worker that can't reach the database for 30 s stops its streams, before anyone else may take them over (45 s).
 - A stop asked for while the stream's worker is gone is completed by the web app.
 - Billing starts when the stream is first on air, not while its files download.
+- **First live confirmed (ON-8).** Every 30 s each web instance runs one conditional update that sets
+  `users.first_live_at` for accounts that have none yet and whose stream a platform received: the earliest
+  `REACHED` timeline line of any of their runs, or now for a destination `ON` in a live run (in case that line
+  was lost). `WHERE first_live_at IS NULL ... RETURNING` means one instance claims each account. It's the
+  activation metric (the admin funnel's first-live step) and triggers the invite credit. `app.first-live.auto=false`
+  turns the sweep off (tests). Accounts that reached a platform before this shipped are backfilled by the first
+  sweep with their historical time, and their invites are credited then.
 - **"Live" means the platform is receiving (RE-8).** The worker counts the bytes each relay actually takes from
   the encoder (a relay that can't open its output exits; one whose connection hangs stops reading). A destination
   is `ON` after 10 s of steady sending and `NOT_REACHING` after two 10 s windows without it (one reconnect never
@@ -576,8 +583,13 @@ text; until then a worker draws those characters as boxes, exactly as before.
 ## Referrals (GR-18)
 
 `?ref=CODE` on any GET sets an `afk_ref` cookie (30 days, first invite wins, HttpOnly). Email and
-Google sign-ups read it and add a `referrals` row (one per new account, never self). Nothing is paid
-yet: the free month for both sides waits for RE-8's confirmed first live (see `ReferralService`).
+Google sign-ups read it and add a `referrals` row (one per new account, never self). When the invited
+creator's first live is confirmed (ON-8, below), the same sweep credits the referral: a conditional update
+moves it `JOINED` → `CREDITED` (sets `confirmed_live_at`, `credited_at`) and, in the same transaction,
+`BillingService.addFreeDays` gives each side 30 days (a paid plan's period is extended, like an admin
+extension; on Free the days go to `users.bonus_days` and join the next paid period, shown on its invoice
+line) and an `admin_actions` row (`REFERRAL_CREDIT`, by `system`) records both outcomes. Both creators
+get an in-app notice after it commits. A referral whose inviter or invited account is disabled waits.
 `users.credit_line` (off by default) appends "Streamed 24/7 with AFK Live: <link>" only to descriptions
 AFK Live already writes (the classic start flow's broadcast update); never to overlays.
 

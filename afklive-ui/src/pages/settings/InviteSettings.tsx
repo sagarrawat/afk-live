@@ -12,6 +12,8 @@ export interface ReferralSummary {
   creditLine: boolean;
   creditText: string;
   payoutsLive: boolean;
+  /** Free days earned while on Free, added to the next paid period. */
+  freeDaysSaved?: number;
 }
 
 export const referralsKey = ['referrals'] as const;
@@ -49,7 +51,12 @@ export function InviteSettings() {
             <dd className="tnum text-xl font-semibold">{data.credited}</dd>
           </div>
         </dl>
-        {!data.payoutsLive && (
+        {data.payoutsLive ? (
+          <p className="mt-3 text-sm text-muted">
+            On a paid plan, a free month is added to your plan right away. On Free, it's saved and added when you start a paid plan.
+            {!!data.freeDaysSaved && ` You have ${data.freeDaysSaved} free days saved.`}
+          </p>
+        ) : (
           <p className="mt-3 text-sm text-muted">
             Free months are added once we can confirm the creator's first live reached YouTube. That check is coming soon; people who join through your link now still count.
           </p>
