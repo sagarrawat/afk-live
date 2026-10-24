@@ -7,6 +7,7 @@ import { mountProof } from './proof';
 import { mountFunnel } from './funnel';
 import { mountStatus } from './status';
 import { mountHelpSearch } from './help';
+import { mountCreators } from './creators';
 
 // Mobile menu.
 const toggle = document.querySelector<HTMLButtonElement>('[data-menu-toggle]');
@@ -26,3 +27,4 @@ if (document.querySelector('[data-proof], [data-incidents]')) mountProof();
 mountFunnel();
 document.querySelectorAll<HTMLElement>('[data-status]').forEach((e) => mountStatus(e));
 document.querySelectorAll<HTMLElement>('[data-help]').forEach((e) => mountHelpSearch(e));
+document.querySelectorAll<HTMLElement>('[data-creators]').forEach((e) => mountCreators(e));
