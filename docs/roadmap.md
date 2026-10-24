@@ -44,7 +44,7 @@ Written 23 October 2026, after the first real users. Sizes: S (a day or two), M 
 | 18 | FO-5 Bandwidth budget and alerts | S | FO-3 | PR `feature/cost-metering` (web only) |
 | 19 | FO-6 Clean up playout copies nobody plays | S | FO-1 | PR `feature/cost-metering` (web only; last-played tracking shipped in #163/#167) |
 | 20 | OPS-5 Staging on the production droplet | M | OPS-4 | Next |
-| 21 | OPS-6 Nightly soak test | M | — | Next |
+| 21 | OPS-6 Nightly soak test | M | — | Harness built (ops/soak-test); nightly run waits for OPS-5 |
 | 22 | FO-7 Add and remove workers on load | L | OPS-3, FO-3 | Later |
 | 23 | FO-8 A bandwidth-cheap fleet for 24/7 playout | L | FO-7, FO-2 | Later |
 | 24 | MS-7 Cloud recording of phone streams | M | FO-1 | Later |

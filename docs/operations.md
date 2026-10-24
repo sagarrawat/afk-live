@@ -273,6 +273,72 @@ lowest priority.
   mechanism restarts a crashed producer without dropping destinations.
 - Turn it on for a worker by setting `APP_STREAMING_COPYMODE=true` and restarting it; turn it off the
   same way. Streams in copy mode show `"mode":"copy"` in their now-playing data.
+- **Before turning it on**, run the copy-mode soak below for 6 hours and get a pass. Known blocker
+  (first soak, Oct 2026): every studio↔copy hand-off moves the media timeline about 150 ms *ahead* of
+  real time (≈ 120 ms to the studio, ≈ 200 ms to copy) and nothing takes it back, so 56 switches gave
+  +4.2 s and the "kept pace with the clock" check fails. Everything else passed. Fix the hand-off first.
+
+## Soak test (OPS-6)
+
+**Proves a long stream stays healthy before copy mode is turned on and before a worker deploy.**
+`afklive-scripts/soak.sh` runs K streams for N minutes through the worker's own streaming code: the
+studio (`StudioRuns` → `StudioBuilder` → `Studio`, one long-lived x264 encoder, overlays on), copy mode
+(`CopyRuns` → `CopyPlayer`, stream copy of profile copies made with the web side's own command),
+`StreamRunner` with production timings and the production relay command, and `TsStitcher` hand-offs.
+Only the database and object storage are in-memory stand-ins. Each destination is a TCP server on
+127.0.0.1 that reads the FLV the relay sends tag by tag: nothing leaves the machine and nothing large is
+written. In copy mode every stream switches studio↔copy every 10 minutes, the way `StreamWorker` does.
+
+```sh
+afklive-scripts/soak.sh --minutes 10 --copy-mode --streams 2   # smoke run, ~13 min including the build
+afklive-scripts/soak.sh --copy-mode                            # the real one: 6 h, 2 streams, 2 destinations each
+afklive-scripts/soak.sh                                        # 6 h studio-only (copy mode off, as production today)
+# --streams K, --destinations D, --height 720|1080, --fps 30|60, --switch-minutes M, --out DIR
+```
+
+Results go to `afklive-web/target/soak/<time>-<mode>-<minutes>m/` (or `--out`): `report.md` (the table
+below with measured values), `summary.json` (every check, per-stream and per-destination numbers, the
+10 s time series of memory, descriptors, threads and CPU, and the 10 s timeline windows), `soak.log`
+and any sample file that failed its check. Exit code 0 means every judged check passed. It is also a
+JUnit test, `SoakTest`, tagged `soak` and excluded from every normal build (`soak.excludedGroups` in
+`afklive-web/pom.xml`), so it never costs CI time.
+
+**Where to run the 6-hour soak.** On staging (OPS-5) or any spare Linux machine with at least as many
+vCPUs as a production worker (4) and FFmpeg 6, never on a server that is streaming for customers: it
+uses the CPU of K real streams. Run it from a checkout of the commit you mean to deploy, under `tmux`
+or `nohup`, with nothing else heavy running (a shared machine makes "encoders kept up" and "dropped
+frames" fail for reasons that aren't the code's). For a nightly run, a cron line on staging is enough:
+`0 1 * * * cd /opt/afklive/src && git pull -q && afklive-scripts/soak.sh --copy-mode --out /var/log/afklive-soak/$(date +\%F)`.
+Before a major release, run `--minutes 4320` (72 h).
+
+**What "pass" means.** Every judged row below passes. Limits live in `Thresholds.java`; change both.
+
+| Check | Pass when | Why |
+| --- | --- | --- |
+| Each destination stayed on one connection | exactly 1 TCP connection per destination for the whole run | a planned switch or restart must never reconnect (continuity rule) |
+| No reconnects / not reaching | 0 `RECONNECTING`, 0 "not reaching" from `StreamRunner` | what the creator would see |
+| Every stream ran to the end, no producer crashed | 0 early ends, 0 encoder/copy process failures | |
+| Encoders kept up with real time | ≤ 1% of FFmpeg progress readings below 0.9x | an encoder that falls behind starves the platform |
+| Studio clock dropped almost no frames | ≤ 0.5% of frames | |
+| Timestamps only go forward | 0 steps back, audio or video, on every tag of every connection | |
+| No hole in the timeline | largest step < 0.25 s video, < 0.5 s audio (as `TsStitcherTest`) | |
+| A/V drift | ≤ 40 ms (spec OPS-6) | audio timeline against video timeline, 10 s window medians, against the first window after 30 s |
+| Media timeline kept pace with the clock | ≤ 2 s change after warm-up | the platform's buffer absorbs a little, not a growing lead or lag |
+| No stalls | no 2 s pause in the bytes | |
+| Samples decode cleanly | every 20 s sample (cut at each switch and every 30 min, from a keyframe 4 s before) has continuous timestamps (ffprobe) and < 5 FFmpeg decode error lines | the actual bitstream, across the switch |
+| Every studio↔copy switch succeeded, hand-off time | all switches, each ≤ 10 s | copy mode only |
+| Heap after full GC / JVM RSS / FFmpeg RSS | ≤ 10 / 50 / 20 MB per hour (least-squares slope after warm-up) | leaks; judged only with ≥ 30 min of steady running |
+| Descriptors / threads while running | peak in the last fifth ≤ peak in the first fifth + 10 / + 6 | leaks that show without a long slope |
+| After stopping | descriptors ≤ +4 and threads ≤ +6 of the start (JVM pools such as `process reaper` excluded), 0 FFmpeg processes, 0 files in work folders, 0 media cache pins | everything a stream opens is closed |
+
+Information only (shown, not judged): CPU per stream in each mode (FFmpeg plus an equal share of the
+JVM), sequence headers re-sent mid-stream, the playlist position jump at a switch, and how far the media
+timeline moved against the clock per switch.
+
+**Before enabling copy mode** (`APP_STREAMING_COPYMODE=true`): a 6-hour `--copy-mode` soak on
+production-like hardware passes, at the canvas production streams use (720p30 today), with the release
+you deploy. **Before a worker deploy** that touches `streaming/`: a 6-hour soak in the mode production
+runs passes, or at least the 10-minute smoke run while a 6-hour one is under way.
 
 ## Worker deploys without interruption (OPS-3)
 
