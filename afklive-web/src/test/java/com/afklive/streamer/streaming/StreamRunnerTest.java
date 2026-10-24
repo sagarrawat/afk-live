@@ -225,6 +225,74 @@ class StreamRunnerTest {
         assertThat(rec.restarts.getOrDefault(0, 0)).as("not counted as a failure").isZero();
     }
 
+    @Test
+    void aDestinationMovesToANewAddressMakeBeforeBreak() throws Exception {
+        // OPS-3: YouTube back from its backup ingest to the primary: the new relay runs next to the old one
+        // until it has been up a while; only then does the old one stop. Nothing reports a reconnect.
+        Path backup = dir.resolve("mbb-backup.flv");
+        Path primary = dir.resolve("mbb-primary.flv");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(10, () -> realtimeEncoder(-1), List.of(relayTo(backup)), rec, FAST);
+        runner.start();
+        TimeUnit.SECONDS.sleep(4);
+        long before = System.nanoTime();
+        assertThat(runner.replaceRelays(Map.of(0, relayTo(primary)), Duration.ofSeconds(2), Duration.ofSeconds(20))).isTrue();
+        assertThat(Duration.ofNanos(System.nanoTime() - before)).isGreaterThanOrEqualTo(Duration.ofSeconds(2));
+        long backupSize = Files.size(backup);
+        TimeUnit.SECONDS.sleep(3);
+        assertThat(Files.size(backup)).as("the old relay stopped").isEqualTo(backupSize);
+        assertThat(Files.size(primary)).isPositive();
+        // A later change of destinations sees the new address as the current one: unchanged, no reconnect.
+        runner.setRelays(List.of(relayTo(primary)));
+        runner.stop("Stopped by user");
+        assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+
+        assertThat(rec.events).containsExactly("encoder-started-0");
+        assertThat(rec.statuses).doesNotContain("0:RECONNECTING", "0:OFF");
+        assertThat(rec.restarts.getOrDefault(0, 0)).isZero();
+        assertThat(probe(backup)).contains("h264");
+        assertThat(probe(primary)).contains("h264");
+    }
+
+    @Test
+    void aMoveWhoseNewAddressNeverComesUpLeavesTheOldConnectionAlone() throws Exception {
+        Path backup = dir.resolve("mbb-keep.flv");
+        List<String> refused = List.of("sh", "-c", "cat > /dev/null & sleep 0.3; echo 'refused' >&2; exit 1");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(11, () -> realtimeEncoder(-1), List.of(relayTo(backup)), rec, FAST);
+        runner.start();
+        TimeUnit.SECONDS.sleep(4);
+        assertThat(runner.replaceRelays(Map.of(0, refused), Duration.ofSeconds(2), Duration.ofSeconds(4))).isFalse();
+        long size = Files.size(backup);
+        TimeUnit.SECONDS.sleep(2);
+        assertThat(Files.size(backup)).as("still writing to the old address").isGreaterThan(size);
+        runner.stop("Stopped by user");
+        assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+        assertThat(rec.errors).as("the failed attempt reported nothing").isEmpty();
+        assertThat(rec.restarts.getOrDefault(0, 0)).isZero();
+    }
+
+    @Test
+    void droppedDestinationsAreClosedBeforeItReturnsAndReportNothing() throws Exception {
+        // OPS-3: platforms without a backup ingest must see the old worker disconnect before the new one dials.
+        Path keep = dir.resolve("drop-keep.flv");
+        Path drop = dir.resolve("drop-drop.flv");
+        Recorder rec = new Recorder();
+        StreamRunner runner = new StreamRunner(12, () -> realtimeEncoder(-1), List.of(relayTo(keep), relayTo(drop)), rec, FAST);
+        runner.start();
+        TimeUnit.SECONDS.sleep(4);
+        int before = rec.statuses.size();
+        runner.dropRelays(List.of(1), Duration.ofSeconds(5));
+        long dropped = Files.size(drop);
+        long kept = Files.size(keep);
+        TimeUnit.SECONDS.sleep(2);
+        assertThat(Files.size(drop)).isEqualTo(dropped);
+        assertThat(Files.size(keep)).isGreaterThan(kept);
+        assertThat(rec.statuses.subList(before, rec.statuses.size())).noneMatch(s -> s.startsWith("1:"));
+        runner.stop("Stopped by user");
+        assertThat(runner.awaitFinished(Duration.ofSeconds(20))).isTrue();
+    }
+
     private static String probe(Path file) throws Exception {
         Process p = new ProcessBuilder("ffprobe", "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0",
                 file.toString()).redirectErrorStream(true).start();

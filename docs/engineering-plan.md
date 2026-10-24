@@ -97,6 +97,15 @@ function; full handover with real FFmpeg and file destinations; each crash case.
 itself can only be confirmed on production, once, with a test stream before creators rely on it.
 **Ships** first in the worker batch; its own deploy is the last interrupting one.
 
+**As built** (branch `feature/worker-handover`, changesets 070–071): as above, plus two refinements.
+After a handover the new owner moves YouTube back to the primary ingest make-before-break from the same
+encoder (Google's API docs say the primary must be streamed to), so the steady state is always the
+primary and every handover uses the backup; the recorded ingest still decides if a run was left on the
+backup. A draining worker still rescues orphaned streams, so a new version that dies after taking
+streams never leaves them ownerless. Measured reconnect for platforms without a backup ingest: about
+3 s, mostly the new relay's FFmpeg analysing its input before it connects. Operations and one-time
+setup: `docs/operations.md` ("Worker deploys without interruption").
+
 ## 4. Support and email: OPS-1, OPS-2, AD-6 (branch `feature/support-ops`)
 
 **Approach.**

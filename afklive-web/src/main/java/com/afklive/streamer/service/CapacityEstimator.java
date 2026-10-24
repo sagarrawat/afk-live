@@ -79,8 +79,8 @@ public class CapacityEstimator {
         Double best = null;
         double biggest = 0;
         for (WorkerStatus w : reports) {
-            if (w.getCpuPercent() == null) {
-                continue;
+            if (w.getCpuPercent() == null || w.getDrainingSince() != null) {
+                continue; // no load reported, or (OPS-3) being replaced: it takes on no new streams
             }
             int cpus = w.getCpus() != null && w.getCpus() > 0 ? w.getCpus() : Math.max(1, w.getCapacity());
             double usable = cpus * USABLE;

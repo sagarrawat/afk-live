@@ -70,12 +70,15 @@ describe('Admin', () => {
       '/api/admin/live': [],
       '/api/admin/workers': [
         { worker: 'worker-mumbai-1', streams: 3, lastHeartbeatAgeSeconds: 2, healthy: true, capacity: 20, cpuPercent: 92.4, memoryUsedBytes: 4 * 1024 ** 3, memoryTotalBytes: 8 * 1024 ** 3 },
-        { worker: 'worker-idle', streams: 0, lastHeartbeatAgeSeconds: 5, healthy: true, capacity: 20 },
+        { worker: 'worker-idle', streams: 0, lastHeartbeatAgeSeconds: 5, healthy: true, capacity: 20, draining: true },
       ],
       '/api/admin/cost': { monthlyServerCost: 12000, currency: 'INR', streamHours30d: 2400, costPerStreamHour: 5 },
     });
     render(<App client={makeQueryClient()} />);
     const card = (await screen.findByText('worker-mumbai-1')).closest('li')!;
+    expect(within(card).queryByText('Being replaced')).not.toBeInTheDocument();
+    // OPS-3: a worker handing its streams to a new version says so.
+    expect(within((await screen.findByText('worker-idle')).closest('li')!).getByText('Being replaced')).toBeInTheDocument();
     expect(within(card).getByText('92%')).toHaveClass('text-bad');
     expect(within(card).getByText('4 GB of 8 GB')).toBeInTheDocument();
     expect(within(card).getByText(/3 of 20 streams/)).toBeInTheDocument();

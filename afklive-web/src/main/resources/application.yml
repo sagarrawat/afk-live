@@ -112,6 +112,18 @@ app:
     work-dir: ${STREAMING_WORK_DIR:data/worker}
     worker:
       max-streams: ${STREAMING_WORKER_MAX_STREAMS:20}
+      # OPS-3: shared with the deploy script that asks a worker to hand its streams over (/internal/worker/*,
+      # worker process only, localhost only). Empty: that endpoint refuses everything and deploys use a restart.
+      control-token: ${WORKER_CONTROL_TOKEN:}
+    # OPS-3: planned handover of live streams to a new worker version (see docs/operations.md).
+    handover:
+      # A new copy that isn't on air everywhere within this many seconds is abandoned; the old one carries on.
+      timeout-seconds: ${STREAMING_HANDOVER_TIMEOUT_SECONDS:60}
+      # How long the new copy must be live everywhere it publishes before the old one stops.
+      ready-seconds: ${STREAMING_HANDOVER_READY_SECONDS:5}
+      # After a handover, move YouTube destinations back from the backup ingest to the primary (both connected
+      # for a few seconds, same encoder). Google asks for the primary to be used; false leaves them on the backup.
+      return-to-primary: ${STREAMING_HANDOVER_RETURN_TO_PRIMARY:true}
     # Library files kept on each worker's disk, in GB (least recently used are removed first).
     cache-gb: ${STREAMING_CACHE_GB:50}
     # Live encoder (studio) and the profile copies copy mode plays: x264 speed preset, ultrafast..medium

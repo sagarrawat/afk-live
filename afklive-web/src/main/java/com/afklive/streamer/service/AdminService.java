@@ -174,10 +174,11 @@ public class AdminService {
 
     /**
      * A worker as admins see it (AD-1, AD-2): streams it runs, when it last reported, and the machine's
-     * CPU and memory from its own report (null for a worker that hasn't sent one).
+     * CPU and memory from its own report (null for a worker that hasn't sent one), and (OPS-3) whether it
+     * is draining: a new version is taking its streams over.
      */
     public record WorkerRow(String worker, int streams, long lastHeartbeatAgeSeconds, boolean healthy, Integer capacity,
-                            Double cpuPercent, Long memoryUsedBytes, Long memoryTotalBytes) {
+                            Double cpuPercent, Long memoryUsedBytes, Long memoryTotalBytes, boolean draining) {
     }
 
     /** Workers that reported in the last hour, plus any worker named on a live stream. */
@@ -203,7 +204,8 @@ public class AdminService {
             // Streams' heartbeats are the truth while it runs any; an idle worker counts by its own report.
             boolean healthy = list.isEmpty() ? reportAge >= 0 && reportAge < timeout : jobAge >= 0 && jobAge < timeout;
             out.add(new WorkerRow(w, list.size(), newest, healthy, r == null ? null : r.getCapacity(),
-                    r == null ? null : r.getCpuPercent(), r == null ? null : r.getMemoryUsedBytes(), r == null ? null : r.getMemoryTotalBytes()));
+                    r == null ? null : r.getCpuPercent(), r == null ? null : r.getMemoryUsedBytes(), r == null ? null : r.getMemoryTotalBytes(),
+                    r != null && r.getDrainingSince() != null));
         });
         out.sort(Comparator.comparing(WorkerRow::worker));
         return out;

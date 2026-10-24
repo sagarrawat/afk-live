@@ -49,6 +49,11 @@ class CapacityEstimatorTest {
         // Nobody reported load: unknown.
         assertThat(CapacityEstimator.room(List.of(worker(4, 0, 4, null)))).isNull();
         assertThat(CapacityEstimator.room(List.of())).isNull();
+        // OPS-3: a worker being replaced takes on nothing new, so its room doesn't count.
+        WorkerStatus draining = worker(8, 0, 4, 5.0);
+        draining.setDrainingSince(java.time.ZonedDateTime.now());
+        assertThat(CapacityEstimator.room(List.of(draining, worker(4, 1, 4, 50.0))).best()).isEqualTo(1.4);
+        assertThat(CapacityEstimator.room(List.of(draining))).isNull();
     }
 
     @Test

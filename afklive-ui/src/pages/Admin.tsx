@@ -40,6 +40,8 @@ interface WorkerRow {
   cpuPercent?: number | null;
   memoryUsedBytes?: number | null;
   memoryTotalBytes?: number | null;
+  /** OPS-3: a new version is taking this worker's streams over. */
+  draining?: boolean;
 }
 export interface CostView {
   monthlyServerCost?: number | null;
@@ -284,6 +286,7 @@ function WorkerCard({ w }: { w: WorkerRow }) {
       <span className="flex items-center gap-2 font-medium">
         <HealthDot level={w.healthy ? 'green' : 'red'} />
         <span className="truncate">{w.worker}</span>
+        {w.draining ? <span className="shrink-0 rounded bg-raised px-1.5 py-0.5 text-xs text-muted">Being replaced</span> : null}
       </span>
       <span className="tnum block text-sm text-muted">
         {w.streams}

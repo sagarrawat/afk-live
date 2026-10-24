@@ -7,7 +7,7 @@ AFK Live runs as two processes from the same jar:
 | Service | Role | What it does | Deployed |
 | --- | --- | --- | --- |
 | `afklive-web@a` / `@b` (was `afklive`) | `STREAMING_ROLE=web` | Website and API, billing, scheduled starts/stops | On every push to `main` (GitHub Actions), without downtime (OPS-4, below) |
-| `afklive-worker` | profile `worker` | Runs live streams (FFmpeg) | Manually: **Actions → Deploy stream worker** |
+| `afklive-worker@a` / `@b` (was `afklive-worker`) | profile `worker` | Runs live streams (FFmpeg) | Manually: **Actions → Deploy stream worker**; streams are handed to the new version without a break (OPS-3, below) |
 
 They share only the PostgreSQL database. The web app records what should stream; workers claim
 streams, run them, and report health every 2 seconds. Restarting the web app never touches a
@@ -194,6 +194,11 @@ put MediaMTX back, remove `/opt/afklive/scripts/web-deploy.sh` (the workflow the
 | `STREAMING_WORK_DIR` | `data/worker` | Where each stream's files are downloaded; cleaned up when it ends |
 | `APP_STREAMING_COPYMODE` | `false` | FO-2 copy mode (below). Set on workers; the web side always prepares the copies workers ask for |
 | `APP_STREAMING_WORKER_MAXCPUTOCLAIM` | `0.85` | Above this machine CPU (0–1) a worker leaves new streams to others for 45 s, then starts them anyway |
+| `WORKER_CONTROL_TOKEN` | empty | OPS-3: shared by the worker and the deploy script, which asks the running worker to hand its streams over (`/internal/worker/*`, localhost only). Empty: the endpoint refuses everything and only restart deploys work |
+| `WORKER_HTTP_PORT` | `8081` | The worker's localhost-only web server (control endpoint). The slot units set it per slot (8081 for a, 8082 for b) |
+| `STREAMING_HANDOVER_TIMEOUT_SECONDS` | `60` | A new copy not on air everywhere within this time is abandoned; the old worker keeps the stream |
+| `STREAMING_HANDOVER_READY_SECONDS` | `5` | How long the new copy must be live everywhere it publishes before the old one stops |
+| `STREAMING_HANDOVER_RETURN_TO_PRIMARY` | `true` | After a handover, move YouTube destinations from the backup ingest back to the primary (make-before-break, same encoder) |
 | `APP_STREAMING_X264PRESET` | `superfast` | x264 speed preset of the live encoder (below). Set the same value on workers and web |
 | `APP_STREAMING_X264THREADS` | `0` | Threads per live encoder; `0` lets x264 decide (below) |
 
@@ -247,6 +252,103 @@ lowest priority.
   mechanism restarts a crashed producer without dropping destinations.
 - Turn it on for a worker by setting `APP_STREAMING_COPYMODE=true` and restarting it; turn it off the
   same way. Streams in copy mode show `"mode":"copy"` in their now-playing data.
+
+## Worker deploys without interruption (OPS-3)
+
+**A worker deploy starts the new version next to the running one and moves live streams over one at a
+time; viewers see no gap on YouTube and about 3 seconds of reconnect on other platforms.** Design:
+`docs/roadmap.md` ("Zero-downtime deploys") and `docs/engineering-plan.md` §3.
+
+How a deploy runs (`afklive-scripts/worker-handover-deploy.sh`, called by **Actions → Deploy stream
+worker** with method `handover`):
+
+1. The new jar goes into the idle systemd slot (`afklive-worker@a` or `@b`; each has its own worker id
+   `HOST-a` / `HOST-b`, its own localhost port and its own jar) and starts. The script waits until its
+   loop has made a pass.
+2. The script asks the running worker to drain (`POST /internal/worker/drain` with
+   `WORKER_CONTROL_TOKEN`). That is recorded in `stream_workers.draining_since`; admins see "Being
+   replaced" on the worker. A draining worker takes on no new streams and offers its streams one at a
+   time (`stream_jobs.handover_*`).
+3. The new worker claims the offer and starts the stream at the old one's current playlist position
+   (copy mode or studio, whichever qualifies). YouTube destinations publish to YouTube's other ingest:
+   `rtmp://b.rtmp.youtube.com/live2?backup=1/KEY` when the old run uses the primary
+   (`rtmp://a.rtmp.youtube.com/live2/KEY`), or the reverse; RTMPS the same with `a.rtmps` / `b.rtmps`.
+   Other destinations wait, because most platforms accept one connection per key.
+4. When the encoder and every YouTube destination of the new copy have been live for 5 s, it marks the
+   handover ready. The old worker disconnects its other destinations, makes the new worker the owner
+   (one fenced update) and stops its copy; YouTube fails over to the backup ingest. The new worker sees
+   that within a quarter second and connects the other destinations.
+5. A few seconds later the new worker moves YouTube back to the primary ingest: it connects the primary
+   next to the backup from the same encoder and drops the backup once the primary has been up for 8 s.
+   (Google's API docs say the primary "must" be streamed to; the backup is optional.)
+6. When the old worker owns nothing, the script stops it, disables its slot and enables the new one.
+
+What can go wrong, and what happens (each case has a test in `WorkerHandoverIntegrationTest` or
+`WorkerHandoverDeployScriptTest`):
+
+| Case | Result |
+| --- | --- |
+| New version doesn't start or isn't ready in 4 minutes | Script stops it; the old one was never touched |
+| A new copy isn't on air everywhere within 60 s | Handover abandoned; the old copy never stopped. That stream is offered again after the others |
+| New worker dies before a handover completes | The old worker drops the stale claim after 15 s and keeps the stream; the script tells the old worker to stop draining |
+| Old worker dies mid-handover | The new copy (already on YouTube's backup ingest) takes over through the normal 45 s takeover, without reconnecting |
+| Old worker stalls after handing over | Its next pass sees the stream isn't its own and stops its copy: never two owners |
+| New worker dies after taking streams | The draining old worker still rescues orphaned streams (normal takeover) |
+| Streams still not moved after the time limit (90 s per stream, at least 5 min) | Script stops the old worker anyway; it lets go of them and the new worker claims them within seconds (a short reconnect for those only); the workflow fails so someone looks |
+| Running worker predates the handover, or no token | Script changes nothing and says to use method `restart` |
+
+Not proven by tests, only on production: **YouTube's own failover between the primary and backup
+ingest** (that the broadcast doesn't end and viewers see no gap or only a short repeat), and the move
+back to the primary. Before relying on it, run one deploy while watching a private test stream on
+YouTube Studio (stream health and the watch page), with a second destination on another platform.
+
+**Memory.** During a deploy two worker JVMs run side by side for a few minutes (`-Xmx512m` each, about
+700 MB resident each) plus, for each stream being handed over, a second encoder (one at a time). On
+the 7.8 GB droplet, with the web app (two during a web deploy, OPS-4), PostgreSQL and MediaMTX, check
+`free -m` before the first handover deploy; the script refuses to start the second worker when less
+than 1.2 GB is available (`MIN_FREE_MB`). Don't run a web deploy and a worker deploy at the same time.
+
+**CPU.** One extra encode for about 15–30 s per stream (none for streams in copy mode beyond a stream
+copy). Handovers ignore the busy-CPU claim gate, since the streams have to move.
+
+**Shared disk.** Both slots use `/opt/afklive/worker/data/worker` (the media cache and per-run work
+folders): downloads in progress are named per process, so neither deletes the other's.
+
+### One-time server setup (do this once, by hand; then deploy this release with method `restart`)
+
+The release that brings the handover must itself be deployed the old way (its predecessor can't hand
+over). Steps, as root on the droplet:
+
+```sh
+# 1. A token the deploy script and the workers share
+echo "WORKER_CONTROL_TOKEN=$(openssl rand -hex 32)" >> /opt/afklive/afklive.env
+
+# 2. Slot units and their ports
+cp afklive-scripts/systemd/afklive-worker@.service /etc/systemd/system/
+echo "WORKER_HTTP_PORT=8081" > /opt/afklive/worker-slot-a.env
+echo "WORKER_HTTP_PORT=8082" > /opt/afklive/worker-slot-b.env
+mkdir -p /opt/afklive/worker/slots/a /opt/afklive/worker/slots/b
+systemctl daemon-reload
+
+# 3. The deploy script (root-owned; the deploy user may run only this with sudo)
+mkdir -p /opt/afklive/scripts
+install -o root -g root -m 0755 afklive-scripts/worker-handover-deploy.sh /opt/afklive/scripts/
+echo "DEPLOY_USER ALL=(root) NOPASSWD: /opt/afklive/scripts/worker-handover-deploy.sh" > /etc/sudoers.d/afklive-worker-deploy
+chmod 0440 /etc/sudoers.d/afklive-worker-deploy   # replace DEPLOY_USER with the user in the DO_USER secret
+
+# 4. Where the workflow uploads the new jar
+mkdir -p /opt/afklive/worker/incoming && chown DEPLOY_USER /opt/afklive/worker/incoming
+```
+
+Then run **Deploy stream worker** with method `restart` (the last interrupting worker deploy: the
+running `afklive-worker.service` restarts on this release). From the next deploy on, use `handover`:
+the first one moves the streams from `afklive-worker.service` to slot b and disables the old unit;
+after that deploys alternate between slots a and b. Re-run step 3 whenever the script changes.
+
+Useful: `sudo /opt/afklive/scripts/worker-handover-deploy.sh --status` (which slot runs and what it
+owns); `journalctl -u afklive-worker@b -f`. To deploy a specific commit (or roll back), give its SHA
+in the workflow's `ref` input; it is built, tested and handed over the same way. Worker and web deploys
+share one GitHub concurrency group (`production-deploy`), so they never run at the same time.
 
 ## Capacity guard (GL-7, RE-10)
 

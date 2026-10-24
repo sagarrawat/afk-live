@@ -304,6 +304,106 @@ public final class StreamRunner {
         }
     }
 
+    /**
+     * OPS-3: stops the relays at these positions and waits (up to {@code wait}) until their processes
+     * have exited, so the platform has seen the disconnect before another worker connects in their place.
+     * The encoder and the other destinations keep running. Nothing is reported for the dropped ones.
+     */
+    public void dropRelays(java.util.Collection<Integer> positions, Duration wait) {
+        List<Relay> dropped;
+        synchronized (this) {
+            List<List<String>> commands = new ArrayList<>(relayCommands);
+            for (int p : positions) {
+                if (p >= 0 && p < commands.size()) {
+                    commands.set(p, null);
+                }
+            }
+            dropped = relays.stream().filter(r -> positions.contains(r.position)).toList();
+            dropped.forEach(r -> r.silent = true);
+            setRelays(commands);
+        }
+        long deadline = System.nanoTime() + wait.toNanos();
+        for (Relay r : dropped) {
+            r.awaitDone(Duration.ofNanos(Math.max(1, deadline - System.nanoTime())));
+        }
+    }
+
+    /**
+     * OPS-3: moves destinations to new addresses make-before-break: for each position in {@code next} a
+     * second relay connects alongside the current one, fed the same encoder output; once every new relay
+     * has stayed up for {@code upFor}, the old ones are stopped and the new ones take their place. If any
+     * new relay doesn't get there within {@code timeout} (or the destinations change meanwhile), all new
+     * ones are stopped and nothing changes. Used to move YouTube from its backup ingest back to the
+     * primary: both are connected for a few seconds with identical content. Blocks; call off the loop.
+     *
+     * @return true when every position moved
+     */
+    public boolean replaceRelays(java.util.Map<Integer, List<String>> next, Duration upFor, Duration timeout)
+            throws InterruptedException {
+        List<Relay> added = new ArrayList<>();
+        synchronized (this) {
+            if (stopping.get() || finished.get() || next.isEmpty()) {
+                return false;
+            }
+            List<Relay> now = new ArrayList<>(relays);
+            for (var e : next.entrySet()) {
+                if (now.stream().noneMatch(r -> r.position == e.getKey())) {
+                    return false; // nothing there to replace
+                }
+                Relay r = new Relay(e.getKey(), e.getValue());
+                r.silent = true; // not this destination's state until it takes over
+                added.add(r);
+            }
+            now.addAll(added);
+            relays = List.copyOf(now);
+            added.forEach(Relay::start);
+        }
+        long deadline = System.nanoTime() + timeout.toNanos();
+        boolean up = false;
+        while (System.nanoTime() < deadline && !stopping.get()) {
+            if (added.stream().anyMatch(r -> r.down.get() || !relays.contains(r))) {
+                break; // stopped, or removed by a change of destinations
+            }
+            if (added.stream().allMatch(r -> r.upFor(upFor))) {
+                up = true;
+                break;
+            }
+            Thread.sleep(100);
+        }
+        synchronized (this) {
+            if (up && !stopping.get() && relays.containsAll(added)) {
+                List<Relay> now = new ArrayList<>();
+                List<List<String>> commands = new ArrayList<>(relayCommands);
+                for (Relay r : relays) {
+                    boolean replaced = !added.contains(r) && next.containsKey(r.position);
+                    if (replaced) {
+                        r.silent = true;
+                        r.removed = true;
+                        r.shutdown();
+                    } else {
+                        now.add(r);
+                    }
+                }
+                for (Relay r : added) {
+                    r.silent = false;
+                    while (commands.size() <= r.position) {
+                        commands.add(null);
+                    }
+                    commands.set(r.position, r.command);
+                    listener.onDestination(r.position, "LIVE", 0, null);
+                }
+                relays = List.copyOf(now);
+                relayCommands = java.util.Collections.unmodifiableList(commands);
+                return true;
+            }
+            List<Relay> now = new ArrayList<>(relays);
+            now.removeAll(added);
+            relays = List.copyOf(now);
+        }
+        added.forEach(Relay::shutdown);
+        return false;
+    }
+
     public boolean isRunning() {
         return supervisor != null && !finished.get();
     }
@@ -722,6 +822,10 @@ public final class StreamRunner {
         private volatile boolean accepting = true; // the first attempt takes the stream from its very start
         /** Turned off while live: report OFF, not STOPPED. */
         volatile boolean removed;
+        /** OPS-3: reports nothing (a relay connecting alongside, or one being retired). */
+        volatile boolean silent;
+        /** When the running relay process started (0: none running). */
+        volatile long runningSinceNanos;
 
         Relay(int position, List<String> command) {
             this.position = position;
@@ -730,6 +834,18 @@ public final class StreamRunner {
 
         void start() {
             platformThread("relay-" + jobId + "-" + position, this::supervise);
+        }
+
+        /** The current relay process has been running for at least {@code d}. */
+        boolean upFor(Duration d) {
+            long since = runningSinceNanos;
+            return since != 0 && System.nanoTime() - since >= d.toNanos();
+        }
+
+        private void report(String status, int restarts, String error) {
+            if (!silent) {
+                listener.onDestination(position, status, restarts, error);
+            }
         }
 
         void offer(byte[] chunk) {
@@ -808,7 +924,8 @@ public final class StreamRunner {
                             terminate(p);
                         }
                         accepting = true;
-                        listener.onDestination(position, restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, null);
+                        runningSinceNanos = System.nanoTime();
+                        report(restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, null);
                         Deque<String> errLines = new ArrayDeque<>();
                         Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readLines(p.getErrorStream(), errLines,
                                 line -> listener.onLogLine("dest " + (position + 1), line)));
@@ -816,11 +933,12 @@ public final class StreamRunner {
                         boolean reportedLive = false;
                         while (!p.waitFor(200, TimeUnit.MILLISECONDS)) {
                             if (!reportedLive && Duration.ofNanos(System.nanoTime() - startedAt).toSeconds() >= 3) {
-                                listener.onDestination(position, "LIVE", restarts, null);
+                                report("LIVE", restarts, null);
                                 reportedLive = true;
                             }
                         }
                         accepting = false;
+                        runningSinceNanos = 0;
                         joinQuietly(writer, Duration.ofSeconds(1));
                         joinQuietly(errReader, Duration.ofSeconds(1));
                         synchronized (errLines) {
@@ -833,6 +951,7 @@ public final class StreamRunner {
                         break;
                     } finally {
                         accepting = false;
+                        runningSinceNanos = 0;
                     }
                     if (down.get() || draining) {
                         break;
@@ -844,12 +963,12 @@ public final class StreamRunner {
                     if (reconnectRequested) {
                         // Asked for (GL-5): not a failure, so no backoff and no restart counted.
                         reconnectRequested = false;
-                        listener.onDestination(position, "RECONNECTING", restarts, null);
+                        report("RECONNECTING", restarts, null);
                         clearQueue();
                         continue;
                     }
                     restarts++;
-                    listener.onDestination(position, "RECONNECTING", restarts, error);
+                    report("RECONNECTING", restarts, error);
                     if (Duration.ofNanos(System.nanoTime() - startedAt).compareTo(settings.stableAfter()) >= 0) {
                         backoff = settings.initialBackoff();
                     }
@@ -869,7 +988,7 @@ public final class StreamRunner {
                 if (p != null && p.isAlive()) {
                     waitOrKill(p);
                 }
-                listener.onDestination(position, removed ? "OFF" : "STOPPED", restarts, null);
+                report(removed ? "OFF" : "STOPPED", restarts, null);
                 done.countDown();
             }
         }
