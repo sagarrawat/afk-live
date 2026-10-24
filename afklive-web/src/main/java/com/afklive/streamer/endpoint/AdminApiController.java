@@ -1,6 +1,7 @@
 package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.model.AdminAction;
+import com.afklive.streamer.service.AdminConsoleService;
 import com.afklive.streamer.service.AdminService;
 import com.afklive.streamer.service.StatusService;
 import com.afklive.streamer.util.SecurityUtils;
@@ -31,10 +32,12 @@ public class AdminApiController {
 
     private final AdminService admin;
     private final StatusService status;
+    private final AdminConsoleService console;
 
-    public AdminApiController(AdminService admin, StatusService status) {
+    public AdminApiController(AdminService admin, StatusService status, AdminConsoleService console) {
         this.admin = admin;
         this.status = status;
+        this.console = console;
     }
 
     public record Reason(String reason) {
@@ -64,8 +67,10 @@ public class AdminApiController {
     }
 
     @GetMapping("/users")
-    public Page<AdminService.UserRow> users(@RequestParam(required = false) String q, @RequestParam(defaultValue = "0") int page) {
-        return admin.searchUsers(q, page);
+    /** {@code filter}: paying, live or never (went live); blank lists everyone. Newest accounts first. */
+    public Page<AdminConsoleService.UserRow> users(@RequestParam(required = false) String q, @RequestParam(required = false) String filter,
+                                                   @RequestParam(defaultValue = "0") int page) {
+        return console.users(q, filter, page);
     }
 
     @GetMapping("/users/{id}")

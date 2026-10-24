@@ -71,3 +71,5 @@ databaseChangeLog:
       file: db/changelog/changes/100-encoder-preset.sql
   - include:
       file: db/changelog/changes/105-site-funnel.sql
+  - include:
+      file: db/changelog/changes/120-worker-samples.sql
