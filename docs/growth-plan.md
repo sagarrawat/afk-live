@@ -1,118 +1,130 @@
 # Growth plan: helping creators gain views
 
-**AFK Live should sell watch time, not streaming.** YouTube gives looped lives no ranking boost. A
-live gains views by keeping its broadcast unbroken (so its URL, likes and viewers pile up), by being
-found through the new doors YouTube has opened for lives (the Shorts feed for vertical lives, Shorts
-clips, reminders, redirects), and by feeling alive enough that people stay. None of the 24/7 tools we
-compete with sells that. They sell playout. This plan turns the research in
-`docs/research/youtube-live-growth.md` into stories (epic 24 in `docs/product-spec.md`), in the order
-the evidence supports.
+**Prove that AFK Live grows channels before building growth features, then build only the few that
+work for streams with almost no viewers.** YouTube gives looped lives no ranking boost. A live gains
+views by keeping one broadcast unbroken, by being found (Shorts, reminders, search), and by looking
+alive. But most of our creators run streams that nobody is watching yet, on channels we can't see
+into unless they connect them. Many ideas that look strong on paper (chat overlays, A/B tests,
+growth dashboards, dual output) do nothing, or harm, at zero viewers. This plan is the version that
+survived a critique of the first draft (section "What changed and why"). Research:
+`docs/research/youtube-live-growth.md`. Stories: epic 24 in `docs/product-spec.md`.
 
-Written 24 October 2026. Stories with an ID already in the spec are reused rather than duplicated.
+Written 24 October 2026; revised the same day after review.
 
-## North star and guardrails
+## What changed and why
 
-| | Metric | Why |
+The first draft listed 17 stories in five phases. Reviewed against our real situation (a handful of
+creators, a two-person team, a shared YouTube API quota, no proof yet that 24/7 lives grow
+channels), these are its problems and the fixes.
+
+| First draft said | Problem | Now |
 | --- | --- | --- |
-| **North star** | Weekly live watch hours on creators' channels, from YouTube Analytics, per connected stream | Watch time is the only optimisation target YouTube states (Test & Compare judges on it) and what 24/7 creators are paid on |
-| Leading | Broadcast continuity: share of planned live time on one unbroken broadcast | An encoder gap over ~1 minute ends the broadcast and its URL (`enableAutoStop`) |
-| Leading | Entry points used: % of streams with vertical output, Shorts clips posted, a scheduled successor | The documented ways new viewers arrive |
-| Leading | Chat rate on streams with engagement features | A metric YouTube reports for lives |
-| Business | Activation (first live confirmed, RE-8), conversion to the growth plan, churn | Growth features are why creators pay instead of using a $6 looper |
-| Guardrail | Monetization or policy strikes on AFK Live channels: zero | One wave of "inauthentic content" demonetisations would end the product |
-| Guardrail | YouTube API quota and compliance audit status | 10,000 units a day is shared by every customer until audited |
+| North star: weekly live watch hours on creators' channels | Only visible for channels that connect via Google sign-in; YouTube Analytics lags 2–3 days; seasonality and content swamp our effect; "+25% in 8 weeks" was invented | Two measures: **continuity** (ours, every stream) and **watch hours for connected beta channels against their own baseline**, read honestly as signal, not proof |
+| Build 17 stories after 6 experiments | Too much for the team before the Trust release, email and a real user base exist. Every feature also costs support and quota | **Growth v1 is five stories.** The rest are parked with an explicit trigger to revisit |
+| Experiments decide feature order | Nothing tested the premise: **does running a 24/7 live grow a small channel at all?** The only evidence is vendor marketing ("2x views") | New **EX-0**: baseline study with beta creators. If 24/7 lives don't move their channels, we pivot the pitch to reliability and phone lives |
+| GR-4: vertical plus landscape (dual output) for every stream | Two broadcasts split viewers, chat and likes. With few viewers, splitting hurts the signals that rank a live. It doubles encode and traffic cost. Shorts-feed eligibility for encoder streams is unknown | **Vertical-native**: phones and vertical content stream vertical only (already supported), with a one-tap fix. Dual output is parked until YouTube opens dual format to encoders *and* EX-1 passes |
+| GR-5: Shorts cut automatically from 24/7 loops | Clipping files the creator already uploaded is the "reused, mass-produced" pattern the inauthentic content policy names. "Loudest moment" means nothing for music loops. Upload quota is 100 calls a day for all customers until the audit | **Shorts from phone lives only**, creator-marked moments, creator approves every upload. Loops get a "make a Short" checklist, not automation |
+| GR-7: chat on screen, commands and polls on every stream | An empty chat box on screen is *negative* social proof. Auto-replies on a stream with no one watching look like bots. Reading chat 24/7 costs quota on every stream, used or not | Chat on screen **appears only while chat is active** (for example 3 messages in 10 minutes) and hides otherwise. Commands and polls are part of the phone studio, where a person is present |
+| GR-11: rotate thumbnails and titles and compare | At under ~50 concurrent viewers the differences are noise. Time of day and day of week swamp the effect. YouTube's own test works only on archives. We'd be showing false winners, which breaks the honesty rule | **Dropped.** Replaced by a one-time "title and thumbnail check" (keyword first, readable at phone size, honest wording) inside GR-9 |
+| GR-12: weekly growth report from YouTube Analytics | Duplicates YouTube Studio, which creators already have. A blended score needs Google's audit for derived metrics (III.L). Most creators won't have connected | **Next-step nudge** from what only we know: continuity, schedule consistency, variety warnings, plus a link into the matching Studio report |
+| GR-2: scheduled broadcasts and a 12-hour rollover for everyone | A rollover resets the URL, likes and viewer count. 12-hour archives of a loop get few views. Most 24/7 creators reuse YouTube's default stream key and never schedule | **Default: one unbroken broadcast.** Scheduling and reminders are for *scheduled* lives (daily aarti, a phone show). Rollover is an advanced option only for creators who want recordings |
+| GR-3: ask creators to connect their channel early | Full channel access is a big ask, and stolen tokens are a high-value target. Google verification takes weeks. Many creators will say no | Connect **only when a feature needs it**, with the scope shown in plain words. Tokens encrypted (SecretBox) and revocable. Every core promise still works with a stream key alone |
+| GR-13: aarti times from sunrise and sunset; festival calendar | Over-engineered. Temples publish fixed times, many devotional channels play bhajans all day, and a calendar is content we'd have to maintain every year | **Schedule presets** ("morning and evening aarti", "all-day bhajans with a midday pause") the creator edits. No sun maths, no calendar |
+| GR-14: diaspora scheduling | Meaningless for 24/7 (always on). For scheduled lives it is one time-zone picker | Folded into GR-2 as a second time zone shown next to the creator's |
+| GR-9: warns about "likely music claims" | We can't predict Content ID. A false "safe" breeds false confidence, and a false "risky" scares people off | Flags only what we can see for certain: one file on loop, a still image with no overlay, a repeated identical message. Music gets a general warning and royalty-free sources, never a verdict |
+| Growth plan sold as an INR add-on (GR-17) | No willingness-to-pay data. A separate growth fee competes with $6 loopers on price | Pricing waits for EX-5. Cheap features go in every plan. Only costly ones (extra encodes) are paid add-ons |
+| Missing | Nothing about how AFK Live *itself* gets found | New **GR-18**: the creators' success becomes our acquisition. An opt-in "Streamed with AFK Live" line in the description, templates people can share, and a referral credit in INR |
 
-## What the research says, in five lines
+## Measures
 
-1. **Vertical lives reach the Shorts feed.** It's the only discovery door YouTube has built for lives. YouTube says portrait-streamed lives are shown to eligible viewers browsing Shorts, and dual-format (horizontal plus vertical, one chat) was in testing from September 2025. *Unknown: whether a 9:16 RTMP stream from a cloud encoder qualifies.*
-2. **Continuity is a growth feature.** A gap of more than about a minute ends the broadcast. Streams over 12 hours may not be archived, so creators trade one long-lived URL against archives they can reuse.
-3. **Policy rewards variety.** No rule bans loops, but the July 2025 "inauthentic content" rule names templated slideshows and scrolling text as ineligible for monetization, and it covers lives. Fake engagement, repetitive chat and rewards for subscribing are banned.
-4. **The APIs allow a lot, with consent.** Scheduling broadcasts, rotating titles and thumbnails, uploading Shorts, reading chat through `streamList` and posting polls are all possible. Community posts and YouTube's own A/B tests are not. Every automated action needs the creator's explicit consent, data must be refreshed within 30 days, and our own metrics must be labelled as ours.
-5. **India is TV-first, devotional, regional and has no INR-priced tool.** 75M+ adults watch YouTube on TV, 56% of digital content is regional, devotional has proven spend (Sri Mandir), Gifts launched in July 2026, and phone lives below 1,000 subscribers may have their audience capped.
+| Measure | How | Why |
+| --- | --- | --- |
+| **Continuity** (every stream) | Share of planned live time on one unbroken broadcast; gaps over YouTube's auto-stop window, with cause | We control it fully; a broken broadcast loses its URL, likes and viewers |
+| **Channel effect** (connected beta channels) | Weekly live watch hours and subscribers, against the same channel's 4-week baseline before AFK Live, read with notes on content changes | The honest test of the premise (EX-0); too noisy to be a target, good enough to decide direction |
+| **Retention** (business) | Creators still streaming after 4 and 8 weeks; paid conversion | If growth features matter, retention moves |
+| **Guardrails** | Policy strikes or demonetisations on AFK Live channels: zero. Quota use under 50% until the API audit | Either one would end the product |
 
 ## Rules every growth feature follows
 
-1. **Consent per stream, logged.** Nothing posts, uploads, replies or changes metadata on a channel unless the creator turned that feature on for that stream. Every action is listed in the stream's activity.
-2. **Real engagement only.** No viewer boosting, no generated chat, no rewards for likes or subscriptions, no repeated identical chat messages. Timed messages vary and have a minimum interval.
-3. **Variety by default.** New 24/7 streams start with shuffle, a now-playing layer and a context layer. A single file looped over a still image shows a monetization warning.
-4. **Music rights are the creator's problem, made visible.** Licensed music can still interrupt a live through Content ID. We warn, point to royalty-free sources and never promise "copyright safe".
-5. **Our numbers are labelled as ours.** Uptime, continuity and experiment results say "AFK Live". YouTube's numbers are cached for at most 30 days and refreshed while the channel stays connected.
-6. **Honest titles.** We never write "LIVE now" over a replay without the creator's choice. A "24/7 replay" tag is offered as the default for pre-recorded loops.
+1. **It must help at zero viewers, or switch itself off there.** No empty chat boxes, no "0 watching" counters, no tests that need traffic.
+2. **Consent per stream, logged.** Nothing posts, uploads, replies or changes metadata unless the creator turned that feature on for that stream. Every action is listed in the stream's activity.
+3. **Real engagement only.** No viewer boosting, no generated chat, no rewards for likes or subscriptions, no repeated identical chat messages.
+4. **Variety by default.** New 24/7 streams start with shuffle, a now-playing layer and a context layer.
+5. **We state only what we know.** No predictions about Content ID or ranking. Our numbers are labelled as ours. YouTube data is cached for at most 30 days.
+6. **Honest titles.** No "LIVE now" over a replay unless the creator chooses it. "24/7 replay" is offered by default for loops.
+7. **Every feature works without connecting a channel, or says plainly why it needs one.**
 
-## Phase G0: answer the unknowns first (1–2 weeks, before building)
+## Experiments first (2 weeks, before building Growth v1)
 
-Each experiment runs on an AFK Live test channel plus two or three friendly creators. Results are
-written into this file, and anything that fails changes the plan below.
+Each experiment has a pass mark set in advance and a decision tied to it.
 
-| ID | Question | How | Decides |
-| --- | --- | --- | --- |
-| EX-1 | Does a 9:16 RTMP stream from our encoder appear in the Shorts feed? | Vertical 720×1280 stream from the studio; check from several viewer accounts and devices over a week; compare Studio traffic sources ("Shorts feed") | Whether GR-4 is a P0 headline or a P2 option |
-| EX-2 | Does an encoder (RTMP) live from a channel under 1,000 subscribers avoid the mobile audience cap? | Stream from a 100-subscriber channel via our ingest; compare reach with a phone-app live | The phone-studio pitch for small Indian creators |
-| EX-3 | How is `liveChatMessages.streamList` billed against quota over 24 hours? | One 24-hour stream, quota dashboard every hour | Whether chat features fit the shared quota before the audit |
-| EX-4 | How long can the encoder be gone before YouTube ends the broadcast, with auto-stop on and off? | Controlled disconnects of 30 s, 60 s, 90 s and 5 min | Reconnect deadlines in RE-8 and OPS-3 |
-| EX-5 | What will Indian creators pay for growth? | 20 interviews plus a pricing page test with three INR price points | Packaging and price of the growth plan |
-| EX-6 | How long does Google OAuth verification and the YouTube API audit take for our scopes? | Start the verification and audit applications now | When growth features can reach all users |
+| ID | Question | How | Pass mark | If it fails |
+| --- | --- | --- | --- | --- |
+| EX-0 | Does a 24/7 live grow a small channel? | 5–10 beta creators who connect; 4-week baseline, then 4 weeks live with good practice (title, thumbnail, variety, continuity) | Most channels gain live watch hours **and** subscribers above baseline | Pitch AFK Live as reliability and phone lives; Growth v1 shrinks to GR-1 and GR-9 |
+| EX-1 | Does a 9:16 encoder stream reach the Shorts feed? | Vertical stream from the studio on a test channel; Studio traffic source "Shorts feed" over a week | Any "Shorts feed" traffic | Vertical stays a phone-format convenience, not a reach feature |
+| EX-2 | Does an encoder live from a channel under 1,000 subscribers avoid the mobile audience cap? | 100-subscriber channel: our ingest vs the phone app, same content, same time | Encoder live shows no cap notice and reaches viewers the phone app didn't | Don't market it |
+| EX-3 | How much quota does reading chat for 24 hours cost? | One 24-hour stream with `streamList`, quota dashboard hourly | Under 500 units a day per stream | Chat features only on active phone lives |
+| EX-4 | How long can the encoder be gone before YouTube ends the broadcast? | Disconnects of 30 s, 60 s, 90 s and 5 min, auto-stop on and off | Known number | Sets reconnect deadlines (RE-8, OPS-3) |
+| EX-5 | What will Indian creators pay? | 20 interviews and a pricing page with three INR prices | A price that covers cost per stream-hour (FO-3) | Rework plans, not features |
+| EX-6 | How long do Google verification and the API audit take? | Apply now | — | Ship stream-key features first |
 
-## Phase G1: keep the broadcast alive (P0)
+## Growth v1: five stories
 
-The trust work already planned (RE-8, OPS-3) is the foundation. These stories make it a growth
-promise the creator can see.
+1. **GR-1 Continuity score** (P0, S). "One unbroken broadcast for N days", with gaps and their cause. Alerts fire before YouTube's auto-stop window closes (EX-4). Built on RE-8. Works with a stream key.
+2. **GR-9 Go-live check** (P0, S). Before go-live and weekly, it flags:
+   - a single file on loop, or a still image with no overlay (the inauthentic content pattern);
+   - a title without a searchable phrase, or with misleading "LIVE";
+   - a thumbnail unreadable at phone size;
+   - a repeated identical timed message.
 
-- **GR-1 Continuity score.** Every stream shows "one unbroken broadcast for N days". Gaps longer than YouTube's auto-stop window are shown with their cause, and alerts fire before that window closes.
-- **GR-2 Broadcast lifecycle with a connected channel.** AFK Live creates and schedules broadcasts (YT-1, YT-2), so upcoming cards and "Notify me" reminders work. Creators choose between one unbroken URL (no archive) and a planned rollover before 12 hours. A rollover pre-schedules the next broadcast, sets Live Redirect when eligible, and carries title, thumbnail and playlist forward.
-- **GR-3 Connect your channel for growth tools.** An optional, clearly scoped connection step after the first stream works: stream keys stay the default, and the connection unlocks GR-2 and everything below. It shows the permissions in plain words, and disconnecting deletes cached YouTube data.
+   Each flag has a one-tap fix and a help link. Works with a stream key; title and thumbnail checks read what the creator typed into AFK Live.
+3. **GR-8 Niche starter templates** (P1, M). Lofi, devotional, study, sleep/ambience and phone gaming. Each comes with layout, overlay layers (now playing, clock, next item), Indic-script fonts, and schedule presets (GR-13 folded in). Chat on screen only appears when chat is active. Works with a stream key; the subscriber goal needs a connection.
+4. **GR-2 Scheduled lives** (P1, M; needs a connection). For daily or weekly scheduled lives (aarti, a phone show), AFK Live creates the broadcast ahead of time so the upcoming card and "Notify me" reminders collect. A second time zone is shown for diaspora audiences, and the next broadcast is created automatically. 24/7 streams default to one unbroken broadcast; rollover is an advanced option.
+5. **GR-15 Phone lives that grow** (P1, M). Low-data phone presets, with data per hour in plain words. Vertical by default. Chat, polls and commands for a present host. "Mark a moment" during the live, then a Short from each marked moment after it ends, uploaded only on approval (GR-5, narrowed). The audience-cap message only if EX-2 passes.
 
-## Phase G2: more ways in (P1, gated by EX-1)
+## Parked, with what would bring each back
 
-- **GR-4 Vertical and dual output.** The studio can produce a second, 9:16 output from the same scene: its own layout, the safe area, and chat or now-playing placed for phones. It goes to the same channel as a separate broadcast, or as YouTube's dual format once that is open to encoders. It costs a second encode, so it's a paid add-on (FinOps), and copy mode can still serve the horizontal output.
-- **GR-5 Clips to Shorts.** Moments are picked from the library (loudest, most-skipped-to, creator-marked) or from a phone live's recording. They're cut to 9:16 with captions and uploaded as Shorts that link to the live, with the creator approving each upload or a daily batch. Background CPU at the lowest priority (FinOps), within the upload quota bucket.
-- **GR-6 Successor and redirect.** When a scheduled live ends, viewers are sent to the next one (Live Redirect at 1,000+ subscribers; otherwise an end slate with the next start time and a QR code). For daily lives, the next broadcast is created automatically so reminders start collecting.
+| Story | Bring back when |
+| --- | --- |
+| GR-4 Dual output | YouTube opens dual format to encoders **and** EX-1 passes **and** a creator pays for the second encode |
+| GR-5 Shorts from 24/7 loops | Never automated. Revisit only if YouTube publishes guidance that clipping one's own uploads is fine |
+| GR-6 Redirect to the next live | Creators with 1,000+ subscribers run scheduled lives on AFK Live |
+| GR-7 Chat overlays and commands on 24/7 streams | Typical 24/7 streams on AFK Live have active chat (EX-0 data) |
+| GR-10 Multilingual titles | GR-9 shows titles are the common weakness; AI-1 lands |
+| GR-11 Thumbnail and title rotation | Dropped (noise at our viewer counts) |
+| GR-12 Growth report | Replaced by GR-9's weekly nudge; revisit after the API audit, if creators ask for numbers outside Studio |
+| GR-14 Diaspora scheduling | Folded into GR-2 |
+| GR-16 Earnings checklist | A help article now (MK-4); in-app when creators reach YPP eligibility on AFK Live |
+| GR-17 INR growth add-on | EX-5 |
 
-## Phase G3: make it feel live (P1)
+## GR-18: our own acquisition loop (P1, S)
 
-- **GR-7 Chat on screen, commands and polls.** Read chat through `streamList` (EX-3). Show recent messages or a "comment of the minute" on screen. Creator-defined commands such as `!song` or `!next` answer within rules (AI-3). Polls run on YouTube and show their result on screen. Builds on CH-1 and AI-4.
-- **GR-8 Niche templates.** Ready layouts for lofi, devotional (aarti times, a deity image slot, bhajan name), study-with-me (Pomodoro timer), sleep and ambience, and phone gaming (webcam corner, chat and goal). Indic-script fonts, subscriber goal (OV-4). Builds on OV-5 and OV-6.
-- **GR-9 Variety check.** Before go-live and weekly: flags a single file on loop, a still image with no overlay, identical repeated chat messages, or music likely to be claimed. Each flag links to the help article and a one-tap fix (add shuffle, add a layer). Protects monetization under the inauthentic content policy.
-
-## Phase G4: help me improve (P2)
-
-- **GR-10 Titles and descriptions that get found.** Search-style titles and descriptions in English, Hindi and the creator's regional language, with timestamps and tracklists (AI-1, YT-3). It also suggests a second-language title for diaspora audiences: over 40% of live watch time is international, and over 15% of Indian channels' watch time comes from outside India.
-- **GR-11 Thumbnail and title experiments.** Rotate two or three thumbnails or titles on a schedule and compare concurrent viewers and watch time per period. These are labelled as AFK Live experiments, not YouTube's A/B tests (which only work on archives). One thumbnail change costs about 50 units of quota.
-- **GR-12 Growth report.** A weekly report in the app and by email: watch hours, peak and average viewers, continuity, chat rate, which title or thumbnail did better, and the best hours for the creator's audience, with one suggested next step (AN-1, AN-2, AI-5). It follows the derived-metrics rule (III.L) and labels our numbers as ours.
-
-## India pack (spread across phases)
-
-- **GR-13 Devotional schedules.** Aarti and puja times computed from sunrise and sunset for the temple's city, a festival calendar with ready titles, and morning and evening scene switches. (G1, with GR-2.)
-- **GR-14 Diaspora hours.** Scheduling and title suggestions for Gulf, UK and US evenings next to Indian prime time. (G2.)
-- **GR-15 Phone-first studio for small channels.** Low-bitrate phone ingest presets (data budget per hour shown in plain words: Indian users average about 1.2 GB a day) and cloud encoding to YouTube quality. If EX-2 confirms it, add a "go live without the 1,000-subscriber audience cap" message. (G2.)
-- **GR-16 Earnings readiness.** A checklist for Super Chat, memberships and Gifts (launched in India in July 2026), with what turning on Gifts changes (Super Stickers go away). (G3.)
-- **GR-17 INR growth plan.** Growth features (GR-4 to GR-12) as a plan or add-on priced in rupees from EX-5, with UPI autopay and GST invoices. (Pricing, after EX-5.)
+- **Credit line (opt-in, off by default).** A "Streamed 24/7 with AFK Live" line with a link in the broadcast description. It's never forced and never on screen, and never added when the creator connects their channel without asking.
+- **Template gallery pages** on the public site: each niche template is a page that ranks for "24/7 bhajan live setup" or "lofi live stream 24/7", with a live example (with permission).
+- **Referral credit in INR:** a free month for both sides, paid only after the referred creator's first confirmed live. This keeps it clear of the "rewards for engagement" rule, since it rewards using AFK Live, not YouTube actions.
 
 ## Order of work
 
-| When | Work | Depends on |
-| --- | --- | --- |
-| Now | EX-1 to EX-6 (no code beyond test streams) | Test channel |
-| Trust release | RE-8, OPS-3 (already planned), GR-1 | — |
-| Next | GR-3, GR-2, GR-13 | EX-6 for public launch of channel connection |
-| Then | GR-9, GR-8, GR-7 | EX-3 |
-| Then | GR-4, GR-15, GR-14 | EX-1, EX-2 |
-| Then | GR-5, GR-6 | GR-2 |
-| Later | GR-10, GR-11, GR-12, GR-16, GR-17 | GR-3; EX-5 for pricing |
+| When | Work |
+| --- | --- |
+| Now | EX-6 applications (Google verification, API audit); EX-0 baseline recruitment; EX-1 to EX-4 test streams |
+| Trust release | RE-8 and OPS-3 (already planned), then GR-1 |
+| After 2 weeks of experiments | GR-9, then GR-8 |
+| With the connection approved | GR-2 |
+| Phone track | GR-15 |
+| Anytime | GR-18 template pages and referral |
 
 ## FinOps notes
 
-- **GR-4 costs a second encode** (about 0.45 vCPU at 720p), so it is priced as an add-on. The horizontal output can still use copy mode.
-- **GR-5 runs at the lowest priority on spare CPU,** like playout copies. The upload quota is 100 calls a day per project until the audit, so clips are batched per creator.
-- **The quota is one pool for every customer until the API audit** (EX-6). Growth features read and write within it: chat through `streamList`, no polling of broadcast status (our worker already knows its health), and statistics cached for hours, never re-read per page view.
-- **Every growth feature has a cost line in its PR,** per the roadmap's FinOps rules.
+- **Growth v1 adds no always-on cost.** GR-1, GR-9 and GR-8 run on data we already have. GR-15's Shorts render at the lowest priority on spare CPU.
+- **Quota is one pool for every customer until the API audit.** Chat is read only on active phone lives (until EX-3 says otherwise), broadcasts are created once per scheduled live, and nothing polls YouTube for status.
+- **Dual output stays parked partly for cost:** it doubles encode and traffic for a reach gain that is unproven.
 
 ## Risks
 
 | Risk | What we do |
 | --- | --- |
-| EX-1 fails: encoder verticals don't reach Shorts | GR-4 drops to P2; lean on GR-5 Shorts clips, which do reach the feed |
-| Google OAuth verification or audit takes months | Ship G1 continuity and the India pack on stream keys; growth features beta to test users |
-| Policy shift against 24/7 loops | GR-9 and variety defaults; never position the product as "fake live" |
-| Creators won't pay for growth in INR | Fold the essentials (GR-8, GR-9, GR-13) into base plans to win on value; keep GR-4 and GR-5 as add-ons |
-| Chat automation misread as spam | Strict limits, creator review, varied messages, everything logged |
+| EX-0 shows 24/7 lives don't grow small channels | Say so. Market reliability, zero-downtime and phone lives; keep the growth features that cost little |
+| Google verification or the audit is slow | Growth v1 runs mostly on stream keys; GR-2 waits |
+| A policy change against loops | Variety defaults and GR-9; never position the product as "fake live" |
+| Creators see the checks as nagging | One weekly summary, dismissible flags, no blocking except clear policy risks |
