@@ -126,6 +126,13 @@ the lowest priority, picked up at the next item; frame-rate reduction before sca
 leaves new streams to others for 45 s. **Measured**: about 1.35 → 0.6 vCPU for a 1080p60 source on a
 720p30 stream.
 
+**Encoder preset (perf/encoder-preset):** the live x264 encoder moved from `veryfast` to `superfast`
+(configurable, `APP_STREAMING_X264PRESET`). Production had two 720p30 studio encoders at 0.8 and 1.24
+cores on a 4-vCPU worker at 70–90%; on 720x1280 footage superfast costs 30–45% less encoder CPU for an
+SSIM drop of 0.001–0.002. Both presets write identical SPS/PPS, so existing profile copies (FO-2) stay
+valid; copies now record their preset so a later change to another preset family re-makes them.
+A per-encoder thread cap measured no saving and stays off by default.
+
 **FO-6 (next, small):** record when a copy was last played (written at most every 10 minutes from the
 worker's lookup), delete copies unplayed for 30 days in the web sweeper, and show copy storage in
 admin. Copies are made again on demand, so deletion is always safe.
