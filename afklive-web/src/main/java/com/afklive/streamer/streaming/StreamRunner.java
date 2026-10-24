@@ -50,6 +50,13 @@ public final class StreamRunner {
         default void onEncoderFailure(int restarts, String error) {
         }
 
+        /**
+         * A line FFmpeg wrote to stderr (not progress): {@code source} is "encoder" or "dest N" (1-based).
+         * Unredacted: the listener must remove keys before keeping it.
+         */
+        default void onLogLine(String source, String line) {
+        }
+
         void onFinished(String reason, boolean failed);
     }
 
@@ -636,6 +643,13 @@ public final class StreamRunner {
                         // progress fields we don't store
                     }
                     default -> {
+                        if (!line.isBlank() && !isProgressField(line)) {
+                            try {
+                                listener.onLogLine("encoder", line);
+                            } catch (RuntimeException ignored) {
+                                // a listener problem must never stop us draining the pipe
+                            }
+                        }
                         if (!line.isBlank()) {
                             synchronized (errorLines) {
                                 errorLines.addLast(line.length() > 300 ? line.substring(0, 300) : line);
@@ -650,6 +664,11 @@ public final class StreamRunner {
         } catch (IOException ignored) {
             // process ended
         }
+    }
+
+    /** "stream_0_1_q=28.0" and the like: progress output, not a message. */
+    static boolean isProgressField(String line) {
+        return line.matches("[A-Za-z0-9_]+=\\S*");
     }
 
     static double parseLeadingNumber(String value) {
@@ -791,7 +810,8 @@ public final class StreamRunner {
                         accepting = true;
                         listener.onDestination(position, restarts == 0 ? "CONNECTING" : "RECONNECTING", restarts, null);
                         Deque<String> errLines = new ArrayDeque<>();
-                        Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readLines(p.getErrorStream(), errLines));
+                        Thread errReader = platformThread("relay-err-" + jobId + "-" + position, () -> readLines(p.getErrorStream(), errLines,
+                                line -> listener.onLogLine("dest " + (position + 1), line)));
                         Thread writer = platformThread("relay-in-" + jobId + "-" + position, () -> write(p));
                         boolean reportedLive = false;
                         while (!p.waitFor(200, TimeUnit.MILLISECONDS)) {
@@ -915,11 +935,16 @@ public final class StreamRunner {
         }
     }
 
-    private static void readLines(InputStream in, Deque<String> lines) {
+    private static void readLines(InputStream in, Deque<String> lines, java.util.function.Consumer<String> each) {
         try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
                 if (!line.isBlank()) {
+                    try {
+                        each.accept(line);
+                    } catch (RuntimeException ignored) {
+                        // a listener problem must never stop us draining the pipe
+                    }
                     synchronized (lines) {
                         lines.addLast(line.length() > 300 ? line.substring(0, 300) : line);
                         while (lines.size() > 3) {

@@ -41,6 +41,7 @@
         <div class="my-6 flex items-center gap-3 text-sm text-muted"><span class="h-px flex-1 bg-line"></span>or with email<span class="h-px flex-1 bg-line"></span></div>
         </div>
         <form th:action="@{/login}" method="post" class="space-y-4">
+            <p th:if="${param.expired}" class="note-bad" role="alert">This page expired. Please try again.</p>
             <p th:if="${param.error}" class="note-bad" role="alert">That email and password don't match. Try again, or reset your password.</p>
             <p th:if="${param.logout}" class="note-ok">You're signed out.</p>
             <p th:if="${param.restored}" class="note-ok">Your account is kept. Sign in to carry on.</p>

@@ -149,6 +149,50 @@ key from `APP_ENCRYPTION_OLD_KEYS` after that.
   tax records, detached from the account; B2C invoices (no GSTIN) lose the customer's name and address,
   B2B invoices keep the legal name, address and GSTIN that GST law requires.
 
+## Email (OPS-1)
+
+Email goes through ZeptoMail: set `ZEPTOMAIL_URL` and `ZEPTOMAIL_TOKEN` on the web app, and
+`APP_BASE_URL` to the public address (`https://afklive.in`): verification and reset links are built
+from it, never from the request. While either ZeptoMail variable is empty:
+
+- the web app logs `EMAIL IS OFF` at startup and Admin shows a red banner;
+- password sign-ups are verified at once (logged), and at startup any sign-up still waiting for a
+  verification email is verified too (accounts an admin disabled are left alone);
+- "Forgot password" says email is unavailable and points to support@afklive.in (or Google sign-in)
+  instead of claiming a link was sent. For someone who writes in, check who they are (the address they
+  write from, a payment id), then Admin > Users > the user > Emails > "Password reset link" (audited,
+  works once) and send them the link;
+- alerts and payment reminders still appear in the app, just not by email.
+
+Every send is recorded in `email_log` (time, kind, the recipient's account, sent or why not; never the
+address or body) and shown in Admin > Users > the user > Emails. "Send a test email" (Admin > Platform, or the
+banner) sends to your own address and is audited. Records older than 180 days are removed.
+
+## Errors and request ids (OPS-2)
+
+Every request gets an 8-character id: in each log line it writes (`[abcd2345]`), in the `X-Request-Id`
+header, on the error page as "Code: abcd2345", and in the app's message for an API server error.
+Only a server error (5xx) says "something went wrong on our side"; a 4xx says what happened. A creator who quotes a code can
+be found with a log search for it. A form opened before a deploy (expired security token) is not an
+error: sign-in forms open again with "This page expired", and the app gets a fresh token and retries.
+
+## Support view of a run (AD-6)
+
+Admin > Live streams (click the stream) or Admin > Users > the user > Stream runs opens the run: source
+files with size, frame rate and shape; the output profile; each destination's server, the key masked as
+the creator sees it (`••••` and the last four), its length and the same key check the app runs on save;
+the platform's last error, reconnects and, once the stream servers report it (RE-8), whether the
+platform is receiving; and the last 200 FFmpeg lines. "Send a test" runs the usual 10-second
+destination test with the run's address (not while that destination is live, one at a time per
+account, not counted against the creator's hourly tests), needs a reason and is audited.
+
+FFmpeg lines are captured on the worker (`JobLogs`): every line passes `Redact.line` before it is kept
+(stream URLs, every part of the run's destination addresses in plain and URL-encoded form, and named
+values such as `key=`, `streamid=`, `passphrase=`, `token=`), only the last 200 are kept in memory, and
+a background thread saves them to `stream_job_logs` every 10 s while there are new ones and once when
+the run stops (one row per run, replaced; removed after 14 days by the web app). A database outage only
+delays the save; it never touches the stream. Runs on workers older than this release have no log.
+
 ## Destination tests
 
 "Test" on a destination runs on a stream worker (behind its egress firewall), at most two at a time
