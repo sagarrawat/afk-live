@@ -171,8 +171,8 @@ public final class FlvTimeline {
         boolean config = raw[12] == 0; // AVCPacketType / AACPacketType 0 = sequence header
         if (config) {
             byte[] before = video ? videoConfig : audioConfig;
-            // Before the first frame the relay may write a header twice (the AAC one is completed by aac_adtstoasc).
-            if (before != null && wall0 != 0) {
+            // At the start the relay writes the AAC header twice (aac_adtstoasc completes it with the first frame).
+            if (before != null && wall0 != 0 && now - wall0 > 1_000_000_000L) {
                 midStreamHeaders++;
                 boolean changed = !Arrays.equals(before, 11, before.length - 4, raw, 11, raw.length - 4);
                 if (changed) {

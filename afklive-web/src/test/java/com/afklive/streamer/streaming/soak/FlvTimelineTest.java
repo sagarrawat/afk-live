@@ -131,14 +131,17 @@ class FlvTimelineTest {
     @Test
     void timestampsGoingBackwardsAndResentHeadersAreCounted() {
         FlvTimeline t = new FlvTimeline(0);
-        Flv flv = new Flv().video(0, true).audio(0).video(33, false).audio(23).video(20, false)
-                .tag(9, 40, new byte[]{0x17, 0, 0, 0, 0, 1, 2, 3});
+        Flv flv = new Flv().audio(0).tag(8, 0, new byte[]{(byte) 0xaf, 0, 0x12, 0x11}) // start-up repeat: not counted
+                .video(0, true).video(33, false).audio(23).video(20, false);
         byte[] b = flv.take();
         // Split mid-tag, like a socket read.
         t.feed(b, 30, 1);
         byte[] rest = java.util.Arrays.copyOfRange(b, 30, b.length);
         t.feed(rest, rest.length, 2);
+        byte[] later = flv.tag(9, 40, new byte[]{0x17, 0, 0, 0, 0, 1, 2, 4}).take(); // 3 s in: a real mid-stream one
+        t.feed(later, later.length, 3_000_000_000L);
         FlvTimeline.Stats s = t.stats();
+        assertThat(s.changedHeaders()).isEqualTo(1);
         assertThat(s.videoTags()).isEqualTo(3);
         assertThat(s.audioTags()).isEqualTo(2);
         assertThat(s.backwardsVideo()).isEqualTo(1);
