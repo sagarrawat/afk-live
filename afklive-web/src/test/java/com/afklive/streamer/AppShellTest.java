@@ -88,12 +88,17 @@ class AppShellTest extends PostgresIntegrationTest {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio"));
         mvc.perform(get("/").with(user("ops@example.com").roles("ADMIN")))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio/admin"));
-        for (String page : new String[]{"/login", "/register", "/forgot-password"}) {
+        for (String page : new String[]{"/login", "/register"}) {
             mvc.perform(get(page))
                     .andExpect(status().isOk())
                     .andExpect(content().string(containsString("/site/assets/site.css")))
                     .andExpect(content().string(containsString("name=\"_csrf\"")));
         }
+        // OPS-1: tests run with email off, so "Forgot password" offers support instead of a form.
+        mvc.perform(get("/forgot-password"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/site/assets/site.css")))
+                .andExpect(content().string(containsString("support@afklive.in")));
         mvc.perform(get("/login").param("error", ""))
                 .andExpect(content().string(containsString("match. Try again")));
     }
