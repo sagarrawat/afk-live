@@ -8,6 +8,9 @@ export const HELP = {
   notOnYouTube: '/help/live-here-not-on-youtube',
   shape: '/help/vertical-or-landscape',
   phone: '/help/phone-streaming',
+  loops: '/help/loops-and-youtube-rules',
+  titles: '/help/titles-and-thumbnails',
+  music: '/help/music-on-your-live',
 } as const;
 
 export type HelpArticle = (typeof HELP)[keyof typeof HELP];

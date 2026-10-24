@@ -132,7 +132,7 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void goingLiveCreatesOneStudioRunAndASecondStartIsRefused() {
+    void goingLiveCreatesOneStudioRunAndASecondStartGetsTheSameRun() {
         String email = newUser(PlanType.ESSENTIALS);
         LiveStream s = ready(email);
         assertThat(service.view(email, s.getId()).live().state()).isEqualTo("DRAFT");
@@ -146,7 +146,10 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
         assertThat(job.getStreamId()).isEqualTo(s.getId());
         assertThat(service.view(email, s.getId()).live().state()).isEqualTo("STARTING");
 
-        assertThatThrownBy(() -> service.goLive(email, s.getId(), null)).hasMessageContaining("already live");
+        // A second press (by hand) gets the run that's starting; a scheduled start is told it's already live.
+        assertThat(service.goLive(email, s.getId(), null).getId()).isEqualTo(job.getId());
+        assertThatThrownBy(() -> service.goLive(email, s.getId(), null, List.<Long>of())).hasMessageContaining("already live");
+        assertThat(jobs.findAllByStreamIdAndIsLiveTrue(s.getId())).hasSize(1);
 
         // Stop now with no worker running it: ended right away.
         LiveState after = service.stop(email, s.getId(), new StopRequest("NOW", null, null));
@@ -423,6 +426,119 @@ class LiveStreamServiceTest extends PostgresIntegrationTest {
         }
         assertThat(started.get()).isEqualTo(1);
         assertThat(jobs.countByUserEmailAndIsLiveTrue(email)).isEqualTo(1);
+    }
+
+    @Test
+    void aDoubleTapOnGoLiveCreatesOneRunAndBothTapsGetIt() throws Exception {
+        // Production, 24 Oct 2026: jobs 19 and 20 were created for one stream within a second and
+        // both were claimed. Going live is idempotent per stream: every tap gets the same run.
+        String email = newUser(PlanType.AGENCY);
+        LiveStream s = ready(email);
+        int taps = 4;
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(taps);
+        List<Long> runIds = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        List<Throwable> errors = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        List<Thread> threads = new java.util.ArrayList<>();
+        for (int i = 0; i < taps; i++) {
+            threads.add(Thread.ofPlatform().start(() -> {
+                try {
+                    barrier.await();
+                    runIds.add(service.goLive(email, s.getId(), null).getId());
+                } catch (Throwable e) {
+                    errors.add(e);
+                }
+            }));
+        }
+        for (Thread t : threads) {
+            t.join(30_000);
+        }
+        assertThat(errors).isEmpty();
+        assertThat(jobs.findAllByStreamIdAndIsLiveTrue(s.getId())).hasSize(1);
+        assertThat(runIds).hasSize(taps).containsOnly(runIds.getFirst());
+    }
+
+    @Autowired WorkerStatusRepository workerReports;
+
+    /** Only this worker report counts (other tests leave theirs in the shared database). */
+    private void onlyWorker(int cpus, int streams, int capacity, double cpuPercent) {
+        jdbc.update("DELETE FROM stream_workers");
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        workerReports.report("afklive-1", now.minusHours(1), now, streams, capacity, cpuPercent, 1L, 2L, cpus);
+    }
+
+    @Test
+    void preflightWarnsWhenTheQualityWontKeepUpOnTheServersAndOffersOneThatFits() {
+        // GL-7, production 24 Oct 2026: Agency allows 1080p60, but the 4-CPU worker was 92 % busy.
+        String email = newUser(PlanType.AGENCY);
+        LiveStream s = ready(email);
+        service.update(email, s.getId(), new UpdateStream(null, null, 1080, 60, null, null, null, null, null, null, null));
+        service.setOverlays(email, s.getId(), List.of(new StudioSpec.OverlaySetting(null, "TEXT", true, 0.05, 0.05, 0, 0.05,
+                "Night drive", null, null, "#ffffff", "#99000000", 1, null, null, 0, null))); // drawn live: no copy mode
+        try {
+            onlyWorker(4, 2, 4, 70.0); // 3.4 usable, 2.8 in use: 0.6 free
+            Preflight pf = service.preflight(email, s.getId());
+            assertThat(pf.ok()).isTrue(); // a warning, not a failed check
+            assertThat(pf.capacity().fits()).isFalse();
+            assertThat(pf.capacity().needCpus()).isEqualTo(2.1);
+            assertThat(pf.capacity().freeCpus()).isEqualTo(0.6);
+            assertThat(pf.capacity().suggestion()).isEqualTo(new com.afklive.streamer.service.CapacityEstimator.Quality(720, 30));
+            assertThat(pf.capacity().message()).contains("By our estimate 1080p 60 fps would run slower than real time", "720p 30 fps fits");
+
+            // Going live by hand stops at the warning; "Go live anyway" goes live.
+            assertThatThrownBy(() -> service.goLive(email, s.getId(), null, false))
+                    .isInstanceOf(LiveStreamService.CapacityWarningException.class)
+                    .hasMessageContaining("slower than real time");
+            assertThat(jobs.findAllByStreamIdAndIsLiveTrue(s.getId())).isEmpty();
+            assertThat(service.goLive(email, s.getId(), null, true).getStreamId()).isEqualTo(s.getId());
+            streamService.finalizeJob(jobs.findAllByStreamIdAndIsLiveTrue(s.getId()).getFirst().getId(), "test");
+
+            // Taking the suggestion fits.
+            service.update(email, s.getId(), new UpdateStream(null, null, 720, 30, null, null, null, null, null, null, null));
+            assertThat(service.preflight(email, s.getId()).capacity().fits()).isTrue();
+            assertThat(service.goLive(email, s.getId(), null, false)).isNotNull();
+        } finally {
+            jdbc.update("DELETE FROM stream_workers");
+        }
+    }
+
+    @Test
+    void preflightBlocksOnlyAQualityNoServerCouldRunAndSaysNothingWithoutReports() {
+        String email = newUser(PlanType.AGENCY);
+        LiveStream s = ready(email);
+        service.update(email, s.getId(), new UpdateStream(null, null, 2160, 30, null, null, null, null, null, null, null));
+        try {
+            jdbc.update("DELETE FROM stream_workers");
+            Preflight unknown = service.preflight(email, s.getId());
+            assertThat(unknown.ok()).isTrue();
+            assertThat(unknown.capacity()).isNull(); // no worker reported: nothing to say
+
+            onlyWorker(4, 0, 4, 1.0); // even idle, 4 CPUs can't encode 4K
+            Preflight pf = service.preflight(email, s.getId());
+            assertThat(pf.ok()).isFalse();
+            assertThat(pf.checks()).filteredOn(c -> c.id().equals("server-capacity")).singleElement()
+                    .satisfies(c -> {
+                        assertThat(c.ok()).isFalse();
+                        assertThat(c.fix()).isEqualTo("settings");
+                        assertThat(c.message()).contains("Pick a lower quality, such as 1440p 30 fps");
+                    });
+            assertThatThrownBy(() -> service.goLive(email, s.getId(), null, true)).hasMessageContaining("Pick a lower quality");
+        } finally {
+            jdbc.update("DELETE FROM stream_workers");
+        }
+    }
+
+    @Test
+    void theDatabaseRefusesASecondLiveRunOfTheSameStream() {
+        // The last line of defence: even a path that skips goLive's checks can't create a second run.
+        String email = newUser(PlanType.AGENCY);
+        LiveStream s = ready(email);
+        StreamJob first = service.goLive(email, s.getId(), null);
+        Long userId = users.findByEmail(email).orElseThrow().getId();
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO stream_jobs(user_id, is_live, pid, stream_id, restarts) VALUES (?, true, 0, ?, 0)",
+                userId, s.getId())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        // Ended runs don't count: history keeps every past run of the stream.
+        streamService.finalizeJob(first.getId(), "test");
+        assertThat(service.goLive(email, s.getId(), null).getId()).isNotEqualTo(first.getId());
     }
 
     @Test
