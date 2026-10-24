@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
 import { HealthDot, LiveBadge } from '@/components/status';
 import { Badge, Button, Dialog, ErrorNote, Field, Input, PageHeader, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
+import { ReasonDialog } from './admin/ReasonDialog';
+import { EmailBanner, EmailPanel, RunPage, UserSupport } from './admin/Support';
 import { get, post } from '@/lib/api';
 import { bytes, date, dateTime, duration, money, timecode } from '@/lib/format';
 import { useMe } from '@/lib/queries';
@@ -103,6 +105,7 @@ export function Admin() {
   return (
     <>
       <PageHeader title="Admin" description="Every action asks for a reason and is written to the audit log." />
+      <EmailBanner />
       <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
         {[
           ['live', 'Live streams'],
@@ -122,61 +125,13 @@ export function Admin() {
         ))}
       </nav>
       {section === 'live' && <LiveStreams />}
+      {section === 'runs' && id && <RunPage id={Number(id)} />}
       {section === 'users' && (id ? <UserPage id={Number(id)} /> : <Users />)}
       {section === 'support' && (id ? <TicketPage id={Number(id)} /> : <Tickets />)}
       {section === 'plans' && <Plans />}
       {section === 'platform' && <Platform />}
       {section === 'audit' && <Audit />}
     </>
-  );
-}
-
-function ReasonDialog({
-  title,
-  action,
-  onClose,
-  onSubmit,
-  danger,
-  blocked,
-  wide,
-  children,
-}: {
-  title: string;
-  action: string;
-  onClose: () => void;
-  onSubmit: (reason: string) => Promise<unknown>;
-  danger?: boolean;
-  /** Keeps the action disabled, e.g. while the form above the reason isn't valid. */
-  blocked?: boolean;
-  wide?: boolean;
-  children?: React.ReactNode;
-}) {
-  const [reason, setReason] = useState('');
-  const { busy, run } = useAction();
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={title}
-      wide={wide}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant={danger ? 'danger' : 'primary'} busy={busy} disabled={blocked || reason.trim().length < 3} onClick={async () => (await run(() => onSubmit(reason.trim()), 'Done.')) && onClose()}>
-            {action}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {children}
-        <Field label="Reason" htmlFor="reason" hint="Goes in the audit log.">
-          <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
-        </Field>
-      </div>
-    </Dialog>
   );
 }
 
@@ -231,7 +186,9 @@ function LiveStreams() {
             {(live.data ?? []).map((r) => (
               <tr key={r.jobId}>
                 <td className="max-w-[220px] px-3 py-2">
-                  <span className="block truncate font-medium">{r.streamName}</span>
+                  <Link to={`/studio/admin/runs/${r.jobId}`} className="block truncate font-medium hover:underline">
+                    {r.streamName}
+                  </Link>
                   <Link to={`/studio/admin/users/${r.userId}`} className="block truncate text-muted hover:underline">
                     {r.userEmail}
                   </Link>
@@ -366,6 +323,7 @@ function Platform() {
   return (
     <div className="space-y-6">
       <OverviewPanel />
+      <EmailPanel />
       <Quota />
       <Incidents />
     </div>
@@ -1109,6 +1067,7 @@ function UserPage({ id }: { id: number }) {
           </ul>
         </Panel>
       </div>
+      <UserSupport id={d.id} />
       <Panel title="Admin history" pad={false}>
         <AuditList items={d.history} />
       </Panel>
