@@ -590,11 +590,31 @@ uploaded before this are measured by the media sweeper, two a minute, videos in 
 
 The stream check on a stream's Overview (`/api/streams/{id}/check`) reads only what AFK Live has: the
 playlist, overlays, the measured still-picture flag, the YouTube title and thumbnail the creator typed
-in (`streams.youtube_title`, `thumbnail_media_id`) and replies AFK Live posted (`engagement_activity`).
+in (`streams.youtube_title`, `thumbnail_media_id`) and replies AFK Live posted in the past
+(`engagement_activity`, history only: nothing writes to it since automatic replies were removed, see below).
 It never blocks going live and never calls YouTube. Thumbnail contrast is measured once per image per
 web instance (in memory) from the library thumbnail. Once a week per stream that was live in the past
 seven days, one web instance (conditional update on `streams.check_weekly_at`) sends an in-app notice
 listing open flags; no email or push. `app.check.weekly-auto=false` turns the hourly pass off (tests).
+
+## Automatic replies removed (AI-3)
+
+AFK Live never posts in YouTube chat, replies to comments or deletes comments by itself. YouTube's spam
+policy and API Developer Policies (III.I.2, III.E.3.d) forbid automated chat and comments without the
+creator's consent for each action. `EngagementService` (an AI reply to every live chat message, and
+comment replies and deletes by sentiment) is gone, with the `/api/engagement/settings` endpoints and the
+per-run auto-reply flag. What remains: reading comments, reply drafts (`/api/engagement/suggest`, posts
+nothing), a reply the creator writes and sends (`POST /api/comments/{id}/reply`), the history of replies
+posted before (`/api/engagement/activity`, `/revert`) and the GR-9 repeated-reply flag, which now only
+explains (no fix). JobRunr ids `live-engagement-job` and `general-engagement-job` are still deleted at
+startup.
+
+Expand-then-contract: the release before this one maps these columns, so they stay for now and nothing
+writes them. **Contract step** (a later release, once no instance runs the previous version): one
+changeset that drops `stream_jobs.auto_reply_enabled`, `stream_jobs.last_page_token`,
+`stream_jobs.live_chat_id`, and `user_settings.auto_reply_enabled`,
+`delete_negative_comments`, `auto_reply_unreplied_enabled`, `auto_reply_unreplied_message`. Keep
+`engagement_activity` while GR-9 or the activity history reads it; `processed_comments` can go then too.
 
 ## Push alerts (NT-1, MB-2)
 
