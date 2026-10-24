@@ -66,9 +66,11 @@ public final class ProcessSampler {
         double jvm = jvmCpuSeconds();
         double jvmCores = (jvm - lastJvmCpu) / dt;
         lastJvmCpu = jvm;
-        String jvmMode = modes.isEmpty() ? "idle" : modes.values().iterator().next();
-        jvmCpuByMode.merge(jvmMode, jvmCores * dt, Double::sum);
-        jvmWallByMode.merge(jvmMode, dt, Double::sum);
+        if (!modes.isEmpty()) { // before the first stream starts (media preparation, class loading) isn't a stream's
+            String jvmMode = modes.values().iterator().next();
+            jvmCpuByMode.merge(jvmMode, jvmCores * dt, Double::sum);
+            jvmWallByMode.merge(jvmMode, dt, Double::sum);
+        }
 
         int procs = 0;
         double rss = 0;

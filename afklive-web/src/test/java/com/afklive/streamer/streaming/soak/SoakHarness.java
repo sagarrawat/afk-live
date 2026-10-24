@@ -354,6 +354,9 @@ public final class SoakHarness {
         }
         checker.shutdown();
         checker.awaitTermination(5, TimeUnit.MINUTES);
+        for (Run r : runs) {
+            r.sinks.forEach(SoakSink::close); // the stand-in platforms are the harness's, not the worker's
+        }
         long settle = System.nanoTime() + Duration.ofSeconds(20).toNanos();
         while (System.nanoTime() < settle && ProcessSampler.ffmpegProcesses() > 0) {
             Thread.sleep(250);
@@ -374,9 +377,6 @@ public final class SoakHarness {
         List<Map<String, Object>> streams = new ArrayList<>();
         for (Run r : runs) {
             streams.add(streamJson(r));
-        }
-        for (Run r : runs) {
-            r.sinks.forEach(SoakSink::close);
         }
 
         SoakReport report = SoakReport.evaluate(cfg, ranSeconds, series, fds0, threads0, afterStop, streams,
@@ -650,7 +650,10 @@ public final class SoakHarness {
             List<TsStitcherTest.Packet> packets = TsStitcherTest.probe(c.file);
             SampleCheck sc = SampleCheck.of(packets);
             m.putAll(sc.json());
-            Process p = new ProcessBuilder("ffmpeg", "-v", "error", "-i", c.file.toString(), "-f", "null", "-")
+            // FLV timestamps are whole milliseconds; with the default 1/30 s output time base two frames can round to
+            // the same tick and the null muxer complains, which says nothing about the stream. Keep milliseconds.
+            Process p = new ProcessBuilder("ffmpeg", "-v", "error", "-i", c.file.toString(), "-enc_time_base:v", "1:1000",
+                    "-f", "null", "-")
                     .redirectErrorStream(true).start();
             String errors = new String(p.getInputStream().readAllBytes());
             p.waitFor();
@@ -832,7 +835,8 @@ public final class SoakHarness {
 
     /** Thread pools that start on first use and stay (or idle out after a minute): not a leak. */
     static final List<String> JVM_POOLS = List.of("process reaper", "ForkJoinPool", "CompilerThread", "media-prefetch",
-            "Attach Listener", "Common-Cleaner", "Notification Thread", "surefire");
+            "Attach Listener", "Common-Cleaner", "Notification Thread", "surefire", "CompletableFutureDelayScheduler",
+            "Java2D Disposer");
 
     static List<String> threadNames() {
         return Thread.getAllStackTraces().keySet().stream().filter(Thread::isAlive).map(Thread::getName).sorted().toList();
