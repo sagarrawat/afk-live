@@ -218,6 +218,9 @@ public final class OverlayCompositor {
         FontMetrics fm = metrics(f);
         int padX = Math.round(f.getSize2D() * 0.45f);
         int padY = Math.round(f.getSize2D() * 0.22f);
+        if (!OverlayFonts.coveredBy(BASE_FONT, text)) {
+            return renderMixedText(text, o, f, fm, padX, padY);
+        }
         int w = Math.min(canvas.width(), fm.stringWidth(text) + 2 * padX);
         int h = fm.getAscent() + fm.getDescent() + 2 * padY;
         BufferedImage img = new BufferedImage(Math.max(2, w), Math.max(2, h), BufferedImage.TYPE_INT_ARGB);
@@ -233,6 +236,37 @@ public final class OverlayCompositor {
         return img;
     }
 
+    /** GR-8: text the brand font can't draw alone (Tamil, Bengali...), laid out run by run in the bundled fonts. */
+    private BufferedImage renderMixedText(String text, Overlay o, Font f, FontMetrics fm, int padX, int padY) {
+        java.awt.font.TextLayout tl = OverlayFonts.layout(BASE_FONT, text, f.getSize2D(), FRC);
+        if (tl == null) {
+            return null; // nothing any bundled font can draw (an emoji alone): no empty boxes on screen
+        }
+        int ascent = (int) Math.ceil(Math.max(fm.getAscent(), tl.getAscent()));
+        int descent = (int) Math.ceil(Math.max(fm.getDescent(), tl.getDescent()));
+        int w = Math.min(canvas.width(), (int) Math.ceil(tl.getAdvance()) + 2 * padX);
+        int h = ascent + descent + 2 * padY;
+        BufferedImage img = new BufferedImage(Math.max(2, w), Math.max(2, h), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(img, f);
+        if ((o.background() >>> 24) != 0) {
+            g.setColor(new Color(o.background(), true));
+            int arc = Math.round(f.getSize2D() * 0.5f);
+            g.fillRoundRect(0, 0, w, h, arc, arc);
+        }
+        g.setColor(new Color(o.color()));
+        tl.draw(g, padX, padY + ascent);
+        g.dispose();
+        return img;
+    }
+
+    /** Same hints as {@link #graphics}, so laid-out text measures as it draws. */
+    private static final java.awt.font.FontRenderContext FRC = new java.awt.font.FontRenderContext(null, true, true);
+
+    /** The brand font overlays are drawn in (tests compare fallbacks against it). */
+    static Font baseFont() {
+        return BASE_FONT;
+    }
+
     /** The ticker's text, rendered once as a strip that scrolls across a full-width band. */
     private BufferedImage renderTickerStrip(Overlay o, String text) {
         if (text == null || text.isBlank()) {
@@ -241,6 +275,9 @@ public final class OverlayCompositor {
         Font f = font(o);
         FontMetrics fm = metrics(f);
         String unit = text + "     •     ";
+        if (!OverlayFonts.coveredBy(BASE_FONT, unit)) {
+            return renderMixedTicker(o, unit, f, fm);
+        }
         int w = Math.max(2, fm.stringWidth(unit));
         int h = Math.round((fm.getAscent() + fm.getDescent()) * 1.5f);
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
@@ -251,6 +288,27 @@ public final class OverlayCompositor {
         g.setComposite(AlphaComposite.SrcOver);
         g.setColor(new Color(o.color()));
         g.drawString(unit, 0, (h - fm.getAscent() - fm.getDescent()) / 2 + fm.getAscent());
+        g.dispose();
+        return img;
+    }
+
+    private BufferedImage renderMixedTicker(Overlay o, String unit, Font f, FontMetrics fm) {
+        java.awt.font.TextLayout tl = OverlayFonts.layout(BASE_FONT, unit, f.getSize2D(), FRC);
+        if (tl == null) {
+            return null;
+        }
+        int ascent = (int) Math.ceil(Math.max(fm.getAscent(), tl.getAscent()));
+        int descent = (int) Math.ceil(Math.max(fm.getDescent(), tl.getDescent()));
+        int w = Math.max(2, (int) Math.ceil(tl.getAdvance()));
+        int h = Math.round((ascent + descent) * 1.5f);
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(img, f);
+        g.setColor(new Color(o.background(), true));
+        g.setComposite(AlphaComposite.Src);
+        g.fillRect(0, 0, w, h);
+        g.setComposite(AlphaComposite.SrcOver);
+        g.setColor(new Color(o.color()));
+        tl.draw(g, 0, (h - ascent - descent) / 2f + ascent);
         g.dispose();
         return img;
     }

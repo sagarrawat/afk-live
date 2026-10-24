@@ -45,6 +45,8 @@ public class StreamService {
 
     @Autowired
     private StreamJobRepository streamJobRepo;
+    @Autowired(required = false)
+    private ReferralService referralService;
     @Autowired
     private AppConfigService appConfigService;
     @Autowired
@@ -195,7 +197,9 @@ public class StreamService {
         // Optional YouTube metadata update (non-fatal).
         if (title != null || description != null || privacy != null) {
             try {
-                youTubeService.updateActiveBroadcast(username, title, description, privacy);
+                // GR-18: the credit line only if the creator turned it on, and only on a description they're setting anyway.
+                String described = referralService == null ? description : referralService.withCreditLine(user.getId(), description);
+                youTubeService.updateActiveBroadcast(username, title, described, privacy);
             } catch (Exception e) {
                 log.error("Failed to update broadcast metadata", e);
             }

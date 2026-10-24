@@ -29,7 +29,7 @@ class AuthControllerTest {
     final UserService userService = new UserService(users, NoOpPasswordEncoder.getInstance(), email, mock(PlanService.class));
 
     private AuthController controller(String baseUrl) {
-        return new AuthController(userService, email, baseUrl);
+        return new AuthController(userService, email, mock(com.afklive.streamer.service.ReferralService.class), baseUrl);
     }
 
     @Test
@@ -53,7 +53,7 @@ class AuthControllerTest {
         when(users.save(any())).thenAnswer(i -> i.getArgument(0));
         ExtendedModelMap model = new ExtendedModelMap();
 
-        controller("https://afklive.in").registerUser("new@example.com", "Passw0rd!", "New", model);
+        controller("https://afklive.in").registerUser("new@example.com", "Passw0rd!", "New", model, new org.springframework.mock.web.MockHttpServletRequest());
 
         verify(email).sendVerificationEmail(eq("new@example.com"), startsWith("https://afklive.in/verify-email?token="));
         assertThat(model.getAttribute("success")).asString().contains("check your email");
@@ -91,7 +91,7 @@ class AuthControllerTest {
         });
         ExtendedModelMap model = new ExtendedModelMap();
 
-        String view = controller("https://afklive.in").registerUser("new@example.com", "Passw0rd!", "New", model);
+        String view = controller("https://afklive.in").registerUser("new@example.com", "Passw0rd!", "New", model, new org.springframework.mock.web.MockHttpServletRequest());
 
         assertThat(view).isEqualTo("login");
         assertThat(model.getAttribute("success")).asString().isEqualTo("Your account is ready. Sign in to start.");

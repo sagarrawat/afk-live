@@ -25,6 +25,7 @@ public class AuthController {
 
     private final UserService userService;
     private final EmailService emailService;
+    private final com.afklive.streamer.service.ReferralService referralService;
     /**
      * Links in emails use the configured public address (APP_BASE_URL), never the request's Host: behind
      * the proxy that can be an internal address, and a forged Host header must not end up in a reset link.
@@ -32,9 +33,11 @@ public class AuthController {
     private final String baseUrl;
 
     public AuthController(UserService userService, EmailService emailService,
+                          com.afklive.streamer.service.ReferralService referralService,
                           @Value("${app.base-url:http://localhost:8080}") String baseUrl) {
         this.userService = userService;
         this.emailService = emailService;
+        this.referralService = referralService;
         this.baseUrl = publicBaseUrl(baseUrl);
     }
 
@@ -54,7 +57,8 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public String registerUser(@RequestParam String email, @RequestParam String password, @RequestParam String name, Model model) {
+    public String registerUser(@RequestParam String email, @RequestParam String password, @RequestParam String name, Model model,
+                               jakarta.servlet.http.HttpServletRequest request) {
         String passwordRegex = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=!_\\-]).{8,}$";
         if (!password.matches(passwordRegex)) {
             model.addAttribute("error", "Password must be at least 8 characters long, contain at least one digit, one uppercase letter, one lowercase letter, and one special character.");
@@ -63,6 +67,7 @@ public class AuthController {
 
         try {
             UserService.Registration r = userService.registerUser(email, password, name, baseUrl);
+            referralService.recordSignup(email, request); // GR-18: arrived through an invite link (never fails the sign-up)
             model.addAttribute("success", r == UserService.Registration.READY
                     ? "Your account is ready. Sign in to start."
                     : "Registration successful. Please check your email to verify your account.");

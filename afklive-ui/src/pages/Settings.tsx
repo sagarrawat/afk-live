@@ -3,6 +3,7 @@ import { NavLink, Navigate, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/ui';
 import { BillingSettings } from './settings/BillingSettings';
 import { DataSettings } from './settings/DataSettings';
+import { InviteSettings } from './settings/InviteSettings';
 import { NotificationSettings } from './settings/NotificationSettings';
 import { ProfileSettings } from './settings/ProfileSettings';
 import { SecuritySettings } from './settings/SecuritySettings';
@@ -12,6 +13,7 @@ const SECTIONS = [
   ['billing', 'Plan & billing'],
   ['notifications', 'Notifications'],
   ['security', 'Sign-in & security'],
+  ['invite', 'Invite creators'],
   ['data', 'Your data'],
 ] as const;
 
@@ -40,6 +42,7 @@ export function Settings() {
       {section === 'billing' && <BillingSettings />}
       {section === 'notifications' && <NotificationSettings />}
       {section === 'security' && <SecuritySettings />}
+      {section === 'invite' && <InviteSettings />}
       {section === 'data' && <DataSettings />}
     </>
   );

@@ -56,4 +56,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/085-go-live-check.sql
   - include:
+      file: db/changelog/changes/086-referrals.sql
+  - include:
       file: db/changelog/changes/100-encoder-preset.sql

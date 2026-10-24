@@ -444,6 +444,24 @@ plain reason. Files aren't re-encoded: the studio re-encodes at playout anyway. 
 10 minutes is taken over, so a restart never leaves a file stuck. Web instances therefore need
 `ffmpeg`/`ffprobe` on PATH, like workers.
 
+## Templates and overlay fonts (GR-8)
+
+Niche templates (`NicheTemplates`, `POST /api/streams/{id}/template`) are applied through
+`LiveStreamService.setOverlays/setScenes/update/setPresentation` and `StreamScheduleService.create`, so
+a live stream picks them up between frames like any edit. Template layers have ids starting `tpl-`.
+Overlay text that Poppins can't draw falls back to the Noto Sans fonts bundled in the jar
+(`resources/fonts`, about 1.4 MB, SIL OFL); characters no bundled font has (emoji) are left out instead
+of drawn as boxes. The fonts are drawn by workers, so **workers need the new jar** for Indian-script
+text; until then a worker draws those characters as boxes, exactly as before.
+
+## Referrals (GR-18)
+
+`?ref=CODE` on any GET sets an `afk_ref` cookie (30 days, first invite wins, HttpOnly). Email and
+Google sign-ups read it and add a `referrals` row (one per new account, never self). Nothing is paid
+yet: the free month for both sides waits for RE-8's confirmed first live (see `ReferralService`).
+`users.credit_line` (off by default) appends "Streamed 24/7 with AFK Live: <link>" only to descriptions
+AFK Live already writes (the classic start flow's broadcast update); never to overlays.
+
 After a video is Ready, the same instance checks whether it is one still picture (GR-9): six small
 grey frames grabbed with a seek each (5% to 95% of the length) and compared. The result goes in
 `media_assets.still_picture` (null when a frame couldn't be read, so the check never guesses). Videos
