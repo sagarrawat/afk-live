@@ -599,7 +599,9 @@ public final class StreamRunner {
         if (old != null) {
             Thread.ofPlatform().daemon(true).start(() -> terminate(old.process));
         }
-        log.info("Job {} switched producer without reconnecting", jobId);
+        // Called under the stitcher's lock, so reading its last switch is consistent.
+        log.info("Job {} switched producer without reconnecting (media time {} ms off the clock)", jobId,
+                Math.round(stitcher.lastSwitchErrorMillis()));
     }
 
     private void startRelays() {
