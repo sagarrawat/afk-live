@@ -26,8 +26,8 @@ import java.util.regex.Pattern;
  *   <li>Views and clicks come from the site's beacon and are stored only as a counter per day and step:
  *       no visitor id, no cookie, no IP, no user agent. Requests that say they're a bot, a crawler, a
  *       preview fetcher or a script are dropped (rough on purpose: the beacon also needs JavaScript).</li>
- *   <li>Sign-ups are accounts made that day ({@code users.created_at}); go-lives and reached come from the
- *       existing stream runs and their timeline (RE-9).</li>
+ *   <li>Sign-ups are accounts made that day ({@code users.created_at}); go-lives come from the existing
+ *       stream runs; reached is ON-8's "first live confirmed" ({@code users.first_live_at}).</li>
  * </ul>
  */
 @Service
@@ -119,9 +119,9 @@ public class SiteFunnelService {
         perDay(rows, 3, "SELECT (first AT TIME ZONE 'UTC')::date AS d, count(*) AS n FROM "
                 + "(SELECT user_id, min(start_time) AS first FROM stream_jobs GROUP BY user_id) f "
                 + "WHERE first >= :fromTs GROUP BY 1", p);
-        perDay(rows, 4, "SELECT (first AT TIME ZONE 'UTC')::date AS d, count(*) AS n FROM "
-                + "(SELECT j.user_id, min(e.at) AS first FROM stream_events e JOIN stream_jobs j ON j.id = e.job_id "
-                + "WHERE e.kind = 'REACHED' GROUP BY j.user_id) f WHERE first >= :fromTs GROUP BY 1", p);
+        // ON-8: "first live confirmed", recorded once per account by FirstLiveService (the activation metric).
+        perDay(rows, 4, "SELECT (first_live_at AT TIME ZONE 'UTC')::date AS d, count(*) AS n FROM users "
+                + "WHERE first_live_at >= :fromTs GROUP BY 1", p);
         List<Day> out = new ArrayList<>();
         for (LocalDate d = today; !d.isBefore(from); d = d.minusDays(1)) {
             long[] r = rows.getOrDefault(d, new long[5]);
