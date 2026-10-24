@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * AD-1 / AD-3: the last {@link #MAX_LINES} lines of FFmpeg output for one run, keys removed as each
+ * AD-6: the last {@link #MAX_LINES} lines of FFmpeg output for one run, keys removed as each
  * line arrives (nothing unredacted is ever kept). The worker writes it to the database now and then
  * so admins can read it from the console.
  */

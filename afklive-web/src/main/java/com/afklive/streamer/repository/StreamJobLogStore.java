@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * AD-1 / AD-3: the last FFmpeg lines of each run ({@code stream_job_logs}), written by the worker running
+ * AD-6: the last FFmpeg lines of each run ({@code stream_job_logs}), written by the worker running
  * it (already without stream keys) and read by the admin console. One row per run, replaced whole.
  */
 @Repository

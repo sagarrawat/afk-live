@@ -38,7 +38,7 @@ public class AuthController {
         this.baseUrl = publicBaseUrl(baseUrl);
     }
 
-    static String publicBaseUrl(String configured) {
+    public static String publicBaseUrl(String configured) {
         String url = configured == null ? "" : configured.trim();
         while (url.endsWith("/")) {
             url = url.substring(0, url.length() - 1);

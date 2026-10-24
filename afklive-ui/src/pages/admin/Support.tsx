@@ -4,7 +4,7 @@ import { MailWarning } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HealthDot, LiveBadge } from '@/components/status';
-import { Badge, Button, ErrorNote, Panel, Spinner, useToast } from '@/components/ui';
+import { Badge, Button, ErrorNote, Input, Panel, Spinner, useToast } from '@/components/ui';
 import { get, post } from '@/lib/api';
 import { dateTime, relative, timecode } from '@/lib/format';
 import type { Level, LiveStateName } from '@/lib/types';
@@ -136,7 +136,79 @@ export function EmailList({ items }: { items: EmailRow[] }) {
   );
 }
 
-// ------------------------------------------------------------------ AD-1 / AD-3: one run
+interface UserSupportData {
+  awaitingVerification: boolean;
+  hasPassword: boolean;
+  streams: { streamId: number; name: string; live: boolean; lastJobId?: number | null }[];
+  emails: EmailRow[];
+}
+
+/** On a user's admin page: each stream's last run (AD-6), emails sent (OPS-1), and a reset link for someone locked out. */
+export function UserSupport({ id }: { id: number }) {
+  const q = useQuery({ queryKey: ['admin', 'user-support', id], queryFn: () => get<UserSupportData>(`/api/admin/users/${id}/support`) });
+  const [asking, setAsking] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  if (q.isLoading) return <Spinner />;
+  if (!q.data) return <ErrorNote error={q.error} />;
+  const d = q.data;
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Panel title="Stream runs" pad={false}>
+        <ul className="divide-y divide-line">
+          {d.streams.map((s) => (
+            <li key={s.streamId}>
+              {s.lastJobId ? (
+                <Link to={`/studio/admin/runs/${s.lastJobId}`} className="flex justify-between gap-3 px-4 py-2.5 text-sm hover:bg-raised">
+                  <span className="truncate">{s.name}</span>
+                  <span className="shrink-0 text-muted">{s.live ? 'Live run' : 'Last run'}</span>
+                </Link>
+              ) : (
+                <span className="flex justify-between gap-3 px-4 py-2.5 text-sm">
+                  <span className="truncate">{s.name}</span>
+                  <span className="shrink-0 text-muted">Never live</span>
+                </span>
+              )}
+            </li>
+          ))}
+          {d.streams.length === 0 && <li className="px-4 py-3 text-muted">No streams.</li>}
+        </ul>
+      </Panel>
+      <Panel
+        title="Emails"
+        pad={false}
+        action={
+          d.hasPassword ? (
+            <Button size="sm" onClick={() => setAsking(true)}>
+              Password reset link
+            </Button>
+          ) : undefined
+        }
+      >
+        {d.awaitingVerification && <p className="border-b border-line px-4 py-2.5 text-sm text-warn">Waiting for email verification.</p>}
+        {link && (
+          <div className="space-y-2 border-b border-line px-4 py-3 text-sm">
+            <p>Give this link only to the account's owner. It works once.</p>
+            <Input readOnly value={link} aria-label="Password reset link" onFocus={(e) => e.currentTarget.select()} />
+          </div>
+        )}
+        <EmailList items={d.emails} />
+      </Panel>
+      {asking && (
+        <ReasonDialog
+          title="Make a password reset link?"
+          action="Make link"
+          success=""
+          onClose={() => setAsking(false)}
+          onSubmit={(reason) => post<{ link: string }>(`/api/admin/users/${id}/reset-link`, { reason }).then((r) => setLink(r.link))}
+        >
+          <p className="text-muted">For someone locked out while email is off. Check it's really them first (the email they write from, a payment id).</p>
+        </ReasonDialog>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ AD-6: one run
 
 interface SourceMedia {
   id?: number | null;
@@ -163,6 +235,9 @@ interface RunDestination {
   restarts: number;
   lastError?: string | null;
   updatedAt?: string | null;
+  /** RE-8, when the stream server reports it: is the platform receiving? */
+  reach?: 'ON' | 'CONNECTING' | 'NOT_REACHING' | null;
+  reachReason?: string | null;
 }
 export interface RunDetail {
   jobId: number;
@@ -204,6 +279,11 @@ interface DestinationTestResult {
 }
 
 const CHECK_TONE = { OK: 'ok', WARN: 'warn', BAD: 'bad' } as const;
+const REACH = {
+  ON: { label: 'Platform receiving', tone: 'ok' },
+  CONNECTING: { label: 'Connecting', tone: 'warn' },
+  NOT_REACHING: { label: 'Not reaching the platform', tone: 'bad' },
+} as const;
 const SOURCE_KIND: Record<string, string> = { PLAYLIST: 'Playlist', PHONE: 'Phone (live input)', FILE: 'One file', UNKNOWN: 'Unknown' };
 
 /** One line about a source file: size, frame rate, shape, codec, sound. */
@@ -226,7 +306,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-/** AD-1 / AD-3: everything support needs about one run of a stream. Keys are only ever masked. */
+/** AD-6: everything support needs about one run of a stream. Keys are only ever masked. */
 export function RunPage({ id }: { id: number }) {
   const run = useQuery({
     queryKey: ['admin', 'run', id],
@@ -337,7 +417,11 @@ export function RunPage({ id }: { id: number }) {
                     {dest.position + 1}. {dest.name}
                   </span>
                   {dest.off && <Badge>Turned off</Badge>}
-                  {dest.status && <Badge tone={dest.status === 'LIVE' ? 'ok' : dest.status === 'RECONNECTING' ? 'warn' : 'neutral'}>{dest.status.toLowerCase()}</Badge>}
+                  {dest.reach && REACH[dest.reach] ? (
+                    <Badge tone={REACH[dest.reach].tone}>{REACH[dest.reach].label}</Badge>
+                  ) : (
+                    dest.status && <Badge tone={dest.status === 'LIVE' ? 'ok' : dest.status === 'RECONNECTING' ? 'warn' : 'neutral'}>{dest.status.toLowerCase()}</Badge>
+                  )}
                   <Button size="sm" disabled={blocked} title={blocked ? 'Live right now: test it when the stream has stopped' : undefined} onClick={() => setTesting(dest)}>
                     Send a test
                   </Button>
@@ -353,6 +437,7 @@ export function RunPage({ id }: { id: number }) {
                   {dest.restarts} reconnect{dest.restarts === 1 ? '' : 's'}
                   {dest.updatedAt ? `, last change ${relative(dest.updatedAt)}` : ''}
                 </p>
+                {dest.reach === 'NOT_REACHING' && dest.reachReason && <p className="break-words text-bad">Why: {dest.reachReason}</p>}
                 {dest.lastError && <p className="break-words text-bad">Platform said: {dest.lastError}</p>}
                 {tests[dest.position] && <TestResult id={tests[dest.position]} />}
               </li>
@@ -366,7 +451,7 @@ export function RunPage({ id }: { id: number }) {
         {d.log ? (
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-relaxed">{d.log}</pre>
         ) : (
-          <p className="px-4 py-3 text-sm text-muted">Nothing logged for this run yet. Workers save the last 200 lines every few seconds; keys are removed.</p>
+          <p className="px-4 py-3 text-sm text-muted">Nothing logged for this run. Stream servers save FFmpeg's last 200 messages every few seconds, with keys removed; a run with no problems may have none.</p>
         )}
       </Panel>
 

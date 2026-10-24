@@ -52,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * OPS-1 (email works or we say so), OPS-2 (friendly errors), AD-1 / AD-3 (a run as support sees it).
+ * OPS-1 (email works or we say so), OPS-2 (friendly errors), AD-6 (a run as support sees it).
  * Tests run without ZeptoMail settings, as production does today.
  */
 @SpringBootTest
@@ -151,13 +151,40 @@ class SupportOpsTest extends PostgresIntegrationTest {
     void everySendIsRecordedAndShownInTheUserLookupWithoutTheBody() throws Exception {
         emailService.sendAlert(customer.getEmail(), "AFK Live: Stream down", "Stream down", "Your stream <b>x</b> is down", "/studio");
 
-        mvc.perform(get("/api/admin/users/" + customer.getId()).with(admin()))
+        mvc.perform(get("/api/admin/users/" + customer.getId() + "/support").with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.emails[0].kind").value("ALERT"))
                 .andExpect(jsonPath("$.emails[0].ok").value(false))
                 .andExpect(jsonPath("$.emails[0].error").value(containsString("isn't set up")))
                 .andExpect(content().string(not(containsString("is down"))))
                 .andExpect(jsonPath("$.awaitingVerification").value(false));
+        mvc.perform(get("/api/admin/users/" + customer.getId() + "/support").with(user(customer.getEmail()))).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anAdminCanGiveSomeoneLockedOutAResetLinkThatUsesThePublicAddress() throws Exception {
+        String email = "locked-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+        User locked = new User(email);
+        locked.setPassword("{noop}old");
+        locked = users.save(locked);
+        String url = "/api/admin/users/" + locked.getId() + "/reset-link";
+
+        mvc.perform(postJson(url, "{'reason':'x'}").with(user(customer.getEmail()))).andExpect(status().isForbidden());
+        mvc.perform(postJson(url, "{}").with(admin())).andExpect(status().isBadRequest());
+        String body = mvc.perform(postJson(url, "{'reason':'Ticket 40: checked their payment id'}").with(admin()).header("Host", "evil.example.com"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String link = com.jayway.jsonpath.JsonPath.parse(body).read("$.link", String.class);
+        String token = users.findById(locked.getId()).orElseThrow().getResetToken();
+        assertThat(token).isNotBlank();
+        assertThat(link).doesNotContain("evil.example.com").endsWith("/reset-password?token=" + token);
+        assertThat(audit.findTop50ByTargetTypeAndTargetIdOrderByCreatedAtDesc("user", String.valueOf(locked.getId())))
+                .anyMatch(x -> x.getAction().equals("PASSWORD_RESET_LINK") && x.getDetail().contains("Ticket 40"));
+
+        User google = new User("google-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com");
+        google = users.save(google);
+        mvc.perform(postJson("/api/admin/users/" + google.getId() + "/reset-link", "{'reason':'Ticket 41'}").with(admin()))
+                .andExpect(status().is4xxClientError());
     }
 
     @Test
@@ -239,7 +266,7 @@ class SupportOpsTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.requestId").value("abcd2345"));
     }
 
-    // ------------------------------------------------------------------ AD-1 / AD-3
+    // ------------------------------------------------------------------ AD-6
 
     private StreamJob run(boolean live, List<StreamSpec.Destination> destinations, StudioSpec studio) {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
@@ -294,17 +321,46 @@ class SupportOpsTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.output.height").value(1080))
                 .andExpect(jsonPath("$.output.videoKbps").value(6000))
                 .andExpect(jsonPath("$.destinations[0].server").value("rtmp://a.rtmp.youtube.com/live2"))
-                .andExpect(jsonPath("$.destinations[0].keyMasked").value("abcd…qrst"))
+                .andExpect(jsonPath("$.destinations[0].keyMasked").value("••••qrst"))
                 .andExpect(jsonPath("$.destinations[0].checkLevel").value("OK"))
                 .andExpect(jsonPath("$.destinations[0].restarts").value(3))
                 .andExpect(jsonPath("$.destinations[0].lastError").value(containsString("Broken pipe")))
-                .andExpect(jsonPath("$.destinations[1].check").value("Key looks like a server address"))
+                .andExpect(jsonPath("$.destinations[1].checkLevel").value("BAD"))
+                .andExpect(jsonPath("$.destinations[1].check").value(containsString("second server address")))
                 .andExpect(jsonPath("$.log").value("12:00:00 dest 1: Broken pipe"))
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         assertThat(body).doesNotContain(KEY).doesNotContain("efgh-ijkl-mnop");
 
         mvc.perform(get("/api/admin/jobs/" + job.getId()).with(user(customer.getEmail()))).andExpect(status().isForbidden());
         mvc.perform(get("/api/admin/jobs/999999999").with(admin())).andExpect(status().isNotFound());
+    }
+
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    /**
+     * RE-8 status shows when the worker reports it (columns from feature/truth-of-live), and the view works
+     * without those columns. Added here if missing, as that branch's changeset would.
+     */
+    @Test
+    void aRunShowsWhetherThePlatformIsReceivingWhenTheWorkerReportsIt() throws Exception {
+        StreamJob job = run(true, List.of(new StreamSpec.Destination("YouTube", "rtmp://a.rtmp.youtube.com/live2/" + KEY)), playlist());
+        try {
+            mvc.perform(get("/api/admin/jobs/" + job.getId()).with(admin())).andExpect(status().isOk());
+            jdbc.execute("ALTER TABLE stream_job_destinations ADD COLUMN IF NOT EXISTS reach VARCHAR(20)");
+            jdbc.execute("ALTER TABLE stream_job_destinations ADD COLUMN IF NOT EXISTS reach_reason TEXT");
+            jdbc.update("UPDATE stream_job_destinations SET reach = 'NOT_REACHING', reach_reason = ? WHERE job_id = ?",
+                    "Error opening output rtmp://a.rtmp.youtube.com/live2/" + KEY + ": Connection refused", job.getId());
+            String body = mvc.perform(get("/api/admin/jobs/" + job.getId()).with(admin()))
+                    .andExpect(jsonPath("$.destinations[0].reach").value("NOT_REACHING"))
+                    .andExpect(jsonPath("$.destinations[0].reachReason").value(containsString("Connection refused")))
+                    .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+            assertThat(body).doesNotContain(KEY);
+        } finally {
+            jobs.findById(job.getId()).ifPresent(j -> {
+                j.setLive(false);
+                jobs.save(j);
+            });
+        }
     }
 
     @Test

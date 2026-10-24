@@ -16,7 +16,7 @@ CREATE INDEX idx_email_log_user ON email_log(user_id, created_at DESC);
 CREATE INDEX idx_email_log_created ON email_log(created_at DESC);
 
 --changeset afklive:075-stream-job-logs
---comment: AD-1 / AD-3: the last FFmpeg lines of each run (encoder and every destination), written by the
+--comment: AD-6: the last FFmpeg lines of each run (encoder and every destination), written by the
 --comment: worker running it with stream keys removed. One row per run, replaced as a whole: bounded by design.
 CREATE TABLE stream_job_logs (
     job_id BIGINT PRIMARY KEY REFERENCES stream_jobs(id) ON DELETE CASCADE,

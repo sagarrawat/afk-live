@@ -51,7 +51,7 @@ const run: RunDetail = {
   source: { kind: 'PLAYLIST', count: 2, musicCount: 0, media: [{ id: 3, title: 'rain.mp4', width: 1080, height: 1920, fps: 30, shape: 'Vertical', codec: 'h264', hasAudio: false, status: 'READY', problem: 'No sound track' }] },
   output: { width: 1920, height: 1080, fps: 30, shape: 'Landscape', videoKbps: 6000, audio: 'AAC 128 kbps, 44.1 kHz stereo', keyframes: 'Every 2 s' },
   destinations: [
-    { position: 0, name: 'YouTube', off: false, server: 'rtmp://a.rtmp.youtube.com/live2', keyMasked: 'abcd…qrst', keyLength: 24, checkLevel: 'OK', check: 'Looks right', status: 'RECONNECTING', restarts: 3, lastError: 'Broken pipe' },
+    { position: 0, name: 'YouTube', off: false, server: 'rtmp://a.rtmp.youtube.com/live2', keyMasked: '••••qrst', keyLength: 24, checkLevel: 'OK', check: 'Looks right', status: 'RECONNECTING', restarts: 3, lastError: 'Broken pipe' },
     { position: 1, name: 'Old channel', off: true, server: 'rtmp://a.rtmp.youtube.com/live2', keyMasked: '', keyLength: 0, checkLevel: 'BAD', check: 'Key looks like a server address', restarts: 0 },
   ],
   log: '12:00:01 dest 1: [flv] Broken pipe\n12:00:02 worker: dest 1 dropped; reconnecting (restart 3)',
@@ -98,7 +98,7 @@ describe('Admin support tools', () => {
     expect(screen.getByText('1080×1920, 30 fps, vertical, h264, no sound')).toBeInTheDocument();
     expect(screen.getByText('No sound track')).toBeInTheDocument();
     expect(screen.getByText('1920×1080, landscape, 30 fps')).toBeInTheDocument();
-    expect(screen.getByText('abcd…qrst')).toBeInTheDocument();
+    expect(screen.getByText('••••qrst')).toBeInTheDocument();
     expect(screen.getByText('Looks right')).toBeInTheDocument();
     expect(screen.getByText('Key looks like a server address')).toBeInTheDocument();
     expect(screen.getByText('Platform said: Broken pipe')).toBeInTheDocument();
@@ -108,6 +108,20 @@ describe('Admin support tools', () => {
     expect(live).toBeDisabled();
     expect(off).toBeEnabled();
     expect(screen.getByRole('link', { name: /Stopped by user/ })).toHaveAttribute('href', '/studio/admin/runs/70');
+  });
+
+  it('shows whether the platform is receiving when the stream server reports it (RE-8)', async () => {
+    window.history.pushState({}, '', '/studio/admin/runs/77');
+    const reaching = {
+      ...run,
+      destinations: [{ ...run.destinations[0], reach: 'NOT_REACHING' as const, reachReason: 'The platform refused the stream key.' }, run.destinations[1]],
+    };
+    mockApi({ ...base, '/api/admin/email': { configured: true, sent24h: 0, failed24h: 0 }, '/api/admin/jobs/77': reaching });
+    render(<App client={makeQueryClient()} />);
+    expect(await screen.findByText('Not reaching the platform')).toBeInTheDocument();
+    expect(screen.getByText('Why: The platform refused the stream key.')).toBeInTheDocument();
+    // Without a reach (older stream servers) the relay status shows instead.
+    expect(screen.queryByText('reconnecting')).toBeNull();
   });
 
   it('tests a destination with a reason and shows the result', async () => {
@@ -129,9 +143,9 @@ describe('Admin support tools', () => {
     expect(await screen.findByText('Test failed: The platform refused the stream key.')).toBeInTheDocument();
   });
 
-  it('lists the emails sent to a user and links streams to their last run', async () => {
+  it('lists the emails sent to a user, links streams to their last run, and makes a reset link with a reason', async () => {
     window.history.pushState({}, '', '/studio/admin/users/42');
-    mockApi({
+    const fetch = mockApi({
       ...base,
       '/api/admin/email': emailOff,
       '/api/admin/users/42': {
@@ -144,20 +158,34 @@ describe('Admin support tools', () => {
         storageLimit: 1,
         hoursThisMonth: 0,
         hoursIncluded: 10,
-        streams: [{ id: 9, name: 'Lofi 24/7', live: false, lastJobId: 77 }],
+        streams: [{ id: 9, name: 'Lofi 24/7', live: false }],
         payments: [],
         invoices: [],
         history: [],
+      },
+      '/api/admin/users/42/support': {
         awaitingVerification: true,
+        hasPassword: true,
+        streams: [{ streamId: 9, name: 'Lofi 24/7', live: false, lastJobId: 77 }],
         emails: [{ at: now, kind: 'VERIFY', ok: false, error: "Email isn't set up" }],
       },
+      '/api/admin/users/42/reset-link': { link: 'https://afklive.in/reset-password?token=t0k3n' },
     });
     render(<App client={makeQueryClient()} />);
-    expect(await screen.findByText('Waiting for email verification')).toBeInTheDocument();
+    expect(await screen.findByText('Waiting for email verification.')).toBeInTheDocument();
     const email = screen.getByText('Verify email').closest('li')!;
     expect(within(email).getByText('Not sent')).toBeInTheDocument();
     expect(within(email).getByText("Email isn't set up")).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Lofi 24\/7/ })).toHaveAttribute('href', '/studio/admin/runs/77');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Password reset link' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Make link' })).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText('Reason'), 'Ticket 40');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Make link' }));
+    const call = fetch.mock.calls.find(([u]) => String(u) === '/api/admin/users/42/reset-link')!;
+    expect(JSON.parse(String(call[1]!.body))).toEqual({ reason: 'Ticket 40' });
+    expect(await screen.findByLabelText('Password reset link')).toHaveValue('https://afklive.in/reset-password?token=t0k3n');
   });
 
   it('describes a source file in one line', () => {

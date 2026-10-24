@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.security.Principal;
 
 /**
- * Support tools in the admin console (OPS-1 email, AD-1 / AD-3 run detail). {@code /api/admin/**} is
+ * Support tools in the admin console (OPS-1 email, AD-6 run detail). {@code /api/admin/**} is
  * ADMIN-only in SecurityConfig. Nothing here returns a full stream key.
  */
 @RestController
@@ -38,6 +38,17 @@ public class SupportApiController {
     @PostMapping("/email/test")
     public EmailService.Result testEmail(@RequestBody Reason body, Principal p) {
         return support.sendTestEmail(SecurityUtils.getEmail(p), body.reason());
+    }
+
+    @GetMapping("/users/{id}/support")
+    public SupportService.UserSupport userSupport(@PathVariable Long id) {
+        return support.userSupport(id);
+    }
+
+    /** OPS-1: a one-time password reset link to give someone who wrote in (email off). */
+    @PostMapping("/users/{id}/reset-link")
+    public java.util.Map<String, String> resetLink(@PathVariable Long id, @RequestBody Reason body, Principal p) {
+        return java.util.Map.of("link", support.passwordResetLink(SecurityUtils.getEmail(p), id, body.reason()));
     }
 
     @GetMapping("/jobs/{id}")

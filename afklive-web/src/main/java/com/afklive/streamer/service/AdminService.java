@@ -75,14 +75,13 @@ public class AdminService {
     private final FileStorageService storage;
     private final AppConfigService appConfig;
     private final PlanConfigRepository planConfigs;
-    private final com.afklive.streamer.repository.EmailLogRepository emailLog;
 
     public AdminService(StreamJobRepository jobs, LiveStreamRepository streams, UserRepository users,
                         SubscriptionRepository subscriptions, PaymentAuditRepository payments, InvoiceRepository invoices,
                         UsageRepository usage, PlanService plans, StreamService streamService, AdminActionRepository audit,
                         NotificationService notifications, WorkerStatusRepository workerStatus, QuotaAuditRepository quota,
                         SupportTicketRepository tickets, FileStorageService storage, AppConfigService appConfig,
-                        PlanConfigRepository planConfigs, com.afklive.streamer.repository.EmailLogRepository emailLog,
+                        PlanConfigRepository planConfigs,
                         @Value("${app.youtube.daily-quota:10000}") int dailyQuota,
                         @Value("${app.admin.monthly-server-cost:}") String monthlyServerCost,
                         @Value("${app.admin.server-cost-currency:INR}") String serverCostCurrency) {
@@ -90,7 +89,6 @@ public class AdminService {
         this.storage = storage;
         this.appConfig = appConfig;
         this.planConfigs = planConfigs;
-        this.emailLog = emailLog;
         this.workerStatus = workerStatus;
         this.quota = quota;
         this.dailyQuota = dailyQuota;
@@ -301,12 +299,7 @@ public class AdminService {
     public record InvoiceRow(Long id, String number, long total, String currency, ZonedDateTime issuedAt) {
     }
 
-    /** {@code lastJobId}: the live run, or else the most recent one (AD-1 / AD-3 run page); null if never run. */
-    public record StreamRow(Long id, String name, boolean live, Long jobId, String worker, Long lastJobId) {
-    }
-
-    /** OPS-1: an email we tried to send this user. */
-    public record EmailRow(ZonedDateTime at, String kind, boolean ok, String error) {
+    public record StreamRow(Long id, String name, boolean live, Long jobId, String worker) {
     }
 
     public record SubscriptionView(String plan, String cycle, String status, String currency, ZonedDateTime periodStart,
@@ -316,8 +309,7 @@ public class AdminService {
     public record UserDetail(Long id, String email, String name, String plan, boolean enabled, String role,
                              java.time.LocalDateTime planExpiration, SubscriptionView subscription, long storageBytes,
                              long storageLimit, double hoursThisMonth, int hoursIncluded, List<StreamRow> streams,
-                             List<PaymentRow> payments, List<InvoiceRow> invoices, List<AdminAction> history,
-                             boolean awaitingVerification, List<EmailRow> emails) {
+                             List<PaymentRow> payments, List<InvoiceRow> invoices, List<AdminAction> history) {
     }
 
     public UserDetail user(Long id) {
@@ -329,9 +321,8 @@ public class AdminService {
         List<StreamRow> rows = new ArrayList<>();
         for (LiveStream s : streams.findAllByUserEmailOrderByCreatedAtAsc(u.getEmail())) {
             Optional<StreamJob> live = jobs.findAllByStreamIdAndIsLiveTrue(s.getId()).stream().findFirst();
-            Long last = live.map(StreamJob::getId).orElseGet(() -> jobs.findFirstByStreamIdOrderByIdDesc(s.getId()).map(StreamJob::getId).orElse(null));
             rows.add(new StreamRow(s.getId(), s.getName(), live.isPresent(), live.map(StreamJob::getId).orElse(null),
-                    live.map(StreamJob::getWorkerId).orElse(null), last));
+                    live.map(StreamJob::getWorkerId).orElse(null)));
         }
         List<PaymentRow> pay = payments.findTop50ByMerchantUserIdOrderByCreatedAtDesc(u.getEmail()).stream()
                 .map(p -> new PaymentRow(p.getTransactionId(), p.getAmount() == null ? 0 : p.getAmount(), p.getCurrency(), p.getStatus(),
@@ -341,10 +332,7 @@ public class AdminService {
         double hours = Math.round(usage.secondsIn(u.getId(), BillingService.month(now())) / 36.0) / 100.0;
         return new UserDetail(u.getId(), u.getEmail(), u.getFullName(), u.getPlanType().name(), u.isEnabled(), u.getRole(),
                 u.getPlanExpiration(), sub, users.usedStorage(u.getId()), cfg.getMaxStorageBytes(), hours, cfg.getMonthlyHours(),
-                rows, pay, inv, audit.findTop50ByTargetTypeAndTargetIdOrderByCreatedAtDesc("user", String.valueOf(u.getId())),
-                !u.isEnabled() && u.getVerificationToken() != null,
-                emailLog.findTop50ByUserIdOrderByCreatedAtDesc(u.getId()).stream()
-                        .map(e -> new EmailRow(e.getCreatedAt(), e.getKind(), e.isOk(), e.getError())).toList());
+                rows, pay, inv, audit.findTop50ByTargetTypeAndTargetIdOrderByCreatedAtDesc("user", String.valueOf(u.getId())));
     }
 
     /**
@@ -793,7 +781,7 @@ public class AdminService {
         log.info("Admin {} {} {} {}: {}", admin, action, type, id, detail);
     }
 
-    static String requireReason(String reason) {
+    private static String requireReason(String reason) {
         if (reason == null || reason.trim().length() < 3) {
             throw new IllegalArgumentException("Say why (it goes in the audit log).");
         }

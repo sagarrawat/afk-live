@@ -6,7 +6,7 @@ import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
 import { HealthDot, LiveBadge } from '@/components/status';
 import { Badge, Button, Dialog, ErrorNote, Field, Input, PageHeader, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
 import { ReasonDialog } from './admin/ReasonDialog';
-import { EmailBanner, EmailList, EmailPanel, RunPage, type EmailRow } from './admin/Support';
+import { EmailBanner, EmailPanel, RunPage, UserSupport } from './admin/Support';
 import { get, post } from '@/lib/api';
 import { bytes, date, dateTime, duration, money, timecode } from '@/lib/format';
 import { useMe } from '@/lib/queries';
@@ -91,13 +91,10 @@ interface UserDetail {
   storageLimit: number;
   hoursThisMonth: number;
   hoursIncluded: number;
-  streams: { id: number; name: string; live: boolean; jobId?: number | null; worker?: string | null; lastJobId?: number | null }[];
+  streams: { id: number; name: string; live: boolean; jobId?: number | null; worker?: string | null }[];
   payments: { orderId: string; amount: number; currency?: string | null; status: string; kind?: string | null; plan?: string | null; createdAt: string }[];
   invoices: { id: number; number: string; total: number; currency: string; issuedAt: string }[];
   history: AdminAction[];
-  /** OPS-1: a password sign-up still waiting for its verification email. */
-  awaitingVerification?: boolean;
-  emails?: EmailRow[];
 }
 
 /** AD-1 / AD-3: the operator console. */
@@ -1020,7 +1017,7 @@ function UserPage({ id }: { id: number }) {
           </div>
           <div>
             <p className="text-sm text-muted">Account</p>
-            <p>{d.awaitingVerification ? 'Waiting for email verification' : d.enabled ? 'Active' : 'Disabled'}</p>
+            <p>{d.enabled ? 'Active' : 'Disabled'}</p>
           </div>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -1039,18 +1036,9 @@ function UserPage({ id }: { id: number }) {
         <Panel title="Streams" pad={false}>
           <ul className="divide-y divide-line">
             {d.streams.map((s) => (
-              <li key={s.id}>
-                {s.lastJobId ? (
-                  <Link to={`/studio/admin/runs/${s.lastJobId}`} className="flex justify-between gap-3 px-4 py-2.5 text-sm hover:bg-raised">
-                    <span className="truncate">{s.name}</span>
-                    <span className="shrink-0 text-muted">{s.live ? `Live on ${s.worker ?? 'unassigned'}` : 'Last run'}</span>
-                  </Link>
-                ) : (
-                  <span className="flex justify-between gap-3 px-4 py-2.5 text-sm">
-                    <span className="truncate">{s.name}</span>
-                    <span className="shrink-0 text-muted">Never live</span>
-                  </span>
-                )}
+              <li key={s.id} className="flex justify-between gap-3 px-4 py-2.5 text-sm">
+                <span className="truncate">{s.name}</span>
+                <span className="text-muted">{s.live ? `Live on ${s.worker ?? 'unassigned'}` : 'Off air'}</span>
               </li>
             ))}
             {d.streams.length === 0 && <li className="px-4 py-3 text-muted">No streams.</li>}
@@ -1079,9 +1067,7 @@ function UserPage({ id }: { id: number }) {
           </ul>
         </Panel>
       </div>
-      <Panel title="Emails" pad={false}>
-        <EmailList items={d.emails ?? []} />
-      </Panel>
+      <UserSupport id={d.id} />
       <Panel title="Admin history" pad={false}>
         <AuditList items={d.history} />
       </Panel>

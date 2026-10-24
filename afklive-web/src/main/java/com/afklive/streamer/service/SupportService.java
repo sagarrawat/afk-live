@@ -16,6 +16,7 @@ import com.afklive.streamer.repository.LiveStreamRepository;
 import com.afklive.streamer.repository.MediaAssetRepository;
 import com.afklive.streamer.repository.StreamJobLogStore;
 import com.afklive.streamer.repository.StreamJobRepository;
+import com.afklive.streamer.repository.UserRepository;
 import com.afklive.streamer.streaming.StreamSpec;
 import com.afklive.streamer.streaming.StudioSpec;
 import com.afklive.streamer.streaming.studio.Canvas;
@@ -49,7 +50,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>OPS-1: is email working? A startup warning when it isn't set up, its state for the admin console,
  *   a test email (audited), and, while it's off, password sign-ups that would wait forever for a
  *   verification email are verified.</li>
- *   <li>AD-1 / AD-3: one run of a stream as support needs it: what goes in (source files), what comes out
+ *   <li>AD-6: one run of a stream as support needs it: what goes in (source files), what comes out
  *   (output profile), where it goes (server, masked key, a check of the key's shape, the platform's
  *   last error), the last FFmpeg lines, and a test of a destination (audited). Keys never leave the
  *   server.</li>
@@ -76,6 +77,7 @@ public class SupportService {
     private final AdminService admin;
     private final AdminActionRepository audit;
     private final JdbcTemplate jdbc;
+    private final UserRepository users;
     private final String role;
     private final String baseUrl;
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -86,7 +88,7 @@ public class SupportService {
 
     public SupportService(EmailService email, EmailLogRepository emailLog, StreamJobRepository jobs, LiveStreamRepository streams,
                           MediaAssetRepository media, StreamJobLogStore jobLogs, DestinationTestRepository destinationTests,
-                          AdminService admin, AdminActionRepository audit, JdbcTemplate jdbc,
+                          AdminService admin, AdminActionRepository audit, JdbcTemplate jdbc, UserRepository users,
                           @Value("${app.streaming.role:all}") String role,
                           @Value("${app.base-url:http://localhost:8080}") String baseUrl) {
         this.email = email;
@@ -99,8 +101,9 @@ public class SupportService {
         this.admin = admin;
         this.audit = audit;
         this.jdbc = jdbc;
+        this.users = users;
         this.role = role;
-        this.baseUrl = baseUrl;
+        this.baseUrl = com.afklive.streamer.endpoint.AuthController.publicBaseUrl(baseUrl);
     }
 
     // ------------------------------------------------------------------ startup and retention (web side)
@@ -178,13 +181,52 @@ public class SupportService {
     /** Sends a test email to the admin's own address; audited with the reason. */
     @Transactional
     public EmailService.Result sendTestEmail(String adminEmail, String reason) {
-        String why = AdminService.requireReason(reason);
+        String why = requireReason(reason);
         EmailService.Result r = email.sendTestEmail(adminEmail);
         admin.record(adminEmail, "EMAIL_TEST", "setting", "email", (r.ok() ? "sent" : "failed: " + r.error()) + ": " + why);
         return r;
     }
 
-    // ------------------------------------------------------------------ AD-1 / AD-3: one run
+    /** A stream of the user and its newest run, for the AD-6 run page. */
+    public record StreamRun(Long streamId, String name, boolean live, Long lastJobId) {
+    }
+
+    /** What support needs about a user beyond Admin > Users: email state and sends, and each stream's last run. */
+    public record UserSupport(boolean awaitingVerification, boolean hasPassword, List<StreamRun> streams, List<EmailRow> emails) {
+    }
+
+    @Transactional(readOnly = true)
+    public UserSupport userSupport(Long userId) {
+        com.afklive.streamer.model.User u = users.findById(userId).orElseThrow(() -> new NotFoundException("User not found."));
+        List<StreamRun> runs = new ArrayList<>();
+        for (LiveStream s : streams.findAllByUserEmailOrderByCreatedAtAsc(u.getEmail())) {
+            Long last = jdbc.queryForObject("SELECT max(id) FROM stream_jobs WHERE stream_id = ?", Long.class, s.getId());
+            boolean live = Boolean.TRUE.equals(jdbc.queryForObject(
+                    "SELECT EXISTS (SELECT 1 FROM stream_jobs WHERE stream_id = ? AND is_live)", Boolean.class, s.getId()));
+            runs.add(new StreamRun(s.getId(), s.getName(), live, last));
+        }
+        return new UserSupport(!u.isEnabled() && u.getVerificationToken() != null, u.getPassword() != null && !u.getPassword().isBlank(),
+                runs, emailLog.findTop50ByUserIdOrderByCreatedAtDesc(u.getId()).stream().map(EmailRow::of).toList());
+    }
+
+    /**
+     * OPS-1: while email is off, someone locked out writes to support; after checking who they are, an
+     * admin gives them this link (the same one "Forgot password" would email). Audited; the link works once.
+     */
+    @Transactional
+    public String passwordResetLink(String adminEmail, Long userId, String reason) {
+        String why = requireReason(reason);
+        com.afklive.streamer.model.User u = users.findById(userId).orElseThrow(() -> new NotFoundException("User not found."));
+        if (u.getPassword() == null || u.getPassword().isBlank()) {
+            throw new IllegalStateException("This account signs in with Google, so it has no password to reset.");
+        }
+        u.setResetToken(java.util.UUID.randomUUID().toString());
+        users.save(u);
+        admin.record(adminEmail, "PASSWORD_RESET_LINK", "user", userId, why);
+        return baseUrl + "/reset-password?token=" + u.getResetToken();
+    }
+
+    // ------------------------------------------------------------------ AD-6: one run
 
     public record SourceMedia(Long id, String title, Integer width, Integer height, Double fps, String shape, String codec,
                               Boolean hasAudio, String status, String problem) {
@@ -407,7 +449,7 @@ public class SupportService {
     /** Sends a 10-second test to one of the run's destinations from a worker; audited with the reason. */
     @Transactional
     public TestView testDestination(String adminEmail, Long jobId, int position, String reason) {
-        String why = AdminService.requireReason(reason);
+        String why = requireReason(reason);
         StreamJob j = jobs.findById(jobId).orElseThrow(() -> new NotFoundException("Stream run not found."));
         StreamSpec spec = specOf(j);
         if (spec == null || spec.destinations() == null || position < 0 || position >= spec.destinations().size()) {
@@ -460,6 +502,14 @@ public class SupportService {
         ZonedDateTime cutoff = now().minus(TEST_EXPIRES_AFTER);
         destinationTests.expire("No stream server could run the test right now. Try again in a minute.", cutoff, cutoff, now());
         return TestView.of(destinationTests.findById(testId).orElseThrow(() -> new NotFoundException("Test not found.")));
+    }
+
+    /** As AdminService: every support action says why, for the audit log. */
+    static String requireReason(String reason) {
+        if (reason == null || reason.trim().length() < 3) {
+            throw new IllegalArgumentException("Say why (it goes in the audit log).");
+        }
+        return reason.trim();
     }
 
     private static ZonedDateTime now() {
