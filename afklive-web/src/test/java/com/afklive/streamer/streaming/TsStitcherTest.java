@@ -269,7 +269,8 @@ public class TsStitcherTest {
         List<Chunk> studioFrames = framesOf(studio);
         List<Chunk> copyFrames = framesOf(copy);
         int switches = 24;
-        double every = 2.5;
+        double every = 3.0;
+        int lateOne = 12;
         java.util.Random random = new java.util.Random(7);
 
         record Arrival(double at, int producer, byte[] data) {
@@ -279,9 +280,14 @@ public class TsStitcherTest {
         for (int k = 1; k <= switches + 1; k++) {
             launchedAt[k] = (k - 1) * every;
             double startup = k == 1 ? 0.3 : 0.3 + random.nextDouble() * 0.9; // FFmpeg start, first encoded frame
-            // Every third one starts its clock before its first frame is out (as -re after a slow open, seen in
-            // the soak): its first frames come out 0.33 s late and the next ones catch up at once.
-            double late = k > 1 && k % 3 == 0 ? 0.33 : 0;
+            // Every third one has its clock running before its first keyframe is out (seen in the soak: copy mode's
+            // first keyframe falling inside FFmpeg -re's initial 0.5 s burst): its first frames come out 0.33 s
+            // late and the next ones catch up at once.
+            // Producer 12 is 1.2 s late, more than one switch can take back.
+            double late = k == lateOne ? 1.2 : k > 1 && k % 3 == 0 ? 0.33 : 0;
+            if (k == lateOne) {
+                startup = 0.3;
+            }
             for (Chunk c : (k % 2 == 1 ? copyFrames : studioFrames)) {
                 arrivals.add(new Arrival(launchedAt[k] + startup + Math.max(c.atSeconds(), late), k, c.data()));
             }
@@ -317,17 +323,27 @@ public class TsStitcherTest {
         }
         assertThat(switched).hasSize(switches);
 
-        // Media time against the clock in each producer's turn, compared with the first producer's.
+        // Media time against the clock in each producer's turn, compared with the first producer's: from when its
+        // switch is done (start-up, lateness and the watch: under 2 s after launch) until the next hand-off begins
+        // (which holds the old producer's output back for a moment; a dip in delivery, not drift).
         double base = median(leads, 0.5, every);
         List<Double> drift = new ArrayList<>();
         for (int k = 1; k <= switches; k++) {
-            drift.add(median(leads, k * every + 1.5, (k + 1) * every) - base);
+            drift.add(median(leads, k * every + 2.0, (k + 1) * every) - base);
         }
-        // Before the fix: +142 ms after the first switch, +3.5 s after 24. After: within 0.1 ms of the first producer.
-        assertThat(drift).as("ms ahead of the clock after each switch").allSatisfy(d -> assertThat(d).isBetween(-50.0, 50.0));
-        double firstHalf = drift.subList(0, switches / 2).stream().mapToDouble(Double::doubleValue).average().orElseThrow();
-        double secondHalf = drift.subList(switches / 2, switches).stream().mapToDouble(Double::doubleValue).average().orElseThrow();
-        assertThat(secondHalf - firstHalf).as("doesn't grow with the number of switches: %s", drift).isBetween(-20.0, 20.0);
+        // Before the fix: +142 ms after the first switch, +3.5 s after 24. After: within 0.1 ms of the first producer,
+        // except right after the very late one, which the next switches take back.
+        int late = lateOne - 2; // drift.get(j) is producer j + 2's turn
+        for (int j = 0; j < switches; j++) {
+            if (j != late && j != late + 1) {
+                assertThat(drift.get(j)).as("ms ahead of the clock after switch %s: %s", j + 1, drift).isBetween(-50.0, 50.0);
+            }
+        }
+        assertThat(drift.get(late)).as("1.2 s late: ahead after that switch: %s", drift).isBetween(100.0, 1000.0);
+        assertThat(drift.get(late + 1)).as("taken back by the next switches: %s", drift).isLessThan(drift.get(late));
+        double before = drift.subList(0, late).stream().mapToDouble(Double::doubleValue).average().orElseThrow();
+        double after = drift.subList(late + 2, switches).stream().mapToDouble(Double::doubleValue).average().orElseThrow();
+        assertThat(after - before).as("doesn't grow with the number of switches: %s", drift).isBetween(-20.0, 20.0);
 
         // And the joined programme is still one continuous, decodable timeline.
         Path file = dir.resolve("pace-out.ts");
