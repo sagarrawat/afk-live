@@ -29,6 +29,8 @@ export interface PublicStatus {
   checkedAt: string;
   components: StatusComponent[];
   incidents: Incident[];
+  /** The homepage's platform totals; each null while it's too small to show. */
+  proof?: { liveNow?: number | null; hoursStreamed?: number | null } | null;
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);

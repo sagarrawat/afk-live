@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App, makeQueryClient } from '@/App';
 import type { Me } from '@/lib/types';
-import { attachmentKind, loadLevel, planForm, planProblem, type PlanSettings, type Ticket } from './Admin';
+import { attachmentKind, loadLevel, planForm, planProblem, rate, type PlanSettings, type Ticket } from './Admin';
 
 const admin: Me = {
   id: 1,
@@ -127,6 +127,26 @@ describe('Admin', () => {
     expect(screen.getByRole('link', { name: '3' })).toHaveAttribute('href', '/studio/admin/support');
     expect(screen.getByText(/in the last 30 days/).closest('li')).toHaveTextContent('₹14,990 in the last 30 days, ₹5,00,000 in all');
     expect(screen.getByText(/free accounts can't go live/)).toHaveTextContent('100 or more streams');
+  });
+
+  it('shows the homepage funnel with each step as a share of the one before', async () => {
+    window.history.pushState({}, '', '/studio/admin/platform');
+    mockApi({
+      ...base,
+      '/api/admin/funnel': [
+        { day: '2026-10-24', views: 1200, startClicks: 96, signUps: 40, firstGoLives: 12, firstReached: 10 },
+        { day: '2026-10-23', views: 800, startClicks: 4, signUps: 0, firstGoLives: 0, firstReached: 0 },
+        { day: '2026-10-22', views: 0, startClicks: 0, signUps: 0, firstGoLives: 0, firstReached: 0 },
+      ],
+    });
+    render(<App client={makeQueryClient()} />);
+    expect(await screen.findByText('Homepage to first live, last 30 days')).toBeInTheDocument();
+    expect(screen.getByText('2,000')).toBeInTheDocument();
+    expect(screen.getByText('5%')).toBeInTheDocument(); // 100 clicks of 2,000 views
+    expect(screen.getByText('2026-10-24')).toBeInTheDocument();
+    expect(screen.queryByText('2026-10-22')).not.toBeInTheDocument(); // empty days are left out
+    expect(rate(1, 0)).toBe('–');
+    expect(rate(10, 12)).toBe('83%');
   });
 
   it('changes the free plan capacity with a reason', async () => {

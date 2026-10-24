@@ -333,10 +333,88 @@ function Platform() {
   return (
     <div className="space-y-6">
       <OverviewPanel />
+      <FunnelPanel />
       <EmailPanel />
       <Quota />
       <Incidents />
     </div>
+  );
+}
+
+export interface FunnelDay {
+  day: string;
+  views: number;
+  startClicks: number;
+  signUps: number;
+  firstGoLives: number;
+  firstReached: number;
+}
+
+/** Share of the previous step, or a dash when there's nothing to divide by. */
+export function rate(part: number, whole: number): string {
+  return whole > 0 ? `${Math.round((part / whole) * 100)}%` : '–';
+}
+
+/**
+ * The homepage funnel: views and Start free clicks from the site's beacon (no cookies, bots dropped),
+ * sign-ups and first lives from accounts and runs. Days are UTC.
+ */
+function FunnelPanel() {
+  const f = useQuery({ queryKey: ['admin', 'funnel'], queryFn: () => get<FunnelDay[]>('/api/admin/funnel?days=30') });
+  if (f.isLoading) return <Spinner />;
+  if (!f.data) return <ErrorNote error={f.error} />;
+  const days = f.data;
+  const t = days.reduce(
+    (a, d) => ({ views: a.views + d.views, startClicks: a.startClicks + d.startClicks, signUps: a.signUps + d.signUps, firstGoLives: a.firstGoLives + d.firstGoLives, firstReached: a.firstReached + d.firstReached }),
+    { views: 0, startClicks: 0, signUps: 0, firstGoLives: 0, firstReached: 0 },
+  );
+  const cols: [keyof typeof t, string][] = [
+    ['views', 'Homepage views'],
+    ['startClicks', 'Start free clicks'],
+    ['signUps', 'Sign-ups'],
+    ['firstGoLives', 'First Go live'],
+    ['firstReached', 'First reached a platform'],
+  ];
+  return (
+    <Panel title="Homepage to first live, last 30 days">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        {cols.map(([k, label], i) => (
+          <Stat key={k} label={label}>
+            {t[k].toLocaleString()}
+            {i > 0 && <span className="ml-1.5 text-sm font-normal text-muted">{rate(t[k], t[cols[i - 1][0]])}</span>}
+          </Stat>
+        ))}
+      </div>
+      <div className="mt-4 overflow-x-auto border-t border-line pt-3">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead className="text-left text-muted">
+            <tr>
+              <th className="py-1.5 pr-3 font-medium">Day (UTC)</th>
+              {cols.map(([k, label]) => (
+                <th key={k} className="py-1.5 pr-3 text-right font-medium">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="tnum">
+            {days
+              .filter((d) => cols.some(([k]) => d[k] > 0))
+              .map((d) => (
+                <tr key={d.day} className="border-t border-line">
+                  <td className="py-1.5 pr-3">{d.day}</td>
+                  {cols.map(([k]) => (
+                    <td key={k} className="py-1.5 pr-3 text-right">
+                      {d[k].toLocaleString()}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-muted">Views and clicks are counted without cookies or visitor ids; bots and scripts are left out roughly. Accounts made before this was added have no sign-up day.</p>
+    </Panel>
   );
 }
 
