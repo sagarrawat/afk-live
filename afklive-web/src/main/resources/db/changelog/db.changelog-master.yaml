@@ -47,3 +47,5 @@ databaseChangeLog:
       file: db/changelog/changes/045-profile-copies.sql
   - include:
       file: db/changelog/changes/075-support-ops.sql
+  - include:
+      file: db/changelog/changes/100-encoder-preset.sql

@@ -108,6 +108,11 @@ app:
       max-streams: ${STREAMING_WORKER_MAX_STREAMS:20}
     # Library files kept on each worker's disk, in GB (least recently used are removed first).
     cache-gb: ${STREAMING_CACHE_GB:50}
+    # Live encoder (studio) and the profile copies copy mode plays: x264 speed preset, ultrafast..medium
+    # (anything else falls back to superfast with a warning), and threads per encoder (0 = x264 decides).
+    # See docs/operations.md, "Live encoder".
+    x264-preset: ${APP_STREAMING_X264PRESET:superfast}
+    x264-threads: ${APP_STREAMING_X264THREADS:0}
   # Encrypts stream keys and phone ingest keys at rest: 32 random bytes, base64 (openssl rand -base64 32).
   # Required: the app won't start without it. To rotate, move the old key to APP_ENCRYPTION_OLD_KEYS
   # (comma-separated) and set a new one; stored secrets are re-encrypted at startup.

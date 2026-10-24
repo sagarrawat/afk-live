@@ -57,6 +57,8 @@ public class PlayoutCopies {
     private final FileStorageService storage;
     private final String role;
     private final boolean auto;
+    /** This process's live encoder settings: profile copies a worker plays must be of the same family. */
+    private final EncoderSettings encoder;
     private final Map<String, Remembered> remembered = new ConcurrentHashMap<>();
     private final ScheduledExecutorService preparer = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "playout-copies");
@@ -67,11 +69,13 @@ public class PlayoutCopies {
 
     public PlayoutCopies(JdbcTemplate jdbc, FileStorageService storage,
                          @Value("${app.streaming.role:all}") String role,
-                         @Value("${app.media.auto-process:true}") boolean auto) {
+                         @Value("${app.media.auto-process:true}") boolean auto,
+                         EncoderSettings encoder) {
         this.jdbc = jdbc;
         this.storage = storage;
         this.role = role;
         this.auto = auto;
+        this.encoder = encoder;
     }
 
     private record Remembered(String key, Instant until) {
@@ -210,7 +214,7 @@ public class PlayoutCopies {
                 "UPDATE media_playout_copies SET status = 'WORKING', claimed_at = ? WHERE id = ("
                         + " SELECT id FROM media_playout_copies WHERE status = 'PENDING' OR (status = 'WORKING' AND claimed_at < ?)"
                         + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)"
-                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths",
+                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, x264_preset",
                 Timestamp.from(claimedAt), Timestamp.from(claimedAt.minus(STALE_CLAIM)));
         if (claimed.isEmpty()) {
             return false;
@@ -231,6 +235,9 @@ public class PlayoutCopies {
         String fit = (String) c.get("fit");
         double gainDb = ((Number) c.get("gain_tenths")).intValue() / 10.0;
         boolean hasAudio = !Boolean.FALSE.equals(media.getFirst().get("has_audio"));
+        // The preset the requesting worker's studio uses, so its stream and the copy can follow each other;
+        // none recorded: asked for by a worker from before the preset was configurable.
+        String preset = presetOrLegacy((String) c.get("x264_preset"));
 
         String key = null;
         String reason = null;
@@ -239,7 +246,7 @@ public class PlayoutCopies {
         try {
             out = Files.createTempFile("playout-", profile ? ".ts" : ".mp4");
             List<String> cmd = profile
-                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio)
+                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio, preset)
                     : command(storage.readLocation(original), out, w, h, fps, sourceFps);
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             String log = new String(p.getInputStream().readAllBytes());
@@ -262,9 +269,10 @@ public class PlayoutCopies {
                 }
             }
         }
-        int saved = jdbc.update("UPDATE media_playout_copies SET status = ?, storage_key = ?, reason = ?, finished_at = now() "
-                        + "WHERE id = ? AND status = 'WORKING' AND claimed_at = ?",
-                key != null ? "READY" : "FAILED", key, reason, id, Timestamp.from(claimedAt));
+        // A profile copy records the preset it was made with (PLAYOUT copies are an intermediate: none).
+        int saved = jdbc.update("UPDATE media_playout_copies SET status = ?, storage_key = ?, reason = ?, finished_at = now(), "
+                        + "x264_preset = ? WHERE id = ? AND status = 'WORKING' AND claimed_at = ?",
+                key != null ? "READY" : "FAILED", key, reason, profile ? preset : null, id, Timestamp.from(claimedAt));
         if (saved != 1 && key != null) {
             deleteQuietly(key); // deleted or taken over meanwhile
         }
@@ -325,6 +333,12 @@ public class PlayoutCopies {
      * The profile copy of a video for copy mode: the file encoded exactly as a stream on this canvas
      * sends it, with the item's fit and loudness correction baked in. Returns its storage key when ready;
      * otherwise null, after asking for it when {@code request} is set.
+     * <p>
+     * A copy only counts when it was encoded with an x264 preset of this worker's family
+     * ({@link EncoderSettings#compatibleWith}): its stream must look exactly like this worker's studio
+     * encoder's, or a hand-over between them could confuse a decoder. A ready copy of another family is made
+     * again with this worker's preset, unless a worker played it within {@link #KEEP_OTHER_FAMILY} (then
+     * workers disagree about the preset, mid-rollout, and the one in use keeps it).
      */
     public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
                                 boolean request) {
@@ -336,27 +350,68 @@ public class PlayoutCopies {
         long mediaId = ids.getFirst();
         String f = fit == null ? "FIT" : fit.toUpperCase(Locale.ROOT);
         int gain = (int) Math.round(gainDb * 10);
-        List<Map<String, Object>> rows = jdbc.queryForList("SELECT status, storage_key FROM media_playout_copies WHERE media_id = ? "
-                + "AND kind = 'PROFILE' AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? AND gain_tenths = ?",
-                mediaId, canvasWidth, canvasHeight, fps, f, gain);
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, status, storage_key, x264_preset FROM media_playout_copies "
+                + "WHERE media_id = ? AND kind = 'PROFILE' AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? "
+                + "AND gain_tenths = ?", mediaId, canvasWidth, canvasHeight, fps, f, gain);
         if (rows.isEmpty()) {
             if (request) {
-                jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status) "
-                        + "VALUES (?, 'PROFILE', ?, ?, ?, ?, ?, 'PENDING') ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
-                        mediaId, canvasWidth, canvasHeight, fps, f, gain);
-                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({})", mediaId, canvasWidth, canvasHeight, fps, f);
+                jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, x264_preset) "
+                        + "VALUES (?, 'PROFILE', ?, ?, ?, ?, ?, 'PENDING', ?) ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
+                        mediaId, canvasWidth, canvasHeight, fps, f, gain, encoder.preset());
+                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({}, x264 {})", mediaId, canvasWidth, canvasHeight, fps, f,
+                        encoder.preset());
             }
             return null;
         }
         Map<String, Object> c = rows.getFirst();
-        if (!"READY".equals(c.get("status")) || c.get("storage_key") == null) {
+        long id = ((Number) c.get("id")).longValue();
+        String status = (String) c.get("status");
+        String storageKey = (String) c.get("storage_key");
+        String madeWith = (String) c.get("x264_preset");
+        if (!encoder.compatibleWith(madeWith)) {
+            if (request) {
+                remakeForThisEncoder(id, status, storageKey, madeWith);
+            }
             return null;
         }
-        jdbc.update("UPDATE media_playout_copies SET last_played_at = now() WHERE media_id = ? AND kind = 'PROFILE' "
-                + "AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? AND gain_tenths = ? "
-                + "AND (last_played_at IS NULL OR last_played_at < now() - interval '10 minutes')",
-                mediaId, canvasWidth, canvasHeight, fps, f, gain);
-        return (String) c.get("storage_key");
+        if (!"READY".equals(status) || storageKey == null) {
+            return null;
+        }
+        jdbc.update("UPDATE media_playout_copies SET last_played_at = now() WHERE id = ? "
+                + "AND (last_played_at IS NULL OR last_played_at < now() - interval '10 minutes')", id);
+        return storageKey;
+    }
+
+    /** A worker played a copy of another preset family this recently: it stays as it is for now. */
+    static final Duration KEEP_OTHER_FAMILY = Duration.ofHours(1);
+
+    /** Asks for a profile copy of another preset family to be made again with this worker's preset. */
+    private void remakeForThisEncoder(long id, String status, String storageKey, String madeWith) {
+        int changed;
+        if ("READY".equals(status) && storageKey != null) {
+            // Conditional on the row as read, so one worker wins and a copy someone plays is kept.
+            changed = jdbc.update("UPDATE media_playout_copies SET status = 'PENDING', x264_preset = ?, storage_key = NULL, "
+                    + "reason = NULL, claimed_at = NULL, finished_at = NULL WHERE id = ? AND status = 'READY' AND storage_key = ? "
+                    + "AND (last_played_at IS NULL OR last_played_at < ?)",
+                    encoder.preset(), id, storageKey, Timestamp.from(Instant.now().minus(KEEP_OTHER_FAMILY)));
+            if (changed == 1) {
+                deleteQuietly(storageKey); // a worker playing it has its own cached file
+            }
+        } else if ("PENDING".equals(status)) {
+            changed = jdbc.update("UPDATE media_playout_copies SET x264_preset = ? WHERE id = ? AND status = 'PENDING'",
+                    encoder.preset(), id);
+        } else {
+            return; // being made (it's checked again when ready) or failed (the sweeper clears it)
+        }
+        if (changed == 1) {
+            log.info("Profile copy {} was made with x264 {}; asked for it again with {}", id, presetOrLegacy(madeWith),
+                    encoder.preset());
+        }
+    }
+
+    /** A preset recorded on a copy row, or the legacy one when none (or something unexpected) is recorded. */
+    static String presetOrLegacy(String recorded) {
+        return recorded != null && EncoderSettings.PRESETS.contains(recorded) ? recorded : EncoderSettings.LEGACY_PRESET;
     }
 
     /**
@@ -366,7 +421,7 @@ public class PlayoutCopies {
      * copy has the same tracks. MPEG-TS, like the stream itself.
      */
     public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
-                                       double gainDb, boolean hasAudio) {
+                                       double gainDb, boolean hasAudio, String x264Preset) {
         com.afklive.streamer.streaming.studio.Canvas canvas = new com.afklive.streamer.streaming.studio.Canvas(canvasWidth, canvasHeight, fps, 44100);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit parsed = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit f = parsed == null ? com.afklive.streamer.streaming.studio.DecoderSource.Fit.FIT : parsed;
@@ -386,7 +441,9 @@ public class PlayoutCopies {
         if (!hasAudio) {
             cmd.add("-shortest");
         }
-        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvasWidth, canvasHeight), fps));
+        // The preset of the studio that asked for it, so the two can follow each other in one stream (copy
+        // mode); one thread, because this is background work.
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvasWidth, canvasHeight), fps, new EncoderSettings(x264Preset, 0)));
         cmd.addAll(List.of("-threads", "1", "-f", "mpegts", "-mpegts_flags", "+resend_headers", "-muxdelay", "0", output.toString()));
         return cmd;
     }
