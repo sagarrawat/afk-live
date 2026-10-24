@@ -3,7 +3,7 @@ import { ListVideo, Plus, Smartphone } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { GoLiveButton, StopButton } from '@/components/live-actions';
-import { HealthDot, isOnAir, LiveBadge, Uptime } from '@/components/status';
+import { HealthDot, isOnAir, LiveBadge, reachProblem, Uptime } from '@/components/status';
 import { Button, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Segmented, Select, Spinner, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
 import { keys, useInvalidate, useMe, useQualityOptions, useStreams } from '@/lib/queries';
@@ -81,11 +81,13 @@ function StreamRow({ stream: s }: { stream: StreamSummary }) {
           <span className="flex items-center gap-2">
             {s.source === 'PHONE' ? <Smartphone className="h-4 w-4 shrink-0 text-muted" aria-label="Phone stream" /> : <ListVideo className="h-4 w-4 shrink-0 text-muted" aria-label="Playlist stream" />}
             <span className="truncate font-semibold group-hover:underline">{s.name}</span>
-            <LiveBadge state={s.live.state} />
+            <LiveBadge state={s.live.state} reach={s.live.reach} />
             {onAir && <HealthDot level={s.live.health?.overall} />}
           </span>
-          <span className="mt-1 block truncate text-sm text-muted">
-            {onAir
+          <span className={clsx('mt-1 block truncate text-sm', onAir && reachProblem(s.live) ? 'text-bad' : 'text-muted')}>
+            {onAir && reachProblem(s.live)
+              ? reachProblem(s.live)
+              : onAir
               ? s.source === 'PHONE'
                 ? s.live.inputLive === false
                   ? 'Phone disconnected: viewers see your BRB scene'

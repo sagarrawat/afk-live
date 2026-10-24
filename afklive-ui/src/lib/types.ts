@@ -38,13 +38,24 @@ export interface Metric {
   explanation: string;
 }
 
+/** RE-8: is this platform receiving the stream? */
+export type Reach = 'ON' | 'CONNECTING' | 'NOT_REACHING';
+
 export interface DestinationHealth {
   name: string;
   status: string;
   level: Level;
   error?: string | null;
   restarts: number;
+  /** "YouTube", "Twitch", ...; null for a server we don't know. */
+  platform?: string | null;
+  reach?: Reach | null;
+  /** In plain words: "On YouTube", "Not reaching YouTube. YouTube refused the stream key. ..." */
+  message?: string | null;
 }
+
+/** RE-8: the stream badge. ALL: Live; SOME: Live with problems; NONE: Not reaching anyone. */
+export type StreamReach = 'ALL' | 'SOME' | 'NONE' | 'CONNECTING';
 
 export interface Health {
   overall: Level;
@@ -65,6 +76,8 @@ export interface LiveState {
   nowPlaying?: { mediaId?: number; title?: string; elapsed?: number; duration?: number; next?: { mediaId?: number; title?: string }[] | null } | null;
   health?: Health | null;
   endReason?: string | null;
+  /** RE-8, while LIVE: whether the platforms are receiving it. */
+  reach?: StreamReach | null;
 }
 
 export interface StreamSummary {
@@ -375,6 +388,33 @@ export interface BillingProfile {
 export interface Uptime {
   windows: { label: string; onAirSeconds: number; downSeconds: number; percent: number | null }[];
   outages: { startedAt: string; resolvedAt?: string | null }[];
+}
+
+/** RE-9: one line on a stream's timeline (newest first). */
+export interface TimelineEvent {
+  id: number;
+  jobId: number;
+  at: string;
+  lastAt: string;
+  kind: 'REACHED' | 'RECONNECTING' | 'NOT_REACHING' | 'RECOVERED';
+  name?: string | null;
+  message: string;
+  repeats: number;
+  level: Level;
+}
+
+/** GL-1: one destination's test before going live. */
+export interface DestinationCheck {
+  destinationId: number;
+  name: string;
+  platform?: string | null;
+  state: 'PASSED' | 'TESTING' | 'FAILED' | 'SKIPPED';
+  message: string;
+}
+
+export interface DestinationChecks {
+  ready: boolean;
+  checks: DestinationCheck[];
 }
 
 /** SC-3: GET /api/schedules/calendar. Local times are wall-clock in the account's time zone. */

@@ -47,11 +47,19 @@ public class AlertMonitor {
     static final Duration HEARTBEAT_STALE = Duration.ofSeconds(60);
     static final Duration PHONE_LOST_AFTER = Duration.ofMinutes(2);
     static final Duration STUCK_STARTING_AFTER = Duration.ofMinutes(3);
+    /** RE-9: one destination not reaching its platform while the stream still reaches others alerts after this long. */
+    static final Duration DEST_DOWN_AFTER = Duration.ofMinutes(5);
+    /** A destination that keeps dropping and coming back alerts at most this often. */
+    static final Duration DEST_ALERT_EVERY = Duration.ofHours(1);
 
     static final String DOWN = "DOWN";
     static final String DEST = "DEST";
     static final String PHONE = "PHONE";
     static final String STARTING = "STARTING";
+    /** RE-8: the stream runs but no platform is receiving it. For viewers it is down. */
+    static final String UNREACHED = "UNREACHED";
+    /** Incidents that count as the stream being down (RE-4 uptime). */
+    public static final List<String> OUTAGE_KINDS = List.of(DOWN, UNREACHED);
 
     private final StreamJobRepository jobs;
     private final StreamIncidentRepository incidents;
@@ -140,19 +148,40 @@ public class AlertMonitor {
                     () -> notifier.notify(email, alert(NotificationService.Types.STREAM_RECOVERED, Notification.Level.SUCCESS, streamId,
                             name + " is back live", "The stream recovered on its own.", link)));
 
-            // Each destination on its own (the others keep going).
+            // RE-8: the stream runs, but no platform is receiving it: as bad as down for viewers.
+            Map<Integer, String> urls = StreamHealth.urls(job);
+            boolean unreached = !starting && !down && StreamHealth.REACH_NONE.equals(StreamHealth.reach(job.getDestinations()));
+            condition(seen, job, UNREACHED, "", unreached, now, DOWN_AFTER,
+                    () -> notifier.notify(email, alert(NotificationService.Types.STREAM_DOWN, Notification.Level.ERROR, streamId,
+                            name + " isn't reaching anyone",
+                            "The stream is running, but no platform is receiving it. " + reasons(job, urls) + " We keep trying.", link)),
+                    () -> notifier.notify(email, alert(NotificationService.Types.STREAM_RECOVERED, Notification.Level.SUCCESS, streamId,
+                            name + " is reaching viewers again", "A platform is receiving the stream again.", link)));
+
+            // RE-9: each destination on its own while the stream still reaches others (all of them is the alert above).
             if (!starting && !down) {
                 for (StreamJobDestination d : job.getDestinations()) {
-                    String status = d.getStatus() == null ? "CONNECTING" : d.getStatus();
-                    boolean bad = !"LIVE".equals(status) && !"STOPPED".equals(status) && !"OFF".equals(status);
-                    String dn = d.getName() == null ? "a destination" : d.getName();
-                    condition(seen, job, DEST, String.valueOf(d.getPosition()), bad, now, DOWN_AFTER,
-                            () -> notifier.notify(email, alert(NotificationService.Types.DESTINATION_DOWN, Notification.Level.ERROR, streamId,
-                                    name + " isn't reaching " + dn,
-                                    "We keep reconnecting to " + dn + ". If it doesn't come back, check its stream key on the platform"
-                                            + (d.getLastError() == null ? "." : ". Last error: " + d.getLastError()), link)),
-                            () -> notifier.notify(email, alert(NotificationService.Types.DESTINATION_RECOVERED, Notification.Level.SUCCESS,
-                                    streamId, name + " is reaching " + dn + " again", "The connection recovered.", link)));
+                    String target = String.valueOf(d.getPosition());
+                    if (unreached) {
+                        String key = job.getId() + ":" + DEST + ":" + target;
+                        if (firstBad.containsKey(key)) {
+                            seen.add(key); // keeps counting; its own alert waits until the stream reaches someone
+                        }
+                        continue;
+                    }
+                    boolean bad = StreamHealth.NOT_REACHING.equals(StreamHealth.reachOf(d));
+                    String url = urls.get(d.getPosition());
+                    String dn = StreamHealth.label(d, url);
+                    String why = bad ? StreamHealth.why(d, url) : "";
+                    String dedupe = "dest:" + job.getId() + ":" + target;
+                    condition(seen, job, DEST, target, bad, now, DEST_DOWN_AFTER,
+                            () -> notifier.notify(email, new NotificationService.Alert(NotificationService.Types.DESTINATION_DOWN,
+                                    Notification.Level.ERROR, streamId, name + " isn't reaching " + dn,
+                                    why + " Your other destinations are fine. We keep reconnecting to " + dn + ".", link,
+                                    dedupe + ":down", DEST_ALERT_EVERY, true)),
+                            () -> notifier.notify(email, new NotificationService.Alert(NotificationService.Types.DESTINATION_RECOVERED,
+                                    Notification.Level.SUCCESS, streamId, name + " is reaching " + dn + " again",
+                                    "The connection recovered.", link, dedupe + ":back", DEST_ALERT_EVERY, true)));
                 }
             }
 
@@ -199,6 +228,19 @@ public class AlertMonitor {
                 safely(onRecovered);
             }
         }
+    }
+
+    /** Each destination's reason, in plain words: "YouTube: YouTube refused the stream key. ..." */
+    private static String reasons(StreamJob job, Map<Integer, String> urls) {
+        List<String> out = new java.util.ArrayList<>();
+        for (StreamJobDestination d : job.getDestinations()) {
+            if (StreamHealth.NOT_REACHING.equals(StreamHealth.reachOf(d))) {
+                String url = urls.get(d.getPosition());
+                String label = StreamHealth.label(d, url);
+                out.add(Character.toUpperCase(label.charAt(0)) + label.substring(1) + ": " + StreamHealth.why(d, url));
+            }
+        }
+        return String.join(" ", out);
     }
 
     /** NT-2: storage almost full (80 %), at most once a day per user. */

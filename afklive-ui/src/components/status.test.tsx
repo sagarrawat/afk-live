@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { LiveBadge, isOnAir } from './status';
+import { badgeLabel, LiveBadge, isOnAir, reachProblem } from './status';
 import { cssColor } from '@/pages/stream/OverlaysTab';
 import { defaultQuality } from '@/pages/Home';
 import { describe as describeSchedule, localInZone } from '@/pages/stream/ScheduleTab';
@@ -10,6 +10,37 @@ describe('status', () => {
     expect(screen.getByText('Live')).toBeInTheDocument();
     render(<LiveBadge state="DRAFT" />);
     expect(screen.getByText('Off air')).toBeInTheDocument();
+  });
+
+  it('says Live only while a platform is receiving the stream (RE-8)', () => {
+    expect(badgeLabel('LIVE', 'ALL')).toBe('Live');
+    expect(badgeLabel('LIVE', 'SOME')).toBe('Live with problems');
+    expect(badgeLabel('LIVE', 'NONE')).toBe('Not reaching anyone');
+    expect(badgeLabel('LIVE', 'CONNECTING')).toBe('Connecting');
+    expect(badgeLabel('LIVE', null)).toBe('Live'); // an older server: the state alone
+    expect(badgeLabel('STARTING', null)).toBe('Starting');
+    expect(badgeLabel('STOPPING', 'ALL')).toBe('Stopping');
+  });
+
+  it('keeps red for on air: a stream nobody receives is shown as a problem, not live', () => {
+    const { rerender } = render(<LiveBadge state="LIVE" reach="SOME" />);
+    expect(screen.getByText('Live with problems')).toHaveClass('bg-live');
+    rerender(<LiveBadge state="LIVE" reach="NONE" />);
+    expect(screen.getByText('Not reaching anyone')).not.toHaveClass('bg-live');
+    expect(screen.getByText('Not reaching anyone')).toHaveClass('text-bad');
+    rerender(<LiveBadge state="LIVE" reach="CONNECTING" />);
+    expect(screen.getByText('Connecting')).not.toHaveClass('bg-live');
+  });
+
+  it('names the destination that is not reaching its platform', () => {
+    const destinations = [
+      { name: 'Main', status: 'LIVE', level: 'green' as const, restarts: 0, reach: 'ON' as const, message: 'On YouTube' },
+      { name: 'Twitch', status: 'RECONNECTING', level: 'red' as const, restarts: 3, reach: 'NOT_REACHING' as const, message: 'Not reaching Twitch. Twitch refused the stream key.' },
+    ];
+    const live = { state: 'LIVE' as const, uptimeSeconds: 60, reach: 'SOME' as const, health: { overall: 'red' as const, metrics: [], destinations } };
+    expect(reachProblem(live)).toBe('Not reaching Twitch. Twitch refused the stream key.');
+    expect(reachProblem({ ...live, reach: 'ALL' })).toBeNull();
+    expect(reachProblem({ ...live, state: 'STOPPING' })).toBeNull();
   });
 
   it('knows which states are on air', () => {

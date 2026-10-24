@@ -41,6 +41,32 @@ class DestinationTestServiceTest {
     }
 
     @Test
+    void aTestStopsAtOnceWhenAStreamGoesLiveOnItsKey() {
+        // GL-1: a test must never compete with a live run for the same key.
+        DestinationTestService s = with(List.of("sh", "-c", "sleep 30"));
+        java.util.concurrent.atomic.AtomicInteger looks = new java.util.concurrent.atomic.AtomicInteger();
+        long started = System.nanoTime();
+        DestinationTestService.Outcome o = s.execute("abcd-efgh-ijkl-mnop", () -> looks.incrementAndGet() >= 2);
+        assertThat(o.ok()).isFalse();
+        assertThat(o.message()).isEqualTo(DestinationTestService.WENT_LIVE);
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(5_000);
+    }
+
+    @Test
+    void errorsAreExplainedWithThePlatformsName() {
+        String broken = "[rtmp @ 0x55] av_interleaved_write_frame(): Broken pipe";
+        assertThat(DestinationTestService.explain(broken, "rtmp://live.twitch.tv/app/live_1"))
+                .isEqualTo("Twitch refused the stream key. Copy the key again from Twitch and save it.");
+        assertThat(DestinationTestService.explain(broken, "abcd-efgh")).startsWith("YouTube refused the stream key");
+        assertThat(DestinationTestService.explain("exit code 1", "rtmp://a.rtmp.youtube.com/live2/rtmp://a.rtmp.youtube.com/live2"))
+                .as("a server address pasted as the key, whatever FFmpeg said").contains("second server address");
+        assertThat(DestinationTestService.explain(com.afklive.streamer.streaming.StreamRunner.STALLED, "abcd-efgh"))
+                .isEqualTo("YouTube stopped taking the stream. We keep reconnecting.");
+        assertThat(DestinationTestService.explain(com.afklive.streamer.streaming.StreamRunner.FELL_BEHIND, "abcd-efgh"))
+                .isEqualTo("The connection to YouTube was too slow to keep up, so we reconnected.");
+    }
+
+    @Test
     void theTestCommandMeetsYouTubesIngestBasicsAndTimesOut() {
         List<String> cmd = DestinationTestService.ffmpegTest("abcd-efgh-ijkl-mnop");
         assertThat(cmd).containsSequence("-g", "60").containsSequence("-ar", "44100").contains("flv").contains("-rw_timeout")

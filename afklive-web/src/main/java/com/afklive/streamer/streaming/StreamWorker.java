@@ -94,6 +94,10 @@ public class StreamWorker {
     static final Duration COPY_CHECK_EVERY = Duration.ofSeconds(60);
     private volatile Duration copyCheckEvery = COPY_CHECK_EVERY;
     static final Duration HAND_OFF_TIMEOUT = Duration.ofSeconds(30);
+    private volatile com.afklive.streamer.repository.StreamEventRepository events;
+    /** FO-3: bytes sent per destination are written with the heartbeat, at most this often. */
+    static final Duration BYTES_EVERY = Duration.ofSeconds(30);
+    private volatile Duration bytesEvery = BYTES_EVERY;
     private volatile boolean firstPassDone;
     private volatile long lastSuccessfulTickNanos = System.nanoTime();
 
@@ -144,6 +148,17 @@ public class StreamWorker {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setCopyRuns(CopyRuns copyRuns) {
         this.copyRuns = copyRuns;
+    }
+
+    /** RE-9: where destination events go (null in tests that don't wire it: no timeline). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setEvents(com.afklive.streamer.repository.StreamEventRepository events) {
+        this.events = events;
+    }
+
+    /** For tests: how often bytes sent are written. */
+    public void bytesEvery(Duration every) {
+        this.bytesEvery = every;
     }
 
     /** For tests: how often studio runs are checked for moving to copy mode. */
@@ -227,6 +242,9 @@ public class StreamWorker {
                 }
                 if (jobs.heartbeat(id, workerId, r.lastHeartbeat, now, r.status(), r.bitrate, r.fps, r.speed, r.drops, r.lastError) == 1) {
                     r.lastHeartbeat = now;
+                    if (System.nanoTime() - r.bytesWrittenNanos >= bytesEvery.toNanos()) {
+                        r.flushBytes();
+                    }
                     CopyRuns.Handle copy = r.copy;
                     if (copy != null) {
                         try {
@@ -331,6 +349,10 @@ public class StreamWorker {
         }
         Running r = new Running(id, spec);
         r.lastHeartbeat = heartbeatWritten;
+        for (com.afklive.streamer.model.StreamJobDestination d : job.getDestinations()) {
+            r.bytesBefore.put(d.getPosition(), d.getBytesSent()); // a takeover carries on from what was recorded
+        }
+        r.bytesWrittenNanos = System.nanoTime();
         running.put(id, r);
         if (spec.studio() != null) {
             r.commandsAfter = job.getAppliedCommandId();
@@ -734,10 +756,143 @@ public class StreamWorker {
         /** Set when the stream ended but recording that failed; retried on the next pass. */
         volatile String finishPending;
         volatile boolean finishFailed;
+        /** FO-3: what earlier workers of this run recorded per destination, and what this one last wrote. */
+        final Map<Integer, Long> bytesBefore = new ConcurrentHashMap<>();
+        private final Map<Integer, Long> bytesReported = new ConcurrentHashMap<>();
+        volatile long bytesWrittenNanos;
+        /** RE-9: what the timeline last said about each destination. */
+        private final Map<Integer, Track> tracks = new ConcurrentHashMap<>();
 
         Running(long id, StreamSpec spec) {
             this.id = id;
             this.spec = spec;
+        }
+
+        /** FO-3: each destination's bytes sent so far in this run, written when it changed. */
+        void flushBytes() {
+            bytesWrittenNanos = System.nanoTime();
+            StreamRunner rn = runner;
+            if (rn == null) {
+                return;
+            }
+            for (Map.Entry<Integer, Long> e : rn.bytesSent().entrySet()) {
+                long total = bytesBefore.getOrDefault(e.getKey(), 0L) + e.getValue();
+                if (Long.valueOf(total).equals(bytesReported.get(e.getKey()))) {
+                    continue;
+                }
+                try {
+                    destinations.updateBytesSent(id, e.getKey(), total);
+                    bytesReported.put(e.getKey(), total);
+                } catch (Exception ex) {
+                    log.debug("Bytes sent update for job {} failed: {}", id, ex.getMessage());
+                }
+            }
+        }
+
+        private String destUrl(int position) {
+            List<StreamSpec.Destination> ds = spec.destinations();
+            return position < ds.size() ? ds.get(position).url() : null;
+        }
+
+        private String destName(int position) {
+            List<StreamSpec.Destination> ds = spec.destinations();
+            return position < ds.size() && ds.get(position).name() != null ? ds.get(position).name() : "Destination";
+        }
+
+        /** "YouTube" for a YouTube destination; the creator's own name for a server we don't know. */
+        private String label(int position) {
+            String p = com.afklive.streamer.util.Platforms.label(destUrl(position));
+            return p != null ? p : destName(position);
+        }
+
+        private String explain(int position, String raw) {
+            return com.afklive.streamer.service.DestinationTestService.explain(raw, destUrl(position));
+        }
+
+        private Long event(String kind, int position, String message) {
+            com.afklive.streamer.repository.StreamEventRepository repo = events;
+            if (repo == null) {
+                return null;
+            }
+            try {
+                return repo.save(new com.afklive.streamer.model.StreamEvent(id, ZonedDateTime.now(ZoneId.of("UTC")), kind,
+                        position, destName(position), message)).getId();
+            } catch (Exception e) {
+                log.debug("Timeline event for job {} failed: {}", id, e.getMessage());
+                return null;
+            }
+        }
+
+        /** RE-9: reached, not reaching, back again. Reconnects are recorded by {@link #recordReconnect}. */
+        void recordReach(int position, String reach, String reason) {
+            Track t = tracks.computeIfAbsent(position, p -> new Track());
+            synchronized (t) {
+                ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+                if (StreamRunner.ON.equals(reach)) {
+                    if (!t.everOn) {
+                        event(com.afklive.streamer.model.StreamEvent.Kinds.REACHED, position, "On " + label(position)
+                                + ": it has been receiving the stream steadily.");
+                    } else if (t.troubled) {
+                        recovered(t, position, now);
+                    }
+                    t.everOn = true;
+                    t.troubled = false;
+                    t.troubleSince = null;
+                } else if (StreamRunner.NOT_REACHING.equals(reach) && !StreamRunner.NOT_REACHING.equals(t.reach)) {
+                    t.lastEventId = event(com.afklive.streamer.model.StreamEvent.Kinds.NOT_REACHING, position,
+                            "Not reaching " + label(position) + ". " + (reason == null ? label(position)
+                                    + " isn't receiving the stream." : explain(position, reason)) + " We keep trying.");
+                    t.lastMessage = null;
+                    t.troubled = true;
+                    if (t.troubleSince == null) {
+                        t.troubleSince = now;
+                    }
+                }
+                t.reach = reach;
+            }
+        }
+
+        /** RE-9: a relay dropped. The same reason again is one more repeat on the same line, not a new line. */
+        void recordReconnect(int position, String error) {
+            Track t = tracks.computeIfAbsent(position, p -> new Track());
+            synchronized (t) {
+                ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+                String message = "Reconnecting to " + label(position) + ". " + explain(position, error);
+                com.afklive.streamer.repository.StreamEventRepository repo = events;
+                if (message.equals(t.lastMessage) && t.lastEventId != null && repo != null) {
+                    try {
+                        repo.bump(t.lastEventId, now);
+                    } catch (Exception e) {
+                        log.debug("Timeline update for job {} failed: {}", id, e.getMessage());
+                    }
+                } else {
+                    t.lastEventId = event(com.afklive.streamer.model.StreamEvent.Kinds.RECONNECTING, position, message);
+                    t.lastMessage = message;
+                }
+                t.troubled = true;
+                if (t.troubleSince == null) {
+                    t.troubleSince = now;
+                }
+            }
+        }
+
+        /** RE-9: an attempt has been sending steadily again; after trouble, that is a recovery. */
+        void recordSteady(int position) {
+            Track t = tracks.computeIfAbsent(position, p -> new Track());
+            synchronized (t) {
+                if (t.everOn && t.troubled) {
+                    recovered(t, position, ZonedDateTime.now(ZoneId.of("UTC")));
+                    t.troubled = false;
+                    t.troubleSince = null;
+                }
+            }
+        }
+
+        private void recovered(Track t, int position, ZonedDateTime now) {
+            String after = t.troubleSince == null ? "" : " after " + humanDuration(Duration.between(t.troubleSince, now));
+            event(com.afklive.streamer.model.StreamEvent.Kinds.RECOVERED, position, "Back on " + label(position) + after + ".");
+            t.lastEventId = null;
+            t.lastMessage = null;
         }
 
         /** Stop now, or (if still preparing) make sure it never starts. */
@@ -775,12 +930,31 @@ public class StreamWorker {
             String safeError = Redact.streamKeys(error);
             try {
                 destinations.updateState(id, position, status, restarts, safeError, ZonedDateTime.now(ZoneId.of("UTC")));
+                if ("OFF".equals(status)) {
+                    destinations.updateReach(id, position, null, null); // turned off: nothing to reach
+                }
             } catch (Exception e) {
                 log.debug("Destination state update failed", e);
             }
             if (safeError != null) {
                 streamService.addLog("[job " + id + " dest " + position + "] " + safeError);
             }
+            if ("RECONNECTING".equals(status) && safeError != null) {
+                recordReconnect(position, safeError);
+            } else if ("LIVE".equals(status)) {
+                recordSteady(position);
+            }
+        }
+
+        @Override
+        public void onReach(int position, String reach, String reason) {
+            String safeReason = Redact.streamKeys(reason);
+            try {
+                destinations.updateReach(id, position, reach, safeReason);
+            } catch (Exception e) {
+                log.debug("Destination reach update failed", e);
+            }
+            recordReach(position, reach, safeReason);
         }
 
         @Override
@@ -799,6 +973,7 @@ public class StreamWorker {
             }
             finishPending = reason;
             finishFailed = failed;
+            flushBytes();
             tryFinalize();
         }
 
@@ -813,5 +988,26 @@ public class StreamWorker {
             running.remove(id, this);
             cleanup(this, true);
         }
+    }
+
+    /** What the timeline last said about one destination of a run. */
+    private static final class Track {
+        String reach;
+        boolean everOn;
+        boolean troubled;
+        ZonedDateTime troubleSince;
+        Long lastEventId;
+        String lastMessage;
+    }
+
+    static String humanDuration(Duration d) {
+        long s = Math.max(0, d.getSeconds());
+        if (s < 60) {
+            return s + " s";
+        }
+        if (s < 3600) {
+            return (s / 60) + " min";
+        }
+        return (s / 3600) + " h " + (s % 3600 / 60) + " min";
     }
 }

@@ -45,3 +45,9 @@ databaseChangeLog:
       file: db/changelog/changes/040-dismissed-hints.sql
   - include:
       file: db/changelog/changes/045-profile-copies.sql
+  - include:
+      file: db/changelog/changes/060-destination-reach.sql
+  - include:
+      file: db/changelog/changes/061-stream-events.sql
+  - include:
+      file: db/changelog/changes/062-destination-tests-latest.sql

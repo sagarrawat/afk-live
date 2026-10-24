@@ -120,18 +120,62 @@ class AlertsTest extends PostgresIntegrationTest {
 
     @Test
     void oneDestinationDownIsReportedWithoutTheWholeStream() {
+        // RE-9: one platform not reaching while another receives the stream alerts on its own after 5 minutes.
         ZonedDateTime t = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
         StreamJob job = liveJob(StreamStates.LIVE, t);
         StreamJobDestination d = job.getDestinations().getFirst();
         d.setStatus("RECONNECTING");
-        d.setLastError("Connection reset by peer");
-        job.setHeartbeatAt(t.plusSeconds(60));
+        d.setReach("NOT_REACHING");
+        d.setReachReason("av_interleaved_write_frame(): Broken pipe");
+        StreamJobDestination twitch = new StreamJobDestination(job, 1, "Twitch");
+        twitch.setStatus("LIVE");
+        twitch.setReach("ON");
+        job.getDestinations().add(twitch);
+        job.setHeartbeatAt(t.plusSeconds(300));
         jobs.save(job);
         monitor.check(t);
         monitor.check(t.plusSeconds(61));
+        assertThat(types()).as("a minute is a hiccup when the stream still reaches another platform").isEmpty();
+        monitor.check(t.plusSeconds(301));
         List<Notification> list = notifications.findTop50ByUserIdOrderByCreatedAtDesc(owner.getId());
         assertThat(list).extracting(Notification::getType).containsExactly(NotificationService.Types.DESTINATION_DOWN);
         assertThat(list.getFirst().getTitle()).isEqualTo("Lofi radio isn't reaching YouTube");
+        assertThat(list.getFirst().getBody()).contains("refused the stream key").contains("Your other destinations are fine");
+    }
+
+    @Test
+    void noPlatformReceivingForAMinuteIsAnOutageWithTheReasonAndARecovery() {
+        // RE-8: our encoder runs fine (status LIVE), but every destination is not reaching its platform.
+        ZonedDateTime t = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
+        StreamJob job = liveJob(StreamStates.LIVE, t);
+        StreamJobDestination d = job.getDestinations().getFirst();
+        d.setStatus("RECONNECTING");
+        d.setReach("NOT_REACHING");
+        d.setReachReason("av_interleaved_write_frame(): Broken pipe");
+        job.setHeartbeatAt(t.plusSeconds(500));
+        jobs.save(job);
+
+        monitor.check(t);
+        monitor.check(t.plusSeconds(30));
+        assertThat(types()).isEmpty();
+        monitor.check(t.plusSeconds(61));
+        List<Notification> list = notifications.findTop50ByUserIdOrderByCreatedAtDesc(owner.getId());
+        assertThat(list).extracting(Notification::getType).containsExactly(NotificationService.Types.STREAM_DOWN);
+        assertThat(list.getFirst().getTitle()).isEqualTo("Lofi radio isn't reaching anyone");
+        assertThat(list.getFirst().getBody()).contains("The stream is running, but no platform is receiving it")
+                .contains("YouTube: The platform refused the stream key");
+        assertThat(incidents.findAllByJobIdAndResolvedAtIsNull(job.getId())).extracting(StreamIncident::getKind).containsExactly("UNREACHED");
+        monitor.check(t.plusSeconds(400));
+        assertThat(types()).as("no second alert, and no per-destination one on top").hasSize(1);
+
+        job = jobs.findById(job.getId()).orElseThrow();
+        job.getDestinations().getFirst().setReach("ON");
+        job.getDestinations().getFirst().setStatus("LIVE");
+        job.setHeartbeatAt(t.plusSeconds(500));
+        jobs.save(job);
+        monitor.check(t.plusSeconds(420));
+        assertThat(types()).containsExactly(NotificationService.Types.STREAM_RECOVERED, NotificationService.Types.STREAM_DOWN);
+        assertThat(incidents.findAllByJobIdAndResolvedAtIsNull(job.getId())).isEmpty();
     }
 
     @Test

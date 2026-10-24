@@ -1,11 +1,11 @@
-import { CheckCircle2, CircleAlert, Play, Square } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, CircleAlert, Loader2, Play, Square } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, post } from '@/lib/api';
+import { ApiError, get, post } from '@/lib/api';
 import { appLink } from '@/lib/links';
 import { keys, useInvalidate } from '@/lib/queries';
-import type { Preflight, StreamSummary, StreamView } from '@/lib/types';
-import { Button, Dialog, Field, Input, Segmented, useAction, useToast } from './ui';
+import type { DestinationChecks, Preflight, StreamSummary, StreamView } from '@/lib/types';
+import { Button, buttonClass, Dialog, Field, Input, Segmented, useAction, useToast } from './ui';
 import { isOnAir } from './status';
 
 type AnyStream = Pick<StreamView | StreamSummary, 'id' | 'name' | 'live' | 'source'>;
@@ -33,13 +33,54 @@ export function PreflightList({ preflight, streamId, onNavigate }: { preflight: 
   );
 }
 
-/** GL-1: one press goes live; if a pre-flight check fails, say which and where to fix it. */
+/** GL-1: each destination's test before going live, in plain words. */
+export function DestinationChecksList({ checks }: { checks: DestinationChecks }) {
+  return (
+    <ul className="space-y-2.5">
+      {checks.checks.map((c) => (
+        <li key={c.destinationId} className="flex items-start gap-2.5">
+          {c.state === 'TESTING' ? (
+            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted" aria-label="Testing" />
+          ) : c.state === 'FAILED' ? (
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-bad" aria-label="Not reaching" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-label="Ready" />
+          )}
+          <span className="min-w-0">
+            <span className="block font-medium">{c.name}</span>
+            <span className={c.state === 'FAILED' ? 'block text-sm text-bad' : 'block text-sm text-muted'}>{c.message}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The dialog's title: what is happening, or which platform can't be reached. */
+export function checksTitle(checks: DestinationChecks): string {
+  if (checks.checks.some((c) => c.state === 'TESTING')) return 'Checking your destinations';
+  const failed = checks.checks.filter((c) => c.state === 'FAILED');
+  if (failed.length === 1) return `Not reaching ${failed[0].platform ?? failed[0].name}`;
+  return "Some destinations can't be reached";
+}
+
+/** How often the dialog asks how the tests are going. */
+export const CHECK_POLL_MS = 1500;
+
+/**
+ * GL-1: one press goes live. First each destination that hasn't passed a test in 24 hours (or whose
+ * key changed) gets a 10-second test; a failure blocks with the reason, "Fix key" and "Go live anyway".
+ * If a pre-flight check fails, say which and where to fix it.
+ */
 export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream; size?: 'sm' | 'md'; scene?: string }) {
   const [preflight, setPreflight] = useState<Preflight | null>(null);
+  const [checks, setChecks] = useState<DestinationChecks | null>(null);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const invalidate = useInvalidate();
-  const go = async () => {
+  const open = useRef(false);
+
+  const goLive = async () => {
     setBusy(true);
     try {
       await post(`/api/streams/${stream.id}/live`, scene ? { scene } : {});
@@ -55,11 +96,94 @@ export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream
       setBusy(false);
     }
   };
+
+  const close = () => {
+    open.current = false;
+    setChecks(null);
+  };
+
+  const press = async () => {
+    setBusy(true);
+    let c: DestinationChecks | null = null;
+    try {
+      c = await post<DestinationChecks>(`/api/streams/${stream.id}/destination-checks`);
+    } catch {
+      c = null; // the check itself couldn't run: don't stand between the creator and going live
+    }
+    setBusy(false);
+    if (c && !c.ready) {
+      open.current = true;
+      setChecks(c);
+      return;
+    }
+    await goLive();
+  };
+
+  // While a test runs, ask again; when everything passed, go live without another press.
+  useEffect(() => {
+    if (!checks || !checks.checks.some((c) => c.state === 'TESTING')) return;
+    const t = setTimeout(async () => {
+      try {
+        const next = await get<DestinationChecks>(`/api/streams/${stream.id}/destination-checks`);
+        if (!open.current) return;
+        if (next.ready) {
+          close();
+          await goLive();
+        } else {
+          setChecks(next);
+        }
+      } catch {
+        if (open.current) setChecks({ ...checks });
+      }
+    }, CHECK_POLL_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checks, stream.id]);
+
+  const testing = !!checks?.checks.some((c) => c.state === 'TESTING');
   return (
     <>
-      <Button variant="live" size={size} busy={busy} onClick={go} icon={<Play className="h-4 w-4" />}>
+      <Button variant="live" size={size} busy={busy} onClick={press} icon={<Play className="h-4 w-4" />}>
         Go live
       </Button>
+      <Dialog
+        open={!!checks}
+        onClose={close}
+        title={checks ? checksTitle(checks) : ''}
+        footer={
+          testing ? (
+            <Button variant="ghost" onClick={close}>
+              Cancel
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  close();
+                  await goLive();
+                }}
+              >
+                Go live anyway
+              </Button>
+              <Link to={`/studio/streams/${stream.id}/destinations`} onClick={close} className={buttonClass('primary')}>
+                Fix key
+              </Link>
+            </>
+          )
+        }
+      >
+        {checks && (
+          <div className="space-y-3">
+            <DestinationChecksList checks={checks} />
+            {testing ? (
+              <p className="text-sm text-muted">We send a short test to each destination that hasn't been checked in the last day. It goes live by itself when they pass.</p>
+            ) : (
+              <p className="text-sm text-muted">If you go live anyway, the stream starts but this destination won't show it until the key is fixed.</p>
+            )}
+          </div>
+        )}
+      </Dialog>
       <Dialog open={!!preflight} onClose={() => setPreflight(null)} title={`${stream.name} can't go live yet`} footer={<Button onClick={() => setPreflight(null)}>Close</Button>}>
         {preflight && <PreflightList preflight={preflight} streamId={stream.id} onNavigate={() => setPreflight(null)} />}
       </Dialog>

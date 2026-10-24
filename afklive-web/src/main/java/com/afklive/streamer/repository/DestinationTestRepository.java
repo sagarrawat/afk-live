@@ -19,6 +19,9 @@ public interface DestinationTestRepository extends JpaRepository<DestinationTest
 
     boolean existsByUserIdAndStatusIn(Long userId, List<DestinationTest.Status> statuses);
 
+    /** GL-1: a destination's latest tests (one of its current key decides whether Go live tests it again). */
+    List<DestinationTest> findTop10ByDestinationIdOrderByIdDesc(Long destinationId);
+
     @Query("SELECT t.id FROM DestinationTest t WHERE t.status = 'PENDING' ORDER BY t.id")
     List<Long> findPendingIds();
 

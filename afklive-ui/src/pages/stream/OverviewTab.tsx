@@ -6,7 +6,7 @@ import { HealthDot, isOnAir } from '@/components/status';
 import { Badge, Button, Panel, Toggle, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
 import { clock, dateTime, duration } from '@/lib/format';
-import { useDestinations, useRuns, useUptime } from '@/lib/queries';
+import { useDestinations, useRuns, useTimeline, useUptime } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
 import { VerticalHint } from './VerticalHint';
@@ -36,6 +36,7 @@ export function OverviewTab({ stream: s }: { stream: StreamView }) {
       <div className="space-y-6">
         <HealthPanel stream={s} />
         <DestinationsPanel stream={s} />
+        <TimelinePanel stream={s} />
       </div>
     </div>
   );
@@ -273,12 +274,21 @@ function DestinationsPanel({ stream: s }: { stream: StreamView }) {
             <li key={d.name} className="flex items-start justify-between gap-3">
               <span className="min-w-0">
                 <span className="block truncate font-medium">{d.name}</span>
-                {(d.error || d.restarts > 0) && (
-                  <span className="block text-sm text-muted">
-                    {d.error}
-                    {d.restarts > 0 && <span className="tnum"> {d.restarts} reconnect{d.restarts === 1 ? '' : 's'}</span>}
-                    {d.error && d.level !== 'green' && <DestinationHelp stream={s} name={d.name} error={d.error} />}
+                {/* RE-8: whether the platform is receiving it, in plain words; the raw error only without that. */}
+                {d.message ? (
+                  <span className={clsx('block text-sm', d.reach === 'NOT_REACHING' ? 'text-bad' : 'text-muted')}>
+                    {d.message}
+                    {d.restarts > 0 && <span className="tnum text-muted"> {d.restarts} reconnect{d.restarts === 1 ? '' : 's'}</span>}
+                    {d.reach === 'NOT_REACHING' && <DestinationHelp stream={s} name={d.name} error={d.message} />}
                   </span>
+                ) : (
+                  (d.error || d.restarts > 0) && (
+                    <span className="block text-sm text-muted">
+                      {d.error}
+                      {d.restarts > 0 && <span className="tnum"> {d.restarts} reconnect{d.restarts === 1 ? '' : 's'}</span>}
+                      {d.error && d.level !== 'green' && <DestinationHelp stream={s} name={d.name} error={d.error} />}
+                    </span>
+                  )
                 )}
               </span>
               <span className="shrink-0 whitespace-nowrap">
@@ -330,6 +340,32 @@ export function UptimePanel({ stream: s }: { stream: StreamView }) {
           : 'No outages in the last 30 days.'}{' '}
         Counts time on air; an outage is a minute or more down.
       </p>
+    </Panel>
+  );
+}
+
+/** RE-9: each destination reached, dropped (and why), not reaching, back again. */
+export function TimelinePanel({ stream: s }: { stream: StreamView }) {
+  const { data } = useTimeline(s.id, isOnAir(s.live.state));
+  if (!data || data.length === 0) return null;
+  return (
+    <Panel title="What happened" pad={false}>
+      <ul className="divide-y divide-line">
+        {data.slice(0, 12).map((e) => (
+          <li key={e.id} className="flex items-start gap-2.5 px-4 py-2.5 text-sm">
+            <span className="mt-0.5">
+              <HealthDot level={e.level} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block">{e.message}</span>
+              <span className="tnum block text-xs text-muted">
+                {dateTime(e.at, s.timeZone)}
+                {e.repeats > 1 && `, ${e.repeats} times until ${dateTime(e.lastAt, s.timeZone)}`}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </Panel>
   );
 }
