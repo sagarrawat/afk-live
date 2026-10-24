@@ -132,6 +132,16 @@ class ZeroDowntimeWebTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void aLongEmailCanStillSignIn() throws Exception {
+        // Spring Session's own schema allows 100 characters for the principal; accounts allow 255.
+        String email = "a".repeat(120) + System.nanoTime() + "@example.com";
+        String session = signIn(email);
+        HttpResponse<String> me = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/me"))
+                .header("Cookie", "SESSION=" + session).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(me.statusCode()).isEqualTo(200);
+    }
+
+    @Test
     void aSessionTheNewVersionCantReadSignsThatVisitorOutInsteadOfFailing() throws Exception {
         String email = "bluegreen-old-" + System.nanoTime() + "@example.com";
         String session = signIn(email);

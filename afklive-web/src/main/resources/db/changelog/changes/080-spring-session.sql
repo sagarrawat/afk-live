@@ -20,6 +20,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS spring_session_ix1 ON spring_session (session_
 CREATE INDEX IF NOT EXISTS spring_session_ix2 ON spring_session (expiry_time);
 CREATE INDEX IF NOT EXISTS spring_session_ix3 ON spring_session (principal_name);
 
+-- Sign-ins are named by email, which may be up to 255 characters (users.email); Spring's default is 100.
+ALTER TABLE spring_session ALTER COLUMN principal_name TYPE VARCHAR(255);
+
 CREATE TABLE IF NOT EXISTS spring_session_attributes (
     session_primary_id CHAR(36) NOT NULL,
     attribute_name VARCHAR(200) NOT NULL,
