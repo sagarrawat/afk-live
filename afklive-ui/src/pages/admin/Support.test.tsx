@@ -63,15 +63,12 @@ const run: RunDetail = {
 describe('Admin support tools', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('warns on every admin page while email is off and sends an audited test email', async () => {
-    window.history.pushState({}, '', '/studio/admin/live');
-    const fetch = mockApi({ ...base, '/api/admin/live': [], '/api/admin/workers': [], '/api/admin/email': emailOff, '/api/admin/email/test': { ok: false, error: "Email isn't set up (ZEPTOMAIL_URL / ZEPTOMAIL_TOKEN are empty)" } });
+  it('shows email off on the Servers page and sends an audited test email', async () => {
+    window.history.pushState({}, '', '/studio/admin/servers');
+    const fetch = mockApi({ ...base, '/api/admin/workers': [], '/api/admin/servers/history': [], '/api/admin/email': emailOff, '/api/admin/email/test': { ok: false, error: "Email isn't set up (ZEPTOMAIL_URL / ZEPTOMAIL_TOKEN are empty)" } });
     render(<App client={makeQueryClient()} />);
-    const banner = await screen.findByRole('alert');
-    expect(banner).toHaveTextContent('Email is off');
-    expect(banner).toHaveTextContent('ZEPTOMAIL_URL');
-
-    await userEvent.click(within(banner).getByRole('button', { name: 'Send a test email' }));
+    const panel = (await screen.findByText('Off: not set up')).closest('section')!;
+    await userEvent.click(within(panel).getByRole('button', { name: 'Send a test email' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled(); // needs a reason
     await userEvent.type(within(dialog).getByLabelText('Reason'), 'Checking after setup');
@@ -81,11 +78,11 @@ describe('Admin support tools', () => {
     expect(await screen.findByText(/Not sent: Email isn't set up/)).toBeInTheDocument();
   });
 
-  it('shows no banner when email works', async () => {
+  it('no longer puts an email banner on top of every tab', async () => {
     window.history.pushState({}, '', '/studio/admin/live');
-    mockApi({ ...base, '/api/admin/live': [], '/api/admin/workers': [], '/api/admin/email': { configured: true, sent24h: 3, failed24h: 0 } });
+    mockApi({ ...base, '/api/admin/live': [], '/api/admin/email': emailOff });
     render(<App client={makeQueryClient()} />);
-    expect(await screen.findByText('No live streams match.')).toBeInTheDocument();
+    expect(await screen.findAllByText('Nothing is live right now.')).not.toHaveLength(0);
     expect(screen.queryByText(/Email is off/)).toBeNull();
   });
 

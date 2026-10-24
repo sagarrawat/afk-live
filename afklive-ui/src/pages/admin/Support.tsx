@@ -1,7 +1,6 @@
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import { nowPlayingTitle } from '../../lib/now-playing';
-import { MailWarning } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HealthDot, LiveBadge } from '@/components/status';
@@ -74,26 +73,7 @@ function TestEmailButton({ variant = 'secondary' }: { variant?: 'primary' | 'sec
   );
 }
 
-/** OPS-1: on every admin page while email is off. */
-export function EmailBanner() {
-  const status = useEmailStatus();
-  if (!status.data || status.data.configured) return null;
-  return (
-    <div role="alert" className="mb-6 flex flex-wrap items-start gap-3 rounded-md border border-bad/50 bg-bad/10 px-4 py-3 text-sm">
-      <MailWarning className="mt-0.5 h-5 w-5 shrink-0 text-bad" aria-hidden />
-      <div className="min-w-0 flex-1 basis-60">
-        <p className="font-medium">Email is off. Nothing is being sent.</p>
-        <p className="text-muted">
-          Verification links, password resets, alerts and payment reminders don't go out. Meanwhile new password sign-ups are verified automatically and “Forgot password” sends people to
-          support. Set <code>ZEPTOMAIL_URL</code> and <code>ZEPTOMAIL_TOKEN</code> on the web server to turn it on.
-        </p>
-      </div>
-      <TestEmailButton />
-    </div>
-  );
-}
-
-/** OPS-1: email on the Platform page. */
+/** OPS-1: email on the Servers page (the Overview lists "Email is off" as one compact item). */
 export function EmailPanel() {
   const status = useEmailStatus();
   if (status.isLoading) return <Spinner />;

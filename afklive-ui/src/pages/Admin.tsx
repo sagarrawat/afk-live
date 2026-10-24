@@ -1,49 +1,15 @@
 import clsx from 'clsx';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { nowPlayingTitle } from '../lib/now-playing';
-import { Download, Paperclip, Search } from 'lucide-react';
+import { Download, Paperclip } from 'lucide-react';
 import { useState } from 'react';
-import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
-import { HealthDot, LiveBadge } from '@/components/status';
-import { Badge, Button, Dialog, ErrorNote, Field, Input, PageHeader, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
+import { Link } from 'react-router-dom';
+import { Badge, Button, Dialog, ErrorNote, Field, Input, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
 import { ReasonDialog } from './admin/ReasonDialog';
-import { EmailBanner, EmailPanel, RunPage, UserSupport } from './admin/Support';
+import { UserSupport } from './admin/Support';
 import { get, post } from '@/lib/api';
-import { bytes, date, dateTime, duration, money, timecode } from '@/lib/format';
-import { useMe } from '@/lib/queries';
-import type { Level, LiveStateName, Page } from '@/lib/types';
+import { bytes, date, dateTime, duration, money } from '@/lib/format';
+import type { Level, Page } from '@/lib/types';
 
-interface LiveRow {
-  jobId: number;
-  streamId?: number | null;
-  streamName: string;
-  userEmail: string;
-  userId: number;
-  plan: string;
-  worker?: string | null;
-  heartbeatAgeSeconds?: number | null;
-  status: string;
-  health: Level;
-  uptimeSeconds: number;
-  nowPlaying?: string | null;
-  restarts: number;
-  bitrateKbps?: number | null;
-  lastError?: string | null;
-  /** RE-10: what's wrong and the fix, e.g. running slower than real time. */
-  problem?: string | null;
-}
-interface WorkerRow {
-  worker: string;
-  streams: number;
-  lastHeartbeatAgeSeconds: number;
-  healthy: boolean;
-  capacity?: number | null;
-  cpuPercent?: number | null;
-  memoryUsedBytes?: number | null;
-  memoryTotalBytes?: number | null;
-  /** OPS-3: a new version is taking this worker's streams over. */
-  draining?: boolean;
-}
 export interface CostView {
   monthlyServerCost?: number | null;
   currency: string;
@@ -66,16 +32,7 @@ interface StatusIncident {
   resolvedAt?: string | null;
   updates: { status: IncidentStage; message: string; at: string }[];
 }
-interface UserRow {
-  id: number;
-  email: string;
-  name?: string | null;
-  plan: string;
-  enabled: boolean;
-  liveStreams: number;
-  storageBytes: number;
-}
-interface AdminAction {
+export interface AdminAction {
   id: number;
   adminEmail: string;
   action: string;
@@ -102,170 +59,13 @@ interface UserDetail {
   history: AdminAction[];
 }
 
-/** AD-1 / AD-3: the operator console. */
-export function Admin() {
-  const { data: me } = useMe();
-  const { section = 'live', id } = useParams();
-  if (me && !me.admin) return <Navigate to="/studio" replace />;
-  return (
-    <>
-      <PageHeader title="Admin" description="Every action asks for a reason and is written to the audit log." />
-      <EmailBanner />
-      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
-        {[
-          ['live', 'Live streams'],
-          ['users', 'Users'],
-          ['support', 'Support'],
-          ['plans', 'Plans'],
-          ['platform', 'Platform'],
-          ['audit', 'Audit log'],
-        ].map(([s, label]) => (
-          <NavLink
-            key={s}
-            to={`/studio/admin/${s}`}
-            className={() => clsx('-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-sm', section === s ? 'border-accent font-medium' : 'border-transparent text-muted hover:text-ink')}
-          >
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-      {section === 'live' && <LiveStreams />}
-      {section === 'runs' && id && <RunPage id={Number(id)} />}
-      {section === 'users' && (id ? <UserPage id={Number(id)} /> : <Users />)}
-      {section === 'support' && (id ? <TicketPage id={Number(id)} /> : <Tickets />)}
-      {section === 'plans' && <Plans />}
-      {section === 'platform' && <Platform />}
-      {section === 'audit' && <Audit />}
-    </>
-  );
-}
-
-function LiveStreams() {
-  const [q, setQ] = useState('');
-  const [health, setHealth] = useState('');
-  const live = useQuery({ queryKey: ['admin', 'live', q, health], queryFn: () => get<LiveRow[]>(`/api/admin/live?q=${encodeURIComponent(q)}&health=${health}`), refetchInterval: 5000 });
-  const workers = useQuery({ queryKey: ['admin', 'workers'], queryFn: () => get<WorkerRow[]>('/api/admin/workers'), refetchInterval: 10000 });
-  const cost = useQuery({ queryKey: ['admin', 'cost'], queryFn: () => get<CostView>('/api/admin/cost'), refetchInterval: 300000 });
-  const [act, setAct] = useState<{ row: LiveRow; kind: 'stop' | 'move' } | null>(null);
-  return (
-    <div className="space-y-6">
-      <Panel title="Workers" pad={false}>
-        <ul className="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3">
-          {(workers.data ?? []).map((w) => (
-            <WorkerCard key={w.worker} w={w} />
-          ))}
-          {workers.data?.length === 0 && <li className="bg-panel px-4 py-3 text-muted">No workers have reported in the last hour.</li>}
-        </ul>
-        {cost.data && (
-          <div className="border-t border-line px-4 py-2.5 text-sm">
-            <CostLine cost={cost.data} />
-          </div>
-        )}
-      </Panel>
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted" aria-hidden />
-          <Input className="pl-9" placeholder="Email, stream name or run id" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search live streams" />
-        </div>
-        <Select className="w-40" value={health} onChange={(e) => setHealth(e.target.value)} aria-label="Health">
-          <option value="">Any health</option>
-          <option value="red">Problem</option>
-          <option value="amber">Needs a look</option>
-          <option value="green">Healthy</option>
-        </Select>
-      </div>
-      <ErrorNote error={live.error} />
-      <div className="overflow-x-auto rounded-md border border-line bg-panel">
-        <table className="w-full text-sm">
-          <thead className="border-b border-line text-left text-muted">
-            <tr>
-              <th className="px-3 py-2 font-medium">Stream</th>
-              <th className="px-3 py-2 font-medium">State</th>
-              <th className="px-3 py-2 font-medium">Up</th>
-              <th className="px-3 py-2 font-medium">Worker</th>
-              <th className="px-3 py-2 font-medium">Detail</th>
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {(live.data ?? []).map((r) => (
-              <tr key={r.jobId}>
-                <td className="max-w-[220px] px-3 py-2">
-                  <Link to={`/studio/admin/runs/${r.jobId}`} className="block truncate font-medium hover:underline">
-                    {r.streamName}
-                  </Link>
-                  <Link to={`/studio/admin/users/${r.userId}`} className="block truncate text-muted hover:underline">
-                    {r.userEmail}
-                  </Link>
-                </td>
-                <td className="px-3 py-2">
-                  <span className="flex items-center gap-2">
-                    <LiveBadge state={r.status as LiveStateName} />
-                    <HealthDot level={r.health} />
-                  </span>
-                </td>
-                <td className="tnum px-3 py-2">{timecode(r.uptimeSeconds)}</td>
-                <td className="px-3 py-2">
-                  <span className="block truncate">{r.worker ?? 'Unassigned'}</span>
-                  <span className="tnum text-xs text-muted">{r.heartbeatAgeSeconds == null ? '' : `${r.heartbeatAgeSeconds}s ago`}</span>
-                </td>
-                <td className="max-w-[240px] px-3 py-2 text-muted">
-                  {r.problem && (
-                    <span className="block whitespace-normal text-warn" title={r.problem}>
-                      {r.problem}
-                    </span>
-                  )}
-                  <span className="block truncate">{r.lastError || nowPlayingTitle(r.nowPlaying) || '–'}</span>
-                  <span className="tnum text-xs">
-                    {r.bitrateKbps ? `${Math.round(r.bitrateKbps)} kbps` : ''} {r.restarts ? `${r.restarts} restarts` : ''}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => setAct({ row: r, kind: 'move' })} disabled={!r.worker}>
-                    Move
-                  </Button>
-                  <Button size="sm" variant="danger" onClick={() => setAct({ row: r, kind: 'stop' })}>
-                    Stop
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {live.data?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-muted">
-                  No live streams match.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      {act && (
-        <ReasonDialog
-          title={act.kind === 'stop' ? `Stop ${act.row.streamName}?` : `Move ${act.row.streamName} to another worker?`}
-          action={act.kind === 'stop' ? 'Stop stream' : 'Move stream'}
-          danger={act.kind === 'stop'}
-          onClose={() => setAct(null)}
-          onSubmit={(reason) => post(`/api/admin/jobs/${act.row.jobId}/${act.kind}`, { reason }).then(() => live.refetch())}
-        >
-          <p className="text-muted">
-            {act.kind === 'stop'
-              ? `${act.row.userEmail} is notified with your reason.`
-              : 'Another worker picks it up within a few seconds; destinations reconnect, so viewers may see a short gap.'}
-          </p>
-        </ReasonDialog>
-      )}
-    </div>
-  );
-}
-
 /** Health colour for a load percentage: green below 75, amber to 90, red above. */
 export function loadLevel(pct: number | null | undefined): Level {
   if (pct == null) return 'green';
   return pct >= 90 ? 'red' : pct >= 75 ? 'amber' : 'green';
 }
 
-function Meter({ label, pct, text }: { label: string; pct: number | null | undefined; text: string }) {
+export function Meter({ label, pct, text }: { label: string; pct: number | null | undefined; text: string }) {
   const level = loadLevel(pct);
   return (
     <div>
@@ -277,31 +77,6 @@ function Meter({ label, pct, text }: { label: string; pct: number | null | undef
         {pct != null && <div className={clsx('h-full rounded-full', level === 'red' ? 'bg-bad' : level === 'amber' ? 'bg-warn' : 'bg-ok')} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />}
       </div>
     </div>
-  );
-}
-
-function WorkerCard({ w }: { w: WorkerRow }) {
-  const memPct = w.memoryUsedBytes != null && w.memoryTotalBytes ? Math.round((w.memoryUsedBytes / w.memoryTotalBytes) * 100) : null;
-  return (
-    <li className="min-w-0 bg-panel px-4 py-3">
-      <span className="flex items-center gap-2 font-medium">
-        <HealthDot level={w.healthy ? 'green' : 'red'} />
-        <span className="truncate">{w.worker}</span>
-        {w.draining ? <span className="shrink-0 rounded bg-raised px-1.5 py-0.5 text-xs text-muted">Being replaced</span> : null}
-      </span>
-      <span className="tnum block text-sm text-muted">
-        {w.streams}
-        {w.capacity ? ` of ${w.capacity}` : ''} stream{w.streams === 1 && !w.capacity ? '' : 's'}, last report {w.lastHeartbeatAgeSeconds < 0 ? 'never' : `${w.lastHeartbeatAgeSeconds}s ago`}
-      </span>
-      {w.cpuPercent != null || memPct != null ? (
-        <div className="mt-2.5 space-y-2">
-          <Meter label="CPU" pct={w.cpuPercent} text={w.cpuPercent == null ? '–' : `${Math.round(w.cpuPercent)}%`} />
-          <Meter label="Memory" pct={memPct} text={memPct == null ? '–' : `${bytes(w.memoryUsedBytes)} of ${bytes(w.memoryTotalBytes)}`} />
-        </div>
-      ) : (
-        <span className="mt-1 block text-xs text-muted">No CPU or memory report yet.</span>
-      )}
-    </li>
   );
 }
 
@@ -330,18 +105,6 @@ export function CostLine({ cost }: { cost: CostView }) {
   );
 }
 
-function Platform() {
-  return (
-    <div className="space-y-6">
-      <OverviewPanel />
-      <FunnelPanel />
-      <EmailPanel />
-      <Quota />
-      <Incidents />
-    </div>
-  );
-}
-
 export interface FunnelDay {
   day: string;
   views: number;
@@ -360,7 +123,7 @@ export function rate(part: number, whole: number): string {
  * The homepage funnel: views and Start free clicks from the site's beacon (no cookies, bots dropped),
  * sign-ups and first lives from accounts and runs. Days are UTC.
  */
-function FunnelPanel() {
+export function FunnelPanel() {
   const f = useQuery({ queryKey: ['admin', 'funnel'], queryFn: () => get<FunnelDay[]>('/api/admin/funnel?days=30') });
   if (f.isLoading) return <Spinner />;
   if (!f.data) return <ErrorNote error={f.error} />;
@@ -466,7 +229,7 @@ const STAGES: [IncidentStage, string][] = [
 const stageLabel = (s: IncidentStage) => STAGES.find(([v]) => v === s)?.[1] ?? s;
 
 /** RE-7: incidents on the public status page. */
-function Incidents() {
+export function Incidents() {
   const list = useQuery({ queryKey: ['admin', 'incidents'], queryFn: () => get<{ incident: StatusIncident; createdBy: string }[]>('/api/admin/status/incidents') });
   const [dialog, setDialog] = useState<{ incident?: StatusIncident } | null>(null);
   return (
@@ -580,7 +343,7 @@ export interface AdminOverview {
   revenue: { currency: string; allTime: number; last30Days: number }[];
 }
 
-function Stat({ label, children }: { label: string; children: React.ReactNode }) {
+export function Stat({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <p className="text-sm text-muted">{label}</p>
@@ -589,8 +352,40 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
+/** Payments received (completed ones, per currency) and the server cost per stream hour (AD-2). */
+export function RevenuePanel() {
+  const o = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => get<AdminOverview>('/api/admin/overview'), refetchInterval: 30000 });
+  const cost = useQuery({ queryKey: ['admin', 'cost'], queryFn: () => get<CostView>('/api/admin/cost'), refetchInterval: 300000 });
+  if (o.isLoading) return <Spinner />;
+  if (!o.data) return <ErrorNote error={o.error} />;
+  const d = o.data;
+  return (
+    <Panel title="Payments received">
+      <div className="text-sm">
+        {d.revenue.length === 0 ? (
+          <p className="text-muted">No completed payments yet.</p>
+        ) : (
+          <ul className="space-y-1">
+            {d.revenue.map((r) => (
+              <li key={r.currency} className="tnum text-muted">
+                <span className="font-medium text-ink">{money(r.last30Days, r.currency)}</span> in the last 30 days, {money(r.allTime, r.currency)} in all
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-1 text-xs text-muted">Completed payments only; refunded ones aren't counted.</p>
+      </div>
+      {cost.data && (
+        <div className="mt-4 border-t border-line pt-3 text-sm">
+          <CostLine cost={cost.data} />
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 /** The platform at a glance, and the free-plan capacity setting. */
-function OverviewPanel() {
+export function OverviewPanel() {
   const qc = useQueryClient();
   const o = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => get<AdminOverview>('/api/admin/overview'), refetchInterval: 30000 });
   const [editing, setEditing] = useState(false);
@@ -612,22 +407,7 @@ function OverviewPanel() {
           </Link>
         </Stat>
       </div>
-      <div className="mt-5 border-t border-line pt-4 text-sm">
-        <p className="font-medium">Payments received</p>
-        {d.revenue.length === 0 ? (
-          <p className="text-muted">No completed payments yet.</p>
-        ) : (
-          <ul className="mt-1 space-y-1">
-            {d.revenue.map((r) => (
-              <li key={r.currency} className="tnum text-muted">
-                <span className="font-medium text-ink">{money(r.last30Days, r.currency)}</span> in the last 30 days, {money(r.allTime, r.currency)} in all
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-1 text-xs text-muted">Completed payments only; refunded ones aren't counted.</p>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
+      <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
         <p className="min-w-0 flex-1">
           <span className="font-medium">Free plan capacity: </span>
           <span className="text-muted">
@@ -672,7 +452,7 @@ export interface Ticket {
 const TICKET_LABEL: Record<TicketStatus, string> = { OPEN: 'Open', RESOLVED: 'Resolved', CLOSED: 'Closed' };
 const TICKET_TONE: Record<TicketStatus, 'warn' | 'ok' | 'neutral'> = { OPEN: 'warn', RESOLVED: 'ok', CLOSED: 'neutral' };
 
-function Tickets() {
+export function Tickets() {
   const [status, setStatus] = useState<TicketStatus | 'ALL'>('OPEN');
   const [page, setPage] = useState(0);
   const list = useQuery({
@@ -732,7 +512,7 @@ export function attachmentKind(name: string | null | undefined): 'image' | 'vide
   return 'file';
 }
 
-function TicketPage({ id }: { id: number }) {
+export function TicketPage({ id }: { id: number }) {
   const qc = useQueryClient();
   const t = useQuery({ queryKey: ['admin', 'ticket', id], queryFn: () => get<Ticket>(`/api/admin/tickets/${id}`) });
   const [next, setNext] = useState<TicketStatus | null>(null);
@@ -915,7 +695,7 @@ function planBody(f: PlanForm) {
   };
 }
 
-function Plans() {
+export function Plans() {
   const plans = useQuery({ queryKey: ['admin', 'plans'], queryFn: () => get<PlanSettings[]>('/api/admin/plans') });
   const [editing, setEditing] = useState<PlanSettings | null>(null);
   if (plans.isLoading) return <Spinner />;
@@ -1038,44 +818,7 @@ function PlanDialog({ plan, onClose, onSaved }: { plan: PlanSettings; onClose: (
   );
 }
 
-function Users() {
-  const [q, setQ] = useState('');
-  const [page, setPage] = useState(0);
-  const users = useQuery({ queryKey: ['admin', 'users', q, page], queryFn: () => get<Page<UserRow>>(`/api/admin/users?q=${encodeURIComponent(q)}&page=${page}`) });
-  return (
-    <div className="space-y-4">
-      <Input placeholder="Search by email or name" value={q} onChange={(e) => (setQ(e.target.value), setPage(0))} aria-label="Search users" />
-      <ul className="divide-y divide-line rounded-md border border-line bg-panel">
-        {(users.data?.content ?? []).map((u) => (
-          <li key={u.id}>
-            <Link to={`/studio/admin/users/${u.id}`} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-raised">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{u.email}</span>
-                <span className="block truncate text-sm text-muted">{u.name}</span>
-              </span>
-              <Badge>{u.plan}</Badge>
-              {u.liveStreams > 0 && <Badge tone="live">{u.liveStreams} live</Badge>}
-              {!u.enabled && <Badge tone="bad">Disabled</Badge>}
-              <span className="tnum text-sm text-muted">{bytes(u.storageBytes)}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      {users.data && users.data.totalPages > 1 && (
-        <div className="flex justify-center gap-3">
-          <Button size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
-            Previous
-          </Button>
-          <Button size="sm" disabled={page + 1 >= users.data.totalPages} onClick={() => setPage(page + 1)}>
-            Next
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function UserPage({ id }: { id: number }) {
+export function UserPage({ id }: { id: number }) {
   const u = useQuery({ queryKey: ['admin', 'user', id], queryFn: () => get<UserDetail>(`/api/admin/users/${id}`) });
   const [act, setAct] = useState<'plan' | 'extend' | 'enable' | { refund: string; amount: number } | null>(null);
   const [plan, setPlan] = useState('PRO');
@@ -1198,7 +941,7 @@ function UserPage({ id }: { id: number }) {
   );
 }
 
-function AuditList({ items }: { items: AdminAction[] }) {
+export function AuditList({ items }: { items: AdminAction[] }) {
   if (items.length === 0) return <p className="px-4 py-3 text-muted">Nothing yet.</p>;
   return (
     <ul className="divide-y divide-line">
@@ -1215,7 +958,7 @@ function AuditList({ items }: { items: AdminAction[] }) {
   );
 }
 
-function Audit() {
+export function Audit() {
   const [page, setPage] = useState(0);
   const log = useQuery({ queryKey: ['admin', 'audit', page], queryFn: () => get<Page<AdminAction>>(`/api/admin/audit?page=${page}`) });
   return (

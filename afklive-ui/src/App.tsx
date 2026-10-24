@@ -7,7 +7,7 @@ import { ApiError, patch } from './lib/api';
 import { browserTimeZone, guessCurrency } from './lib/format';
 import { keys, useMe } from './lib/queries';
 import { UploadsProvider } from './lib/uploads-context';
-import { Admin } from './pages/Admin';
+import { AdminConsole } from './pages/admin/AdminConsole';
 import { Destinations } from './pages/Destinations';
 import { Help } from './pages/Help';
 import { Home } from './pages/Home';
@@ -52,6 +52,16 @@ function Routed({ qc }: { qc: QueryClient }) {
   useTheme();
   useDetectPreferences(qc);
   return (
+    <Routes>
+      {/* The admin console has its own layout: none of the creator app's nav or plan card. */}
+      <Route path="/studio/admin/*" element={<AdminConsole />} />
+      <Route path="*" element={<CreatorApp />} />
+    </Routes>
+  );
+}
+
+function CreatorApp() {
+  return (
     <Shell>
       <Routes>
         <Route path="/studio" element={<LegacyRedirects />} />
@@ -64,9 +74,6 @@ function Routed({ qc }: { qc: QueryClient }) {
         <Route path="/studio/settings" element={<Settings />} />
         <Route path="/studio/settings/:section" element={<Settings />} />
         <Route path="/studio/help" element={<Help />} />
-        <Route path="/studio/admin" element={<Navigate to="/studio/admin/live" replace />} />
-        <Route path="/studio/admin/:section" element={<Admin />} />
-        <Route path="/studio/admin/:section/:id" element={<Admin />} />
         <Route
           path="*"
           element={
