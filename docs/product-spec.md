@@ -482,8 +482,9 @@ The platform adds its own delay on top; for interactive streams we recommend You
 | --- | --- | --- |
 | Stream copy (no re-encode) | 0.005 | 24/7 playlists of normalized files with no live overlays |
 | x264 ultrafast, 1080p30 | 0.44 | Not recommended: worst quality per bit |
-| x264 veryfast, 720p30 | 0.78 | Free plan live overlays |
-| x264 veryfast, 1080p30 | 1.03 | Default for live overlays and mobile streams |
+| x264 superfast, 720x1280 30 fps (real footage, Oct 2026) | 0.14–0.39 | Default for live encodes since Oct 2026: 30–45% less than veryfast on the same footage, SSIM within 0.002 |
+| x264 veryfast, 720p30 | 0.78 | Previous default (720p) |
+| x264 veryfast, 1080p30 | 1.03 | Previous default (1080p) |
 | x264 faster, 1080p30 | 1.54 | Only if quality complaints justify 50% more CPU |
 
 **Bandwidth is the other half.** One 1080p30 stream at about 6.3 Mbps sends roughly 2.8 GB an hour, about 2 TB a month if it runs 24/7, and that is per destination. Incoming traffic from phones is usually free.

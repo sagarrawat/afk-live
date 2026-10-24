@@ -58,7 +58,7 @@ class PlayoutCopiesShutdownTest extends PostgresIntegrationTest {
         jdbc.update("INSERT INTO media_playout_copies (media_id, canvas_width, canvas_height, fps, status) VALUES (?, 640, 360, 30, 'PENDING')",
                 a.getId());
 
-        PlayoutCopies copies = new PlayoutCopies(jdbc, storage, "web", false);
+        PlayoutCopies copies = new PlayoutCopies(jdbc, storage, "web", false, EncoderSettings.DEFAULT);
         CompletableFuture<Boolean> making = CompletableFuture.supplyAsync(copies::prepareNext);
         long deadline = System.currentTimeMillis() + 10_000;
         while (!"WORKING".equals(status(a)) && System.currentTimeMillis() < deadline) {
