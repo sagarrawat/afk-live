@@ -34,7 +34,7 @@ public final class StillFeed implements Feed {
         }
         try {
             if (!p.waitFor(30, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
+                com.afklive.streamer.streaming.Processes.kill(p);
                 throw new IOException("Timed out decoding " + image.getFileName());
             }
         } catch (InterruptedException e) {

@@ -415,7 +415,7 @@ public final class DecoderSource implements AutoCloseable {
             Process p = new ProcessBuilder(command(fifo, resolved.input(), audio)).start();
             process = p;
             if (closed) {
-                p.destroyForcibly();
+                com.afklive.streamer.streaming.Processes.kill(p);
             }
             Deque<String> errors = new ArrayDeque<>();
             Thread err = Thread.ofPlatform().daemon(true).name("decoder-err-" + name).start(() -> readErrors(p.getErrorStream(), errors));
@@ -634,9 +634,9 @@ public final class DecoderSource implements AutoCloseable {
         }
         Process p = process;
         if (p != null && p.isAlive()) {
-            p.destroy();
+            com.afklive.streamer.streaming.Processes.terminate(p);
             p.onExit().orTimeout(3, TimeUnit.SECONDS).exceptionally(t -> {
-                p.destroyForcibly();
+                com.afklive.streamer.streaming.Processes.kill(p);
                 return p;
             });
         }

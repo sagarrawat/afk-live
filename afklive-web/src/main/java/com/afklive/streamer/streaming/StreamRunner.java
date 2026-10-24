@@ -585,7 +585,7 @@ public final class StreamRunner {
                 r.awaitDone(Duration.ofSeconds(15));
             }
             if (p.isAlive()) {
-                p.destroyForcibly();
+                Processes.kill(p);
             }
             try {
                 launcher.ended(p);
@@ -749,12 +749,15 @@ public final class StreamRunner {
                 downSignal.countDown();
                 Process p = process;
                 if (p != null) {
-                    try {
-                        p.getOutputStream().close(); // EOF lets FFmpeg finish cleanly
-                    } catch (IOException ignored) {
-                        // already closed
-                    }
+                    // Signal first: closing stdin waits for its lock, which a writer blocked on a full pipe holds.
                     terminate(p);
+                    Thread.ofPlatform().daemon(true).name("relay-close-" + jobId + "-" + position).start(() -> {
+                        try {
+                            p.getOutputStream().close(); // EOF, once the writer lets go
+                        } catch (IOException ignored) {
+                            // already closed
+                        }
+                    });
                 }
             }
         }
@@ -764,7 +767,7 @@ public final class StreamRunner {
                 if (!done.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
                     Process p = process;
                     if (p != null) {
-                        p.destroyForcibly();
+                        Processes.kill(p);
                     }
                 }
             } catch (InterruptedException e) {
@@ -871,13 +874,13 @@ public final class StreamRunner {
     // ---------------------------------------------------------------- helpers
 
     /** SIGTERM now; SIGKILL if still alive after {@link #KILL_AFTER}. */
-    private static void terminate(Process p) {
+    static void terminate(Process p) {
         if (p == null || !p.isAlive()) {
             return;
         }
-        p.destroy();
+        Processes.terminate(p);
         p.onExit().orTimeout(KILL_AFTER.toMillis(), TimeUnit.MILLISECONDS).exceptionally(t -> {
-            p.destroyForcibly();
+            Processes.kill(p);
             return p;
         });
     }
@@ -891,7 +894,7 @@ public final class StreamRunner {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        p.destroyForcibly();
+        Processes.kill(p);
         try {
             p.waitFor(KILL_AFTER.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
