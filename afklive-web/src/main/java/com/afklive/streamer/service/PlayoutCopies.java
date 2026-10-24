@@ -412,7 +412,8 @@ public class PlayoutCopies {
                     }
                 }
             }
-            String spec = (String) run.get("spec");
+            // Encrypted at rest (it holds stream keys); a spec that can't be read stops this sweep (nothing deleted).
+            String spec = com.afklive.streamer.util.SecretBox.decrypt((String) run.get("spec"));
             if (spec != null && !spec.isBlank()) {
                 try {
                     collectKeys(SPEC_JSON.readTree(spec), keys);

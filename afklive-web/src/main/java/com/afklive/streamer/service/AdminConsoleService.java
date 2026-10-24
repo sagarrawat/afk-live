@@ -222,7 +222,7 @@ public class AdminConsoleService {
     }
 
     /** Amber from 70% of the included transfer, red from 90%; null below 70% or when nothing is included. */
-    static Attention transferAttention(CostMeter.Use u) {
+    public static Attention transferAttention(CostMeter.Use u) {
         Double pct = u.percent();
         if (pct == null || pct < CostMeter.THRESHOLDS[0]) {
             return null;

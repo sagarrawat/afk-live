@@ -208,7 +208,7 @@ public class CostMeter {
     }
 
     /** A run's part of the month, with who ran it and the server that last ran it. */
-    record Run(long jobId, Long userId, String email, String worker, CostModel.Slice slice) {
+    public record Run(long jobId, Long userId, String email, String worker, CostModel.Slice slice) {
     }
 
     /**
@@ -216,6 +216,10 @@ public class CostMeter {
      * reconnect), spread evenly over its time, so a run that started last month brings only this month's share.
      * A run without an end time ends at its last heartbeat (or now while live).
      */
+    public List<Run> runsThisMonth(ZonedDateTime now) {
+        return runs(Month.of(now));
+    }
+
     List<Run> runs(Month m) {
         List<Run> out = new ArrayList<>();
         jdbc.query("SELECT j.id, j.user_id, u.email, COALESCE(u.plan_type, 'FREE') AS plan, j.worker_id, j.spec, "
@@ -236,11 +240,20 @@ public class CostMeter {
                     double inside = Math.max(0, Duration.between(inFrom, end).toMillis() / 1000.0);
                     long bytes = rs.getLong("bytes");
                     double share = total > 0 ? inside / total : 1;
-                    int[] q = quality(rs.getString("spec"), (Integer) rs.getObject("quality_height"), (Integer) rs.getObject("stream_fps"));
+                    int[] q = quality(plainSpec(rs.getString("spec")), (Integer) rs.getObject("quality_height"), (Integer) rs.getObject("stream_fps"));
                     out.add(new Run(rs.getLong("id"), rs.getLong("user_id"), rs.getString("email"), rs.getString("worker_id"),
                             new CostModel.Slice(rs.getString("plan"), q[0], q[1], inside, bytes * share)));
                 });
         return out;
+    }
+
+    /** The spec as written by the app: it's encrypted at rest (it holds stream keys); null when unreadable. */
+    private static String plainSpec(String stored) {
+        try {
+            return com.afklive.streamer.util.SecretBox.decrypt(stored);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** The run's height and frame rate from its spec, else the stream's settings, else 720p 30. */

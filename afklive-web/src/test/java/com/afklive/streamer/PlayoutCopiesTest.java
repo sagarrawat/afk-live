@@ -22,7 +22,12 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -141,6 +146,100 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
                 .containsExactly(180);
         assertThatThrownBy(() -> storage.size(idle)).isInstanceOf(Exception.class);
         assertThat(storage.size(played)).isPositive();
+    }
+
+    @Test
+    void aCopyOfAVideoALiveRunPlaysIsNeverDeletedEvenIfItLooksUnplayed() throws Exception {
+        String email = "copies-live-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+        MediaAsset a = upload(email);
+        copies.forget();
+        // Copy mode looks its profile copy up once, at the start of a run: a 24/7 run never touches it again.
+        copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true);
+        while (copies.prepareNext()) {
+            // make it
+        }
+        String key = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, false);
+        assertThat(key).isNotNull();
+        jdbc.update("UPDATE media_playout_copies SET created_at = now() - interval '40 days', finished_at = now() - interval '40 days', "
+                + "last_played_at = now() - interval '35 days' WHERE media_id = ?", a.getId());
+        // A live run whose spec (encrypted at rest, as the app writes it) plays the original.
+        Long userId = a.getUser().getId();
+        Long jobId = jdbc.queryForObject("INSERT INTO stream_jobs (user_id, stream_key, is_live, pid, start_time, status, desired_state, spec, "
+                        + "applied_command_id, restarts, accumulated_cost) VALUES (?, 'k', TRUE, 0, now() - interval '31 days', 'LIVE', 'RUN', ?, 0, 0, 0) RETURNING id",
+                Long.class, userId, com.afklive.streamer.util.SecretBox.encrypt("{\"maxHeight\":320,\"studio\":{\"height\":320,\"fps\":30,"
+                        + "\"videos\":[{\"id\":\"" + a.getId() + "\",\"key\":\"" + a.getS3Key() + "\",\"duration\":3.0}]}}"));
+        try {
+            assertThat(copies.deleteUnplayed()).isZero();
+            assertThat(storage.size(key)).isPositive();
+            assertThat(copies.stats().kinds()).anySatisfy(k -> {
+                assertThat(k.kind()).isEqualTo("PROFILE");
+                assertThat(k.dueForDeletion()).isPositive();
+            });
+        } finally {
+            jdbc.update("UPDATE stream_jobs SET is_live = FALSE, end_time = now() WHERE id = ?", jobId);
+        }
+        // Once that run ends, the copy goes, with its file.
+        assertThat(copies.deleteUnplayed()).isGreaterThanOrEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ?", Integer.class, a.getId())).isZero();
+        assertThatThrownBy(() -> storage.size(key)).isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void twoWebInstancesDeleteAnOldCopyOnceAndCopySizesAreKept() throws Exception {
+        MediaAsset a = upload("copies-twice-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com");
+        copies.forget();
+        copies.keyFor(a.getS3Key(), 180, 320, 30);
+        while (copies.prepareNext()) {
+            // make it
+        }
+        Map<String, Object> row = jdbc.queryForMap("SELECT storage_key, size_bytes FROM media_playout_copies WHERE media_id = ?", a.getId());
+        String key = (String) row.get("storage_key");
+        assertThat(((Number) row.get("size_bytes")).longValue()).isEqualTo(storage.size(key));
+        // A copy made before sizes were recorded gets its size from storage.
+        jdbc.update("UPDATE media_playout_copies SET size_bytes = NULL WHERE media_id = ?", a.getId());
+        assertThat(copies.fillSizes()).isPositive();
+        assertThat(jdbc.queryForObject("SELECT size_bytes FROM media_playout_copies WHERE media_id = ?", Long.class, a.getId()))
+                .isEqualTo(storage.size(key));
+        PlayoutCopies.Stats stats = copies.stats();
+        assertThat(stats.keepDays()).isEqualTo(30);
+        assertThat(stats.bytes()).isGreaterThanOrEqualTo(storage.size(key));
+
+        jdbc.update("UPDATE media_playout_copies SET created_at = now() - interval '40 days', finished_at = now() - interval '40 days', "
+                + "last_played_at = NULL WHERE media_id = ?", a.getId());
+        PlayoutCopies second = new PlayoutCopies(jdbc, storage, "web", false, EncoderSettings.DEFAULT);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch go = new CountDownLatch(1);
+        try {
+            Future<Integer> one = pool.submit(() -> {
+                go.await();
+                return copies.deleteUnplayed();
+            });
+            Future<Integer> two = pool.submit(() -> {
+                go.await();
+                return second.deleteUnplayed();
+            });
+            go.countDown();
+            one.get();
+            two.get();
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ?", Integer.class, a.getId())).isZero();
+        assertThatThrownBy(() -> storage.size(key)).isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void aCopyBeingMadeAgainIsNotDeletedByTheSweeper() throws Exception {
+        MediaAsset a = upload("copies-remake-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com");
+        copies.forget();
+        copies.keyFor(a.getS3Key(), 180, 320, 30);
+        while (copies.prepareNext()) {
+            // make it
+        }
+        jdbc.update("UPDATE media_playout_copies SET created_at = now() - interval '40 days', finished_at = now() - interval '40 days', "
+                + "status = 'PENDING', storage_key = NULL WHERE media_id = ?", a.getId());
+        copies.deleteUnplayed();
+        assertThat(jdbc.queryForObject("SELECT status FROM media_playout_copies WHERE media_id = ?", String.class, a.getId())).isEqualTo("PENDING");
     }
 
     @Test
