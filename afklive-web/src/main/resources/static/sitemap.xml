@@ -66,6 +66,21 @@
       <priority>0.6</priority>
    </url>
    <url>
+      <loc>https://afklive.in/help/loops-and-youtube-rules</loc>
+      <changefreq>monthly</changefreq>
+      <priority>0.6</priority>
+   </url>
+   <url>
+      <loc>https://afklive.in/help/titles-and-thumbnails</loc>
+      <changefreq>monthly</changefreq>
+      <priority>0.6</priority>
+   </url>
+   <url>
+      <loc>https://afklive.in/help/music-on-your-live</loc>
+      <changefreq>monthly</changefreq>
+      <priority>0.6</priority>
+   </url>
+   <url>
       <loc>https://afklive.in/register</loc>
       <changefreq>monthly</changefreq>
       <priority>0.6</priority>

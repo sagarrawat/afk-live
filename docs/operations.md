@@ -194,6 +194,21 @@ plain reason. Files aren't re-encoded: the studio re-encodes at playout anyway. 
 10 minutes is taken over, so a restart never leaves a file stuck. Web instances therefore need
 `ffmpeg`/`ffprobe` on PATH, like workers.
 
+After a video is Ready, the same instance checks whether it is one still picture (GR-9): six small
+grey frames grabbed with a seek each (5% to 95% of the length) and compared. The result goes in
+`media_assets.still_picture` (null when a frame couldn't be read, so the check never guesses). Videos
+uploaded before this are measured by the media sweeper, two a minute, videos in a playlist first.
+
+## Go-live check (GR-9)
+
+The stream check on a stream's Overview (`/api/streams/{id}/check`) reads only what AFK Live has: the
+playlist, overlays, the measured still-picture flag, the YouTube title and thumbnail the creator typed
+in (`streams.youtube_title`, `thumbnail_media_id`) and replies AFK Live posted (`engagement_activity`).
+It never blocks going live and never calls YouTube. Thumbnail contrast is measured once per image per
+web instance (in memory) from the library thumbnail. Once a week per stream that was live in the past
+seven days, one web instance (conditional update on `streams.check_weekly_at`) sends an in-app notice
+listing open flags; no email or push. `app.check.weekly-auto=false` turns the hourly pass off (tests).
+
 ## Push alerts (NT-1, MB-2)
 
 Alerts that are emailed are also pushed to every device where the creator turned on
