@@ -419,14 +419,16 @@ public class StreamWorker {
             }
         }
 
-        // 2. New streams, then 3. other workers' streams that stopped reporting. A draining worker takes on nothing.
-        if (!draining) {
+        // 2. New streams, then 3. other workers' streams that stopped reporting. A draining worker leaves new
+        // streams to the new version, unless they've waited long (the new version died: late beats never), and
+        // still rescues orphans (whatever it takes on, it offers again like the rest).
+        {
             boolean busy = ownedCount() > 0 && cpuBusy();
             for (Long id : jobs.findUnclaimedIds(workerId, now.minusMinutes(1))) {
                 Running r = running.get(id);
                 if (r != null && r.incoming) {
                     // Its worker let go of it (shut down, or an admin moved it) mid-handover: our copy is already on air.
-                    if (jobs.claim(id, workerId, now) == 1) {
+                    if (!draining && jobs.claim(id, workerId, now) == 1) {
                         promote(r, now, "released by its worker");
                     }
                     continue;
@@ -434,8 +436,8 @@ public class StreamWorker {
                 if (running.size() >= maxStreams) {
                     break;
                 }
-                if (busy && !waitedLong(id, now)) {
-                    continue; // leave it to a less busy worker for now
+                if ((busy || draining) && !waitedLong(id, now)) {
+                    continue; // leave it to a less busy worker (or the new version) for now
                 }
                 if (r == null && jobs.claim(id, workerId, now) == 1) {
                     jobs.findById(id).ifPresent(j -> start(j, now));
