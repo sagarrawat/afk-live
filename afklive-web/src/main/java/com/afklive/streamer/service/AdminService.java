@@ -115,7 +115,7 @@ public class AdminService {
                           String worker, Long heartbeatAgeSeconds, String status, String health, long uptimeSeconds,
                           String nowPlaying, Boolean inputLive, int restarts, Double bitrateKbps, Double fps, Double speed,
                           String lastError, int destinations, List<StreamDtos.DestinationHealth> destinationHealth,
-                          ZonedDateTime slowSince, String problem) {
+                          ZonedDateTime slowSince, String problem, String quality) {
     }
 
     public List<LiveRow> liveStreams(String q, String health, String worker) {
@@ -145,7 +145,8 @@ public class AdminService {
                     j.getUser().getEmail(), j.getUser().getId(), j.getUser().getPlanType().name(), j.getWorkerId(), age,
                     j.getStatus(), h.overall(), j.getStartTime() == null ? 0 : Math.max(0, Duration.between(j.getStartTime(), now).getSeconds()),
                     j.getNowPlaying(), j.getInputLive(), j.getRestarts(), j.getBitrateKbps(), j.getFps(), j.getSpeed(), j.getLastError(),
-                    h.destinations().size(), h.destinations(), slowSince, problem);
+                    h.destinations().size(), h.destinations(), slowSince, problem,
+                    s.isPresent() ? height + "p " + fps + " fps" : null);
             if (q != null && !q.isBlank()) {
                 String needle = q.trim().toLowerCase(Locale.ROOT);
                 boolean match = row.userEmail().toLowerCase(Locale.ROOT).contains(needle)
@@ -297,17 +298,6 @@ public class AdminService {
     }
 
     // ------------------------------------------------------------------ AD-3: users
-
-    public record UserRow(Long id, String email, String name, String plan, boolean enabled, String role, int liveStreams,
-                          long storageBytes) {
-    }
-
-    public Page<UserRow> searchUsers(String q, int page) {
-        PageRequest p = PageRequest.of(Math.max(0, page), 25, Sort.by(Sort.Direction.DESC, "id"));
-        Page<User> found = q == null || q.isBlank() ? users.findAll(p) : users.search(q.trim().toLowerCase(Locale.ROOT), p);
-        return found.map(u -> new UserRow(u.getId(), u.getEmail(), u.getFullName(), u.getPlanType().name(), u.isEnabled(),
-                u.getRole(), (int) jobs.countByUserEmailAndIsLiveTrue(u.getEmail()), u.getUsedStorageBytes()));
-    }
 
     public record PaymentRow(String orderId, long amount, String currency, String status, String kind, String plan,
                              String cycle, java.time.LocalDateTime createdAt) {

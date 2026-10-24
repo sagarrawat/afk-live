@@ -63,38 +63,54 @@ const base = { '/api/me': admin, '/api/notifications': { unread: 0, emailAlerts:
 describe('Admin', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows each worker’s CPU and memory and the cost per stream hour', async () => {
-    window.history.pushState({}, '', '/studio/admin/live');
+  it('shows each worker’s CPU and memory history and the cost per stream hour on Servers', async () => {
+    window.history.pushState({}, '', '/studio/admin/servers');
+    const at = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
     mockApi({
       ...base,
-      '/api/admin/live': [],
       '/api/admin/workers': [
         { worker: 'worker-mumbai-1', streams: 3, lastHeartbeatAgeSeconds: 2, healthy: true, capacity: 20, cpuPercent: 92.4, memoryUsedBytes: 4 * 1024 ** 3, memoryTotalBytes: 8 * 1024 ** 3 },
         { worker: 'worker-idle', streams: 0, lastHeartbeatAgeSeconds: 5, healthy: true, capacity: 20, draining: true },
       ],
+      '/api/admin/servers/history': [
+        {
+          worker: 'worker-mumbai-1',
+          memoryTotalBytes: 8 * 1024 ** 3,
+          bucketSeconds: 300,
+          points: [
+            { at: at(30), cpu: 40, cpuPeak: 45, memory: 50, streams: 3 },
+            { at: at(25), cpu: 42, cpuPeak: 96, memory: 50, streams: 3 },
+            { at: at(20), cpu: 41, cpuPeak: 44, memory: 50, streams: 3 },
+          ],
+        },
+        { worker: 'worker-idle', bucketSeconds: 300, points: [] },
+      ],
       '/api/admin/cost': { monthlyServerCost: 12000, currency: 'INR', streamHours30d: 2400, costPerStreamHour: 5 },
+      '/api/admin/email': { configured: true, sent24h: 0, failed24h: 0 },
     });
     render(<App client={makeQueryClient()} />);
     const card = (await screen.findByText('worker-mumbai-1')).closest('li')!;
     expect(within(card).queryByText('Being replaced')).not.toBeInTheDocument();
     // OPS-3: a worker handing its streams to a new version says so.
     expect(within((await screen.findByText('worker-idle')).closest('li')!).getByText('Being replaced')).toBeInTheDocument();
-    expect(within(card).getByText('92%')).toHaveClass('text-bad');
-    expect(within(card).getByText('4 GB of 8 GB')).toBeInTheDocument();
+    // A single reading is read against its window: now, average and peak, in words.
+    expect(within(card).getByRole('img', { name: /CPU over the last 24 hours: now 41%, average 41%, peak 96%/ })).toBeInTheDocument();
+    expect(within(card).getByText('Memory now 4 GB of 8 GB')).toBeInTheDocument();
     expect(within(card).getByText(/3 of 20 streams/)).toBeInTheDocument();
-    expect(within((await screen.findByText('worker-idle')).closest('li')!).getByText(/No CPU or memory report yet/)).toBeInTheDocument();
+    expect(within(card).getByText('Healthy')).toBeInTheDocument();
+    expect(within((await screen.findByText('worker-idle')).closest('li')!).getByText(/No history yet/)).toBeInTheDocument();
     expect(await screen.findByText(/per stream hour/)).toHaveTextContent('2,400 stream hours in the last 30 days');
   });
 
   it('asks for the server cost when it isn’t set', async () => {
-    window.history.pushState({}, '', '/studio/admin/live');
-    mockApi({ ...base, '/api/admin/live': [], '/api/admin/workers': [], '/api/admin/cost': { currency: 'INR', streamHours30d: 10 } });
+    window.history.pushState({}, '', '/studio/admin/servers');
+    mockApi({ ...base, '/api/admin/workers': [], '/api/admin/servers/history': [], '/api/admin/cost': { currency: 'INR', streamHours30d: 10 } });
     render(<App client={makeQueryClient()} />);
     expect(await screen.findByText('APP_MONTHLY_SERVER_COST')).toBeInTheDocument();
   });
 
-  it('shows YouTube quota and the status page incidents on Platform', async () => {
-    window.history.pushState({}, '', '/studio/admin/platform');
+  it('shows YouTube quota and the status page incidents on Servers', async () => {
+    window.history.pushState({}, '', '/studio/admin/servers');
     mockApi({
       ...base,
       '/api/admin/quota': { usedToday: 8200, dailyLimit: 10000, percent: 82, resetsAt: new Date(Date.now() + 3 * 3600_000).toISOString(), breakdown: [{ api: 'videos.insert', units: 8000 }, { api: 'liveBroadcasts.list', units: 200 }] },
@@ -112,7 +128,7 @@ describe('Admin', () => {
     expect(screen.getByRole('button', { name: 'Post an incident' })).toBeInTheDocument();
   });
 
-  it('shows the platform overview and the free plan capacity on Platform', async () => {
+  it('shows the platform at a glance and the free plan capacity on Overview (old Platform links redirect)', async () => {
     window.history.pushState({}, '', '/studio/admin/platform');
     mockApi({
       ...base,
@@ -125,12 +141,23 @@ describe('Admin', () => {
     expect(screen.getByText('87')).toBeInTheDocument();
     expect(screen.getByText('2 TB')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '3' })).toHaveAttribute('href', '/studio/admin/support');
-    expect(screen.getByText(/in the last 30 days/).closest('li')).toHaveTextContent('₹14,990 in the last 30 days, ₹5,00,000 in all');
     expect(screen.getByText(/free accounts can't go live/)).toHaveTextContent('100 or more streams');
+    expect(window.location.pathname).toBe('/studio/admin/overview');
   });
 
-  it('shows the homepage funnel with each step as a share of the one before', async () => {
-    window.history.pushState({}, '', '/studio/admin/platform');
+  it('shows payments received on Billing', async () => {
+    window.history.pushState({}, '', '/studio/admin/billing');
+    mockApi({
+      ...base,
+      '/api/admin/overview': { users: 1234, liveStreams: 87, storageBytes: 0, openTickets: 3, freeStreamLimit: 100, revenue: [{ currency: 'INR', allTime: 50000000, last30Days: 1499000 }] },
+      '/api/admin/plans': [],
+    });
+    render(<App client={makeQueryClient()} />);
+    expect((await screen.findByText(/in the last 30 days/)).closest('li')).toHaveTextContent('₹14,990 in the last 30 days, ₹5,00,000 in all');
+  });
+
+  it('shows the homepage funnel with each step as a share of the one before on Growth', async () => {
+    window.history.pushState({}, '', '/studio/admin/growth');
     mockApi({
       ...base,
       '/api/admin/funnel': [
@@ -150,12 +177,11 @@ describe('Admin', () => {
   });
 
   it('changes the free plan capacity with a reason', async () => {
-    window.history.pushState({}, '', '/studio/admin/platform');
+    window.history.pushState({}, '', '/studio/admin/overview');
     const overview = { users: 1, liveStreams: 0, storageBytes: 0, openTickets: 0, freeStreamLimit: 100, revenue: [] };
     const fetch = mockApi({ ...base, '/api/admin/overview': overview, '/api/admin/settings/free-stream-limit': { ...overview, freeStreamLimit: 40 } });
     render(<App client={makeQueryClient()} />);
-    expect(await screen.findByText('No completed payments yet.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change' }));
     const limit = screen.getByLabelText(/Live streams before free accounts wait/);
     await userEvent.clear(limit);
     await userEvent.type(limit, '-3');
@@ -199,7 +225,7 @@ describe('Admin', () => {
     expect(await screen.findByRole('button', { name: 'Reopen' })).toBeInTheDocument();
   });
 
-  it('shows each plan and checks edits before saving', async () => {
+  it('shows each plan and checks edits before saving (old Plans links go to Billing)', async () => {
     window.history.pushState({}, '', '/studio/admin/plans');
     const fetch = mockApi({ ...base, '/api/admin/plans': [free, pro], '/api/admin/plans/PRO': { ...pro, maxActiveStreams: 4 } });
     render(<App client={makeQueryClient()} />);
