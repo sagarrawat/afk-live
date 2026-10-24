@@ -28,6 +28,9 @@ public interface StreamIncidentRepository extends JpaRepository<StreamIncident, 
 
     List<StreamIncident> findAllByJobIdAndResolvedAtIsNull(Long jobId);
 
+    /** RE-10: every open incident of a kind (e.g. runs slower than real time), for the admin console. */
+    List<StreamIncident> findAllByKindAndResolvedAtIsNull(String kind);
+
     List<StreamIncident> findAllByJobIdInAndKindOrderByStartedAtDesc(java.util.Collection<Long> jobIds, String kind);
 
     List<StreamIncident> findAllByJobIdInAndKindInOrderByStartedAtDesc(java.util.Collection<Long> jobIds, java.util.Collection<String> kinds);

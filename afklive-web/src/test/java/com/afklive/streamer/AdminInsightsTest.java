@@ -109,7 +109,27 @@ class AdminInsightsTest extends PostgresIntegrationTest {
         workers.report("worker-quiet", old.minusHours(1), old, 0, 20, 12.0, 1L, 2L);
         mvc.perform(get("/api/admin/workers").with(user("a@x").roles("ADMIN")))
                 .andExpect(jsonPath("$[?(@.worker == 'worker-quiet')].healthy").value(false))
-                .andExpect(jsonPath("$[?(@.worker == 'worker-quiet')].cpuPercent").value(12.0));
+                .andExpect(jsonPath("$[?(@.worker == 'worker-quiet')].cpuPercent").value(12.0))
+                .andExpect(jsonPath("$[?(@.worker == 'worker-quiet')].draining").value(false));
+    }
+
+    @Test
+    void aDrainingWorkerIsShownAsSuchAndItsReportsKeepTheMark() throws Exception {
+        // OPS-3: the deploy marks the old worker draining; its own reports never clear that.
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        workers.report("worker-old-slot", now.minusHours(1), now, 3, 20, 40.0, 1L, 2L);
+        workers.setDraining("worker-old-slot", now, now);
+        workers.report("worker-old-slot", now.minusHours(1), now.plusSeconds(10), 2, 20, 41.0, 1L, 2L);
+        assertThat(workers.findDrainingSince("worker-old-slot")).isPresent();
+        mvc.perform(get("/api/admin/workers").with(user("a@x").roles("ADMIN")))
+                .andExpect(jsonPath("$[?(@.worker == 'worker-old-slot')].draining").value(true));
+        workers.setDraining("worker-old-slot", now, null);
+        assertThat(workers.findDrainingSince("worker-old-slot")).isEmpty();
+        // A worker that hasn't reported yet can still be marked.
+        workers.setDraining("worker-brand-new", now, now);
+        assertThat(workers.findDrainingSince("worker-brand-new")).isPresent();
+        workers.remove("worker-brand-new");
+        workers.remove("worker-old-slot");
     }
 
     @Test

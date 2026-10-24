@@ -31,6 +31,10 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class MediaCache {
 
+    /** A partial download untouched this long was interrupted (an active one is written to continuously). */
+    static final java.time.Duration STALE_PART = java.time.Duration.ofHours(1);
+    private final String processTag = java.util.UUID.randomUUID().toString().substring(0, 8);
+
     private final FileStorageService storage;
     private final Path root;
     private final long budgetBytes;
@@ -61,9 +65,14 @@ public class MediaCache {
         }
         try (var files = Files.list(root)) {
             List<Path> old = new java.util.ArrayList<>();
+            long staleBefore = System.currentTimeMillis() - STALE_PART.toMillis();
             for (Path p : (Iterable<Path>) files::iterator) {
                 if (p.getFileName().toString().endsWith(".part")) {
-                    Files.deleteIfExists(p); // an interrupted download
+                    // An interrupted download. A recent one may be another worker process's download in
+                    // progress (OPS-3: during a deploy two workers share this cache), so only old ones go.
+                    if (p.toFile().lastModified() < staleBefore) {
+                        Files.deleteIfExists(p);
+                    }
                 } else {
                     old.add(p);
                 }
@@ -86,7 +95,8 @@ public class MediaCache {
         try {
             if (!Files.exists(target)) {
                 Files.createDirectories(root);
-                Path partial = target.resolveSibling(target.getFileName() + ".part");
+                // Named per process: two worker processes sharing the cache never write the same file.
+                Path partial = target.resolveSibling(target.getFileName() + "." + processTag + ".part");
                 long started = System.nanoTime();
                 storage.downloadFileToPath(key, partial);
                 Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);

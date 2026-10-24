@@ -69,12 +69,36 @@ class MediaCacheTest {
         FakeStorage storage = new FakeStorage();
         MediaCache first = new MediaCache(storage, dir.toString(), 50);
         Path old = first.fetch("old.mp4");
-        Files.writeString(old.resolveSibling("x.mp4.part"), "partial");
+        Path interrupted = old.resolveSibling("x.mp4.abcd1234.part");
+        Files.writeString(interrupted, "partial");
+        Files.setLastModifiedTime(interrupted, java.nio.file.attribute.FileTime.fromMillis(
+                System.currentTimeMillis() - MediaCache.STALE_PART.toMillis() - 60_000));
 
         MediaCache restarted = new MediaCache(storage, dir.toString(), 0);
-        assertThat(old.resolveSibling("x.mp4.part")).doesNotExist(); // interrupted downloads are cleaned up
+        assertThat(interrupted).doesNotExist(); // interrupted downloads are cleaned up
         Path fresh = restarted.fetch("new.mp4");
         assertThat(old).doesNotExist();
         assertThat(fresh).exists();
+    }
+
+    /** OPS-3: during a deploy two worker processes share the cache; one starting never breaks the other's downloads. */
+    @Test
+    void aSecondProcessLeavesDownloadsInProgressAlone() throws Exception {
+        FakeStorage storage = new FakeStorage();
+        MediaCache running = new MediaCache(storage, dir.toString(), 50);
+        running.fetch("seed.mp4");
+        Path inProgress = dir.resolve("cache").resolve("y.mp4.0f0f0f0f.part");
+        Files.writeString(inProgress, "downloading");
+
+        MediaCache starting = new MediaCache(storage, dir.toString(), 50);
+        assertThat(inProgress).exists();
+
+        // Both fetch the same file: each writes its own partial file, and both end with the complete copy.
+        Path a = running.fetch("same.mp4");
+        Path b = starting.fetch("same.mp4");
+        assertThat(a).isEqualTo(b).exists();
+        try (var files = Files.list(dir.resolve("cache"))) {
+            assertThat(files.filter(p -> p.toString().endsWith(".part")).toList()).containsExactly(inProgress);
+        }
     }
 }

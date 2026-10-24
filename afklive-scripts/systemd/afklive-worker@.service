@@ -1,0 +1,31 @@
+# Stream worker, deploy slot %i (a or b). OPS-3: a deploy starts the new version in the idle slot next to
+# the running one, which hands its streams over one at a time and is then stopped, so live streams never
+# drop. Driven by afklive-scripts/worker-handover-deploy.sh; one-time setup in docs/operations.md.
+#
+# Each slot has its own worker id (host-a / host-b), its own localhost port for the control endpoint
+# (/opt/afklive/worker-slot-%i.env sets WORKER_HTTP_PORT: 8081 for a, 8082 for b) and its own jar, so
+# installing a new version never touches the jar of the process that is running.
+# Restart resumes the slot's own streams (same id). Only one slot is enabled at a time (the deploy
+# script enables the new one and disables the old one), so a reboot starts just the current version.
+[Unit]
+Description=AFK Live stream worker (slot %i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# A separate user lets the egress firewall (afklive-scripts/worker-egress.nft) apply to FFmpeg only.
+User=afklive-worker
+WorkingDirectory=/opt/afklive/worker
+EnvironmentFile=/opt/afklive/afklive.env
+EnvironmentFile=/opt/afklive/worker-slot-%i.env
+# Role, profiles, worker id and port are -D properties: they win over anything in afklive.env.
+# During a deploy two of these run for a few minutes: keep -Xmx small (see docs/operations.md, memory).
+ExecStart=/usr/bin/java -Xmx512m -Dspring.profiles.active=worker,loki -Dapp.streaming.role=worker -Dapp.streaming.worker-id=%H-%i -Dserver.port=${WORKER_HTTP_PORT} -jar /opt/afklive/worker/slots/%i/app.jar
+# A draining worker that is stopped lets go of the streams it still has (another worker claims them
+# within seconds); give running streams time to close cleanly first.
+TimeoutStopSec=30
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

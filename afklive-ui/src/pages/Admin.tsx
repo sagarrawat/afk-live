@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
 import { HealthDot, LiveBadge } from '@/components/status';
 import { Badge, Button, Dialog, ErrorNote, Field, Input, PageHeader, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
+import { ReasonDialog } from './admin/ReasonDialog';
+import { EmailBanner, EmailPanel, RunPage, UserSupport } from './admin/Support';
 import { get, post } from '@/lib/api';
 import { bytes, date, dateTime, duration, money, timecode } from '@/lib/format';
 import { useMe } from '@/lib/queries';
@@ -26,6 +28,8 @@ interface LiveRow {
   restarts: number;
   bitrateKbps?: number | null;
   lastError?: string | null;
+  /** RE-10: what's wrong and the fix, e.g. running slower than real time. */
+  problem?: string | null;
 }
 interface WorkerRow {
   worker: string;
@@ -36,6 +40,8 @@ interface WorkerRow {
   cpuPercent?: number | null;
   memoryUsedBytes?: number | null;
   memoryTotalBytes?: number | null;
+  /** OPS-3: a new version is taking this worker's streams over. */
+  draining?: boolean;
 }
 export interface CostView {
   monthlyServerCost?: number | null;
@@ -103,6 +109,7 @@ export function Admin() {
   return (
     <>
       <PageHeader title="Admin" description="Every action asks for a reason and is written to the audit log." />
+      <EmailBanner />
       <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
         {[
           ['live', 'Live streams'],
@@ -122,61 +129,13 @@ export function Admin() {
         ))}
       </nav>
       {section === 'live' && <LiveStreams />}
+      {section === 'runs' && id && <RunPage id={Number(id)} />}
       {section === 'users' && (id ? <UserPage id={Number(id)} /> : <Users />)}
       {section === 'support' && (id ? <TicketPage id={Number(id)} /> : <Tickets />)}
       {section === 'plans' && <Plans />}
       {section === 'platform' && <Platform />}
       {section === 'audit' && <Audit />}
     </>
-  );
-}
-
-function ReasonDialog({
-  title,
-  action,
-  onClose,
-  onSubmit,
-  danger,
-  blocked,
-  wide,
-  children,
-}: {
-  title: string;
-  action: string;
-  onClose: () => void;
-  onSubmit: (reason: string) => Promise<unknown>;
-  danger?: boolean;
-  /** Keeps the action disabled, e.g. while the form above the reason isn't valid. */
-  blocked?: boolean;
-  wide?: boolean;
-  children?: React.ReactNode;
-}) {
-  const [reason, setReason] = useState('');
-  const { busy, run } = useAction();
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={title}
-      wide={wide}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant={danger ? 'danger' : 'primary'} busy={busy} disabled={blocked || reason.trim().length < 3} onClick={async () => (await run(() => onSubmit(reason.trim()), 'Done.')) && onClose()}>
-            {action}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {children}
-        <Field label="Reason" htmlFor="reason" hint="Goes in the audit log.">
-          <Textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
-        </Field>
-      </div>
-    </Dialog>
   );
 }
 
@@ -231,7 +190,9 @@ function LiveStreams() {
             {(live.data ?? []).map((r) => (
               <tr key={r.jobId}>
                 <td className="max-w-[220px] px-3 py-2">
-                  <span className="block truncate font-medium">{r.streamName}</span>
+                  <Link to={`/studio/admin/runs/${r.jobId}`} className="block truncate font-medium hover:underline">
+                    {r.streamName}
+                  </Link>
                   <Link to={`/studio/admin/users/${r.userId}`} className="block truncate text-muted hover:underline">
                     {r.userEmail}
                   </Link>
@@ -248,6 +209,11 @@ function LiveStreams() {
                   <span className="tnum text-xs text-muted">{r.heartbeatAgeSeconds == null ? '' : `${r.heartbeatAgeSeconds}s ago`}</span>
                 </td>
                 <td className="max-w-[240px] px-3 py-2 text-muted">
+                  {r.problem && (
+                    <span className="block whitespace-normal text-warn" title={r.problem}>
+                      {r.problem}
+                    </span>
+                  )}
                   <span className="block truncate">{r.lastError || r.nowPlaying || '–'}</span>
                   <span className="tnum text-xs">
                     {r.bitrateKbps ? `${Math.round(r.bitrateKbps)} kbps` : ''} {r.restarts ? `${r.restarts} restarts` : ''}
@@ -320,6 +286,7 @@ function WorkerCard({ w }: { w: WorkerRow }) {
       <span className="flex items-center gap-2 font-medium">
         <HealthDot level={w.healthy ? 'green' : 'red'} />
         <span className="truncate">{w.worker}</span>
+        {w.draining ? <span className="shrink-0 rounded bg-raised px-1.5 py-0.5 text-xs text-muted">Being replaced</span> : null}
       </span>
       <span className="tnum block text-sm text-muted">
         {w.streams}
@@ -366,6 +333,7 @@ function Platform() {
   return (
     <div className="space-y-6">
       <OverviewPanel />
+      <EmailPanel />
       <Quota />
       <Incidents />
     </div>
@@ -1109,6 +1077,7 @@ function UserPage({ id }: { id: number }) {
           </ul>
         </Panel>
       </div>
+      <UserSupport id={d.id} />
       <Panel title="Admin history" pad={false}>
         <AuditList items={d.history} />
       </Panel>

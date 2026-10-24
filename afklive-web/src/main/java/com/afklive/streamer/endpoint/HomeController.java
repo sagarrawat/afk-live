@@ -37,7 +37,7 @@ public class HomeController {
 
     /** MK-4: the help articles (afklive-ui/site/help.py writes site/help-&lt;slug&gt;.html). */
     public static final Set<String> HELP_ARTICLES = Set.of("youtube-stream-key", "youtube-preparing", "vertical-or-landscape",
-            "live-here-not-on-youtube", "phone-streaming");
+            "live-here-not-on-youtube", "phone-streaming", "loops-and-youtube-rules", "titles-and-thumbnails", "music-on-your-live");
 
     @GetMapping("/help")
     public String help() {

@@ -6,6 +6,8 @@
 #   - only workers, with INGEST_READ_USER / INGEST_READ_PASS, may read
 # Replace WEB_HOST and the secret (same value as INGEST_AUTH_SECRET in afklive.env). Use https:// (or a
 # private network): each call carries the secret and the phone's stream key.
+# On the web app's own server go through Caddy's local listener, never a web slot's port (OPS-4: each
+# deploy stops one slot): http://127.0.0.1:8079/internal/ingest/auth?secret=...
 
 logLevel: info
 

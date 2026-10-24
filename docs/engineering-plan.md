@@ -13,7 +13,7 @@ Every workstream follows the repo rules in `CLAUDE.md` and the FinOps rules in t
   drop a release later.
 - **Changeset numbers per branch** to avoid clashes while work runs in parallel: 022 playout copies,
   025–029 truth of live, 030–034 worker handover, 035–039 support and email, 040–044 onboarding,
-  045–049 cost metering.
+  045–049 cost metering, 080–084 zero-downtime web deploys.
 - **Two deploy batches.** Web-only changes ship first. Worker changes ship together, after the
   handover is installed, so that batch is the first uninterrupted worker deploy.
 - **Feature switches** for anything that changes a live stream's behaviour (`app.*` properties with
@@ -62,6 +62,10 @@ old slot with graceful shutdown so in-flight requests finish.
 **Tests**: readiness only on localhost, graceful shutdown configured, script `--dry-run` and
 shellcheck. The server setup (units, Caddyfile) is applied by hand once, from `docs/operations.md`.
 **Ships** with the web batch; the GitHub workflow keeps the old restart path behind an input.
+*Built* (branch `ops/web-zero-downtime-v2`): sessions moved to PostgreSQL (they had silently been in
+memory since Spring Boot 4), alerts deduped across instances under an advisory lock, a stopping slot
+hands its playout copy back; rehearsed end to end with real Caddy and two real JVMs. Operations and the
+one-time setup: `docs/operations.md`, "Web deploys without downtime".
 
 ## 3. Zero-interruption worker deploys: OPS-3 (branch `feature/worker-handover`)
 
@@ -92,6 +96,15 @@ for one stream for about 30 s, so handovers are paced. **Tests**: the ingest cho
 function; full handover with real FFmpeg and file destinations; each crash case. YouTube's failover
 itself can only be confirmed on production, once, with a test stream before creators rely on it.
 **Ships** first in the worker batch; its own deploy is the last interrupting one.
+
+**As built** (branch `feature/worker-handover`, changesets 070–071): as above, plus two refinements.
+After a handover the new owner moves YouTube back to the primary ingest make-before-break from the same
+encoder (Google's API docs say the primary must be streamed to), so the steady state is always the
+primary and every handover uses the backup; the recorded ingest still decides if a run was left on the
+backup. A draining worker still rescues orphaned streams, so a new version that dies after taking
+streams never leaves them ownerless. Measured reconnect for platforms without a backup ingest: about
+3 s, mostly the new relay's FFmpeg analysing its input before it connects. Operations and one-time
+setup: `docs/operations.md` ("Worker deploys without interruption").
 
 ## 4. Support and email: OPS-1, OPS-2, AD-6 (branch `feature/support-ops`)
 
@@ -125,6 +138,13 @@ becomes the activation metric. **Ships** in the web batch (ON-8 with the worker 
 the lowest priority, picked up at the next item; frame-rate reduction before scaling; a busy worker
 leaves new streams to others for 45 s. **Measured**: about 1.35 → 0.6 vCPU for a 1080p60 source on a
 720p30 stream.
+
+**Encoder preset (perf/encoder-preset):** the live x264 encoder moved from `veryfast` to `superfast`
+(configurable, `APP_STREAMING_X264PRESET`). Production had two 720p30 studio encoders at 0.8 and 1.24
+cores on a 4-vCPU worker at 70–90%; on 720x1280 footage superfast costs 30–45% less encoder CPU for an
+SSIM drop of 0.001–0.002. Both presets write identical SPS/PPS, so existing profile copies (FO-2) stay
+valid; copies now record their preset so a later change to another preset family re-makes them.
+A per-encoder thread cap measured no saving and stays off by default.
 
 **FO-6 (next, small):** record when a copy was last played (written at most every 10 minutes from the
 worker's lookup), delete copies unplayed for 30 days in the web sweeper, and show copy storage in

@@ -6,6 +6,7 @@ import com.afklive.streamer.model.PlanType;
 import com.afklive.streamer.model.User;
 import com.afklive.streamer.repository.MediaAssetRepository;
 import com.afklive.streamer.repository.UserRepository;
+import com.afklive.streamer.service.EncoderSettings;
 import com.afklive.streamer.service.FileStorageService;
 import com.afklive.streamer.service.MediaProbe;
 import com.afklive.streamer.service.MediaService;
@@ -177,5 +178,73 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
         String log = new String(p.getInputStream().readAllBytes());
         assertThat(p.waitFor()).as(log).isZero();
         com.afklive.streamer.streaming.TsStitcherTest.assertContinuous(com.afklive.streamer.streaming.TsStitcherTest.probe(joined), 9);
+    }
+
+    /** The x264 settings line x264 writes into the first keyframe of a stream. */
+    private String x264Settings(String storageKey) throws Exception {
+        Path h264 = dir.resolve(UUID.randomUUID() + ".h264");
+        Process p = new ProcessBuilder("ffmpeg", "-v", "error", "-y", "-i", storage.readLocation(storageKey), "-map", "0:v:0",
+                "-c", "copy", "-frames:v", "1", "-f", "h264", h264.toString()).redirectErrorStream(true).start();
+        String log = new String(p.getInputStream().readAllBytes());
+        assertThat(p.waitFor()).as(log).isZero();
+        String all = new String(Files.readAllBytes(h264), java.nio.charset.StandardCharsets.ISO_8859_1);
+        int at = all.indexOf("x264 - core");
+        assertThat(at).isNotNegative();
+        return all.substring(at, all.indexOf('\0', at));
+    }
+
+    @Test
+    void profileCopiesAreMadeWithTheRequestingWorkersPresetAndOldOnesOfTheSameFamilyStayInUse() throws Exception {
+        MediaAsset a = upload("copies-preset@example.com");
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true)).isNull();
+        assertThat(jdbc.queryForObject("SELECT x264_preset FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                String.class, a.getId())).isEqualTo(EncoderSettings.DEFAULT_PRESET);
+        while (copies.prepareNext()) {
+            // make it
+        }
+        String made = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, false);
+        assertThat(made).isNotNull();
+        assertThat(x264Settings(made)).contains(" subme=1 ").contains(" me=dia "); // superfast's search, not veryfast's
+        assertThat(jdbc.queryForObject("SELECT x264_preset FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                String.class, a.getId())).isEqualTo("superfast");
+
+        // A copy made before presets were recorded (veryfast, NULL) is the same family: a superfast worker plays it.
+        jdbc.update("UPDATE media_playout_copies SET x264_preset = NULL WHERE media_id = ? AND kind = 'PROFILE'", a.getId());
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true)).isEqualTo(made);
+        assertThat(storage.size(made)).isPositive();
+    }
+
+    @Test
+    void aCopyOfAnotherPresetFamilyIsMadeAgainUnlessAWorkerIsPlayingIt() throws Exception {
+        MediaAsset a = upload("copies-family@example.com");
+        copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true);
+        while (copies.prepareNext()) {
+            // a superfast copy
+        }
+        String superfastCopy = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, false);
+        assertThat(superfastCopy).isNotNull();
+
+        // A worker set to ultrafast (no B-frames, another profile) can't splice that copy into its stream.
+        PlayoutCopies ultrafastWorker = new PlayoutCopies(jdbc, storage, "worker", false, new EncoderSettings("ultrafast", 0));
+        // Played within the hour (by a superfast worker): left alone.
+        assertThat(ultrafastWorker.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true)).isNull();
+        assertThat(jdbc.queryForObject("SELECT status FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                String.class, a.getId())).isEqualTo("READY");
+        assertThat(storage.size(superfastCopy)).isPositive();
+
+        // Nobody has played it lately: made again with ultrafast, the old file deleted.
+        jdbc.update("UPDATE media_playout_copies SET last_played_at = now() - interval '2 hours' WHERE media_id = ?", a.getId());
+        assertThat(ultrafastWorker.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true)).isNull();
+        assertThat(jdbc.queryForMap("SELECT status, x264_preset, storage_key FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                a.getId())).containsEntry("status", "PENDING").containsEntry("x264_preset", "ultrafast").containsEntry("storage_key", null);
+        assertThatThrownBy(() -> storage.size(superfastCopy)).isInstanceOf(Exception.class);
+        // Until it's made, the superfast worker doesn't get it either (it would be the wrong family once made).
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, false)).isNull();
+        while (copies.prepareNext()) {
+            // the web side makes it as asked, whatever its own setting
+        }
+        String ultrafastCopy = ultrafastWorker.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true);
+        assertThat(ultrafastCopy).isNotNull();
+        assertThat(x264Settings(ultrafastCopy)).contains(" cabac=0 ").contains(" bframes=0 ");
     }
 }

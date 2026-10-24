@@ -55,6 +55,7 @@ public class LiveStreamService {
     private final NotificationService notifications;
     private final com.afklive.streamer.repository.StreamJobDestinationRepository jobDestinations;
     private final com.afklive.streamer.repository.StreamIncidentRepository incidents;
+    private final CapacityEstimator capacity;
     private final com.afklive.streamer.repository.StreamEventRepository events;
     private final DestinationTestService destinationTests;
 
@@ -569,12 +570,21 @@ public class LiveStreamService {
         } else {
             checks.add(new Check("quality", true, s.getQualityHeight() + "p" + s.getFps() + " is included in your plan.", "settings"));
         }
+        // GL-7: the plan's top quality isn't the server's capacity. A quality that won't keep up right now
+        // is a warning with a lighter suggestion; only one no server could ever run fails the check.
+        CapacityEstimator.Estimate estimate = capacity.estimate(new CapacityEstimator.Quality(s.getQualityHeight(), s.getFps()),
+                playsByCopy(s, playlist), allowedQualities(user));
+        if (estimate.impossible()) {
+            checks.add(new Check("server-capacity", false, estimate.message(), "settings"));
+        }
 
         int live = (int) jobs.countByUserEmailAndIsLiveTrue(email);
         int maxStreams = planService.getPlanConfig(user.getPlanType()).getMaxActiveStreams();
-        boolean alreadyLive = !jobs.findAllByStreamIdAndIsLiveTrue(id).isEmpty();
-        if (alreadyLive) {
-            checks.add(new Check("running", false, "This stream is already live.", "overview"));
+        List<StreamJob> running = jobs.findAllByStreamIdAndIsLiveTrue(id);
+        if (!running.isEmpty()) {
+            boolean stopping = running.stream().allMatch(j -> StreamStates.STOP.equals(j.getDesiredState()));
+            checks.add(new Check("running", false, stopping ? "This stream is still stopping. Try again in a few seconds."
+                    : "This stream is already live.", "overview"));
         } else if (live >= maxStreams) {
             checks.add(new Check("concurrency", false, "Your " + planName + " plan runs " + maxStreams
                     + " stream(s) at a time and " + live + " are live.", "/pricing"));
@@ -588,18 +598,67 @@ public class LiveStreamService {
             }
         }
         boolean ok = checks.stream().allMatch(Check::ok);
-        return new Preflight(ok, checks);
+        return new Preflight(ok, checks, estimate.freeCpus() == null ? null : estimate);
     }
 
-    /** GL-2: go live. Runs pre-flight; on success a worker picks the run up within seconds. */
+    /** Qualities the creator's plan includes, for GL-7's lighter suggestion. */
+    private List<CapacityEstimator.Quality> allowedQualities(User user) {
+        int max = planMaxHeight(user);
+        int maxFps = planService.getPlanConfig(user.getPlanType()).getMaxFps();
+        List<CapacityEstimator.Quality> out = new ArrayList<>();
+        for (int h : new int[]{720, 1080, 1440, 2160}) {
+            for (int f : new int[]{30, 60}) {
+                if (h <= max && f <= maxFps) {
+                    out.add(new CapacityEstimator.Quality(h, f));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** FO-2: whether this run would play by stream copy (nothing drawn or mixed live), for GL-7's estimate. */
+    private boolean playsByCopy(LiveStream s, List<Long> playlist) {
+        if (s.getSource() != LiveStream.Source.PLAYLIST) {
+            return false;
+        }
+        try {
+            String override = playlist == null || playlist.isEmpty() ? null
+                    : String.join(",", playlist.stream().map(String::valueOf).toList());
+            return com.afklive.streamer.streaming.CopyRuns.ineligible(studioSpec(s, null, override), null) == null;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** GL-2: go live by hand, past any GL-7 capacity warning (see {@link #goLive(String, Long, String, boolean)}). */
     @Transactional
     public StreamJob goLive(String email, Long id, String scene) {
-        return goLive(email, id, scene, null);
+        return goLive(email, id, scene, true);
     }
 
-    /** {@code playlist}: SC-4, a scheduled slot's own videos for this run (null: the stream's playlist). */
+    /**
+     * GL-2: go live by hand. Runs pre-flight; on success a worker picks the run up within seconds.
+     * Idempotent per stream: a second request while the stream's run is starting or live (a double tap)
+     * returns that run instead of creating another. GL-7: unless {@code anyway}, a quality the servers
+     * can't keep up with right now is refused with a {@link CapacityWarningException} carrying the estimate.
+     */
+    @Transactional
+    public StreamJob goLive(String email, Long id, String scene, boolean anyway) {
+        return start(email, id, scene, null, true, !anyway);
+    }
+
+    /** A scheduled start (SC-1, SC-4): {@code playlist} is the slot's own videos (null: the stream's playlist). */
     @Transactional
     public StreamJob goLive(String email, Long id, String scene, List<Long> playlist) {
+        return start(email, id, scene, playlist, false, false);
+    }
+
+    /** The stream's live run, if it has one (e.g. the run a double tap already started). */
+    public Optional<StreamJob> liveRun(String email, Long id) {
+        return currentJob(get(email, id));
+    }
+
+    private StreamJob start(String email, Long id, String scene, List<Long> playlist, boolean returnExisting, boolean warnCapacity) {
         get(email, id); // ownership first, before taking any lock
         // Plan limits count the user's live runs: serialize this user's starts (and free-tier starts
         // platform-wide), then this stream's, so two simultaneous starts can't both pass the check.
@@ -612,6 +671,14 @@ public class LiveStreamService {
             jobs.lockFreeCapacity();
         }
         streams.lockById(id);
+        if (returnExisting) {
+            Optional<StreamJob> existing = jobs.findAllByStreamIdAndIsLiveTrue(id).stream()
+                    .filter(j -> !StreamStates.STOP.equals(j.getDesiredState())).findFirst();
+            if (existing.isPresent()) {
+                log.info("Stream {} is already live as job {}: returning that run", id, existing.get().getId());
+                return existing.get();
+            }
+        }
         Preflight pf = preflight(email, id, playlist);
         if (!pf.ok()) {
             String first = pf.checks().stream().filter(c -> !c.ok()).map(Check::message).findFirst().orElse("Pre-flight failed.");
@@ -621,6 +688,9 @@ public class LiveStreamService {
                             limit.message() + " Upgrade to remove this limit.", "/pricing", "plan-limit:" + limit.id(),
                             java.time.Duration.ofDays(1), true)));
             throw new PreflightFailedException(first, pf);
+        }
+        if (warnCapacity && pf.capacity() != null && !pf.capacity().fits()) {
+            throw new CapacityWarningException(pf.capacity().message(), pf);
         }
         LiveStream s = get(email, id);
         if (scene != null && !SCENES.contains(scene)) {
@@ -650,7 +720,9 @@ public class LiveStreamService {
         for (int i = 0; i < dests.size(); i++) {
             job.getDestinations().add(new StreamJobDestination(job, i, dests.get(i).name()));
         }
-        job = jobs.save(job);
+        // Flushed here so a second live run of this stream (refused by uq_stream_jobs_one_live_per_stream,
+        // whatever path created the first) fails in this call, where the caller can return the existing run.
+        job = jobs.saveAndFlush(job);
         log.info("Stream {} going live as job {} ({} destinations)", s.getId(), job.getId(), dests.size());
         return job;
     }
@@ -666,6 +738,16 @@ public class LiveStreamService {
 
         public Preflight preflight() {
             return preflight;
+        }
+    }
+
+    /**
+     * GL-7: everything else is ready, but by the estimate the servers can't keep up with this quality
+     * right now. The creator can take the suggested quality or go live anyway.
+     */
+    public static class CapacityWarningException extends PreflightFailedException {
+        public CapacityWarningException(String message, Preflight preflight) {
+            super(message, preflight);
         }
     }
 
@@ -893,9 +975,14 @@ public class LiveStreamService {
                 // stale or partial
             }
         }
+        // RE-10: running slower than real time for a minute or more (opened by the alert monitor).
+        ZonedDateTime slowSince = incidents.findAllByJobIdAndResolvedAtIsNull(j.getId()).stream()
+                .filter(i -> AlertMonitor.SLOW.equals(i.getKind())).map(com.afklive.streamer.model.StreamIncident::getStartedAt)
+                .findFirst().orElse(null);
+        // RE-8: whether the platforms are receiving it.
         String reach = "LIVE".equals(state) ? StreamHealth.reach(j.getDestinations()) : null;
         return new LiveState(state, j.getId(), j.getStartTime(), uptime, j.getStopAt(), j.getScene(), j.getInputLive(), np,
-                StreamHealth.of(j, s.getQualityHeight(), s.getFps()), null, reach);
+                StreamHealth.of(j, s.getQualityHeight(), s.getFps()), null, slowSince, reach);
     }
 
     private Optional<StreamJob> currentJob(LiveStream s) {

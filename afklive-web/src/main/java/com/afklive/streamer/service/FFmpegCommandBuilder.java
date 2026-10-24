@@ -304,27 +304,33 @@ public class FFmpegCommandBuilder {
         return new String[]{"4000k", "4500k", "8000k"};
     }
 
+    /** The live video bitrate in kbps for a picture with this short side and frame rate (60 fps gets 1.5x). */
+    public static int liveVideoKbps(int shortSide, int fps) {
+        int kbps = Integer.parseInt(bitrateFor(shortSide)[0].replace("k", ""));
+        return fps > 30 ? kbps * 3 / 2 : kbps;
+    }
+
     /**
-     * x264 + AAC settings for a live (studio) encode: constant bitrate from the ladder by the
-     * picture's short side, keyframe exactly every 2 s at any frame rate, AAC 128k 44.1 kHz stereo.
-     * 60 fps gets 1.5x the 30 fps bitrate.
+     * x264 + AAC settings for a live encode (the studio, and the profile copies copy mode plays, which
+     * must match it): constant bitrate from the ladder by the picture's short side, keyframe exactly every
+     * 2 s at any frame rate, AAC 128k 44.1 kHz stereo. 60 fps gets 1.5x the 30 fps bitrate. The x264
+     * preset and thread cap come from {@link EncoderSettings}; threads 0 leaves x264 to decide.
      */
-    public static List<String> liveEncodeArgs(int shortSide, int fps) {
-        String[] rate = bitrateFor(shortSide);
-        if (fps > 30) {
-            for (int i = 0; i < rate.length; i++) {
-                rate[i] = (Integer.parseInt(rate[i].replace("k", "")) * 3 / 2) + "k";
-            }
-        }
+    public static List<String> liveEncodeArgs(int shortSide, int fps, EncoderSettings encoder) {
+        int target = liveVideoKbps(shortSide, fps);
+        String rate = target + "k";
         int gop = fps * 2;
+        List<String> args = new ArrayList<>(List.of("-c:v", "libx264", "-preset", encoder.preset()));
+        if (encoder.threads() > 0) {
+            args.addAll(List.of("-threads:v", String.valueOf(encoder.threads())));
+        }
         // Constant bitrate with filler: a still or slow picture (a talk, a lofi loop) would otherwise drop to
         // a few hundred kbps, and YouTube flags the stream as below its recommended bitrate.
-        int target = Integer.parseInt(rate[0].replace("k", ""));
-        return List.of("-c:v", "libx264", "-preset", "veryfast",
-                "-b:v", rate[0], "-minrate", rate[0], "-maxrate", rate[0], "-bufsize", (target * 2) + "k",
+        args.addAll(List.of("-b:v", rate, "-minrate", rate, "-maxrate", rate, "-bufsize", (target * 2) + "k",
                 "-x264-params", "nal-hrd=cbr:force-cfr=1",
                 "-pix_fmt", "yuv420p", "-g", String.valueOf(gop), "-keyint_min", String.valueOf(gop), "-sc_threshold", "0",
-                "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2");
+                "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2"));
+        return List.copyOf(args);
     }
 
     /**

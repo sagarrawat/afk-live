@@ -62,16 +62,17 @@ public final class StreamDtos {
     }
 
     /**
-     * GL-2: DRAFT, STARTING, LIVE, STOPPING, ENDED or ERROR. {@code reach} (RE-8), while LIVE: ALL (every
-     * destination that has been checked is receiving: "Live"), SOME ("Live with problems"), NONE ("Not
-     * reaching anyone") or CONNECTING (none confirmed yet, none given up on); null otherwise.
+     * GL-2: DRAFT, STARTING, LIVE, STOPPING, ENDED or ERROR. {@code slowSince} (RE-10): running slower than
+     * real time since then. {@code reach} (RE-8), while LIVE: ALL (every destination that has been checked is
+     * receiving: "Live"), SOME ("Live with problems"), NONE ("Not reaching anyone") or CONNECTING (none
+     * confirmed yet, none given up on); null otherwise.
      */
     public record LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds,
                             ZonedDateTime stopAt, String scene, Boolean inputLive, Map<String, Object> nowPlaying,
-                            Health health, String endReason, String reach) {
+                            Health health, String endReason, ZonedDateTime slowSince, String reach) {
         public LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds, ZonedDateTime stopAt,
                          String scene, Boolean inputLive, Map<String, Object> nowPlaying, Health health, String endReason) {
-            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null);
+            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null, null);
         }
     }
 
@@ -116,7 +117,15 @@ public final class StreamDtos {
     public record Check(String id, boolean ok, String message, String fix) {
     }
 
-    public record Preflight(boolean ok, List<Check> checks) {
+    /**
+     * {@code capacity} (GL-7): whether the chosen quality fits the servers' free capacity right now, an
+     * estimate; null when unknown. A quality that doesn't fit is a warning (the creator may go live
+     * anyway), not a failed check, unless it could never fit.
+     */
+    public record Preflight(boolean ok, List<Check> checks, com.afklive.streamer.service.CapacityEstimator.Estimate capacity) {
+        public Preflight(boolean ok, List<Check> checks) {
+            this(ok, checks, null);
+        }
     }
 
     /** GL-3: NOW, AT (local date-time in timeZone) or AFTER_PLAYLIST. */

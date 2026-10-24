@@ -60,10 +60,16 @@ spring:
           batch_size: 50
           order_inserts: true
           order_updates: true
+  lifecycle:
+    # OPS-4: how long a stopping web instance waits for requests in flight (a 16 MB upload part on a slow
+    # phone connection). The slot unit's TimeoutStopSec covers this plus the drain below.
+    timeout-per-shutdown-phase: ${WEB_SHUTDOWN_TIMEOUT:60s}
+  # OPS-4: sign-ins live in PostgreSQL (Spring Session JDBC), so both web slots see the same sessions and a
+  # deploy signs nobody out. CSRF tokens are in a cookie, not the session.
   session:
-    store-type: jdbc
     jdbc:
-      initialize-schema: always
+      # The tables come from Liquibase (080-spring-session.sql), like every other table.
+      initialize-schema: never
     timeout: PT720H
   mail:
     host: ${SMTP_HOST:localhost}
@@ -106,8 +112,25 @@ app:
     work-dir: ${STREAMING_WORK_DIR:data/worker}
     worker:
       max-streams: ${STREAMING_WORKER_MAX_STREAMS:20}
+      # OPS-3: shared with the deploy script that asks a worker to hand its streams over (/internal/worker/*,
+      # worker process only, localhost only). Empty: that endpoint refuses everything and deploys use a restart.
+      control-token: ${WORKER_CONTROL_TOKEN:}
+    # OPS-3: planned handover of live streams to a new worker version (see docs/operations.md).
+    handover:
+      # A new copy that isn't on air everywhere within this many seconds is abandoned; the old one carries on.
+      timeout-seconds: ${STREAMING_HANDOVER_TIMEOUT_SECONDS:60}
+      # How long the new copy must be live everywhere it publishes before the old one stops.
+      ready-seconds: ${STREAMING_HANDOVER_READY_SECONDS:5}
+      # After a handover, move YouTube destinations back from the backup ingest to the primary (both connected
+      # for a few seconds, same encoder). Google asks for the primary to be used; false leaves them on the backup.
+      return-to-primary: ${STREAMING_HANDOVER_RETURN_TO_PRIMARY:true}
     # Library files kept on each worker's disk, in GB (least recently used are removed first).
     cache-gb: ${STREAMING_CACHE_GB:50}
+    # Live encoder (studio) and the profile copies copy mode plays: x264 speed preset, ultrafast..medium
+    # (anything else falls back to superfast with a warning), and threads per encoder (0 = x264 decides).
+    # See docs/operations.md, "Live encoder".
+    x264-preset: ${APP_STREAMING_X264PRESET:superfast}
+    x264-threads: ${APP_STREAMING_X264THREADS:0}
   # Encrypts stream keys and phone ingest keys at rest: 32 random bytes, base64 (openssl rand -base64 32).
   # Required: the app won't start without it. To rotate, move the old key to APP_ENCRYPTION_OLD_KEYS
   # (comma-separated) and set a new one; stored secrets are re-encrypted at startup.
@@ -182,7 +205,33 @@ app:
     # Username/password set for the webhook in the PhonePe dashboard (verifies callbacks)
     callback-username: ${PHONEPE_CALLBACK_USERNAME:}
     callback-password: ${PHONEPE_CALLBACK_PASSWORD:}
+  web:
+    # OPS-4: on stop, report "not ready" for this long while still serving, so Caddy's health check moves
+    # new requests to the other slot before this one closes its port. 0 = stop at once (dev, tests); the
+    # slot units set WEB_SHUTDOWN_DRAIN=5s.
+    shutdown-drain: ${WEB_SHUTDOWN_DRAIN:0s}
+
+# OPS-4: only the health probes, for the deploy script and Caddy's active health checks. Answered only to
+# requests made on this machine (ActuatorSecurityConfig); Caddy also answers /actuator* with 404.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      show-components: never
+  health:
+    # Email goes through ZeptoMail's API; an unused SMTP check would only report DOWN.
+    mail:
+      enabled: false
+
 server:
+  # OPS-4: on stop, refuse new connections and let requests in flight finish (up to the timeout above).
+  shutdown: graceful
   forward-headers-strategy: native
   error:
     # Don't leak exception messages or stack details to clients in production.

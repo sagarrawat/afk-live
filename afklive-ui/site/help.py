@@ -13,7 +13,7 @@ import html
 import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
-UPDATED = "23 October 2026"
+UPDATED = "24 October 2026"
 STUDIO = "https://studio.youtube.com/channel/UC/livestreaming"
 
 ARTICLES = [
@@ -218,6 +218,106 @@ ARTICLES = [
             ]),
         ],
         "related": ["youtube-preparing", "vertical-or-landscape"],
+    },
+    {
+        "slug": "loops-and-youtube-rules",
+        "title": "24/7 loops and YouTube's rules",
+        "summary": "What YouTube's inauthentic content and spam rules mean for a looped live, and the three things the stream check looks for.",
+        "keywords": "monetisation monetization demonetised inauthentic repetitive reused content loop still image static slideshow spam repeated message ypp ads policy",
+        "sections": [
+            ("", [
+                ("p", "A 24/7 live that plays videos you made is allowed on YouTube. What YouTube's rules for earning (the YouTube Partner "
+                      "Program) exclude is content that is <strong>mass-produced, repetitive or low-effort</strong>: since July 2025 this is "
+                      "called the <em>inauthentic content</em> policy. Its examples include image slideshows and scrolling text with little or "
+                      "nothing else. Separately, the spam policy covers repeated identical chat messages and misleading titles."),
+                ("p", "Nobody outside YouTube can say how a particular channel will be reviewed. AFK Live's stream check only points out the "
+                      "patterns the rules name, when we can see them for certain in what you set up."),
+            ]),
+            ("1. One video playing over and over", [
+                ("p", "If the whole stream is one video (and at most one song) on repeat, viewers who stay see the same thing again and again. "
+                      "Add more videos, or put a music playlist under a looping visual: a looping scene under many tracks is the usual, "
+                      "accepted way 24/7 music channels work."),
+            ]),
+            ("2. One still picture with nothing on screen", [
+                ("p", "We look at frames from the start to the end of each video. If every video is one unchanging picture and nothing is "
+                      "drawn on top, the stream is a still image. Add something that changes: the check's one-tap fix adds a clock and the "
+                      "name of the song that's playing. Better still, use a short looping animation."),
+            ]),
+            ("3. The same reply posted again and again", [
+                ("p", "If AFK Live's automatic replies post the same words three or more times in a week, that's the repeated identical "
+                      "message the spam policy names. The fix turns automatic replies off; you can turn them back on later."),
+            ]),
+            ("Keeping a flag", [
+                ("p", "Every flag can be kept as it is (for example, a stream that really is one long video). Kept flags stay listed "
+                      "under the check, and the weekly check doesn't remind you about them. The check never stops you going live."),
+            ]),
+        ],
+        "related": ["titles-and-thumbnails", "music-on-your-live"],
+    },
+    {
+        "slug": "titles-and-thumbnails",
+        "title": "Titles and thumbnails that get found",
+        "summary": "Start the title with what people search for, don't say LIVE over a replay, and make the thumbnail readable at phone size.",
+        "keywords": "title thumbnail seo search keywords live now replay misleading 1280x720 16:9 phone small text contrast clickbait",
+        "sections": [
+            ("", [
+                ("p", "People find a 24/7 live mostly through search and suggestions, so the title and thumbnail matter. Type the title you use "
+                      "in YouTube Studio into the stream check (on the stream's Overview) and choose your thumbnail from your library: we check "
+                      "them there. We only read them in AFK Live; nothing changes on YouTube."),
+            ]),
+            ("Titles", [
+                ("ul", [
+                    "<strong>Start with the words people type.</strong> “Lofi beats to study and relax”, “Hanuman Chalisa 24/7”, "
+                    "“Rain sounds for sleep”. Words like live, stream, 24/7 or new don't say what's on.",
+                    "<strong>Don't say LIVE over a replay.</strong> A 🔴 or “LIVE now” on videos you uploaded can read as misleading, and "
+                    "YouTube's spam policy covers misleading titles. “24/7 replay” is honest. If you are really there live, keep your title.",
+                    "<strong>Up to 100 characters,</strong> but the first 40 or so are what shows on phones.",
+                ]),
+            ]),
+            ("Thumbnails", [
+                ("ul", [
+                    "<strong>1280x720 (16:9).</strong> YouTube needs at least 640 pixels wide; other shapes get cut off or get bars.",
+                    "<strong>Readable at phone size.</strong> In search and up next, a thumbnail is about the size of a stamp. We shrink "
+                    "yours to that size and measure how much stands out from the background. If it's nearly one flat colour, text and faces "
+                    "on it won't be seen. Use a few big words and strong contrast.",
+                    "We can't read the words on your thumbnail, so we don't judge what it says.",
+                ]),
+            ]),
+            ("Change them on YouTube", [
+                ("p", f'Set the title and thumbnail in <a href="{STUDIO}" target="_blank" rel="noopener">YouTube Studio\'s live dashboard</a> '
+                      "(the pencil next to the title). A stream key alone can't change them from AFK Live."),
+            ]),
+        ],
+        "related": ["loops-and-youtube-rules", "youtube-preparing"],
+    },
+    {
+        "slug": "music-on-your-live",
+        "title": "Music on your live",
+        "summary": "Why no tool can tell you whether a song will be claimed, what a claim can do to a live, and where to get music you can use.",
+        "keywords": "music copyright content id claim muted blocked royalty free audio library license bhajan song cover strike",
+        "sections": [
+            ("", [
+                ("p", "YouTube checks live streams for music owned by others (Content ID). Whether a song is claimed depends on who owns it, "
+                      "what they told YouTube to do, and the exact recording. <strong>AFK Live can't tell you whether a song will be claimed, "
+                      "and no other tool can either.</strong> We'll never call a track safe or risky."),
+            ]),
+            ("What a claim can do to a live", [
+                ("ul", [
+                    "Your live can be muted, shown with a placeholder, or stopped.",
+                    "The recording can lose its ads, or the owner can earn from it instead of you.",
+                    "Repeated problems can lead to restrictions on live streaming for the channel.",
+                ]),
+            ]),
+            ("Music you can use", [
+                ("ul", [
+                    "Music you made yourself, or that you have a written licence for (keep it).",
+                    "YouTube's own <strong>Audio Library</strong> in YouTube Studio: free tracks that are cleared for YouTube.",
+                    "Royalty-free libraries whose licence covers live streams on YouTube. Read the licence: some cover videos but not lives.",
+                    "Devotional songs: the words may be traditional, but a particular recording usually belongs to a label. Record your own or use a licensed one.",
+                ]),
+            ]),
+        ],
+        "related": ["loops-and-youtube-rules", "titles-and-thumbnails"],
     },
 ]
 

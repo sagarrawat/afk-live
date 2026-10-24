@@ -100,7 +100,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
     @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = NULL, j.heartbeatAt = NULL, j.avoidWorker = :worker, "
-            + "j.moveRequestedAt = :now WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND j.workerId = :worker")
+            + "j.moveRequestedAt = :now, j.handoverFrom = NULL, j.handoverTo = NULL, j.handoverOfferedAt = NULL, j.handoverPosition = NULL, j.handoverClaimedAt = NULL, j.handoverBeatAt = NULL, j.handoverReadyAt = NULL WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND j.workerId = :worker")
     int release(@org.springframework.data.repository.query.Param("id") Long id,
                 @org.springframework.data.repository.query.Param("worker") String worker,
                 @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
@@ -114,10 +114,10 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     @org.springframework.data.jpa.repository.Query("SELECT j.id FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'STOP' AND (j.workerId IS NULL OR j.heartbeatAt IS NULL OR j.heartbeatAt < :cutoff)")
     List<Long> findAbandonedStopIds(@org.springframework.data.repository.query.Param("cutoff") java.time.ZonedDateTime cutoff);
 
-    /** A restarted worker resumes its own jobs (same worker id). */
+    /** A restarted worker resumes its own jobs (same worker id); a handover it offered before restarting is dropped. */
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
-    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.heartbeatAt = :now WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true AND j.desiredState = 'RUN'")
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.heartbeatAt = :now, j.handoverFrom = NULL, j.handoverTo = NULL, j.handoverOfferedAt = NULL, j.handoverPosition = NULL, j.handoverClaimedAt = NULL, j.handoverBeatAt = NULL, j.handoverReadyAt = NULL WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true AND j.desiredState = 'RUN'")
     int resumeOwn(@org.springframework.data.repository.query.Param("id") Long id,
                   @org.springframework.data.repository.query.Param("worker") String worker,
                   @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
@@ -189,7 +189,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.transaction.annotation.Transactional
-    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = :worker, j.heartbeatAt = :now, j.restarts = j.restarts + 1 WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND (j.heartbeatAt IS NULL OR j.heartbeatAt < :cutoff)")
+    @org.springframework.data.jpa.repository.Query("UPDATE StreamJob j SET j.workerId = :worker, j.heartbeatAt = :now, j.restarts = j.restarts + 1, j.handoverFrom = NULL, j.handoverTo = NULL, j.handoverOfferedAt = NULL, j.handoverPosition = NULL, j.handoverClaimedAt = NULL, j.handoverBeatAt = NULL, j.handoverReadyAt = NULL WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND (j.heartbeatAt IS NULL OR j.heartbeatAt < :cutoff)")
     int takeOver(@org.springframework.data.repository.query.Param("id") Long id,
                  @org.springframework.data.repository.query.Param("worker") String worker,
                  @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
@@ -232,4 +232,126 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
             + "FROM stream_jobs WHERE start_time IS NOT NULL AND start_time < :to AND (end_time IS NULL OR end_time > :from)", nativeQuery = true)
     double streamSecondsBetween(@org.springframework.data.repository.query.Param("from") java.time.ZonedDateTime from,
                                 @org.springframework.data.repository.query.Param("to") java.time.ZonedDateTime to);
+
+    // ---- OPS-3: planned handover to another worker (see streaming.Handover). Every step is conditional. ----
+
+    String CLEAR_HANDOVER = "j.handoverFrom = NULL, j.handoverTo = NULL, j.handoverOfferedAt = NULL, j.handoverPosition = NULL, "
+            + "j.handoverClaimedAt = NULL, j.handoverBeatAt = NULL, j.handoverReadyAt = NULL";
+
+    /** A draining owner offers one of its streams, with its playlist position. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET j.handoverFrom = :worker, j.handoverOfferedAt = :now, j.handoverPosition = :position, "
+            + "j.handoverTo = NULL, j.handoverClaimedAt = NULL, j.handoverBeatAt = NULL, j.handoverReadyAt = NULL "
+            + "WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true AND j.desiredState = 'RUN' AND j.handoverFrom IS NULL")
+    int offerHandover(@org.springframework.data.repository.query.Param("id") Long id,
+                      @org.springframework.data.repository.query.Param("worker") String worker,
+                      @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                      @org.springframework.data.repository.query.Param("position") String position);
+
+    /** Keeps an unclaimed offer's position current. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET j.handoverPosition = :position "
+            + "WHERE j.id = :id AND j.workerId = :worker AND j.handoverFrom = :worker AND j.handoverTo IS NULL AND j.isLive = true")
+    int refreshHandoverPosition(@org.springframework.data.repository.query.Param("id") Long id,
+                                @org.springframework.data.repository.query.Param("worker") String worker,
+                                @org.springframework.data.repository.query.Param("position") String position);
+
+    /** The owner stops draining: offers nobody claimed yet are taken back (a claimed one finishes or times out). */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET " + CLEAR_HANDOVER
+            + " WHERE j.workerId = :worker AND j.handoverFrom = :worker AND j.handoverTo IS NULL AND j.isLive = true")
+    int withdrawHandoverOffers(@org.springframework.data.repository.query.Param("worker") String worker);
+
+    /** Streams other workers offer and nobody claimed yet, oldest offer first. */
+    @Query("SELECT j.id FROM StreamJob j WHERE j.isLive = true AND j.desiredState = 'RUN' "
+            + "AND j.handoverFrom IS NOT NULL AND j.handoverFrom = j.workerId AND j.handoverTo IS NULL AND j.workerId <> :worker ORDER BY j.handoverOfferedAt")
+    List<Long> findHandoverOfferIds(@org.springframework.data.repository.query.Param("worker") String worker);
+
+    /** A worker claims an offered stream; its first beat is {@code now}. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET j.handoverTo = :worker, j.handoverClaimedAt = :now, j.handoverBeatAt = :now, j.handoverReadyAt = NULL "
+            + "WHERE j.id = :id AND j.isLive = true AND j.desiredState = 'RUN' AND j.handoverFrom IS NOT NULL AND j.handoverFrom = j.workerId "
+            + "AND j.handoverTo IS NULL AND j.workerId <> :worker")
+    int claimHandover(@org.springframework.data.repository.query.Param("id") Long id,
+                      @org.springframework.data.repository.query.Param("worker") String worker,
+                      @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now);
+
+    /**
+     * The claimer's beat, fenced like the heartbeat; with {@code ready} it also says its copy is on air
+     * everywhere it publishes. Returns 0 once the claim is gone (dropped, or completed: then it owns the stream).
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET j.handoverBeatAt = :now, "
+            + "j.handoverReadyAt = CASE WHEN :ready = true AND j.handoverReadyAt IS NULL THEN :now ELSE j.handoverReadyAt END "
+            + "WHERE j.id = :id AND j.handoverTo = :worker AND j.handoverBeatAt = :expected AND j.workerId <> :worker "
+            + "AND j.isLive = true AND j.desiredState = 'RUN'")
+    int handoverBeat(@org.springframework.data.repository.query.Param("id") Long id,
+                     @org.springframework.data.repository.query.Param("worker") String worker,
+                     @org.springframework.data.repository.query.Param("expected") java.time.ZonedDateTime expected,
+                     @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                     @org.springframework.data.repository.query.Param("ready") boolean ready);
+
+    /**
+     * The owner hands the stream over: the claimer becomes the owner, its last beat becomes the heartbeat
+     * it fences on, and the ingest its copy publishes to is recorded. Only while the claim is ready and
+     * its beat is newer than {@code freshAfter}, so a claimer that died never gets the stream.
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET j.workerId = j.handoverTo, j.heartbeatAt = j.handoverBeatAt, j.youtubeIngest = :ingest, "
+            + CLEAR_HANDOVER + " WHERE j.id = :id AND j.workerId = :from AND j.handoverFrom = :from AND j.handoverTo = :to "
+            + "AND j.handoverReadyAt IS NOT NULL AND j.handoverBeatAt > :freshAfter AND j.isLive = true AND j.desiredState = 'RUN'")
+    int completeHandover(@org.springframework.data.repository.query.Param("id") Long id,
+                         @org.springframework.data.repository.query.Param("from") String from,
+                         @org.springframework.data.repository.query.Param("to") String to,
+                         @org.springframework.data.repository.query.Param("freshAfter") java.time.ZonedDateTime freshAfter,
+                         @org.springframework.data.repository.query.Param("ingest") String ingest);
+
+    /**
+     * The claimer gives up (not on air in time, its copy stopped, or it is shutting down). The offer goes
+     * too, so the owner moves on to its next stream and offers this one again later.
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET " + CLEAR_HANDOVER + " WHERE j.id = :id AND j.handoverTo = :worker")
+    int abandonHandoverClaim(@org.springframework.data.repository.query.Param("id") Long id,
+                             @org.springframework.data.repository.query.Param("worker") String worker);
+
+    /** The owner drops a handover whose claimer stopped beating (it died). */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET " + CLEAR_HANDOVER
+            + " WHERE j.id = :id AND j.workerId = :owner AND j.handoverFrom = :owner AND j.handoverTo IS NOT NULL "
+            + "AND (j.handoverBeatAt IS NULL OR j.handoverBeatAt < :staleBefore)")
+    int dropStaleHandoverClaim(@org.springframework.data.repository.query.Param("id") Long id,
+                               @org.springframework.data.repository.query.Param("owner") String owner,
+                               @org.springframework.data.repository.query.Param("staleBefore") java.time.ZonedDateTime staleBefore);
+
+    /** The owner records which YouTube ingest it publishes to (after moving back to the primary). */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET j.youtubeIngest = :ingest WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true")
+    int saveYoutubeIngest(@org.springframework.data.repository.query.Param("id") Long id,
+                          @org.springframework.data.repository.query.Param("worker") String worker,
+                          @org.springframework.data.repository.query.Param("ingest") String ingest);
+
+    /**
+     * A draining worker shutting down before it could hand a stream over lets go of it, so another
+     * worker claims it on its next pass (seconds) instead of waiting for the takeover timeout.
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE StreamJob j SET j.workerId = NULL, j.heartbeatAt = NULL, " + CLEAR_HANDOVER
+            + " WHERE j.id = :id AND j.workerId = :worker AND j.isLive = true AND j.desiredState = 'RUN'")
+    int releaseOnShutdown(@org.springframework.data.repository.query.Param("id") Long id,
+                          @org.springframework.data.repository.query.Param("worker") String worker);
+
+    /** Who owns the job right now (cheap check while a handover completes). */
+    @Query("SELECT j.workerId FROM StreamJob j WHERE j.id = :id")
+    java.util.Optional<String> findWorkerIdById(@org.springframework.data.repository.query.Param("id") Long id);
 }

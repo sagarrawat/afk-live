@@ -101,6 +101,25 @@ public class StreamJob {
     /** Highest live command the worker has applied (commands after it are still to apply). */
     @Column(name = "applied_command_id", nullable = false)
     private long appliedCommandId;
+    /** OPS-3: the YouTube ingest the owning worker publishes to (PRIMARY or BACKUP; null: PRIMARY). */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String youtubeIngest;
+    /** OPS-3: a planned handover to another worker (all null when none is in progress). See {@code Handover}. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String handoverFrom;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String handoverTo;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.ZonedDateTime handoverOfferedAt;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "handover_position", columnDefinition = "TEXT")
+    private String handoverPosition;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.ZonedDateTime handoverClaimedAt;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.ZonedDateTime handoverBeatAt;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.time.ZonedDateTime handoverReadyAt;
     /** Why the stream ended (user, schedule, credit limit, crash, server restart). */
     private String endReason;
 

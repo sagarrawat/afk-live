@@ -159,8 +159,9 @@ public final class StreamHealth {
             String level = speed >= 0.98 ? GREEN : speed >= 0.9 ? AMBER : RED;
             metrics.add(new Metric("speed", String.format("%.2fx", speed), level, switch (level) {
                 case GREEN -> "Encoding in real time.";
-                case AMBER -> "Encoding slightly slower than real time; we'll keep it live by skipping frames.";
-                default -> "The server can't keep up; try a lower quality.";
+                // Slower than real time means YouTube receives it slower than it plays (24 Oct 2026): say so.
+                case AMBER -> "Encoding slightly slower than real time; if it stays there, viewers see it play slowly.";
+                default -> "The server can't keep up, so viewers see the stream play slowly. Lower the quality to 720p 30 fps.";
             }));
         }
 

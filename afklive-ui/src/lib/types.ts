@@ -78,6 +78,8 @@ export interface LiveState {
   endReason?: string | null;
   /** RE-8, while LIVE: whether the platforms are receiving it. */
   reach?: StreamReach | null;
+  /** RE-10: running slower than real time since then (a minute or more); null when it isn't. */
+  slowSince?: string | null;
 }
 
 export interface StreamSummary {
@@ -194,9 +196,28 @@ export interface Check {
   fix?: string | null;
 }
 
+/** GL-7: a quality the creator can pick. */
+export interface Quality {
+  height: number;
+  fps: number;
+}
+
+/** GL-7: whether the chosen quality fits the servers' free capacity right now (an estimate). */
+export interface CapacityEstimate {
+  needCpus: number;
+  freeCpus?: number | null;
+  fits: boolean;
+  impossible: boolean;
+  suggestion?: Quality | null;
+  suggestionFits: boolean;
+  message?: string | null;
+}
+
 export interface Preflight {
   ok: boolean;
   checks: Check[];
+  /** GL-7: null when no server reported its load. */
+  capacity?: CapacityEstimate | null;
 }
 
 export interface QualityOption {

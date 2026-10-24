@@ -51,3 +51,21 @@ databaseChangeLog:
       file: db/changelog/changes/061-stream-events.sql
   - include:
       file: db/changelog/changes/062-destination-tests-latest.sql
+  - include:
+      file: db/changelog/changes/065-one-live-run-per-stream.sql
+  - include:
+      file: db/changelog/changes/066-worker-cpus.sql
+  - include:
+      file: db/changelog/changes/070-worker-draining.sql
+  - include:
+      file: db/changelog/changes/071-worker-handover.sql
+  - include:
+      file: db/changelog/changes/075-support-ops.sql
+  - include:
+      file: db/changelog/changes/080-spring-session.sql
+  - include:
+      file: db/changelog/changes/085-go-live-check.sql
+  - include:
+      file: db/changelog/changes/086-referrals.sql
+  - include:
+      file: db/changelog/changes/100-encoder-preset.sql

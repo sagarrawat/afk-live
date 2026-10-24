@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { ChevronLeft } from 'lucide-react';
 import { NavLink, Navigate, useParams } from 'react-router-dom';
-import { GoLiveButton, StopButton } from '@/components/live-actions';
+import { GoLiveButton, SlowNotice, StopButton } from '@/components/live-actions';
 import { HealthDot, isOnAir, LiveBadge, reachProblem, Uptime } from '@/components/status';
 import { ErrorNote, Spinner } from '@/components/ui';
 import { dateTime } from '@/lib/format';
@@ -71,6 +71,7 @@ export function StreamPage() {
             {onAir && reachProblem(s.live) && <p className="mt-1 text-sm text-bad">{reachProblem(s.live)}</p>}
             {s.live.stopAt && onAir && <p className="mt-1 text-sm text-muted">Stops {dateTime(s.live.stopAt, s.timeZone)}</p>}
             {!onAir && s.live.state === 'ERROR' && s.live.endReason && <p className="mt-1 text-sm text-bad">{s.live.endReason}</p>}
+            {onAir && <SlowNotice live={s.live} streamId={s.id} />}
           </div>
           <div className="flex items-center gap-5">
             {onAir && (

@@ -10,6 +10,7 @@ import { useDestinations, useRuns, useTimeline, useUptime } from '@/lib/queries'
 import type { StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
 import { VerticalHint } from './VerticalHint';
+import { GoLiveCheckCard } from './GoLiveCheck';
 import { YouTubeSideCard } from './YouTubeSideCard';
 import { HelpLink } from '@/components/HelpLink';
 import { HELP, helpForProblem } from '@/lib/help';
@@ -28,6 +29,7 @@ export function OverviewTab({ stream: s }: { stream: StreamView }) {
       <div className="space-y-6">
         <YouTubeSideCard stream={s} />
         <VerticalHint stream={s} />
+        <GoLiveCheckCard stream={s} />
         {s.source === 'PHONE' ? <PhoneControl stream={s} /> : <NowPlaying stream={s} />}
         {onAir && s.overlays.length > 0 && <OverlayToggles stream={s} />}
         <UptimePanel stream={s} />

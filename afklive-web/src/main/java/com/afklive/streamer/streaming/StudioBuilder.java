@@ -38,6 +38,8 @@ public class StudioBuilder {
     private final com.afklive.streamer.service.MediaProbe probe;
     /** Smaller copies of library videos, prepared once at this stream's size and frame rate. */
     private final com.afklive.streamer.service.PlayoutCopies playoutCopies;
+    /** The live encoder's x264 preset and threads (app.streaming.x264-*). */
+    private final com.afklive.streamer.service.EncoderSettings encoderSettings;
     /** Whether each file has an audio track, when the library knows (from upload) or a probe found out. */
     /**
      * A built studio plus what's needed to change it while live: the factory and canvas for new
@@ -229,7 +231,7 @@ public class StudioBuilder {
         String wanted = initialScene != null ? initialScene : spec.initialScene();
         String first = wanted != null && scenes.stream().anyMatch(sc -> sc.name().equals(wanted)) ? wanted : StudioSpec.LIVE;
         long grace = spec.phone() != null ? spec.phone().graceSeconds() * 1000L : 0;
-        Studio studio = new Studio(canvas, workDir, ffmpeg, scenes, first, global, grace, listener);
+        Studio studio = new Studio(canvas, workDir, ffmpeg, encoderSettings, scenes, first, global, grace, listener);
         Built built = new Built(studio, playlist, music, canvas, ffmpeg, factory);
         built.streamFit = streamFit;
         built.crossfadeSeconds = spec.crossfadeSeconds();
