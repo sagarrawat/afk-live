@@ -7,6 +7,7 @@ import com.afklive.streamer.repository.StatusIncidentRepository;
 import com.afklive.streamer.repository.StatusIncidentUpdateRepository;
 import com.afklive.streamer.repository.StatusSignalRepository;
 import com.afklive.streamer.repository.StreamJobRepository;
+import com.afklive.streamer.repository.UsageRepository;
 import com.afklive.streamer.repository.WorkerStatusRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,8 @@ import java.util.Map;
 
 /**
  * RE-7: the public status page. Platform-level only: each component is operational, degraded or
- * down (never counts, names or anything about one account), plus the incidents admins post.
+ * down (never names or anything about one account), plus the incidents admins post. The only numbers
+ * are the homepage's two platform totals ({@link Proof}), left out while they're small.
  * <ul>
  *   <li>Website: answering this request means it's up (and the database answered the checks below).</li>
  *   <li>Stream servers: workers that reported in the last {@link StreamService#HEARTBEAT_TIMEOUT}, and
@@ -57,12 +59,13 @@ public class StatusService {
     private final StatusIncidentUpdateRepository updates;
     private final IngestService ingest;
     private final AdminService admin;
+    private final UsageRepository usage;
 
     private volatile PublicStatus cached;
 
     public StatusService(WorkerStatusRepository workers, StreamJobRepository jobs, StatusSignalRepository signals,
                          StatusIncidentRepository incidents, StatusIncidentUpdateRepository updates, IngestService ingest,
-                         AdminService admin) {
+                         AdminService admin, UsageRepository usage) {
         this.workers = workers;
         this.jobs = jobs;
         this.signals = signals;
@@ -70,6 +73,7 @@ public class StatusService {
         this.updates = updates;
         this.ingest = ingest;
         this.admin = admin;
+        this.usage = usage;
     }
 
     public record Component(String id, String name, String status, String detail) {
@@ -82,7 +86,24 @@ public class StatusService {
                            List<Update> updates) {
     }
 
-    public record PublicStatus(String overall, ZonedDateTime checkedAt, List<Component> components, List<Incident> incidents) {
+    public record PublicStatus(String overall, ZonedDateTime checkedAt, List<Component> components, List<Incident> incidents,
+                               Proof proof) {
+    }
+
+    /**
+     * The homepage's proof line: streams a platform is receiving right now, and hours streamed on AFK Live
+     * so far. Each is null until it's big enough to mean something (and to say nothing about any one
+     * account): {@link #MIN_LIVE} streams, {@link #MIN_HOURS} hours, the hours rounded down to hundreds.
+     */
+    public record Proof(Long liveNow, Long hoursStreamed) {
+    }
+
+    public static final long MIN_LIVE = 10;
+    public static final long MIN_HOURS = 1000;
+
+    public static Proof proof(long liveNow, long streamSeconds) {
+        long hours = streamSeconds / 3600;
+        return new Proof(liveNow >= MIN_LIVE ? liveNow : null, hours >= MIN_HOURS ? hours / 100 * 100 : null);
     }
 
     /** What /api/public/status returns; recomputed at most every {@link #CACHE_FOR} per instance. */
@@ -131,7 +152,13 @@ public class StatusService {
         if (list.stream().anyMatch(i -> i.resolvedAt() == null)) {
             overall = worst(overall, DEGRADED);
         }
-        return new PublicStatus(overall, now, components, list);
+        Proof proof = new Proof(null, null);
+        try {
+            proof = proof(jobs.countReachingSince(now.minus(StreamService.HEARTBEAT_TIMEOUT)), usage.totalSeconds());
+        } catch (RuntimeException e) {
+            log.warn("Status proof numbers couldn't be read: {}", e.getMessage());
+        }
+        return new PublicStatus(overall, now, components, list, proof);
     }
 
     private Component streamServers(ZonedDateTime now) {

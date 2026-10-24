@@ -11,6 +11,12 @@ import java.io.IOException;
 
 public class CsrfCookieFilter extends OncePerRequestFilter {
 
+    /** The homepage beacon sets no cookie of any kind (SiteFunnelService). */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return "/api/public/funnel".equals(request.getRequestURI());
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {

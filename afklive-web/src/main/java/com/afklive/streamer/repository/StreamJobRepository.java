@@ -35,6 +35,11 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
 
     long countByIsLiveTrue();
 
+    /** RE-8: runs a platform is receiving right now (a destination ON, worker still reporting): the homepage's "live now". */
+    @Query(value = "SELECT count(DISTINCT j.id) FROM stream_jobs j JOIN stream_job_destinations d ON d.job_id = j.id "
+            + "WHERE j.is_live = true AND j.heartbeat_at > :since AND d.reach = 'ON'", nativeQuery = true)
+    long countReachingSince(@org.springframework.data.repository.query.Param("since") java.time.ZonedDateTime since);
+
     // Auto-Reply
     @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true AND j.autoReplyEnabled = true")
     List<StreamJob> findByIsLiveTrueAndAutoReplyEnabledTrue();

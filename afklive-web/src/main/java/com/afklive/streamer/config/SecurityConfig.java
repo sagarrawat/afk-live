@@ -90,7 +90,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/api/payment/callback", "/internal/ingest/auth", "/internal/worker/**")
+                        .ignoringRequestMatchers("/api/payment/callback", "/internal/ingest/auth", "/internal/worker/**", "/api/public/funnel")
                 )
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 // ON-6 / ON-7: a second sign-in step for two-step accounts; accounts scheduled for deletion are closed.
@@ -99,7 +99,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.FORWARD, jakarta.servlet.DispatcherType.ERROR).permitAll()
                         // 1. PUBLIC: Landing page, assets
-                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/classic", "/classic.html", "/pricing", "/features", "/for/**", "/help", "/help/**", "/status", "/api/public/status", "/sitemap.xml", "/robots.txt", "/css/**", "/js/**", "/app/assets/**", "/app/manifest.webmanifest", "/app/*.png", "/favicon.ico", "/sw.js", "/site/**", "/api/user-info", "/api/pricing", "/api/billing/plans", "/error").permitAll()
+                        .requestMatchers("/", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/classic", "/classic.html", "/pricing", "/features", "/for/**", "/help", "/help/**", "/status", "/api/public/status", "/api/public/funnel", "/sitemap.xml", "/robots.txt", "/css/**", "/js/**", "/app/assets/**", "/app/manifest.webmanifest", "/app/*.png", "/favicon.ico", "/sw.js", "/site/**", "/api/user-info", "/api/pricing", "/api/billing/plans", "/error").permitAll()
                         .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**", "/account/restore").permitAll()
                         // Server-to-server payment notification; verified by signature in the controller.
                         .requestMatchers("/api/payment/callback").permitAll()

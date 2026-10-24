@@ -19,4 +19,8 @@ public interface UsageRepository extends Repository<User, Long> {
     @Query(value = "SELECT COALESCE((SELECT stream_seconds FROM usage_months WHERE user_id = :userId AND month = :month), 0)",
             nativeQuery = true)
     long secondsIn(@Param("userId") Long userId, @Param("month") String month);
+
+    /** Every second streamed on AFK Live, all accounts (the homepage's "hours streamed"). */
+    @Query(value = "SELECT COALESCE(SUM(stream_seconds), 0) FROM usage_months", nativeQuery = true)
+    long totalSeconds();
 }
