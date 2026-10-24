@@ -66,4 +66,28 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, Long>,
     @org.springframework.data.jpa.repository.Query("UPDATE MediaAsset a SET a.loudnessLufs = :lufs, a.loudnessChecked = true WHERE a.id = :id")
     int setLoudness(@org.springframework.data.repository.query.Param("id") Long id,
                     @org.springframework.data.repository.query.Param("lufs") Double lufs);
+
+    // GR-9: whether a video is one still picture. Native, so the entity (saved whole elsewhere) never overwrites it.
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT id FROM media_assets WHERE status = 'READY' AND content_type = 'VIDEO' "
+            + "AND still_checked = false ORDER BY EXISTS (SELECT 1 FROM stream_items i WHERE i.media_asset_id = media_assets.id) DESC, id DESC",
+            nativeQuery = true)
+    List<Long> findNeedingStillCheck(org.springframework.data.domain.Pageable page);
+
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(value = "UPDATE media_assets SET still_picture = :still, still_checked = true WHERE id = :id",
+            nativeQuery = true)
+    int setStillPicture(@org.springframework.data.repository.query.Param("id") Long id,
+                        @org.springframework.data.repository.query.Param("still") Boolean still);
+
+    /** The ones among {@code ids} measured as one still picture (unmeasured files are not included). */
+    @org.springframework.data.jpa.repository.Query(value = "SELECT id FROM media_assets WHERE id IN (:ids) AND still_picture = true",
+            nativeQuery = true)
+    List<Long> findStillPictures(@org.springframework.data.repository.query.Param("ids") java.util.Collection<Long> ids);
+
+    /** The ones among {@code ids} not yet measured. */
+    @org.springframework.data.jpa.repository.Query(value = "SELECT id FROM media_assets WHERE id IN (:ids) AND still_checked = false",
+            nativeQuery = true)
+    List<Long> findStillUnchecked(@org.springframework.data.repository.query.Param("ids") java.util.Collection<Long> ids);
 }

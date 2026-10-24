@@ -67,6 +67,51 @@ class MediaProbeTest {
         assertThat(l - q).as("10x the amplitude is 20 dB louder").isBetween(19.0, 21.0);
     }
 
+    /** GR-9: a "static image" video is told apart from moving pictures, with real FFmpeg. */
+    @Test
+    void tellsAStillPictureVideoFromAMovingOne() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("still");
+        java.nio.file.Path still = dir.resolve("still.mp4");
+        java.nio.file.Path moving = dir.resolve("moving.mp4");
+        java.nio.file.Path smallMotion = dir.resolve("small-motion.mp4");
+        Object[][] files = {
+                // One picture held for 12 s (what "image + song" videos are), encoded like an upload.
+                {still, "testsrc2=s=1280x720:r=25,trim=end_frame=1,loop=loop=-1:size=1,trim=duration=12"},
+                // Moving test pattern.
+                {moving, "testsrc2=s=1280x720:r=25:d=12"},
+                // A still background with one small moving square (a "lofi" loop with a little animation).
+                {smallMotion, "color=c=0x334455:s=1280x720:r=25:d=12[bg];color=c=white:s=80x80:r=25:d=12[sq];"
+                        + "[bg][sq]overlay=x='mod(t*100,1200)':y=300"},
+        };
+        for (Object[] f : files) {
+            Process p = new ProcessBuilder("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", (String) f[1],
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", f[0].toString())
+                    .redirectErrorStream(true).start();
+            p.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
+            org.junit.jupiter.api.Assumptions.assumeTrue(p.waitFor() == 0, "ffmpeg not available");
+        }
+        MediaProbe probe = new MediaProbe();
+        assertThat(probe.stillPicture(still.toString(), 12)).isTrue();
+        assertThat(probe.stillPicture(moving.toString(), 12)).isFalse();
+        assertThat(probe.stillPicture(smallMotion.toString(), 12)).isFalse();
+        assertThat(probe.stillPicture(dir.resolve("missing.mp4").toString(), 12)).as("unreadable: unknown, never a guess").isNull();
+    }
+
+    @Test
+    void framesMatchOnlyWhenNothingMoves() {
+        byte[] a = new byte[64 * 36];
+        java.util.Arrays.fill(a, (byte) 100);
+        byte[] noisy = a.clone();
+        noisy[10] = (byte) 104; // compression noise
+        byte[] dot = a.clone();
+        dot[500] = (byte) 200; // something small moved
+        byte[] darker = a.clone();
+        java.util.Arrays.fill(darker, (byte) 98);
+        assertThat(MediaProbe.sameFrames(java.util.List.of(a, noisy, a))).isTrue();
+        assertThat(MediaProbe.sameFrames(java.util.List.of(a, dot))).isFalse();
+        assertThat(MediaProbe.sameFrames(java.util.List.of(a, darker))).as("the whole picture changed").isFalse();
+    }
+
     @Test
     void readsTheLastTimestampFromProgress() {
         assertThat(MediaProbe.parseLastTime("frame= 10 time=00:00:01.50 bitrate\nframe= 75 time=00:01:02.04 bitrate")).isEqualTo(62.04);
