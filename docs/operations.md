@@ -128,6 +128,41 @@ key from `APP_ENCRYPTION_OLD_KEYS` after that.
   tax records, detached from the account; B2C invoices (no GSTIN) lose the customer's name and address,
   B2B invoices keep the legal name, address and GSTIN that GST law requires.
 
+## Email (OPS-1)
+
+Email goes through ZeptoMail: set `ZEPTOMAIL_URL` and `ZEPTOMAIL_TOKEN` on the web app, and
+`APP_BASE_URL` to the public address (`https://afklive.in`): verification and reset links are built
+from it, never from the request. While either ZeptoMail variable is empty:
+
+- the web app logs `EMAIL IS OFF` at startup and Admin shows a red banner;
+- password sign-ups are verified at once (logged), and at startup any sign-up still waiting for a
+  verification email is verified too (accounts an admin disabled are left alone);
+- "Forgot password" says email is unavailable and points to support@afklive.in (or Google sign-in)
+  instead of claiming a link was sent. Reset a password for someone who writes in by checking who they
+  are, then setting a new one in the database;
+- alerts and payment reminders still appear in the app, just not by email.
+
+Every send is recorded in `email_log` (time, kind, the recipient's account, sent or why not; never the
+address or body) and shown in Admin > Users > the user. "Send a test email" (Admin > Platform, or the
+banner) sends to your own address and is audited. Records older than 180 days are removed.
+
+## Errors and request ids (OPS-2)
+
+Every request gets an 8-character id: in each log line it writes (`[abcd2345]`), in the `X-Request-Id`
+header, and on the error page as "Code: abcd2345" for server errors. A creator who quotes a code can
+be found with a log search for it. A form opened before a deploy (expired security token) is not an
+error: sign-in forms open again with "This page expired", and the app gets a fresh token and retries.
+
+## Support view of a run (AD-1, AD-3)
+
+Admin > Live streams (click the stream) or Admin > Users > the user > a stream opens the run: source
+files with size, frame rate and shape; the output profile; each destination's server, a masked key
+(first and last four characters only for keys of 16 or more) and a check of its shape; the platform's
+last error and reconnects; and the last 200 FFmpeg lines. Workers keep those lines in memory with keys
+removed as they arrive, and save them to `stream_job_logs` every 10 s while there are new ones (one row
+per run, replaced; removed after 14 days). "Send a test" runs the usual 10-second destination test
+with the user's key (not while that destination is live), needs a reason and is audited.
+
 ## Destination tests
 
 "Test" on a destination runs on a stream worker (behind its egress firewall), at most two at a time

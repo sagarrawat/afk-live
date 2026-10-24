@@ -228,4 +228,7 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
             + "FROM stream_jobs WHERE start_time IS NOT NULL AND start_time < :to AND (end_time IS NULL OR end_time > :from)", nativeQuery = true)
     double streamSecondsBetween(@org.springframework.data.repository.query.Param("from") java.time.ZonedDateTime from,
                                 @org.springframework.data.repository.query.Param("to") java.time.ZonedDateTime to);
+
+    /** AD-3: a stream's newest run (by id: a run that never started has no start time). */
+    java.util.Optional<StreamJob> findFirstByStreamIdOrderByIdDesc(Long streamId);
 }

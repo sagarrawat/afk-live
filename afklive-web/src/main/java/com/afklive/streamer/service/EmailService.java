@@ -1,6 +1,8 @@
 package com.afklive.streamer.service;
 
-import lombok.RequiredArgsConstructor;
+import com.afklive.streamer.model.EmailLog;
+import com.afklive.streamer.repository.EmailLogRepository;
+import com.afklive.streamer.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -14,9 +16,17 @@ import java.util.Collections;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class EmailService {
+
+    /** What an email is for; recorded with every send (OPS-1). */
+    public enum Kind { VERIFY, RESET, WELCOME, UPGRADE, UPLOAD, DELETION, ALERT, SUPPORT, TEST }
+
+    /** Whether the mail service took an email; {@code error} says why not, in short. */
+    public record Result(boolean ok, String error) {
+    }
+
+    static final String NOT_CONFIGURED = "Email isn't set up (ZEPTOMAIL_URL / ZEPTOMAIL_TOKEN are empty)";
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -34,6 +44,25 @@ public class EmailService {
     private String zeptoMailToken;
 
     private final RestTemplate restTemplate;
+    private final UserRepository users;
+    private final EmailLogRepository emailLog;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public EmailService(RestTemplate restTemplate, UserRepository users, EmailLogRepository emailLog) {
+        this.restTemplate = restTemplate;
+        this.users = users;
+        this.emailLog = emailLog;
+    }
+
+    /** Without a record of sends (tests of the templates). */
+    EmailService(RestTemplate restTemplate) {
+        this(restTemplate, null, null);
+    }
+
+    /** OPS-1: whether email can be sent at all. When it can't, sign-ups are verified automatically and "Forgot password" says so. */
+    public boolean isConfigured() {
+        return zeptoMailUrl != null && !zeptoMailUrl.isBlank() && zeptoMailToken != null && !zeptoMailToken.isBlank();
+    }
 
     // DTOs for ZeptoMail API
     private record EmailAddress(String address, String name) {}
@@ -96,7 +125,7 @@ public class EmailService {
                          "<p style='font-size: 18px; font-weight: bold; color: #21245C;'>" + status + "</p>" +
                          "<p>You can view your video details in the library.</p>";
         String html = createBaseHtml("Video Status Update", content);
-        sendEmail(to, "AFK Live: Video " + status, html);
+        sendEmail(Kind.UPLOAD, to, "AFK Live: Video " + status, html);
     }
 
     public void sendVerificationEmail(String to, String link) {
@@ -106,7 +135,7 @@ public class EmailService {
                          "</p>" +
                          "<p style='font-size: 14px; color: #888;'>Or copy this link to your browser:<br><a href='" + link + "' style='color: #21245C;'>" + link + "</a></p>";
         String html = createBaseHtml("Verify your email", content);
-        sendEmail(to, "Verify your email - AFK Live", html);
+        sendEmail(Kind.VERIFY, to, "Verify your email - AFK Live", html);
     }
 
     public void sendPasswordResetEmail(String to, String link) {
@@ -117,7 +146,7 @@ public class EmailService {
                          "<p style='font-size: 14px; color: #888;'>If you didn't ask to reset your password, you can safely ignore this email.</p>" +
                          "<p style='font-size: 14px; color: #888;'>Or copy this link:<br><a href='" + link + "' style='color: #21245C;'>" + link + "</a></p>";
         String html = createBaseHtml("Reset Password", content);
-        sendEmail(to, "Reset your password - AFK Live", html);
+        sendEmail(Kind.RESET, to, "Reset your password - AFK Live", html);
     }
 
     /** ON-7: the account will be deleted on {@code when}; signing in offers to keep it until then. */
@@ -128,7 +157,7 @@ public class EmailService {
                 + "<p style='margin-top: 30px; text-align: center;'><a href='" + escape(baseUrl + "/login") + "' style='background: #21245C; "
                 + "color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Sign in</a></p>"
                 + "<p style='font-size:13px;color:#999'>Didn't ask for this? Sign in now to keep your account, then change your password.</p>";
-        sendEmail(to, "Your AFK Live account will be deleted on " + when, createBaseHtml("Your account is scheduled for deletion", content));
+        sendEmail(Kind.DELETION, to, "Your AFK Live account will be deleted on " + when, createBaseHtml("Your account is scheduled for deletion", content));
     }
 
     public void sendWelcomeEmail(String to) {
@@ -144,7 +173,7 @@ public class EmailService {
                          "<a href='" + baseUrl + "' style='background: #21245C; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Go to Studio</a>" +
                          "</p>";
         String html = createBaseHtml("Welcome aboard! 🚀", content);
-        sendEmail(to, "Welcome to AFK Live! 🚀", html);
+        sendEmail(Kind.WELCOME, to, "Welcome to AFK Live! 🚀", html);
     }
 
     public void sendUpgradeEmail(String to, String planName) {
@@ -155,7 +184,7 @@ public class EmailService {
                          "<a href='" + baseUrl + "' style='background: #21245C; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Open Dashboard</a>" +
                          "</p>";
         String html = createBaseHtml("Upgrade Successful", content);
-        sendEmail(to, "You've upgraded to " + planName + "!", html);
+        sendEmail(Kind.UPGRADE, to, "You've upgraded to " + planName + "!", html);
     }
 
     @Async
@@ -167,7 +196,7 @@ public class EmailService {
                          "<p style='white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 6px; border: 1px solid #eee;'>" + message + "</p>";
 
         String html = createBaseHtml("New Support Ticket", content);
-        sendEmail(supportEmail, subject, html);
+        sendEmail(Kind.SUPPORT, supportEmail, subject, html);
     }
 
     /**
@@ -180,7 +209,7 @@ public class EmailService {
                 + "color:#fff;padding:10px 22px;border-radius:999px;text-decoration:none;font-weight:600'>Open AFK Live</a></p>")
                 + "<p style='font-size:13px;color:#999'>Is it just you? <a href='" + escape(baseUrl + "/status")
                 + "' style='color:#999'>Check AFK Live's status</a>. You can turn alert emails off in Settings.</p>";
-        return sendEmail(to, subject, createBaseHtml(escape(title), content));
+        return sendEmail(Kind.ALERT, to, subject, createBaseHtml(escape(title), content)).ok();
     }
 
     static String escape(String s) {
@@ -190,14 +219,26 @@ public class EmailService {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
     }
 
-    private boolean sendEmail(String to, String subject, String htmlContent) {
+    /** OPS-1: "Send a test email" in the admin console, to the admin's own address. */
+    public Result sendTestEmail(String to) {
+        String content = "<p>This is a test from the AFK Live admin console. If you can read it, email works.</p>";
+        return sendEmail(Kind.TEST, to, "AFK Live test email", createBaseHtml("Email works", content));
+    }
+
+    private Result sendEmail(Kind kind, String to, String subject, String htmlContent) {
+        Result result = deliver(to, subject, htmlContent);
+        record(kind, to, result);
+        return result;
+    }
+
+    private Result deliver(String to, String subject, String htmlContent) {
         if (to == null || to.isEmpty()) {
             log.warn("Skipping email notification: No recipient address.");
-            return false;
+            return new Result(false, "No recipient address");
         }
-        if (zeptoMailUrl == null || zeptoMailUrl.isBlank()) {
+        if (!isConfigured()) {
             log.debug("Email is not configured; not sending \"{}\"", subject);
-            return false;
+            return new Result(false, NOT_CONFIGURED);
         }
 
         try {
@@ -220,10 +261,37 @@ public class EmailService {
 
             restTemplate.postForObject(zeptoMailUrl, entity, String.class);
             log.info("Email sent to {} via ZeptoMail", to);
-            return true;
+            return new Result(true, null);
         } catch (Exception e) {
             log.warn("Failed to send email to {}: {}", to, e.getMessage());
-            return false;
+            return new Result(false, shortError(e.getMessage(), to));
+        }
+    }
+
+    /** The mail service's error, without the recipient's address, short enough for the log table. */
+    static String shortError(String message, String to) {
+        String m = message == null || message.isBlank() ? "The mail service refused it" : message.replaceAll("\\s+", " ").trim();
+        if (to != null && !to.isBlank()) {
+            m = m.replace(to, "[recipient]");
+        }
+        return m.length() > 300 ? m.substring(0, 297) + "..." : m;
+    }
+
+    /** Records the attempt; never fails the caller. */
+    private void record(Kind kind, String to, Result result) {
+        if (emailLog == null) {
+            return;
+        }
+        try {
+            EmailLog row = new EmailLog();
+            row.setCreatedAt(java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC")));
+            row.setKind(kind.name());
+            row.setUserId(to == null || users == null ? null : users.findByEmail(to).map(u -> u.getId()).orElse(null));
+            row.setOk(result.ok());
+            row.setError(result.ok() ? null : result.error());
+            emailLog.save(row);
+        } catch (Exception e) {
+            log.debug("Could not record an email send: {}", e.getMessage());
         }
     }
 }
