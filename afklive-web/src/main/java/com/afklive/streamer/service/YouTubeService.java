@@ -491,7 +491,13 @@ public class YouTubeService {
         return request.execute();
     }
 
-    @YoutubeQuota(apiName = "liveChatMessages.insert", cost = 50)
+    /**
+     * Posts one chat message. Nothing in AFK Live calls this by itself (AI-3): a future caller must be an
+     * explicit per-message action by the creator (YouTube API Developer Policies III.I.2, III.E.3.d).
+     */
+    // Quota: "A call to this method has a quota cost of 20 units."
+    // https://developers.google.com/youtube/v3/live/docs/liveChatMessages/insert
+    @YoutubeQuota(apiName = "liveChatMessages.insert", cost = 20)
     public void replyToLiveChat(String username, String liveChatId, String text) throws Exception {
         YouTube youtube = getYouTubeClient(username);
         LiveChatMessage message = new LiveChatMessage();

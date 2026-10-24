@@ -139,11 +139,11 @@ class AdminInsightsTest extends PostgresIntegrationTest {
         double hoursBefore = Double.parseDouble(before.replaceAll("^.*\"streamHours30d\":([0-9.]+).*$", "$1"));
         // A 10-hour run that ended an hour ago, and one that ended before the 30-day window (doesn't count).
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
-        StreamJob a = new StreamJob(customer, "k", "v.mp4", null, null, false, 0, "A", "d", "private", now.minusHours(11), "YouTube", false);
+        StreamJob a = new StreamJob(customer, "k", "v.mp4", null, null, false, 0, "A", "d", "private", now.minusHours(11), "YouTube");
         a.setEndTime(now.minusHours(1));
         a.setStatus("ENDED");
         jobs.save(a);
-        StreamJob old = new StreamJob(customer, "k", "v.mp4", null, null, false, 0, "B", "d", "private", now.minusDays(40), "YouTube", false);
+        StreamJob old = new StreamJob(customer, "k", "v.mp4", null, null, false, 0, "B", "d", "private", now.minusDays(40), "YouTube");
         old.setEndTime(now.minusDays(35));
         old.setStatus("ENDED");
         jobs.save(old);

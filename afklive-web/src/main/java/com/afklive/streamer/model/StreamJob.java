@@ -13,8 +13,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "stream_jobs", indexes = {
     @Index(name = "idx_streamjob_user_live", columnList = "user_id, is_live"),
     @Index(name = "idx_streamjob_live", columnList = "is_live"),
-    @Index(name = "idx_streamjob_user_time", columnList = "user_id, start_time DESC"),
-    @Index(name = "idx_streamjob_live_reply", columnList = "is_live, auto_reply_enabled")
+    @Index(name = "idx_streamjob_user_time", columnList = "user_id, start_time DESC")
 })
 public class StreamJob {
     @Id
@@ -126,11 +125,8 @@ public class StreamJob {
     private java.time.ZonedDateTime lastBillingTime;
     private double accumulatedCost = 0.0;
 
-    private boolean autoReplyEnabled;
-
-    @Column(columnDefinition = "TEXT")
-    private String lastPageToken;
-    private String liveChatId;
+    // auto_reply_enabled, last_page_token and live_chat_id stay in the table until the contract step
+    // (docs/operations.md, "Automatic replies removed"); nothing maps or writes them any more.
 
     @com.fasterxml.jackson.annotation.JsonProperty("username")
     public String getUsername() {
@@ -153,8 +149,7 @@ public class StreamJob {
             String description,
             String privacy,
             java.time.ZonedDateTime startTime,
-            String destinationName,
-            boolean autoReplyEnabled
+            String destinationName
     ) {
         this.user = user;
         this.streamKey = streamKey;
@@ -168,7 +163,6 @@ public class StreamJob {
         this.privacy = privacy;
         this.startTime = startTime;
         this.destinationName = destinationName;
-        this.autoReplyEnabled = autoReplyEnabled;
     }
 
 }

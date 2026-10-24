@@ -15,9 +15,12 @@ import java.util.List;
 public class JobInitializationService {
 
     /**
-     * Recurring jobs for features removed from the product (scheduled YouTube uploads and comment
-     * engagement). They kept running every 30-60 s, spending YouTube API quota and auto-deleting
-     * comments rated negative, with no UI to turn them off. Removed from JobRunr's store on startup.
+     * Ids of recurring jobs for features removed from the product: scheduled YouTube uploads, and the
+     * automatic live-chat replies and comment replies/auto-delete (AI-3: YouTube's spam policy and API
+     * Developer Policies III.I.2 forbid automated chat and comments). The code they ran
+     * ({@code EngagementService}) is gone; nothing schedules them. Their ids are still removed from
+     * JobRunr's store on startup so a store restored from an old backup can't try to run code that no
+     * longer exists.
      */
     static final List<String> RETIRED_JOBS = List.of("video-upload-job", "live-engagement-job", "general-engagement-job");
 

@@ -40,9 +40,6 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
             + "WHERE j.is_live = true AND j.heartbeat_at > :since AND d.reach = 'ON'", nativeQuery = true)
     long countReachingSince(@org.springframework.data.repository.query.Param("since") java.time.ZonedDateTime since);
 
-    // Auto-Reply
-    @Query("SELECT j FROM StreamJob j JOIN FETCH j.user WHERE j.isLive = true AND j.autoReplyEnabled = true")
-    List<StreamJob> findByIsLiveTrueAndAutoReplyEnabledTrue();
 
     // History
     Page<StreamJob> findByUserEmailOrderByStartTimeDesc(String email, Pageable pageable);

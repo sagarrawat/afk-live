@@ -709,7 +709,7 @@ public class LiveStreamService {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
         StreamJob job = new StreamJob(s.getUser(), dests.getFirst().url(), null, null, null, true, 0,
                 s.getName(), null, null, now,
-                String.join(", ", dests.stream().map(StreamSpec.Destination::name).toList()), false);
+                String.join(", ", dests.stream().map(StreamSpec.Destination::name).toList()));
         job.setLastBillingTime(now);
         job.setStatus(StreamStates.STARTING);
         job.setDesiredState(StreamStates.RUN);

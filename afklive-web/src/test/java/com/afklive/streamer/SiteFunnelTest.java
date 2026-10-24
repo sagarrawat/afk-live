@@ -122,7 +122,7 @@ class SiteFunnelTest extends PostgresIntegrationTest {
         u = users.save(u);
         assertThat(jdbc.queryForObject("SELECT created_at IS NOT NULL FROM users WHERE id = ?", Boolean.class, u.getId())).isTrue();
         StreamJob job = new StreamJob(u, "key", "video.mp4", null, null, true, 0, "t", "d", "private",
-                ZonedDateTime.now(ZoneId.of("UTC")), "YouTube", false);
+                ZonedDateTime.now(ZoneId.of("UTC")), "YouTube");
         job = jobs.save(job);
         events.save(new StreamEvent(job.getId(), ZonedDateTime.now(ZoneId.of("UTC")), StreamEvent.Kinds.REACHED, 0, "YouTube", null));
 
