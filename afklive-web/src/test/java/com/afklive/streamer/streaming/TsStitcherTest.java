@@ -279,8 +279,11 @@ public class TsStitcherTest {
         for (int k = 1; k <= switches + 1; k++) {
             launchedAt[k] = (k - 1) * every;
             double startup = k == 1 ? 0.3 : 0.3 + random.nextDouble() * 0.9; // FFmpeg start, first encoded frame
+            // Every third one starts its clock before its first frame is out (as -re after a slow open, seen in
+            // the soak): its first frames come out 0.33 s late and the next ones catch up at once.
+            double late = k > 1 && k % 3 == 0 ? 0.33 : 0;
             for (Chunk c : (k % 2 == 1 ? copyFrames : studioFrames)) {
-                arrivals.add(new Arrival(launchedAt[k] + startup + c.atSeconds(), k, c.data()));
+                arrivals.add(new Arrival(launchedAt[k] + startup + Math.max(c.atSeconds(), late), k, c.data()));
             }
         }
         arrivals.sort(java.util.Comparator.comparingDouble(Arrival::at));
