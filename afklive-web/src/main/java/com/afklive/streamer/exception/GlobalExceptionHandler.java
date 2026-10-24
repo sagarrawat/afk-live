@@ -21,7 +21,7 @@ public class GlobalExceptionHandler {
     private static final java.util.regex.Pattern PACKAGE_NAME =
             java.util.regex.Pattern.compile("\\b(com|org|java|javax|jakarta)\\.[a-z_]+\\.[a-z_]");
 
-    private static final String GENERIC_ERROR = "Something went wrong. Please try again.";
+    static final String GENERIC_ERROR = "Something went wrong on our side. Please try again.";
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
@@ -31,7 +31,20 @@ public class GlobalExceptionHandler {
             return body(HttpStatus.UNAUTHORIZED, message);
         }
         log.error("Unhandled error", e);
-        return body(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_ERROR);
+        return serverError();
+    }
+
+    /**
+     * OPS-2: only a real server error says "our side", with the request's code (it's in the log line
+     * above, so an admin can find it).
+     */
+    static ResponseEntity<Map<String, Object>> serverError() {
+        String id = org.slf4j.MDC.get(com.afklive.streamer.filter.RequestIdFilter.MDC_KEY);
+        if (id == null) {
+            return body(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_ERROR);
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "message", GENERIC_ERROR + " Code: " + id, "requestId", id));
     }
 
     @ExceptionHandler(NotFoundException.class)

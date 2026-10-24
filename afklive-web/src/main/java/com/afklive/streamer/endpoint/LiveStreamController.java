@@ -135,11 +135,20 @@ public class LiveStreamController {
     }
 
     @PostMapping("/{id}/live")
-    public ResponseEntity<?> goLive(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body,
+    public ResponseEntity<?> goLive(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body,
                                     Principal principal) {
+        // GL-7: "anyway" goes live past a capacity warning (the creator chose to).
+        Object scene = body == null ? null : body.get("scene");
+        boolean anyway = body != null && Boolean.parseBoolean(String.valueOf(body.get("anyway")));
         try {
-            StreamJob job = service.goLive(email(principal), id, body == null ? null : body.get("scene"));
+            StreamJob job = service.goLive(email(principal), id, scene == null ? null : String.valueOf(scene), anyway);
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("jobId", job.getId(), "state", "STARTING"));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Another request created this stream's run first (the database allows one live run per
+            // stream): this one gets that run, as a double tap should.
+            return service.liveRun(email(principal), id)
+                    .<ResponseEntity<?>>map(job -> ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("jobId", job.getId(), "state", "STARTING")))
+                    .orElseThrow(() -> e);
         } catch (LiveStreamService.PreflightFailedException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("success", false, "message", e.getMessage(), "preflight", e.preflight()));

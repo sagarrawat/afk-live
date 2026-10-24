@@ -17,9 +17,10 @@ public final class AlertPreferences {
     }
 
     public static final List<Kind> KINDS = List.of(
-            new Kind("STREAM", "A stream goes down or comes back", "Down for a minute or more, failed, or stuck starting; and the all-clear.",
+            new Kind("STREAM", "A stream goes down or comes back", "Down for a minute or more, failed, stuck starting or running slower than real time; and the all-clear.",
                     List.of(NotificationService.Types.STREAM_DOWN, NotificationService.Types.STREAM_RECOVERED,
-                            NotificationService.Types.STREAM_FAILED, NotificationService.Types.START_STUCK)),
+                            NotificationService.Types.STREAM_FAILED, NotificationService.Types.START_STUCK,
+                            NotificationService.Types.STREAM_SLOW, NotificationService.Types.STREAM_SPEED_OK)),
             new Kind("DESTINATION", "A platform stops receiving", "YouTube or another destination keeps refusing the stream, and when it's back.",
                     List.of(NotificationService.Types.DESTINATION_DOWN, NotificationService.Types.DESTINATION_RECOVERED)),
             new Kind("PHONE", "Your phone's signal", "Your phone stream drops for two minutes, and when it's back.",

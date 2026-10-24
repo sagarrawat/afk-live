@@ -1,10 +1,10 @@
-import { CheckCircle2, CircleAlert, Play, Square } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, CircleAlert, Gauge, Play, Square } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, post } from '@/lib/api';
+import { ApiError, patch, post } from '@/lib/api';
 import { appLink } from '@/lib/links';
 import { keys, useInvalidate } from '@/lib/queries';
-import type { Preflight, StreamSummary, StreamView } from '@/lib/types';
+import type { CapacityEstimate, LiveState, Preflight, Quality, StreamSummary, StreamView } from '@/lib/types';
 import { Button, Dialog, Field, Input, Segmented, useAction, useToast } from './ui';
 import { isOnAir } from './status';
 
@@ -33,37 +33,134 @@ export function PreflightList({ preflight, streamId, onNavigate }: { preflight: 
   );
 }
 
+/** GL-7: "1080p 60 fps" for a quality. */
+export const qualityLabel = (q: Quality) => `${q.height}p ${q.fps} fps`;
+
+/**
+ * GL-7: everything is ready, but by our estimate the servers can't keep up with this quality right
+ * now. One tap takes the lighter quality that fits; the creator may also go live anyway.
+ */
+export function CapacityWarning({
+  capacity,
+  busy,
+  onUseSuggestion,
+  onGoAnyway,
+  onCancel,
+}: {
+  capacity: CapacityEstimate;
+  busy: boolean;
+  onUseSuggestion: (q: Quality) => void;
+  onGoAnyway: () => void;
+  onCancel: () => void;
+}) {
+  const s = capacity.suggestion;
+  return (
+    <Dialog
+      open
+      onClose={onCancel}
+      title="This quality may not keep up right now"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="secondary" onClick={onGoAnyway} disabled={busy}>
+            Go live anyway
+          </Button>
+          {s && (
+            <Button variant="primary" busy={busy} onClick={() => onUseSuggestion(s)}>
+              Use {qualityLabel(s)}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p>{capacity.message}</p>
+        <p className="text-sm text-muted">
+          This is an estimate: about {capacity.needCpus.toFixed(1)} processor cores needed
+          {capacity.freeCpus != null ? `, ${capacity.freeCpus.toFixed(1)} free on our servers right now` : ''}. Going live anyway can work if
+          a server frees up; if it doesn&apos;t, we&apos;ll tell you and you can lower the quality then.
+        </p>
+      </div>
+    </Dialog>
+  );
+}
+
 /** GL-1: one press goes live; if a pre-flight check fails, say which and where to fix it. */
 export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream; size?: 'sm' | 'md'; scene?: string }) {
   const [preflight, setPreflight] = useState<Preflight | null>(null);
+  const [capacity, setCapacity] = useState<CapacityEstimate | null>(null);
   const [busy, setBusy] = useState(false);
+  // A double tap lands before React re-renders the button as busy: guard the request itself.
+  const inFlight = useRef(false);
   const toast = useToast();
   const invalidate = useInvalidate();
-  const go = async () => {
+  const go = async (opts: { anyway?: boolean; quality?: Quality } = {}) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     try {
-      await post(`/api/streams/${stream.id}/live`, scene ? { scene } : {});
+      if (opts.quality) {
+        await patch(`/api/streams/${stream.id}`, { qualityHeight: opts.quality.height, fps: opts.quality.fps });
+      }
+      await post(`/api/streams/${stream.id}/live`, { ...(scene ? { scene } : {}), ...(opts.anyway ? { anyway: true } : {}) });
+      setCapacity(null);
       toast(`${stream.name} is starting. It's usually live within 15 seconds.`, 'ok');
       await invalidate([...keys.streams], [...keys.stream(stream.id)]);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.body && typeof e.body === 'object' && 'preflight' in e.body) {
-        setPreflight((e.body as { preflight: Preflight }).preflight);
+        const pf = (e.body as { preflight: Preflight }).preflight;
+        if (pf.ok && pf.capacity && !pf.capacity.fits) {
+          setCapacity(pf.capacity);
+        } else {
+          setCapacity(null);
+          setPreflight(pf);
+        }
       } else {
         toast(e instanceof Error ? e.message : String(e), 'bad');
       }
+      if (opts.quality) await invalidate([...keys.stream(stream.id)]);
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
   return (
     <>
-      <Button variant="live" size={size} busy={busy} onClick={go} icon={<Play className="h-4 w-4" />}>
+      <Button variant="live" size={size} busy={busy} onClick={() => go()} icon={<Play className="h-4 w-4" />}>
         Go live
       </Button>
       <Dialog open={!!preflight} onClose={() => setPreflight(null)} title={`${stream.name} can't go live yet`} footer={<Button onClick={() => setPreflight(null)}>Close</Button>}>
         {preflight && <PreflightList preflight={preflight} streamId={stream.id} onNavigate={() => setPreflight(null)} />}
       </Dialog>
+      {capacity && (
+        <CapacityWarning
+          capacity={capacity}
+          busy={busy}
+          onUseSuggestion={(q) => go({ quality: q })}
+          onGoAnyway={() => go({ anyway: true })}
+          onCancel={() => setCapacity(null)}
+        />
+      )}
     </>
+  );
+}
+
+/** RE-10: the stream has run slower than real time for a minute or more; say so and give the fix. */
+export function SlowNotice({ live, streamId }: { live: Pick<LiveState, 'slowSince'>; streamId: number }) {
+  if (!live.slowSince) return null;
+  return (
+    <p role="status" className="mt-2 flex items-start gap-2 text-sm text-warn">
+      <Gauge className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      <span>
+        Running slower than real time, so viewers see it play slowly. The server can&apos;t keep up with this quality.{' '}
+        <Link to={`/studio/streams/${streamId}/settings`} className="text-accent hover:underline">
+          Lower it to 720p 30 fps
+        </Link>{' '}
+        (stop, change it, and go live again).
+      </span>
+    </p>
   );
 }
 
