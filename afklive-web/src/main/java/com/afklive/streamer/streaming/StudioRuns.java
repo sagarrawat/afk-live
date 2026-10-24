@@ -60,9 +60,20 @@ public class StudioRuns {
     }
 
     public Handle start(long jobId, StreamSpec spec, String scene, Studio.Listener listener) throws IOException {
+        return start(jobId, spec, scene, listener, null);
+    }
+
+    /**
+     * @param startAt OPS-3: where to start instead of the saved position: where the worker handing this
+     *                stream over is now (the saved position can be up to 10 s old). Null otherwise.
+     */
+    public Handle start(long jobId, StreamSpec spec, String scene, Studio.Listener listener, StudioSpec.Position startAt)
+            throws IOException {
         Path workDir = preparer.newWorkDir(jobId);
         StudioSpec.Position resume = spec.studio().resume();
-        if (spec.streamId() != null) {
+        if (startAt != null) {
+            resume = startAt;
+        } else if (spec.streamId() != null) {
             // The latest saved position wins: after a restart or takeover, continue where it was.
             String saved = streams.findById(spec.streamId()).map(LiveStream::getResumePosition).orElse(null);
             if (saved != null) {

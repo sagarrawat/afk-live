@@ -45,3 +45,7 @@ databaseChangeLog:
       file: db/changelog/changes/040-dismissed-hints.sql
   - include:
       file: db/changelog/changes/045-profile-copies.sql
+  - include:
+      file: db/changelog/changes/070-worker-draining.sql
+  - include:
+      file: db/changelog/changes/071-worker-handover.sql

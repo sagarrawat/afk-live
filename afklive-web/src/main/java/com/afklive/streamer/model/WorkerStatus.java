@@ -30,4 +30,7 @@ public class WorkerStatus {
     private Long memoryUsedBytes;
     @Column(name = "memory_total_bytes")
     private Long memoryTotalBytes;
+    /** OPS-3: set while this worker hands its streams to a new version (null: not draining). */
+    @Column(name = "draining_since")
+    private ZonedDateTime drainingSince;
 }
