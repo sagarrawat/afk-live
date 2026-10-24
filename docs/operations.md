@@ -76,8 +76,9 @@ requests, no errors, the signed-in visitor stayed signed in throughout.
 - **Sign-ins are stored in PostgreSQL** (Spring Session JDBC, `spring_session` tables), so both slots
   share them. A session attribute a new version can't read (a library upgrade changed a class) counts
   as signed out for that visitor instead of an error page; remember-me signs them back in. CSRF tokens
-  are in a cookie. The release that brings this signs everyone out once, because sessions were in memory
-  before (Spring Boot 4 had stopped auto-configuring the JDBC store).
+  are in a cookie. Remember-me cookies need `REMEMBER_ME_KEY` set (otherwise each slot makes up its own
+  key). The release that brings this signs everyone out once, because sessions were in memory before
+  (Spring Boot 4 had stopped auto-configuring the JDBC store).
 - **Every background job claims its work in the database**, so the two slots never do it twice:
 
 | Job (web side) | Every | Why two instances are safe |
@@ -145,6 +146,8 @@ No step interrupts the site:
 ```sh
 # 0. The running version must answer the readiness probe; otherwise Caddy (step 1) would mark it down.
 curl -s http://127.0.0.1:8080/actuator/health/readiness        # must print {"status":"UP"}
+#    Both slots must sign remember-me cookies with the same key (empty = a random key per process):
+grep -q '^REMEMBER_ME_KEY=.\+' /opt/afklive/afklive.env || echo "REMEMBER_ME_KEY=$(openssl rand -hex 32)" >> /opt/afklive/afklive.env
 
 # 1. Caddy: both slot ports with health checks. Only 8080 (afklive.service) answers for now; that's fine.
 #    Replace afk.live with your domain in the file first.
