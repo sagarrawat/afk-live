@@ -138,30 +138,39 @@ from it, never from the request. While either ZeptoMail variable is empty:
 - password sign-ups are verified at once (logged), and at startup any sign-up still waiting for a
   verification email is verified too (accounts an admin disabled are left alone);
 - "Forgot password" says email is unavailable and points to support@afklive.in (or Google sign-in)
-  instead of claiming a link was sent. Reset a password for someone who writes in by checking who they
-  are, then setting a new one in the database;
+  instead of claiming a link was sent. For someone who writes in, check who they are (the address they
+  write from, a payment id), then Admin > Users > the user > Emails > "Password reset link" (audited,
+  works once) and send them the link;
 - alerts and payment reminders still appear in the app, just not by email.
 
 Every send is recorded in `email_log` (time, kind, the recipient's account, sent or why not; never the
-address or body) and shown in Admin > Users > the user. "Send a test email" (Admin > Platform, or the
+address or body) and shown in Admin > Users > the user > Emails. "Send a test email" (Admin > Platform, or the
 banner) sends to your own address and is audited. Records older than 180 days are removed.
 
 ## Errors and request ids (OPS-2)
 
 Every request gets an 8-character id: in each log line it writes (`[abcd2345]`), in the `X-Request-Id`
-header, and on the error page as "Code: abcd2345" for server errors. A creator who quotes a code can
+header, on the error page as "Code: abcd2345", and in the app's message for an API server error.
+Only a server error (5xx) says "something went wrong on our side"; a 4xx says what happened. A creator who quotes a code can
 be found with a log search for it. A form opened before a deploy (expired security token) is not an
 error: sign-in forms open again with "This page expired", and the app gets a fresh token and retries.
 
-## Support view of a run (AD-1, AD-3)
+## Support view of a run (AD-6)
 
-Admin > Live streams (click the stream) or Admin > Users > the user > a stream opens the run: source
-files with size, frame rate and shape; the output profile; each destination's server, a masked key
-(first and last four characters only for keys of 16 or more) and a check of its shape; the platform's
-last error and reconnects; and the last 200 FFmpeg lines. Workers keep those lines in memory with keys
-removed as they arrive, and save them to `stream_job_logs` every 10 s while there are new ones (one row
-per run, replaced; removed after 14 days). "Send a test" runs the usual 10-second destination test
-with the user's key (not while that destination is live), needs a reason and is audited.
+Admin > Live streams (click the stream) or Admin > Users > the user > Stream runs opens the run: source
+files with size, frame rate and shape; the output profile; each destination's server, the key masked as
+the creator sees it (`••••` and the last four), its length and the same key check the app runs on save;
+the platform's last error, reconnects and, once the stream servers report it (RE-8), whether the
+platform is receiving; and the last 200 FFmpeg lines. "Send a test" runs the usual 10-second
+destination test with the run's address (not while that destination is live, one at a time per
+account, not counted against the creator's hourly tests), needs a reason and is audited.
+
+FFmpeg lines are captured on the worker (`JobLogs`): every line passes `Redact.line` before it is kept
+(stream URLs, every part of the run's destination addresses in plain and URL-encoded form, and named
+values such as `key=`, `streamid=`, `passphrase=`, `token=`), only the last 200 are kept in memory, and
+a background thread saves them to `stream_job_logs` every 10 s while there are new ones and once when
+the run stops (one row per run, replaced; removed after 14 days by the web app). A database outage only
+delays the save; it never touches the stream. Runs on workers older than this release have no log.
 
 ## Destination tests
 
