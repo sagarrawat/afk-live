@@ -37,7 +37,7 @@ Written 23 October 2026, after the first real users. Sizes: S (a day or two), M 
 | 11 | RE-9 Destination events on the timeline; per-destination alerts | S | RE-8 | PR in progress |
 | 12 | ST-6 Shape and frame rate from the video | S | DS-8 | PR in progress |
 | 13 | MK-4 Help articles for real tickets | S | GL-6 | PR in progress |
-| 14 | ON-8 Setup ends with proof that it worked | M | RE-8, GL-1 | Next |
+| 14 | ON-8 Setup ends with proof that it worked | M | RE-8, GL-1 | PR in progress |
 | 15 | FO-3 Cost per stream-hour including bandwidth | S | — | Next |
 | 16 | FO-2 Copy mode for playlists without live overlays | L | FO-1 | Next |
 | 17 | FO-4 Right-size bitrates per profile | S | FO-3 | Next |
