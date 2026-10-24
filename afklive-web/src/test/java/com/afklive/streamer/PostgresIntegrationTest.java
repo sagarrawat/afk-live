@@ -48,5 +48,6 @@ public abstract class PostgresIntegrationTest {
         registry.add("app.admin.worker-samples-auto", () -> "false"); // AdminConsoleTest drives WorkerSampler itself
         registry.add("app.check.weekly-auto", () -> "false"); // GoLiveCheckServiceTest drives the weekly check itself
         registry.add("app.first-live.auto", () -> "false"); // FirstLiveTest drives the sweep itself
+        registry.add("app.admin.transfer-alerts-auto", () -> "false"); // CostMeteringTest drives the budget check itself
     }
 }

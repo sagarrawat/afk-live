@@ -41,12 +41,15 @@ public class AdminConsoleService {
     private final AdminService admin;
     private final SupportService support;
     private final SiteFunnelService funnel;
+    private final CostMeter costs;
 
-    public AdminConsoleService(NamedParameterJdbcTemplate jdbc, AdminService admin, SupportService support, SiteFunnelService funnel) {
+    public AdminConsoleService(NamedParameterJdbcTemplate jdbc, AdminService admin, SupportService support, SiteFunnelService funnel,
+                               CostMeter costs) {
         this.jdbc = jdbc;
         this.admin = admin;
         this.support = support;
         this.funnel = funnel;
+        this.costs = costs;
     }
 
     // ------------------------------------------------------------------ overview: what needs attention now
@@ -77,6 +80,7 @@ public class AdminConsoleService {
     public static final String PAYMENT_FAILED = "PAYMENT_FAILED";
     public static final String EMAIL_OFF = "EMAIL_OFF";
     public static final String TICKETS = "TICKETS";
+    public static final String TRANSFER = "TRANSFER";
 
     private record OpenIncident(long jobId, String kind, String target, ZonedDateTime since) {
     }
@@ -195,6 +199,15 @@ public class AdminConsoleService {
         } catch (RuntimeException ignored) {
             // email status unknown: say nothing rather than guess
         }
+        // FO-5: outbound traffic at 70% or more of the month's included transfer.
+        try {
+            Attention t = transferAttention(costs.use(now));
+            if (t != null) {
+                out.add(t);
+            }
+        } catch (RuntimeException ignored) {
+            // traffic unknown: say nothing rather than guess
+        }
         Long tickets = jdbc.queryForObject("SELECT count(*) FROM support_tickets WHERE status = 'OPEN'", new MapSqlParameterSource(), Long.class);
         if (tickets != null && tickets > 0) {
             out.add(new Attention(TICKETS, StreamHealth.AMBER, tickets + " open support ticket" + (tickets == 1 ? "" : "s"),
@@ -206,6 +219,18 @@ public class AdminConsoleService {
         SiteFunnelService.Day today = funnel.daily(1).get(0);
         return new Overview(out, new HealthCounts(green, amber, red), live.size(), today.signUps(), today.firstGoLives(),
                 (int) workers.stream().filter(w -> !"(unassigned)".equals(w.worker())).count());
+    }
+
+    /** Amber from 70% of the included transfer, red from 90%; null below 70% or when nothing is included. */
+    static Attention transferAttention(CostMeter.Use u) {
+        Double pct = u.percent();
+        if (pct == null || pct < CostMeter.THRESHOLDS[0]) {
+            return null;
+        }
+        return new Attention(TRANSFER, pct >= CostMeter.THRESHOLDS[1] ? StreamHealth.RED : StreamHealth.AMBER,
+                String.format(Locale.ROOT, "Traffic is at %.0f%% of this month's included transfer", Math.floor(pct)),
+                String.format(Locale.ENGLISH, "%,.0f GB of %,.0f GB sent in %s; beyond that every GB is billed.", u.gb(), u.includedGb(), u.month()),
+                null, null, null, "/studio/admin/billing");
     }
 
     private static String notReachingDetail(AdminService.LiveRow r) {
