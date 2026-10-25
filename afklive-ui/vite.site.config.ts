@@ -24,6 +24,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve(__dirname, 'site/index.html'),
+        // MK-1: the homepage in Hindi (served at /hi).
+        hi: resolve(__dirname, 'site/hi.html'),
         pricing: resolve(__dirname, 'site/pricing.html'),
         privacy: resolve(__dirname, 'site/privacy.html'),
         terms: resolve(__dirname, 'site/terms.html'),

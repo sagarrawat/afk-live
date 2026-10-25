@@ -1,5 +1,6 @@
 import { mountTabs } from './tabs';
-import { NICHES, frameSrc, showFrame } from './niches';
+import { niches, frameSrc, showFrame } from './niches';
+import { pageLang, type Lang } from './i18n';
 
 export const CYCLE_MS = 6000;
 
@@ -16,7 +17,8 @@ export function prefersReducedMotion(): boolean {
  * picking stops the cycling for good. With reduced motion it never cycles on its own. It also waits
  * while the pointer or focus is on the player, and while the page is hidden.
  */
-export function mountHero(root: HTMLElement, reduced = prefersReducedMotion()) {
+export function mountHero(root: HTMLElement, reduced = prefersReducedMotion(), lang: Lang = pageLang()) {
+  const NICHES = niches(lang);
   const list = root.querySelector<HTMLElement>('[role="tablist"]');
   const img = root.querySelector<HTMLImageElement>('[data-hero-img]');
   const title = root.querySelector<HTMLElement>('[data-hero-title]');

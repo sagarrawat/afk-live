@@ -18,7 +18,7 @@ toggle?.addEventListener('click', () => {
   menu?.classList.toggle('hidden', open);
 });
 
-document.querySelectorAll<HTMLElement>('[data-pricing]').forEach(mountPricing);
+document.querySelectorAll<HTMLElement>('[data-pricing]').forEach((e) => mountPricing(e));
 document.querySelectorAll<HTMLElement>('[data-year]').forEach((e) => (e.textContent = String(new Date().getFullYear())));
 document.querySelectorAll<HTMLElement>('[data-hero]').forEach((e) => mountHero(e));
 document.querySelectorAll<HTMLElement>('[data-niche-picker]').forEach((e) => mountNichePicker(e));

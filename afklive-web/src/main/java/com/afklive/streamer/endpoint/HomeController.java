@@ -18,6 +18,15 @@ public class HomeController {
         return "forward:/site/index.html";
     }
 
+    /**
+     * MK-1: the homepage in Hindi (afklive-ui/site/hi.html). Served to everyone, signed in or not, like
+     * the other public pages; its buttons lead into the (English) app.
+     */
+    @GetMapping("/hi")
+    public String hindiHome() {
+        return "forward:/site/hi.html";
+    }
+
     /** The old server-rendered admin moved into the app; old bookmarks land in the admin console. */
     @GetMapping({"/admin", "/admin/**"})
     public String oldAdmin() {

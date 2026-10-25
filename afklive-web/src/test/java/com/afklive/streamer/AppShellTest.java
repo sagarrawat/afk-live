@@ -88,6 +88,10 @@ class AppShellTest extends PostgresIntegrationTest {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio"));
         mvc.perform(get("/").with(user("ops@example.com").roles("ADMIN")))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl("/studio/admin"));
+        // MK-1: the Hindi homepage, signed out and signed in, and listed in the sitemap.
+        mvc.perform(get("/hi")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/hi.html"));
+        mvc.perform(get("/hi").with(user(email).roles("USER"))).andExpect(status().isOk()).andExpect(forwardedUrl("/site/hi.html"));
+        mvc.perform(get("/sitemap.xml")).andExpect(content().string(containsString("<loc>https://afklive.in/hi</loc>")));
         for (String page : new String[]{"/login", "/register"}) {
             mvc.perform(get(page))
                     .andExpect(status().isOk())

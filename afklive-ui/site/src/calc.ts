@@ -1,4 +1,5 @@
 import { loadPlans } from './plans';
+import { pageLang, t, type Lang } from './i18n';
 
 /**
  * "Leaving your PC on costs more than you think": the electricity a PC uses streaming all month,
@@ -37,15 +38,17 @@ export function clean(key: keyof Inputs, raw: string): number {
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 const num = (n: number) => (Number.isInteger(n) ? n.toLocaleString('en-IN') : n.toLocaleString('en-IN', { maximumFractionDigits: 1 }));
 
-export function formula(i: Inputs): string {
-  return `${num(i.watts)} W × ${num(i.hoursPerDay)} h × ${DAYS} days ÷ 1000 = ${num(monthlyUnits(i))} units × ₹${num(i.rupeesPerUnit)} = ${inr(monthlyCost(i))}`;
+export function formula(i: Inputs, lang: Lang = 'en'): string {
+  const d = t(lang).calc;
+  return `${num(i.watts)} W × ${num(i.hoursPerDay)} ${d.hours} × ${DAYS} ${d.days} ÷ 1000 = ${num(monthlyUnits(i))} ${d.units} × ₹${num(i.rupeesPerUnit)} = ${inr(monthlyCost(i))}`;
 }
 
 /** The honest comparison: cheaper or not, the plan isn't only about the bill. */
-export function verdict(cost: number, price: number): string {
-  if (cost > price) return `That’s ${inr(cost - price)} a month more than Creator, before the PC itself wears out.`;
-  if (cost === price) return 'About the same as Creator. The difference is what happens when the power or internet goes.';
-  return `Electricity alone costs less than Creator. What you pay us for is the stream staying on through power cuts, updates and internet drops, with your PC off.`;
+export function verdict(cost: number, price: number, lang: Lang = 'en'): string {
+  const d = t(lang).calc;
+  if (cost > price) return d.more(inr(cost - price));
+  if (cost === price) return d.same;
+  return d.less;
 }
 
 /** Bar widths in percent, the larger value full width. */
@@ -65,7 +68,7 @@ export async function creatorPrice(load = loadPlans): Promise<number | null> {
 }
 
 /** Wires [data-calc]: inputs [data-calc-input=watts|hoursPerDay|rupeesPerUnit] and outputs [data-calc-*]. */
-export function mountCalc(root: HTMLElement, load = loadPlans) {
+export function mountCalc(root: HTMLElement, load = loadPlans, lang: Lang = pageLang()) {
   let price = Number(root.dataset.price) || 499;
   const out = (name: string) => root.querySelector<HTMLElement>(`[data-calc-${name}]`);
   const read = (): Inputs => {
@@ -78,8 +81,8 @@ export function mountCalc(root: HTMLElement, load = loadPlans) {
     const b = bars(cost, price);
     out('cost')!.textContent = inr(cost);
     out('price')!.textContent = inr(price);
-    out('formula')!.textContent = formula(i);
-    out('verdict')!.textContent = verdict(cost, price);
+    out('formula')!.textContent = formula(i, lang);
+    out('verdict')!.textContent = verdict(cost, price, lang);
     out('bar-pc')!.style.width = `${Math.max(2, b.pc)}%`;
     out('bar-plan')!.style.width = `${Math.max(2, b.plan)}%`;
   };
