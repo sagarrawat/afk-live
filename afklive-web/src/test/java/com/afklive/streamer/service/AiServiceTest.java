@@ -125,4 +125,37 @@ class AiServiceTest {
         assertThat(tags).isEqualTo("lofi beats to study,lofi,beats,study");
         assertThat(tags).doesNotContain("viral").doesNotContain("trending").doesNotContain("2024");
     }
+
+    // ------------------------------------------------------------------ title writer (AI-1)
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theWriterAsksTheConfiguredModelForJsonWithTheKeyInAHeader() {
+        AiService configured = new AiService("secret-key", "gemini-2.5-flash-lite", restTemplate);
+        geminiAnswers("{\"titles\":[\"Rain sounds\"]}");
+        assertThat(configured.isAvailable()).isTrue();
+        assertThat(configured.completeJson("prompt")).isEqualTo("{\"titles\":[\"Rain sounds\"]}");
+        ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> body = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForObject(url.capture(), body.capture(), eq(Map.class));
+        assertThat(url.getValue()).contains("/models/gemini-2.5-flash-lite:generateContent").doesNotContain("secret-key");
+        assertThat(body.getValue().getHeaders().getFirst("x-goog-api-key")).isEqualTo("secret-key");
+        assertThat((Map<String, Object>) body.getValue().getBody().get("generationConfig"))
+                .containsEntry("responseMimeType", "application/json");
+    }
+
+    @Test
+    void withoutAKeyTheWriterIsOffAndNothingCallsOut() {
+        AiService off = new AiService("", "", restTemplate);
+        assertThat(off.isAvailable()).isFalse();
+        assertThat(off.completeJson("prompt")).isNull();
+        assertThat(off.model()).isEqualTo("gemini-flash-lite-latest");
+        org.mockito.Mockito.verifyNoInteractions(restTemplate);
+    }
+
+    @Test
+    void aFailedCallIsNullNotAnError() {
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenThrow(new RestClientException("timeout"));
+        assertThat(aiService.completeJson("prompt")).isNull();
+    }
 }

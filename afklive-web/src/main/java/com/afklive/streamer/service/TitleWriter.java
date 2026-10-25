@@ -279,7 +279,7 @@ public final class TitleWriter {
         if (t.length() > TITLE_MAX) {
             t = cutAtWord(t, TITLE_MAX);
         }
-        return GoLiveCheck.hasSearchablePhrase(t) ? t : null;
+        return GoLiveCheck.hasSearchablePhrase(t) ? capitalize(t) : null;
     }
 
     /** The model's description: no "LIVE" on a replay, no hashtags or emoji, at most {@link #INTRO_MAX} characters. */
@@ -427,7 +427,7 @@ public final class TitleWriter {
         }
         String t = EXTENSION.matcher(title.strip()).replaceAll("");
         t = JUNK.matcher(t).replaceAll(" ");
-        t = t.replace('_', ' ');
+        t = t.replaceAll("^\\d{1,3}_+", "").replace('_', ' ');
         if (!t.contains(" ")) {
             t = t.replaceAll("(?<=[\\p{L}\\p{N}])[-.](?=[\\p{L}\\p{N}])", " ");
         }
@@ -436,6 +436,10 @@ public final class TitleWriter {
         if (t.isEmpty()) {
             return "";
         }
+        return capitalize(t);
+    }
+
+    private static String capitalize(String t) {
         int first = t.codePointAt(0);
         return new String(Character.toChars(Character.toUpperCase(first))) + t.substring(Character.charCount(first));
     }
