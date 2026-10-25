@@ -21,8 +21,8 @@ export default {
         sun: 'rgb(var(--sun) / <alpha-value>)',
       },
       fontFamily: {
-        sans: ['"Inter Variable"', 'Inter', 'system-ui', 'sans-serif'],
-        display: ['"Schibsted Grotesk Variable"', '"Inter Variable"', 'system-ui', 'sans-serif'],
+        sans: ['"Inter Variable"', 'Inter', '"Noto Sans Devanagari Variable"', 'system-ui', 'sans-serif'],
+        display: ['"Schibsted Grotesk Variable"', '"Inter Variable"', '"Noto Sans Devanagari Variable"', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         // A modular scale (1.2) from a 14px UI base.

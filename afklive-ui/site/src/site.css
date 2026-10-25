@@ -1,5 +1,7 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/schibsted-grotesk';
+/* Devanagari for the Hindi homepage (and Hindi words on English pages); downloaded only when used. */
+@import '@fontsource-variable/noto-sans-devanagari';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -49,7 +51,7 @@
   h3,
   .display {
     text-wrap: balance;
-    font-family: 'Schibsted Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+    font-family: 'Schibsted Grotesk Variable', 'Inter Variable', 'Noto Sans Devanagari Variable', system-ui, sans-serif;
   }
   .tnum {
     font-variant-numeric: tabular-nums;
@@ -266,7 +268,7 @@ section[id] {
   border-bottom: 2px solid rgb(var(--ink));
   background: rgb(var(--raised) / 0.6);
   border-radius: 4px 4px 0 0;
-  font-family: 'Schibsted Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+  font-family: 'Schibsted Grotesk Variable', 'Inter Variable', 'Noto Sans Devanagari Variable', system-ui, sans-serif;
   font-weight: 800;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -305,7 +307,7 @@ section[id] {
   letter-spacing: -0.01em;
 }
 .step-n {
-  font-family: 'Schibsted Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+  font-family: 'Schibsted Grotesk Variable', 'Inter Variable', 'Noto Sans Devanagari Variable', system-ui, sans-serif;
   font-weight: 800;
   color: rgb(var(--muted));
   font-variant-numeric: tabular-nums;
@@ -343,7 +345,7 @@ section[id] {
 }
 .night-line time {
   display: block;
-  font-family: 'Schibsted Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+  font-family: 'Schibsted Grotesk Variable', 'Inter Variable', 'Noto Sans Devanagari Variable', system-ui, sans-serif;
   font-size: 15px;
   font-weight: 700;
   color: rgb(var(--sun));
@@ -441,6 +443,55 @@ section[id] {
 }
 .help-article code {
   @apply break-all rounded bg-raised px-1.5 py-0.5 text-[0.9em];
+}
+
+/* Language switch (English / हिन्दी) in the header. The current language is marked. */
+.lang-switch {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid rgb(var(--line));
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1;
+}
+.lang-switch a {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  color: rgb(var(--muted));
+}
+.lang-switch a:hover {
+  color: rgb(var(--ink));
+}
+.lang-switch a[aria-current] {
+  background: rgb(var(--raised));
+  color: rgb(var(--ink));
+  font-weight: 500;
+}
+
+/*
+ * Hindi pages (html lang="hi"). Devanagari letters hang from a joined headline (शिरोरेखा) and carry
+ * marks above and below, so they get more line height and no negative tracking, which would open
+ * gaps in the headline between letters.
+ */
+html[lang='hi'] body {
+  line-height: 1.75;
+}
+html[lang='hi'] :is(h1, h2, h3, summary, .display, .h-section, .step-title) {
+  letter-spacing: 0;
+}
+html[lang='hi'] .hero-head {
+  line-height: 1.28;
+}
+html[lang='hi'] .h-section {
+  line-height: 1.3;
+}
+html[lang='hi'] .night-line h3,
+html[lang='hi'] .niche-panel h3 {
+  line-height: 1.45;
 }
 
 /* Legal pages (site/legal.py): readable long text. */

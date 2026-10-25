@@ -29,6 +29,8 @@ export interface Dict {
     perYear: string;
     startWith(name: string): string;
     startFree: string;
+    /** The free plan's price, or null to show the catalogue's own label. */
+    freePrice: string | null;
   };
   calc: {
     hours: string;
@@ -71,6 +73,7 @@ const en: Dict = {
     perYear: 'year',
     startWith: (name) => `Start with ${name}`,
     startFree: 'Start free',
+    freePrice: null,
   },
   calc: {
     hours: 'h',
@@ -134,6 +137,7 @@ const hi: Dict = {
     perYear: 'साल',
     startWith: (name) => `${name} से शुरू करें`,
     startFree: 'फ़्री में शुरू करें',
+    freePrice: 'फ़्री',
   },
   calc: {
     hours: 'घंटे',

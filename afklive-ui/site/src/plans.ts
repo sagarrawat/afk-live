@@ -42,7 +42,7 @@ export function planCards(plans: PlanView[], cycle: 'MONTHLY' | 'YEARLY', lang: 
   const pitch: Record<string, string> = d.pitch;
   return plans
     .map((p) => {
-      const price = cycle === 'YEARLY' ? p.yearlyLabel : p.monthlyLabel;
+      const price = p.monthly === 0 && d.freePrice ? d.freePrice : cycle === 'YEARLY' ? p.yearlyLabel : p.monthlyLabel;
       const featured = p.id === 'ESSENTIALS';
       return `<li class="flex flex-col rounded-2xl border ${featured ? 'night border-transparent shadow-[0_30px_60px_-30px_rgba(16,18,42,0.7)]' : 'border-line bg-panel'} p-6">
   <h3 class="text-xl font-bold tracking-tight">${esc(p.name)}${featured ? ` <span class="ml-1 align-middle rounded-full bg-sun/15 px-2 py-0.5 font-sans text-xs font-semibold text-sun">${esc(d.mostPicked)}</span>` : ''}</h3>
