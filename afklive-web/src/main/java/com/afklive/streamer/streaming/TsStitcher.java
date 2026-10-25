@@ -1,10 +1,15 @@
 package com.afklive.streamer.streaming;
 
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.LongSupplier;
 
 /**
  * Joins the MPEG-TS output of successive producer processes into one continuous programme, so the
@@ -14,23 +19,74 @@ import java.util.Map;
  * <p>
  * Producers are numbered by the caller. The first one plays as-is. A later one is <em>expected</em>
  * ({@link #expect}): its packets are held from its first video keyframe on, while the current producer
- * keeps playing; the switch happens at the current producer's next video frame boundary (or at once,
- * if it has ended), so neither side's frames are cut in half. From then on the new producer's
- * timestamps (PTS, DTS, PCR) are shifted to continue right after the last ones sent, and continuity
- * counters keep counting per PID. Timestamps are unwrapped across the 33-bit rollover (every 26.5
- * hours), so the offset math holds for streams that run for weeks.
+ * keeps playing. From then on the new producer's timestamps (PTS, DTS, PCR) are shifted to continue
+ * the programme, and continuity counters keep counting per PID. Timestamps are unwrapped across the
+ * 33-bit rollover (every 26.5 hours), so the offset math holds for streams that run for weeks.
+ * <p>
+ * <b>Keeping pace with the clock (OPS-6).</b> Producers are paced in real time, so media time runs in
+ * step with the wall clock, and a switch must not move it: a programme that gains even 0.1 s per
+ * switch is minutes ahead after a few weeks. Three rules keep it in step:
+ * <ol>
+ *   <li><em>The switch point is chosen afterwards.</em> While a producer is expected, the current one's
+ *   output is delayed by {@link #DELAY} (only then; no latency otherwise). The new producer is watched
+ *   for {@link #WATCH} after its first keyframe to learn its pace from its least delayed frame (first
+ *   frames often come out late and the next ones catch up). Then the old one is cut at the latest
+ *   <em>clean</em> frame boundary (before an I or P frame, so every old frame up to the latest one shown
+ *   was sent and nothing is shown out of order) that ends its timeline no later than where the new
+ *   keyframe belongs; what the old producer sent after that point is dropped. Cutting at the old
+ *   producer's next boundary instead would put the new one ahead by however long that took, and
+ *   nothing could take it back: a timeline can step forward, never back.</li>
+ *   <li><em>An absolute reference.</em> The stitcher remembers how far ahead of the clock the first
+ *   producer's video timestamps arrived (its reference lead) and places each new producer so that
+ *   its frames arrive with that same lead. Being ahead (a late-starting producer last time) is taken
+ *   back by cutting the old one earlier, up to the {@link #DELAY} held back per switch. The new
+ *   timeline starts strictly after the old one (video DTS and PTS) and at most {@link #MAX_CATCH_UP}
+ *   after plain continuation: being behind is fixed by a short step forward in the timeline. Every
+ *   switch aims at the same reference, so one switch's error (arrival jitter, a few ms) is corrected
+ *   by the next instead of adding up.</li>
+ *   <li><em>Video anchors the seam, not the largest timestamp.</em> Continuation is measured on video
+ *   DTS (decode order) and video PTS (presentation order). Audio PES from the new producer that would
+ *   start before the old producer's audio has finished are dropped, so audio only goes forward too
+ *   (the gap left is at most one audio frame).</li>
+ * </ol>
+ * If a new producer is far behind (the old one crashed and the restart took a while), the timeline
+ * simply continues and the reference moves to where the stream now is.
  * <p>
  * Assumes what our producers write (FFmpeg's mpegts muxer): one programme, video and audio as PES
- * with PTS (video also DTS), keyframes flagged with the random access indicator.
+ * with PTS (video also DTS), keyframes flagged with the random access indicator, each PES written as
+ * consecutive packets.
  */
 public final class TsStitcher {
 
     public static final int PACKET = 188;
     static final long WRAP = 1L << 33;
-    /** About one frame at 30 fps, in 90 kHz units: the new producer starts this long after the last timestamp. */
+    /** About one frame at 30 fps, in 90 kHz units: the gap used before the frame rate is known. */
     static final long GAP = 3000;
     /** Packets held from an expected producer before it's allowed to cut over: about 10 s at 6 Mbit/s. */
     static final int MAX_HELD = 40_000;
+    /**
+     * How long the new producer is watched after its first keyframe before the switch (90 kHz): 0.4 s.
+     * Its first frames can come out late and the next ones catch up (FFmpeg's -re starts its clock before
+     * the first packet is out; an encoder starts slowly), so its pace is taken from the least delayed of
+     * these frames, not from the keyframe alone.
+     */
+    static final long WATCH = 36_000;
+    /**
+     * How long the current producer's output is delayed while another one is expected (90 kHz): 1 s,
+     * enough to watch the new one and still cut the old one at a clean boundary from before the new
+     * one's first keyframe was due (up to about 0.4 s before it arrived).
+     */
+    static final long DELAY = 90_000;
+    /** Media held from the new producer that also ends the watch, for callers feeding faster than real time: 3 s. */
+    static final long FAST_FEED_SPAN = 270_000;
+    /** At most this much (90 kHz) is added to the timeline at a switch to catch up with the clock: 0.15 s. */
+    static final long MAX_CATCH_UP = 13_500;
+    /** Further behind than this (90 kHz, 1 s) at a switch, the reference moves instead (a crash, a slow restart). */
+    static final long REBASE = 90_000;
+    /** The smallest step allowed between the old producer's last and the new one's first video timestamp: 2 ms. */
+    static final long MIN_STEP = 180;
+    /** Video arrivals of the first producer kept for its reference lead (about 8 s at 30 fps). */
+    private static final int LEAD_SAMPLES = 256;
 
     public interface Sink {
         void write(byte[] data);
@@ -43,17 +99,47 @@ public final class TsStitcher {
 
     private final Sink sink;
     private final Cutover cutover;
+    private final LongSupplier nanoClock;
     private final Map<Integer, Source> sources = new HashMap<>();
     private final Map<Integer, Integer> nextCc = new HashMap<>();
     private int current = -1;
     private int expected = -1;
     /** Largest timestamp sent so far, unwrapped, in 90 kHz units. */
     private long maxOut = Long.MIN_VALUE;
+    /** Last video DTS and largest video PTS sent (unwrapped, 90 kHz), and the video frame duration. */
+    private long lastVideoDts = Long.MIN_VALUE;
+    private long maxVideoPts = Long.MIN_VALUE;
+    private long frameDuration = GAP;
+    /** Per audio PID: the last PTS sent (unwrapped, 90 kHz), one audio PES's duration, and which producer sent it. */
+    private final Map<Integer, long[]> audioOut = new HashMap<>();
+    /** The current producer's packets delayed while another producer is expected. */
+    private final ArrayDeque<Delayed> delayed = new ArrayDeque<>();
+    /** Largest video PTS sent or delayed (unwrapped, 90 kHz): which delayed frames start at a clean boundary. */
+    private long delayedMaxPts = Long.MIN_VALUE;
+    /** Media time minus wall clock (both 90 kHz) the programme keeps; MIN_VALUE until known. */
+    private long referenceLead = Long.MIN_VALUE;
+    private final long[] leadSamples = new long[LEAD_SAMPLES];
+    private int leadCount;
     private long switches;
+    /** How far the last switch put the programme ahead of its reference (90 kHz), for logs and tests. */
+    private long lastSwitchError;
 
     public TsStitcher(Sink sink, Cutover cutover) {
+        this(sink, cutover, System::nanoTime);
+    }
+
+    /** With an explicit clock (System.nanoTime by default): the time each chunk of producer output arrives. */
+    public TsStitcher(Sink sink, Cutover cutover, LongSupplier nanoClock) {
         this.sink = sink;
         this.cutover = cutover;
+        this.nanoClock = nanoClock;
+    }
+
+    /**
+     * A packet of the current producer, delayed. For a video PES start: whether it starts at a clean
+     * boundary, and its DTS on the programme's timeline.
+     */
+    private record Delayed(Source source, byte[] packet, long arrival, boolean videoStart, boolean clean, long dts) {
     }
 
     private static final class Source {
@@ -69,13 +155,27 @@ public final class TsStitcher {
         final Map<Integer, Boolean> videoPid = new HashMap<>();
         final Map<Integer, Long> lastRaw = new HashMap<>();
         final Map<Integer, Long> epoch = new HashMap<>();
+        /** Its own last video DTS and per-PID audio PTS (unwrapped, its own timeline): frame durations. */
+        long ownVideoDts = Long.MIN_VALUE;
+        final Map<Integer, Long> ownAudioPts = new HashMap<>();
+        /** Audio PIDs whose current PES is being dropped (it overlapped the previous producer's audio). */
+        final Set<Integer> dropping = new HashSet<>();
+        /** Held video: the largest (DTS − arrival time), own timeline, 90 kHz: how far ahead of the clock it arrives. */
+        long arrivalLead = Long.MIN_VALUE;
+        /** When its first keyframe arrived (90 kHz clock), and the DTS span of the video held since (90 kHz). */
+        long keyArrival = Long.MIN_VALUE;
+        long firstHeldDts = Long.MIN_VALUE;
+        long heldSpan;
         boolean ended;
 
         Source(int id) {
             this.id = id;
         }
 
-        /** Unwraps a 33-bit timestamp of one kind (pts/dts/pcr per PID) into a continuous count. */
+        /**
+         * Unwraps a 33-bit timestamp of one kind (pts/dts/pcr per PID; a separate key for look-ahead)
+         * into a continuous count.
+         */
         long unwrap(int key, long raw) {
             Long last = lastRaw.get(key);
             long e = epoch.getOrDefault(key, 0L);
@@ -98,6 +198,7 @@ public final class TsStitcher {
             current = id; // the very first producer plays as it is
         } else {
             expected = id;
+            delayedMaxPts = maxVideoPts;
         }
         sources.computeIfAbsent(id, Source::new);
     }
@@ -109,7 +210,11 @@ public final class TsStitcher {
             s.ended = true;
         }
         if (id == current) {
-            tryCutoverNow();
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            long now = wall90();
+            releaseAll(out);
+            tryCutoverNow(out, now);
+            write(out);
         }
     }
 
@@ -118,6 +223,9 @@ public final class TsStitcher {
         if (expected == id) {
             expected = -1;
             sources.remove(id);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            releaseAll(out);
+            write(out);
         }
     }
 
@@ -129,13 +237,25 @@ public final class TsStitcher {
         return switches;
     }
 
+    /** Milliseconds the last switch left the programme ahead of its reference against the clock (negative: behind). */
+    public synchronized double lastSwitchErrorMillis() {
+        return lastSwitchError / 90.0;
+    }
+
     /** Bytes from producer {@code id}; anything from a producer that is neither current nor expected is dropped. */
     public synchronized void feed(int id, byte[] data, int length) {
         Source s = sources.get(id);
         if (s == null || (id != current && id != expected)) {
             return;
         }
+        long now = wall90();
         ByteArrayOutputStream out = new ByteArrayOutputStream(length + PACKET);
+        maybeCutover(out, now); // before releasing: the switch point may be among the oldest delayed packets
+        if (id != current && id != expected) {
+            write(out);
+            return;
+        }
+        release(out, now);
         int pos = 0;
         while (pos < length) {
             if (s.partialLength > 0 || length - pos < PACKET) {
@@ -146,24 +266,34 @@ public final class TsStitcher {
                 if (s.partialLength < PACKET) {
                     break;
                 }
-                packet(s, s.partial.clone(), out);
+                packet(s, s.partial.clone(), out, now);
                 s.partialLength = 0;
             } else {
                 byte[] p = new byte[PACKET];
                 System.arraycopy(data, pos, p, 0, PACKET);
                 pos += PACKET;
-                packet(s, p, out);
+                packet(s, p, out, now);
             }
             if (id != current && id != expected) {
                 break; // replaced while this chunk was being read
             }
         }
+        maybeCutover(out, now);
+        write(out);
+    }
+
+    private void write(ByteArrayOutputStream out) {
         if (out.size() > 0) {
             sink.write(out.toByteArray());
         }
     }
 
-    private void packet(Source s, byte[] p, ByteArrayOutputStream out) {
+    /** The clock in 90 kHz units. */
+    private long wall90() {
+        return Math.floorDiv(nanoClock.getAsLong(), 1000) * 9 / 100;
+    }
+
+    private void packet(Source s, byte[] p, ByteArrayOutputStream out, long now) {
         if ((p[0] & 0xff) != 0x47) {
             return; // not aligned: FFmpeg always writes whole packets, so this never happens with our producers
         }
@@ -171,24 +301,104 @@ public final class TsStitcher {
         boolean pusi = (p[1] & 0x40) != 0;
         learn(s, p, pid, pusi);
         if (s.id == expected) {
-            hold(s, p, pid, pusi);
-            if (s.started && sources.get(current) != null && sources.get(current).ended) {
-                tryCutoverNow();
+            hold(s, p, pid, pusi, now);
+            Source c = sources.get(current);
+            if (s.started && (c == null || c.ended)) {
+                releaseAll(out);
+                tryCutoverNow(out, now);
             }
             return;
         }
-        // Current producer: switch at a video frame boundary once the next one is ready.
-        if (expected >= 0 && pusi && Boolean.TRUE.equals(s.videoPid.get(pid)) && isPes(p)) {
-            Source next = sources.get(expected);
-            if (next != null && next.started) {
-                cutover(next, out);
-                return;
-            }
+        if (expected < 0) {
+            emit(s, p, out, now);
+            return;
         }
-        emit(s, p, out);
+        // Current producer while another is expected: delayed, so the switch point can be chosen afterwards.
+        boolean videoStart = pusi && Boolean.TRUE.equals(s.videoPid.get(pid)) && isPes(p);
+        long[] t = videoStart ? peek(s, p, pid) : null;
+        delayed.add(new Delayed(s, p, now, videoStart, t != null && t[1] == 1, t != null ? t[0] : Long.MIN_VALUE));
     }
 
-    private void hold(Source s, byte[] p, int pid, boolean pusi) {
+    /**
+     * Switches once the expected producer has been watched for {@link #WATCH} after its first keyframe
+     * (by the clock; or after {@link #FAST_FEED_SPAN} of media, for callers that feed faster than real
+     * time). The old producer is cut at the latest clean boundary that leaves room for the new keyframe
+     * where the reference lead wants it, so being ahead is corrected too, by up to the {@link #DELAY}
+     * held back; without a reference yet, at the latest clean boundary from before the keyframe arrived.
+     * Failing either, at the earliest boundary still held back.
+     */
+    private void maybeCutover(ByteArrayOutputStream out, long now) {
+        if (expected < 0) {
+            return;
+        }
+        Source next = sources.get(expected);
+        if (next == null || !next.started || (now < next.keyArrival + WATCH && next.heldSpan < FAST_FEED_SPAN)) {
+            return;
+        }
+        captureReferenceLead();
+        // Where the new keyframe's DTS should go on the programme's timeline to keep the reference lead.
+        boolean aim = referenceLead != Long.MIN_VALUE && next.arrivalLead != Long.MIN_VALUE && lastVideoDts != Long.MIN_VALUE;
+        long keyTarget = aim ? next.firstHeldDts + referenceLead - next.arrivalLead : Long.MIN_VALUE;
+        int best = -1;
+        int firstClean = -1;
+        int firstVideo = -1;
+        int i = 0;
+        for (Delayed d : delayed) {
+            if (d.videoStart()) {
+                // Cutting before d leaves the old timeline ending where d would have started.
+                boolean fits = aim ? d.dts() != Long.MIN_VALUE && d.dts() <= keyTarget + frameDuration / 2
+                        : d.arrival() <= next.keyArrival;
+                if (d.clean() && fits) {
+                    best = i;
+                }
+                if (d.clean() && firstClean < 0) {
+                    firstClean = i;
+                }
+                if (firstVideo < 0) {
+                    firstVideo = i;
+                }
+            }
+            i++;
+        }
+        int cut = best >= 0 ? best : firstClean >= 0 ? firstClean : firstVideo;
+        if (cut >= 0) {
+            cutover(next, cut, out, now);
+        }
+    }
+
+    /**
+     * A delayed video PES of the current producer: its programme DTS, and whether it starts at a clean
+     * boundary (its PTS is past every one before it). Look-ahead unwrap keys, so emitting it later is unaffected.
+     */
+    private long[] peek(Source s, byte[] p, int pid) {
+        int start = payloadStart(p);
+        int flags = (p[start + 7] & 0xc0) >> 6;
+        if ((flags & 2) == 0) {
+            return new long[] {Long.MIN_VALUE, 1};
+        }
+        long pts = s.unwrap(pid * 8 + 3, readTs(p, start + 9)) + s.offset;
+        long dts = flags == 3 ? s.unwrap(pid * 8 + 4, readTs(p, start + 14)) + s.offset : pts;
+        boolean clean = delayedMaxPts == Long.MIN_VALUE || pts > delayedMaxPts;
+        delayedMaxPts = Math.max(delayedMaxPts, pts);
+        return new long[] {dts, clean ? 1 : 0};
+    }
+
+    /** Sends delayed packets that have waited {@link #DELAY}. */
+    private void release(ByteArrayOutputStream out, long now) {
+        while (!delayed.isEmpty() && delayed.peekFirst().arrival() + DELAY <= now) {
+            Delayed d = delayed.pollFirst();
+            emit(d.source(), d.packet(), out, d.arrival());
+        }
+    }
+
+    private void releaseAll(ByteArrayOutputStream out) {
+        while (!delayed.isEmpty()) {
+            Delayed d = delayed.pollFirst();
+            emit(d.source(), d.packet(), out, d.arrival());
+        }
+    }
+
+    private void hold(Source s, byte[] p, int pid, boolean pusi, long now) {
         if (!s.started) {
             if (pusi && Boolean.TRUE.equals(s.videoPid.get(pid)) && isPes(p) && randomAccess(p)) {
                 s.started = true;
@@ -202,47 +412,124 @@ public final class TsStitcher {
                 return; // nothing before its first keyframe is useful
             }
         }
+        if (pusi && Boolean.TRUE.equals(s.videoPid.get(pid)) && isPes(p)) {
+            // How far ahead of the clock this producer's frames arrive (its own timeline). The least delayed
+            // frame shows its steady pace: a late first frame or a slow start only delays frames.
+            int start = payloadStart(p);
+            int flags = (p[start + 7] & 0xc0) >> 6;
+            if ((flags & 2) != 0) {
+                long dts = s.unwrap(pid * 8 + 3, readTs(p, start + (flags == 3 ? 14 : 9)));
+                s.arrivalLead = Math.max(s.arrivalLead, dts - now);
+                if (s.firstHeldDts == Long.MIN_VALUE) {
+                    s.firstHeldDts = dts;
+                    s.keyArrival = now;
+                }
+                s.heldSpan = dts - s.firstHeldDts;
+            }
+        }
         if (s.held.size() < MAX_HELD) {
             s.held.add(p);
         }
     }
 
-    private void tryCutoverNow() {
+    /** The current producer has ended (its delayed output already sent): switch if the next one is ready. */
+    private void tryCutoverNow(ByteArrayOutputStream out, long now) {
         if (expected < 0) {
             return;
         }
         Source next = sources.get(expected);
         if (next != null && next.started) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            cutover(next, out);
-            if (out.size() > 0) {
-                sink.write(out.toByteArray());
-            }
+            cutover(next, delayed.size(), out, now);
         }
     }
 
-    private void cutover(Source next, ByteArrayOutputStream out) {
+    /** Sends the first {@code keep} delayed packets of the old producer, drops the rest, and switches to {@code next}. */
+    private void cutover(Source next, int keep, ByteArrayOutputStream out, long now) {
+        for (int i = 0; i < keep; i++) {
+            Delayed d = delayed.pollFirst();
+            emit(d.source(), d.packet(), out, d.arrival());
+        }
+        delayed.clear();
         long first = Long.MAX_VALUE;
+        long keyDts = Long.MIN_VALUE;
+        long keyPts = Long.MIN_VALUE;
         for (byte[] p : next.held) {
-            long t = firstTimestamp(next, p);
-            if (t != Long.MIN_VALUE) {
-                first = Math.min(first, t);
+            long[] t = timestamps(next, p);
+            if (t != null) {
+                first = Math.min(first, Math.min(t[0], t[1]));
+                if (keyDts == Long.MIN_VALUE && t[2] == 1) {
+                    keyDts = t[1];
+                    keyPts = t[0];
+                }
             }
         }
-        // Reset the unwrap state: firstTimestamp() above walked the held packets once already.
+        // Reset the unwrap state: the walk above went through the held packets once already.
         next.lastRaw.clear();
         next.epoch.clear();
-        next.offset = (first == Long.MAX_VALUE || maxOut == Long.MIN_VALUE) ? 0 : maxOut + GAP - first;
+        captureReferenceLead();
+        if (first == Long.MAX_VALUE || maxOut == Long.MIN_VALUE) {
+            next.offset = 0;
+        } else if (keyDts == Long.MIN_VALUE || lastVideoDts == Long.MIN_VALUE) {
+            next.offset = maxOut + frameDuration - first;
+        } else {
+            next.offset = placement(next, keyDts, keyPts);
+        }
         int previous = current;
         current = next.id;
         expected = -1;
         switches++;
         for (byte[] p : next.held) {
-            emit(next, p, out);
+            emit(next, p, out, now);
         }
         next.held.clear();
         sources.remove(previous);
         cutover.switched(next.id);
+    }
+
+    /**
+     * The offset for a new producer whose keyframe has these (unwrapped, own) timestamps: as close to
+     * the reference lead as the joined timeline allows.
+     */
+    private long placement(Source next, long keyDts, long keyPts) {
+        // Plain continuation: the next frame slot after the old producer's last frame, in decode order
+        // and in presentation order.
+        long natural = Math.max(lastVideoDts + frameDuration - keyDts, maxVideoPts + frameDuration - keyPts);
+        // The earliest valid placement: still strictly after both.
+        long lowest = Math.max(lastVideoDts + MIN_STEP - keyDts, maxVideoPts + MIN_STEP - keyPts);
+        if (next.arrivalLead == Long.MIN_VALUE) {
+            lastSwitchError = 0;
+            return natural;
+        }
+        if (referenceLead == Long.MIN_VALUE) {
+            referenceLead = next.arrivalLead + natural;
+            lastSwitchError = 0;
+            return natural;
+        }
+        long target = referenceLead - next.arrivalLead;
+        long offset;
+        if (target > natural + REBASE) {
+            // Far behind the clock (the old producer stopped and the restart took a while): carry on from
+            // here, and keep pace from where the stream now is.
+            offset = natural;
+            referenceLead = next.arrivalLead + natural;
+            target = offset;
+        } else {
+            offset = Math.min(Math.max(lowest, target), Math.max(lowest, natural + MAX_CATCH_UP));
+        }
+        lastSwitchError = offset - target;
+        return offset;
+    }
+
+    /** The first producer's lead over the clock, from its recent video arrivals (once, at the first switch). */
+    private void captureReferenceLead() {
+        if (referenceLead != Long.MIN_VALUE || leadCount < 30) {
+            return;
+        }
+        int n = Math.min(leadCount, LEAD_SAMPLES);
+        long[] sorted = Arrays.copyOf(leadSamples, n);
+        Arrays.sort(sorted);
+        // A high percentile: the frames least delayed on their way here (pipe reads, scheduling), as for new producers.
+        referenceLead = sorted[(int) Math.floor((n - 1) * 0.9)];
     }
 
     /** Remembers PAT/PMT and which PIDs carry video, from this producer's own tables and PES headers. */
@@ -270,16 +557,22 @@ public final class TsStitcher {
         }
     }
 
-    private void emit(Source s, byte[] p, ByteArrayOutputStream out) {
+    /** Sends one packet: timestamps shifted (after the first switch), continuity counters continued. */
+    private void emit(Source s, byte[] p, ByteArrayOutputStream out, long arrival) {
         int pid = ((p[1] & 0x1f) << 8) | (p[2] & 0xff);
         int afc = (p[3] >> 4) & 0x3;
-        if (s.offset != 0 || switches > 0) {
-            shiftPcr(s, p, pid);
-            if ((p[1] & 0x40) != 0 && isPes(p)) {
-                shiftPes(s, p, pid);
+        boolean shift = s.offset != 0 || switches > 0;
+        if ((p[1] & 0x40) != 0 && isPes(p)) {
+            if (!timestamps(s, p, pid, shift, arrival)) {
+                s.dropping.add(pid);
+                return;
             }
-        } else {
-            track(s, p, pid);
+            s.dropping.remove(pid);
+        } else if (s.dropping.contains(pid)) {
+            return; // the rest of a dropped audio PES
+        }
+        if (shift) {
+            shiftPcr(s, p, pid);
         }
         // Continuity counters keep counting across producers, per PID.
         if (pid != 0x1fff) {
@@ -295,33 +588,61 @@ public final class TsStitcher {
         out.write(p, 0, PACKET);
     }
 
-    /** First producer, no shift: only remember how far the timeline has got. */
-    private void track(Source s, byte[] p, int pid) {
-        if ((p[1] & 0x40) != 0 && isPes(p)) {
-            int start = payloadStart(p);
-            int flags = (p[start + 7] & 0xc0) >> 6;
-            if ((flags & 2) != 0) {
-                note(s.unwrap(pid * 4, readTs(p, start + 9)));
-            }
-            if (flags == 3) {
-                note(s.unwrap(pid * 4 + 1, readTs(p, start + 14)));
-            }
-        }
-    }
-
-    private void shiftPes(Source s, byte[] p, int pid) {
+    /**
+     * Shifts (when {@code shift}) and records a PES header's timestamps. Returns false for an audio PES
+     * that would start before the previous producer's audio has finished: it is dropped.
+     */
+    private boolean timestamps(Source s, byte[] p, int pid, boolean shift, long arrival) {
         int start = payloadStart(p);
         int flags = (p[start + 7] & 0xc0) >> 6;
-        if ((flags & 2) != 0) {
-            long t = s.unwrap(pid * 4, readTs(p, start + 9)) + s.offset;
-            writeTs(p, start + 9, t, flags == 3 ? 0x3 : 0x2);
-            note(t);
+        if ((flags & 2) == 0) {
+            return true;
         }
+        boolean video = Boolean.TRUE.equals(s.videoPid.get(pid));
+        long ownPts = s.unwrap(pid * 8, readTs(p, start + 9));
+        long pts = ownPts + s.offset;
+        long ownDts = ownPts;
+        long dts = pts;
         if (flags == 3) {
-            long t = s.unwrap(pid * 4 + 1, readTs(p, start + 14)) + s.offset;
-            writeTs(p, start + 14, t, 0x1);
-            note(t);
+            ownDts = s.unwrap(pid * 8 + 1, readTs(p, start + 14));
+            dts = ownDts + s.offset;
         }
+        if (video) {
+            if (s.ownVideoDts != Long.MIN_VALUE) {
+                long d = ownDts - s.ownVideoDts;
+                if (d > 0 && d <= 9000) {
+                    frameDuration = d; // at least 10 fps; ignores the gaps of a stalled producer
+                }
+            }
+            s.ownVideoDts = ownDts;
+        } else {
+            long[] a = audioOut.computeIfAbsent(pid, k -> new long[] {Long.MIN_VALUE, 0, -1});
+            if (a[2] != s.id && a[0] != Long.MIN_VALUE && pts < a[0] + a[1] - 90) {
+                return false; // overlaps the previous producer's audio (1 ms tolerance for rounding)
+            }
+            Long ownLast = s.ownAudioPts.put(pid, ownPts);
+            if (ownLast != null && ownPts - ownLast > 0 && ownPts - ownLast <= 45_000) {
+                a[1] = ownPts - ownLast; // one PES's duration, from this producer's own spacing
+            }
+            a[0] = pts;
+            a[2] = s.id;
+        }
+        if (shift) {
+            writeTs(p, start + 9, pts, flags == 3 ? 0x3 : 0x2);
+            if (flags == 3) {
+                writeTs(p, start + 14, dts, 0x1);
+            }
+        }
+        note(Math.max(pts, dts));
+        if (video) {
+            lastVideoDts = Math.max(lastVideoDts, dts);
+            maxVideoPts = Math.max(maxVideoPts, pts);
+            if (switches == 0) {
+                leadSamples[leadCount % LEAD_SAMPLES] = dts - arrival;
+                leadCount++;
+            }
+        }
+        return true;
     }
 
     private void shiftPcr(Source s, byte[] p, int pid) {
@@ -331,7 +652,7 @@ public final class TsStitcher {
         }
         long base = ((long) (p[6] & 0xff) << 25) | ((p[7] & 0xff) << 17) | ((p[8] & 0xff) << 9)
                 | ((p[9] & 0xff) << 1) | ((p[10] & 0x80) >> 7);
-        long shifted = Math.floorMod(s.unwrap(pid * 4 + 2, base) + s.offset, WRAP);
+        long shifted = Math.floorMod(s.unwrap(pid * 8 + 2, base) + s.offset, WRAP);
         p[6] = (byte) (shifted >> 25);
         p[7] = (byte) (shifted >> 17);
         p[8] = (byte) (shifted >> 9);
@@ -345,22 +666,24 @@ public final class TsStitcher {
         }
     }
 
-    /** The earliest PTS/DTS in a held packet (unwrapped), or MIN_VALUE when it carries none. */
-    private static long firstTimestamp(Source s, byte[] p) {
+    /**
+     * A held packet's PES timestamps (unwrapped, own timeline) as {pts, dts, video keyframe ? 1 : 0},
+     * or null when it carries none. Without a DTS, dts is the PTS.
+     */
+    private static long[] timestamps(Source s, byte[] p) {
         if ((p[1] & 0x40) == 0 || !isPes(p)) {
-            return Long.MIN_VALUE;
+            return null;
         }
         int pid = ((p[1] & 0x1f) << 8) | (p[2] & 0xff);
         int start = payloadStart(p);
         int flags = (p[start + 7] & 0xc0) >> 6;
-        long t = Long.MIN_VALUE;
-        if ((flags & 2) != 0) {
-            t = s.unwrap(pid * 4, readTs(p, start + 9));
+        if ((flags & 2) == 0) {
+            return null;
         }
-        if (flags == 3) {
-            t = Math.min(t, s.unwrap(pid * 4 + 1, readTs(p, start + 14)));
-        }
-        return t;
+        long pts = s.unwrap(pid * 8, readTs(p, start + 9));
+        long dts = flags == 3 ? s.unwrap(pid * 8 + 1, readTs(p, start + 14)) : pts;
+        boolean key = Boolean.TRUE.equals(s.videoPid.get(pid)) && randomAccess(p);
+        return new long[] {pts, dts, key ? 1 : 0};
     }
 
     static int payloadStart(byte[] p) {
