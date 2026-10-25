@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ClipboardCheck, ExternalLink, ImagePlus, Music } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, ExternalLink, ImagePlus, Music, PenLine } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HelpLink } from '@/components/HelpLink';
@@ -9,6 +9,7 @@ import { del, get, post, put } from '@/lib/api';
 import { HELP, type HelpArticle, YOUTUBE_STUDIO_LIVE } from '@/lib/help';
 import { keys } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
+import { TitleWriterPanel, useTitleWriter } from './TitleWriter';
 
 /** GR-9: what the check endpoint returns (GoLiveCheckService.CheckView). */
 /** NONE: nothing to change here, the flag only explains (AFK Live never replies in chat by itself, AI-3). */
@@ -47,6 +48,12 @@ export function checkHelp(path: string | null | undefined): HelpArticle | null {
 /** Fixes that change something here in one tap; the rest open the place to fix it. */
 const SERVER_FIXES: CheckFix[] = ['ADD_OVERLAYS', 'USE_TITLE'];
 
+/** Title flags that also offer "Suggest a better title" (AI-1) when the writer is set up. */
+const TITLE_FLAGS = ['title-no-phrase', 'title-live'];
+
+/** How the title writer opens: from a flag it starts writing at once. */
+type WriterMode = 'auto' | 'open' | null;
+
 /**
  * GR-9: the stream check, on the stream's page. It flags only what we can see for certain, each with
  * a one-tap fix or a way to keep it as it is. It's advice: going live never waits for it.
@@ -61,6 +68,8 @@ export function GoLiveCheckCard({ stream: s }: { stream: StreamView }) {
   const [editing, setEditing] = useState(false);
   const [showKept, setShowKept] = useState(false);
   const [focus, setFocus] = useState<'title' | 'thumbnail' | null>(null);
+  const [writer, setWriter] = useState<WriterMode>(null);
+  const canWrite = !!useTitleWriter(s.id).data?.available;
 
   if (!data) return null;
   const open = data.flags.filter((f) => !f.dismissed);
@@ -110,6 +119,15 @@ export function GoLiveCheckCard({ stream: s }: { stream: StreamView }) {
               stream={s}
               busy={busy}
               onFix={() => fix(f)}
+              onSuggest={
+                canWrite && TITLE_FLAGS.includes(f.id)
+                  ? () => {
+                      setFocus(null);
+                      setWriter('auto');
+                      setEditing(true);
+                    }
+                  : undefined
+              }
               onKeep={() => apply(() => post<CheckView>(`/api/streams/${s.id}/check/${f.id}/dismiss`), f.fix === 'NONE' ? undefined : 'Kept as it is.')}
             />
           ))}
@@ -143,7 +161,12 @@ export function GoLiveCheckCard({ stream: s }: { stream: StreamView }) {
             stream={s}
             check={data}
             focus={focus}
-            onDone={() => setEditing(false)}
+            writer={canWrite ? writer : null}
+            canWrite={canWrite}
+            onDone={() => {
+              setEditing(false);
+              setWriter(null);
+            }}
             onSaved={(v) => {
               qc.setQueryData(checkKey(s.id), v);
             }}
@@ -171,7 +194,21 @@ export function GoLiveCheckCard({ stream: s }: { stream: StreamView }) {
   );
 }
 
-function FlagRow({ flag: f, stream: s, busy, onFix, onKeep }: { flag: CheckFlag; stream: StreamView; busy: boolean; onFix: () => void; onKeep: () => void }) {
+function FlagRow({
+  flag: f,
+  stream: s,
+  busy,
+  onFix,
+  onKeep,
+  onSuggest,
+}: {
+  flag: CheckFlag;
+  stream: StreamView;
+  busy: boolean;
+  onFix: () => void;
+  onKeep: () => void;
+  onSuggest?: () => void;
+}) {
   const help = checkHelp(f.help);
   return (
     <li>
@@ -186,6 +223,11 @@ function FlagRow({ flag: f, stream: s, busy, onFix, onKeep }: { flag: CheckFlag;
           // A suggested title can be long: let it wrap at 375 px instead of running off the screen.
           <Button size="sm" disabled={busy} onClick={onFix} className="h-auto min-h-8 whitespace-normal py-1.5 text-left">
             {f.fixLabel}
+          </Button>
+        )}
+        {onSuggest && (
+          <Button size="sm" variant="ghost" icon={<PenLine className="h-4 w-4" />} disabled={busy} onClick={onSuggest}>
+            Suggest a better title
           </Button>
         )}
         {/* An explain-only flag: "Got it" files it with the kept ones. */}
@@ -222,17 +264,25 @@ function TitleEditor({
   stream: s,
   check,
   focus,
+  writer,
+  canWrite,
   onDone,
   onSaved,
 }: {
   stream: StreamView;
   check: CheckView;
   focus: 'title' | 'thumbnail' | null;
+  writer?: WriterMode;
+  canWrite?: boolean;
   onDone: () => void;
   onSaved: (v: CheckView) => void;
 }) {
   const [title, setTitle] = useState(check.youtubeTitle ?? '');
   const [picking, setPicking] = useState(false);
+  const [writing, setWriting] = useState<WriterMode>(writer ?? null);
+  useEffect(() => {
+    if (writer) setWriting(writer);
+  }, [writer]);
   const { busy, run } = useAction();
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -250,73 +300,90 @@ function TitleEditor({
   ) => run(async () => onSaved(await put<CheckView>(`/api/streams/${s.id}/check/title`, body)), success);
 
   return (
-    <form
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (await save({ youtubeTitle: title }, 'Saved. We checked it.')) onDone();
-      }}
-      className="space-y-3"
-    >
-      <div>
-        <label htmlFor={`yt-title-${s.id}`} className="text-sm font-medium">
-          Your YouTube title
-        </label>
-        <Input
-          id={`yt-title-${s.id}`}
-          ref={input}
-          value={title}
-          maxLength={100}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Lofi beats to study and relax"
-          className="mt-1 w-full"
-        />
-        <p className="mt-1 flex justify-between gap-2 text-xs text-muted">
-          <span>The one you set in YouTube Studio. We only read it here; we don't change anything on YouTube.</span>
-          <span className="tnum shrink-0">{title.length}/100</span>
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {check.thumbnail ? (
-          <>
-            <img src={check.thumbnail.url} alt="Your thumbnail" className="aspect-video w-28 rounded-sm bg-raised object-cover" />
-            <Button size="sm" variant="ghost" type="button" onClick={() => setPicking(true)}>
-              Choose another picture
+    <div className="space-y-4">
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (await save({ youtubeTitle: title }, 'Saved. We checked it.')) onDone();
+        }}
+        className="space-y-3"
+      >
+        <div>
+          <label htmlFor={`yt-title-${s.id}`} className="text-sm font-medium">
+            Your YouTube title
+          </label>
+          <Input
+            id={`yt-title-${s.id}`}
+            ref={input}
+            value={title}
+            maxLength={100}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Lofi beats to study and relax"
+            className="mt-1 w-full"
+          />
+          <p className="mt-1 flex justify-between gap-2 text-xs text-muted">
+            <span>The one you set in YouTube Studio. We only read it here; we don't change anything on YouTube.</span>
+            <span className="tnum shrink-0">{title.length}/100</span>
+          </p>
+          {canWrite && !writing && (
+            <Button type="button" size="sm" variant="ghost" icon={<PenLine className="h-4 w-4" />} className="mt-2" onClick={() => setWriting('open')}>
+              Write title and description
             </Button>
-            <Button size="sm" variant="ghost" type="button" disabled={busy} onClick={() => save({ clearThumbnail: true })}>
-              Remove
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {check.thumbnail ? (
+            <>
+              <img src={check.thumbnail.url} alt="Your thumbnail" className="aspect-video w-28 rounded-sm bg-raised object-cover" />
+              <Button size="sm" variant="ghost" type="button" onClick={() => setPicking(true)}>
+                Choose another picture
+              </Button>
+              <Button size="sm" variant="ghost" type="button" disabled={busy} onClick={() => save({ clearThumbnail: true })}>
+                Remove
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="ghost" type="button" icon={<ImagePlus className="h-4 w-4" />} onClick={() => setPicking(true)}>
+              Add your thumbnail
             </Button>
-          </>
-        ) : (
-          <Button size="sm" variant="ghost" type="button" icon={<ImagePlus className="h-4 w-4" />} onClick={() => setPicking(true)}>
-            Add your thumbnail
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" size="sm" busy={busy}>
+            Save and check
           </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={onDone}>
+            Cancel
+          </Button>
+          <a href={YOUTUBE_STUDIO_LIVE} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+            Open YouTube Studio
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+          </a>
+          <HelpLink to={HELP.titles} className="text-sm">
+            Titles and thumbnails that get found
+          </HelpLink>
+        </div>
+        {picking && (
+          <MediaPicker
+            open
+            onClose={() => setPicking(false)}
+            type="IMAGE"
+            multiple={false}
+            title="Choose your thumbnail"
+            onPick={(items) => items[0] && save({ thumbnailMediaId: items[0].id }, 'Thumbnail checked.')}
+          />
         )}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size="sm" busy={busy}>
-          Save and check
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onDone}>
-          Cancel
-        </Button>
-        <a href={YOUTUBE_STUDIO_LIVE} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-accent hover:underline">
-          Open YouTube Studio
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-        </a>
-        <HelpLink to={HELP.titles} className="text-sm">
-          Titles and thumbnails that get found
-        </HelpLink>
-      </div>
-      {picking && (
-        <MediaPicker
-          open
-          onClose={() => setPicking(false)}
-          type="IMAGE"
-          multiple={false}
-          title="Choose your thumbnail"
-          onPick={(items) => items[0] && save({ thumbnailMediaId: items[0].id }, 'Thumbnail checked.')}
+      </form>
+      {canWrite && writing && (
+        <TitleWriterPanel
+          streamId={s.id}
+          autoStart={writing === 'auto'}
+          onUseTitle={(t) => {
+            setTitle(t.slice(0, 100));
+            input.current?.focus();
+          }}
         />
       )}
-    </form>
+    </div>
   );
 }

@@ -696,6 +696,26 @@ web instance (in memory) from the library thumbnail. Once a week per stream that
 seven days, one web instance (conditional update on `streams.check_weekly_at`) sends an in-app notice
 listing open flags; no email or push. `app.check.weekly-auto=false` turns the hourly pass off (tests).
 
+## Title writer (AI-1, GR-10)
+
+"Write title and description" in the stream check (`/api/streams/{id}/ai/metadata`, web only) asks Gemini
+for three titles, a description and tags in English, Hindi, Tamil, Telugu, Bengali or Marathi, checks
+them with the GR-9 title rules and adds a tracklist with timestamps worked out from the playlist. Drafts
+only: nothing is sent to YouTube. Settings (all optional):
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | empty | Empty: the writer is hidden in the app and the endpoint answers `UNAVAILABLE` (never an error) |
+| `GEMINI_MODEL` | `gemini-flash-lite-latest` | The model id; keep a Flash-Lite class model (about ₹0.05–0.1 a draft) |
+| `AI_DAILY_LIMIT_FREE` | 20 | Drafts per account per day on Free (the day is the creator's time zone) |
+| `AI_DAILY_LIMIT_PAID` | 100 | The same on paid plans |
+
+Fair use is counted in `ai_usage` with one conditional upsert (`generations < limit`), so several web
+instances can't let an account past it; an answer that can't be used is not counted. The same inputs
+(stream, language, name, title, note, playlist, model) within 24 hours read `ai_drafts` and cost nothing.
+The key goes in the `x-goog-api-key` header, never the URL. Worst case per Free account at the full limit
+every day: about ₹35 a month; typical use (a few drafts a month): ₹1–7.
+
 ## Automatic replies removed (AI-3)
 
 AFK Live never posts in YouTube chat, replies to comments or deletes comments by itself. YouTube's spam
