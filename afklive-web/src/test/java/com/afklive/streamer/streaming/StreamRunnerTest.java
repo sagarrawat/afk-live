@@ -358,8 +358,10 @@ class StreamRunnerTest {
         long before = System.nanoTime();
         assertThat(runner.replaceRelays(Map.of(0, relayTo(primary)), Duration.ofSeconds(2), Duration.ofSeconds(20))).isTrue();
         assertThat(Duration.ofNanos(System.nanoTime() - before)).isGreaterThanOrEqualTo(Duration.ofSeconds(2));
-        long backupSize = Files.size(backup);
-        TimeUnit.SECONDS.sleep(3);
+        // The old relay is told to stop; its FFmpeg still writes out what it had already received (a fraction
+        // of a second of stream) and the file trailer, then exits. It must settle quickly and stay settled.
+        long backupSize = awaitStableSize(backup, Duration.ofSeconds(1), Duration.ofSeconds(8));
+        TimeUnit.SECONDS.sleep(2);
         assertThat(Files.size(backup)).as("the old relay stopped").isEqualTo(backupSize);
         assertThat(Files.size(primary)).isPositive();
         // A later change of destinations sees the new address as the current one: unchanged, no reconnect.
@@ -532,5 +534,23 @@ class StreamRunnerTest {
         org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(3), () -> runner.stop("test"));
         assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(2000);
         assertThat(runner.awaitFinished(Duration.ofSeconds(30))).isTrue();
+    }
+
+    /** Waits until the file hasn't grown for {@code quiet}; fails if it is still growing after {@code max}. */
+    static long awaitStableSize(Path file, Duration quiet, Duration max) throws Exception {
+        long deadline = System.nanoTime() + max.toNanos();
+        long size = Files.size(file);
+        long since = System.nanoTime();
+        while (System.nanoTime() < deadline) {
+            TimeUnit.MILLISECONDS.sleep(100);
+            long now = Files.size(file);
+            if (now != size) {
+                size = now;
+                since = System.nanoTime();
+            } else if (System.nanoTime() - since >= quiet.toNanos()) {
+                return size;
+            }
+        }
+        throw new AssertionError(file + " was still growing after " + max + ": the old relay didn't stop");
     }
 }
