@@ -1,3 +1,5 @@
+import { pageLang, t, type Lang } from './i18n';
+
 /**
  * Channels shown on the homepage ("Channels that stay live with AFK Live").
  *
@@ -27,7 +29,7 @@ export function shownCreators(list: Creator[]): Creator[] {
 }
 
 /** Fills the creators section and shows it; leaves it hidden when there is nobody to show. */
-export function mountCreators(section: HTMLElement, list: Creator[] = CREATORS): void {
+export function mountCreators(section: HTMLElement, list: Creator[] = CREATORS, lang: Lang = pageLang()): void {
   const shown = shownCreators(list);
   const ul = section.querySelector('ul');
   if (!ul || shown.length === 0) {
@@ -48,7 +50,7 @@ export function mountCreators(section: HTMLElement, list: Creator[] = CREATORS):
       if (c.niche) {
         const p = document.createElement('p');
         p.className = 'mt-1 text-sm text-muted';
-        p.textContent = c.niche + ' · Live with AFK Live';
+        p.textContent = t(lang).creators.liveWith(c.niche);
         li.append(p);
       }
       if (c.quote) {
