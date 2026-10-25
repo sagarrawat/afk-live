@@ -178,17 +178,19 @@ export function TitleWriterPanel({ streamId, onUseTitle, autoStart }: { streamId
       {result?.draft && (result.status === 'OK' || result.status === 'FALLBACK') && (
         <div className="space-y-4">
           {titles.length > 0 && (
-            <fieldset className="space-y-2">
+            <fieldset className="min-w-0 space-y-2">
               <legend className="text-sm font-medium">Titles</legend>
               {titles.map((t, i) => (
                 <div key={i} className="space-y-1">
-                  <div className="flex items-center gap-1">
-                    <Input
+                  <div className="flex items-start gap-1">
+                    {/* Two lines, so a long title is read in full on a phone. */}
+                    <Textarea
                       aria-label={`Title option ${i + 1}`}
                       value={t}
+                      rows={2}
                       maxLength={100}
-                      onChange={(e) => setTitles((all) => all.map((x, j) => (j === i ? e.target.value : x)))}
-                      className="min-w-0 flex-1"
+                      onChange={(e) => setTitles((all) => all.map((x, j) => (j === i ? e.target.value.replace(/\n/g, ' ') : x)))}
+                      className="min-h-0 min-w-0 flex-1 resize-none"
                     />
                     <CopyButton text={t} label={`title option ${i + 1}`} />
                   </div>
