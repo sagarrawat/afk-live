@@ -192,6 +192,12 @@ app:
     token: ${ZEPTOMAIL_TOKEN:}
   gemini:
     key: ${GEMINI_API_KEY:}
+    # The cheapest suitable model (Flash-Lite class); empty uses gemini-flash-lite-latest.
+    model: ${GEMINI_MODEL:}
+  ai:
+    # AI-1: title-writer drafts per account per day (fair use; cached repeats are free).
+    daily-limit-free: ${AI_DAILY_LIMIT_FREE:20}
+    daily-limit-paid: ${AI_DAILY_LIMIT_PAID:100}
   storage:
     type: ${STORAGE_TYPE:local}
     endpoint: ${DO_SPACES_ENDPOINT:}
