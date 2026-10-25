@@ -1,6 +1,9 @@
 package com.afklive.streamer.service;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -27,18 +30,49 @@ import java.util.concurrent.Executors;
  * rules GR-9 uses, so a "LIVE NOW" that slips through is rewritten before anyone sees it.
  */
 @Service
+@Slf4j
 public class AiService {
 
     /** YouTube's title limit, in characters. */
     static final int TITLE_MAX = 100;
 
+    /** The default model: the cheapest Gemini class that writes good Indic text (Flash-Lite). */
+    static final String DEFAULT_MODEL = "gemini-flash-lite-latest";
+
     private final String geminiKey;
+    private final String model;
     private final RestTemplate restTemplate;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public AiService(@Value("${app.gemini.key:}") String geminiKey, RestTemplate restTemplate) {
+    /**
+     * @param geminiKey empty: AI is off and every draft falls back to the creator's own words (never an error)
+     * @param model     the Gemini model id ({@code GEMINI_MODEL}); blank uses {@link #DEFAULT_MODEL}
+     */
+    @Autowired
+    public AiService(@Value("${app.gemini.key:}") String geminiKey, @Value("${app.gemini.model:}") String model) {
+        this(geminiKey, model, timed());
+    }
+
+    AiService(String geminiKey, RestTemplate restTemplate) {
+        this(geminiKey, null, restTemplate);
+    }
+
+    AiService(String geminiKey, String model, RestTemplate restTemplate) {
         this.geminiKey = geminiKey;
+        this.model = model == null || model.isBlank() ? DEFAULT_MODEL : model.strip();
         this.restTemplate = restTemplate;
+    }
+
+    /** Its own client with timeouts: a slow model must not hold a web request for minutes. */
+    private static RestTemplate timed() {
+        SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
+        f.setConnectTimeout(5_000);
+        f.setReadTimeout(25_000);
+        return new RestTemplate(f);
+    }
+
+    public String model() {
+        return model;
     }
 
     // ------------------------------------------------------------------ prompts (tested on their own)
@@ -93,17 +127,7 @@ public class AiService {
      * the GR-9 one-tap fix does), within YouTube's limit, and with a searchable phrase; null when it can't be used.
      */
     static String cleanTitle(String raw) {
-        if (raw == null) return null;
-        String t = raw.strip().lines().map(String::strip).filter(l -> !l.isEmpty()).findFirst().orElse("");
-        t = t.replaceAll("^[\"'“”‘’*]+|[\"'“”‘’*]+$", "").strip();
-        if (t.isEmpty()) return null;
-        if (GoLiveCheck.misleadingLive(t) != null) {
-            t = GoLiveCheck.honestTitle(t, false);
-        }
-        if (t.length() > TITLE_MAX) {
-            t = t.substring(0, TITLE_MAX).strip();
-        }
-        return GoLiveCheck.hasSearchablePhrase(t) ? t : null;
+        return TitleWriter.cleanTitle(raw, false, false);
     }
 
     /** Without AI: the creator's own words, tidied. No invented hooks ("Game Changer", "Unboxing", a year). */
@@ -207,23 +231,41 @@ public class AiService {
         );
     }
 
+    /** True when a Gemini key is configured. Without one, nothing calls out and drafts fall back. */
+    public boolean isAvailable() {
+        return isAiEnabled();
+    }
+
+    /**
+     * One answer from the model, asked to reply in JSON (AI-1 title writer); null when AI is off, the call
+     * fails or times out. Never throws.
+     */
+    public String completeJson(String prompt) {
+        return isAiEnabled() ? callGemini(prompt, true) : null;
+    }
+
     private boolean isAiEnabled() {
-        return geminiKey != null && !geminiKey.isEmpty() && !geminiKey.contains("GEMINI_API_KEY");
+        return geminiKey != null && !geminiKey.isBlank() && !geminiKey.contains("GEMINI_API_KEY");
     }
 
     private String callGemini(String prompt) {
-        try {
-            // Using gemini-flash-lite-latest to avoid 404s
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=" + geminiKey;
+        return callGemini(prompt, false);
+    }
 
-            Map<String, Object> requestBody = Map.of(
-                "contents", List.of(
-                    Map.of("parts", List.of(Map.of("text", prompt)))
-                )
-            );
+    private String callGemini(String prompt, boolean json) {
+        try {
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+
+            Map<String, Object> requestBody = json
+                    ? Map.of("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
+                            "generationConfig", Map.of("responseMimeType", "application/json", "temperature", 0.7,
+                                    "maxOutputTokens", 2048))
+                    : Map.of("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))));
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            // In a header, not the URL, so the key never lands in access logs or error messages.
+            headers.set("x-goog-api-key", geminiKey);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
@@ -241,8 +283,7 @@ public class AiService {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Gemini API failed: " + e.getMessage());
-            // In a real production app, we would log the full response body if it's a 4xx error
+            log.warn("Gemini call failed ({}): {}", model, e.getClass().getSimpleName());
         }
         return null; // Fallback to null instead of prompt
     }

@@ -196,12 +196,23 @@ public final class GoLiveCheck {
         return LIVE_CAPS.matcher(title).find() ? "LIVE" : null;
     }
 
-    /** The title without the "live now" wording, saying it's a replay instead. At most 100 characters (YouTube's limit). */
-    public static String honestTitle(String title, boolean forever) {
-        String t = title.replace(RED_DOT, " ");
+    /**
+     * The text with the words that present a replay as happening now ("LIVE", "live now", a red dot) taken
+     * out and spaces tidied; line breaks are kept, so it works on descriptions too.
+     */
+    public static String withoutLiveWording(String text) {
+        if (text == null) {
+            return null;
+        }
+        String t = text.replace(RED_DOT, " ");
         t = LIVE_NOW.matcher(t).replaceAll(" ");
         t = LIVE_CAPS.matcher(t).replaceAll(" ");
-        t = t.replaceAll("\\s+", " ").strip();
+        return t.replaceAll("[ \\t\\x0B\\f]+", " ").replaceAll(" *\\n *", "\n").strip();
+    }
+
+    /** The title without the "live now" wording, saying it's a replay instead. At most 100 characters (YouTube's limit). */
+    public static String honestTitle(String title, boolean forever) {
+        String t = withoutLiveWording(title);
         t = t.replaceAll("^[\\s|:\\-–—•·,!]+", "").replaceAll("[\\s|:\\-–—•·,]+$", "").strip();
         boolean says247 = t.matches("(?is).*\\b24\\s*[/x]\\s*7\\b.*");
         String tail = forever && !says247 ? "24/7 replay" : "replay";
