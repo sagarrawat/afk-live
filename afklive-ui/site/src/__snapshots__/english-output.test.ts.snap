@@ -1,0 +1,157 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`English homepage text is unchanged > calculator formula and verdicts 1`] = `"150 W × 24 h × 30 days ÷ 1000 = 108 units × ₹8 = ₹864"`;
+
+exports[`English homepage text is unchanged > calculator formula and verdicts 2`] = `"1,250 W × 8 h × 30 days ÷ 1000 = 300 units × ₹7.5 = ₹2,250"`;
+
+exports[`English homepage text is unchanged > calculator formula and verdicts 3`] = `
+[
+  "That’s ₹365 a month more than Creator, before the PC itself wears out.",
+  "About the same as Creator. The difference is what happens when the power or internet goes.",
+  "Electricity alone costs less than Creator. What you pay us for is the stream staying on through power cuts, updates and internet drops, with your PC off.",
+]
+`;
+
+exports[`English homepage text is unchanged > example stream titles, descriptions and template names 1`] = `
+[
+  {
+    "alt": "A lofi stream: a desk lamp and a rainy window at night, with "Now playing: Rain on the window, lofi mix" at the bottom and the time, 02:14, in the corner.",
+    "id": "lofi",
+    "template": "Lofi and chill",
+    "title": "Rainy night lofi, live 24/7",
+  },
+  {
+    "alt": "A temple stream at dusk: a lit aarti thali and marigold garlands, with the now-playing and up-next lines in Hindi and the time, 18:42.",
+    "id": "devotional",
+    "template": "Bhajans and aarti",
+    "title": "संध्या आरती, live every evening",
+  },
+  {
+    "alt": "A racing game streamed from a phone, with the time, 21:37, added in the corner by AFK Live.",
+    "id": "gaming",
+    "template": "Phone gaming",
+    "title": "Night drive, streamed from my phone",
+  },
+  {
+    "alt": "A podcast stream: a microphone at a desk, with "Now playing: Episode 41" and "Up next: Episode 42" at the bottom and the time, 23:05.",
+    "id": "podcasts",
+    "template": "Bhajans and aarti, in English",
+    "title": "Past episodes, live between new ones",
+  },
+  {
+    "alt": "A study stream before dawn: a lamp over an open notebook, a big clock at the top showing 05:48 and the music playing at the bottom.",
+    "id": "study",
+    "template": "Study with me",
+    "title": "Study with me, 6 am to 11 pm",
+  },
+]
+`;
+
+exports[`English homepage text is unchanged > plan cards, monthly and yearly 1`] = `
+[
+  [
+    "1 stream at once",
+    "Up to 720p at 30 fps",
+    "10 hours a month",
+    "1 destination per stream",
+    "2 GB of storage",
+    "Small AFK Live mark on stream",
+  ],
+  [
+    "1 stream at once",
+    "Up to 1080p at 30 fps",
+    "Unlimited hours, 24/7",
+    "2 destinations per stream",
+    "25 GB of storage",
+    "No watermark",
+  ],
+  [
+    "3 streams at once",
+    "Up to 1080p at 60 fps",
+    "Unlimited hours, 24/7",
+    "5 destinations per stream",
+    "100 GB of storage",
+    "No watermark",
+  ],
+  [
+    "10 streams at once",
+    "Up to 4K at 60 fps",
+    "Unlimited hours, 24/7",
+    "5 destinations per stream",
+    "500 GB of storage",
+    "No watermark",
+  ],
+]
+`;
+
+exports[`English homepage text is unchanged > plan cards, monthly and yearly 2`] = `
+"<li class="flex flex-col rounded-2xl border border-line bg-panel p-6">
+  <h3 class="text-xl font-bold tracking-tight">Free</h3>
+  <p class="mt-1 text-sm text-muted">Try it with a real stream.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">Free</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 stream at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 720p at 30 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>10 hours a month</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 destination per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>2 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Small AFK Live mark on stream</li></ul>
+  <a href="/register?plan=FREE" class="btn-secondary mt-6">Start free</a>
+</li><li class="flex flex-col rounded-2xl border night border-transparent shadow-[0_30px_60px_-30px_rgba(16,18,42,0.7)] p-6">
+  <h3 class="text-xl font-bold tracking-tight">Creator <span class="ml-1 align-middle rounded-full bg-sun/15 px-2 py-0.5 font-sans text-xs font-semibold text-sun">Most picked</span></h3>
+  <p class="mt-1 text-sm text-muted">One channel, live around the clock.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">₹499</span><span class="text-muted"> / month</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 stream at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 1080p at 30 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>2 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>25 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=ESSENTIALS" class="btn-primary mt-6">Start with Creator</a>
+</li><li class="flex flex-col rounded-2xl border border-line bg-panel p-6">
+  <h3 class="text-xl font-bold tracking-tight">Pro</h3>
+  <p class="mt-1 text-sm text-muted">Several channels, or 60 fps gaming.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">₹1,499</span><span class="text-muted"> / month</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>3 streams at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 1080p at 60 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>5 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>100 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=PRO" class="btn-secondary mt-6">Start with Pro</a>
+</li><li class="flex flex-col rounded-2xl border border-line bg-panel p-6">
+  <h3 class="text-xl font-bold tracking-tight">Agency</h3>
+  <p class="mt-1 text-sm text-muted">Run streams for clients.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">₹3,999</span><span class="text-muted"> / month</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>10 streams at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 4K at 60 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>5 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>500 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=AGENCY" class="btn-secondary mt-6">Start with Agency</a>
+</li>"
+`;
+
+exports[`English homepage text is unchanged > plan cards, monthly and yearly 3`] = `
+"<li class="flex flex-col rounded-2xl border border-line bg-panel p-6">
+  <h3 class="text-xl font-bold tracking-tight">Free</h3>
+  <p class="mt-1 text-sm text-muted">Try it with a real stream.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">Free</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 stream at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 720p at 30 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>10 hours a month</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 destination per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>2 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Small AFK Live mark on stream</li></ul>
+  <a href="/register?plan=FREE" class="btn-secondary mt-6">Start free</a>
+</li><li class="flex flex-col rounded-2xl border night border-transparent shadow-[0_30px_60px_-30px_rgba(16,18,42,0.7)] p-6">
+  <h3 class="text-xl font-bold tracking-tight">Creator <span class="ml-1 align-middle rounded-full bg-sun/15 px-2 py-0.5 font-sans text-xs font-semibold text-sun">Most picked</span></h3>
+  <p class="mt-1 text-sm text-muted">One channel, live around the clock.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">₹4,990</span><span class="text-muted"> / year</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 stream at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 1080p at 30 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>2 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>25 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=ESSENTIALS" class="btn-primary mt-6">Start with Creator</a>
+</li><li class="flex flex-col rounded-2xl border border-line bg-panel p-6">
+  <h3 class="text-xl font-bold tracking-tight">Pro</h3>
+  <p class="mt-1 text-sm text-muted">Several channels, or 60 fps gaming.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">₹14,990</span><span class="text-muted"> / year</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>3 streams at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 1080p at 60 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>5 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>100 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=PRO" class="btn-secondary mt-6">Start with Pro</a>
+</li><li class="flex flex-col rounded-2xl border border-line bg-panel p-6">
+  <h3 class="text-xl font-bold tracking-tight">Agency</h3>
+  <p class="mt-1 text-sm text-muted">Run streams for clients.</p>
+  <p class="mt-5"><span class="display text-[40px] font-extrabold tracking-tight">₹39,990</span><span class="text-muted"> / year</span></p>
+  <ul class="mt-6 flex-1 space-y-2 text-[15px]"><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>10 streams at once</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 4K at 60 fps</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited hours, 24/7</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>5 destinations per stream</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>500 GB of storage</li><li class="flex gap-2.5"><svg aria-hidden="true" class="mt-1 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>No watermark</li></ul>
+  <a href="/register?plan=AGENCY" class="btn-secondary mt-6">Start with Agency</a>
+</li>"
+`;
+
+exports[`English homepage text is unchanged > proof line and incident note 1`] = `
+[
+  "37 streams live on AFK Live right now.",
+  "1,23,400+ hours streamed on AFK Live so far.",
+  "12 streams live on AFK Live right now. 1,200+ hours streamed so far.",
+]
+`;
+
+exports[`English homepage text is unchanged > proof line and incident note 2`] = `
+[
+  "No platform incidents in the last 90 days.",
+  "1 platform incident in the last 90 days, each written up on the status page.",
+  "3 platform incidents in the last 90 days, each written up on the status page.",
+]
+`;
