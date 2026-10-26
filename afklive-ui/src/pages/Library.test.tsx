@@ -27,6 +27,7 @@ const files = [file(1, 'rain.mp4', [{ id: 3, name: 'Chill' }]), file(2, 'storm.m
 let tags: MediaTag[] = [];
 let calls: { method: string; url: string; body?: unknown }[] = [];
 let storageFull = false;
+let openUploads: unknown[] = [];
 
 function mockApi() {
   vi.stubGlobal(
@@ -48,7 +49,7 @@ function mockApi() {
         const ids = (JSON.parse(String(init!.body)) as { ids: number[] }).ids;
         body = { deleted: ids, blocked: [], freedBytes: ids.length * 1000 };
       }
-      else if (path === '/api/media/uploads') body = [];
+      else if (path === '/api/media/uploads' && method === 'GET') body = openUploads;
       else if (path === '/api/media/tags' && method === 'GET') body = tags;
       else if (path === '/api/media/tags' && method === 'POST') body = { id: 9, name: (JSON.parse(String(init!.body)) as { name: string }).name, fileCount: 0 };
       else if (/^\/api\/media\/tags\/\d+\/files/.test(path)) body = { tagId: 3, name: 'Chill', changed: 2 };
@@ -212,5 +213,39 @@ describe('Deleting files (ML-6)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Free up space' }));
     await waitFor(() => expect(mediaRequests().at(-1)!.url).toContain('sort=size'));
     expect(screen.getByRole('link', { name: 'Get more space' })).toHaveAttribute('href', '/studio/settings/billing');
+  });
+});
+
+describe('unfinished uploads (ML-1)', () => {
+  beforeEach(() => {
+    calls = [];
+    tags = [];
+    storageFull = true;
+    openUploads = [
+      { id: 'up-1', filename: 'concert.mp4', type: 'VIDEO', sizeBytes: 4_194_304, partSize: 1_048_576, partCount: 4, uploadedParts: [1], uploadedBytes: 1_048_576, status: 'UPLOADING', expiresAt: '2026-10-27T10:00:00Z' },
+    ];
+    mockApi();
+    window.history.pushState({}, '', '/studio/library');
+  });
+  afterEach(() => {
+    storageFull = false;
+    openUploads = [];
+    vi.unstubAllGlobals();
+  });
+
+  it('says how much space they hold and discards one to free it', async () => {
+    render(<App client={makeQueryClient()} />);
+    const section = await screen.findByRole('region', { name: 'Unfinished uploads' });
+    expect(within(section).getByText('concert.mp4')).toBeInTheDocument();
+    expect(within(section).getByText(/25% done, holds 4(\.0)? MB/)).toBeInTheDocument();
+    // "Free up space" can't find these by sorting files, so the storage meter names them.
+    expect(screen.getByText(/of this is held by unfinished uploads/)).toBeInTheDocument();
+
+    openUploads = [];
+    await userEvent.click(within(section).getByRole('button', { name: 'Discard concert.mp4' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.url === '/api/media/uploads/up-1')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Unfinished uploads' })).not.toBeInTheDocument());
+    // The storage meter is asked again, now without the reservation.
+    expect(calls.filter((c) => c.url === '/api/media/storage').length).toBeGreaterThan(1);
   });
 });

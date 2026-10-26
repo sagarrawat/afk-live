@@ -71,4 +71,11 @@ describe('setup ends with proof that YouTube receives the stream (ON-8)', () => 
     expect(went).toEqual(['/studio/streams/7/destinations']);
     expect(firstLiveStep(live('ERROR', [], 'The stream key was refused.'))).toEqual({ step: 'stopped', message: 'The stream key was refused.' });
   });
+
+  it('opens the edit of the key saved in setup (DS-8)', async () => {
+    const went: string[] = [];
+    render(<FirstLiveProof live={live('LIVE', [youtube('NOT_REACHING', 'Not reaching YouTube.')])} streamId={7} destinationId={12} onFinish={(to) => went.push(to)} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Check the stream key' }));
+    expect(went).toEqual(['/studio/destinations?edit=12']);
+  });
 });
