@@ -78,12 +78,22 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /** "Keep me signed in" for 30 days; ended by a password change or "Sign out other devices" (ON-6). */
+    @Bean
+    public com.afklive.streamer.security.SessionRememberMeServices rememberMeServices(CustomUserDetailsService userDetailsService,
+                                                                                      com.afklive.streamer.service.AccountSecurityService accounts) {
+        com.afklive.streamer.security.SessionRememberMeServices services =
+                new com.afklive.streamer.security.SessionRememberMeServices(rememberMeKey, userDetailsService, accounts::sessionsVersion);
+        services.setTokenValiditySeconds(86400 * 30);
+        return services;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ClientRegistrationRepository clientRegistrationRepository,
                                            OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler,
                                            CustomAuthenticationSuccessHandler customAuthenticationSuccessHandler,
-                                           CustomUserDetailsService userDetailsService,
+                                           com.afklive.streamer.security.SessionRememberMeServices rememberMeServices,
                                            com.afklive.streamer.security.AccountGate accountGate) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -100,7 +110,7 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.FORWARD, jakarta.servlet.DispatcherType.ERROR).permitAll()
                         // 1. PUBLIC: Landing page, assets
                         .requestMatchers("/", "/hi", "/home.html", "/pricing.html", "/features.html", "/privacy.html", "/privacy", "/terms.html", "/terms", "/classic", "/classic.html", "/pricing", "/features", "/for/**", "/help", "/help/**", "/status", "/api/public/status", "/api/public/funnel", "/sitemap.xml", "/robots.txt", "/css/**", "/js/**", "/app/assets/**", "/app/manifest.webmanifest", "/app/*.png", "/favicon.ico", "/sw.js", "/site/**", "/api/user-info", "/api/pricing", "/api/billing/plans", "/error").permitAll()
-                        .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**", "/account/restore").permitAll()
+                        .requestMatchers("/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/api/auth/**", "/account/restore", "/account/confirm-email").permitAll()
                         // Server-to-server payment notification; verified by signature in the controller.
                         .requestMatchers("/api/payment/callback").permitAll()
                         // Ingest server (MediaMTX) auth hook; verified by a shared secret in the controller.
@@ -125,10 +135,10 @@ public class SecurityConfig {
                         .successHandler(customAuthenticationSuccessHandler)
                         .permitAll()
                 )
+                // ON-6: signed with the password hash and the account's sessions version (SessionRememberMeServices).
                 .rememberMe(remember -> remember
                         .key(rememberMeKey)
-                        .tokenValiditySeconds(86400 * 30) // 30 days
-                        .userDetailsService(userDetailsService)
+                        .rememberMeServices(rememberMeServices)
                 )
                 .oauth2Login(oauth -> oauth
                         .loginPage("/login")

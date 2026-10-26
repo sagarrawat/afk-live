@@ -26,6 +26,7 @@ public class AuthController {
     private final UserService userService;
     private final EmailService emailService;
     private final com.afklive.streamer.service.ReferralService referralService;
+    private final com.afklive.streamer.service.AccountSecurityService accountSecurity;
     /**
      * Links in emails use the configured public address (APP_BASE_URL), never the request's Host: behind
      * the proxy that can be an internal address, and a forged Host header must not end up in a reset link.
@@ -34,10 +35,12 @@ public class AuthController {
 
     public AuthController(UserService userService, EmailService emailService,
                           com.afklive.streamer.service.ReferralService referralService,
+                          com.afklive.streamer.service.AccountSecurityService accountSecurity,
                           @Value("${app.base-url:http://localhost:8080}") String baseUrl) {
         this.userService = userService;
         this.emailService = emailService;
         this.referralService = referralService;
+        this.accountSecurity = accountSecurity;
         this.baseUrl = publicBaseUrl(baseUrl);
     }
 
@@ -84,6 +87,31 @@ public class AuthController {
             model.addAttribute("success", "Email verified. You can now login.");
         } else {
             model.addAttribute("error", "Invalid or expired verification link.");
+        }
+        return "login";
+    }
+
+    /**
+     * ON-6: the link from "Change email". The email changes and every sign-in of the account ends (they're
+     * filed under the old address), this browser's too; the page asks to sign in with the new address.
+     */
+    @GetMapping("/account/confirm-email")
+    public String confirmEmail(@RequestParam(required = false) String token, Model model,
+                               jakarta.servlet.http.HttpServletRequest request) {
+        try {
+            var done = accountSecurity.confirmEmailChange(token);
+            if (done.isEmpty()) {
+                model.addAttribute("error", "That link has expired or was already used. Ask for a new one in Settings > Sign-in & security.");
+                return "login";
+            }
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+            jakarta.servlet.http.HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.invalidate();
+            }
+            model.addAttribute("success", "Your email is now " + done.get().newEmail() + ". Sign in with it.");
+        } catch (IllegalStateException e) {
+            model.addAttribute("error", e.getMessage());
         }
         return "login";
     }

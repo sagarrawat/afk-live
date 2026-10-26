@@ -17,7 +17,7 @@ import java.time.Duration;
 import java.util.Set;
 
 /**
- * Limits account form posts (sign-in, sign-up, password reset) per IP, against password guessing
+ * Limits account form posts (sign-in, sign-up, password reset, password and email changes) per IP, against password guessing
  * and email flooding. Runs before Spring Security (order -100), which answers POST /login itself
  * and never passes it further down the chain.
  */
@@ -26,7 +26,9 @@ import java.util.Set;
 public class AccountRateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> ACCOUNT_PATHS = Set.of(
-            "/login", "/register", "/forgot-password", "/reset-password", "/verify-email", "/login/2fa", "/account/restore");
+            "/login", "/register", "/forgot-password", "/reset-password", "/verify-email", "/login/2fa", "/account/restore",
+            // ON-6: signed-in changes that check the password or send email.
+            "/api/account/password", "/api/account/email", "/api/account/sign-out-others");
 
     private final long perMinute;
     private final Cache<String, Bucket> buckets =
