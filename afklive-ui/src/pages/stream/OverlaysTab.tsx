@@ -1,10 +1,12 @@
 import clsx from 'clsx';
-import { Clock, Image as ImageIcon, Music, Plus, Timer, Trash2, Type, Rss } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock, Image as ImageIcon, Music, Plus, Timer, Trash2, Type, Rss } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { MediaPicker } from '@/components/MediaPicker';
+import { TimeZoneSelect } from '@/components/TimeZoneSelect';
 import { isOnAir } from '@/components/status';
 import { Button, Field, IconButton, Input, Panel, Segmented, Select, Toggle } from '@/components/ui';
-import { put } from '@/lib/api';
+import { post, put } from '@/lib/api';
+import { SaveBar, useUnsavedChanges } from '@/components/unsaved';
 import { browserTimeZone } from '@/lib/format';
 import type { Overlay, Scene, StreamView } from '@/lib/types';
 import { overlayName } from './OverviewTab';
@@ -13,6 +15,42 @@ import { useStreamUpdate } from './useStreamUpdate';
 
 const SCENE_LABEL: Record<string, string> = { STARTING: 'Starting soon', LIVE: 'Live', BRB: 'Be right back', ENDING: 'Ending' };
 const SAFE = 0.05;
+
+const clampPos = (v: number) => Math.round(Math.max(0, Math.min(0.98, v)) * 1000) / 1000;
+
+export type Spot = 'top-left' | 'top' | 'top-right' | 'left' | 'center' | 'right' | 'bottom-left' | 'bottom' | 'bottom-right';
+export const SPOTS: { spot: Spot; label: string }[] = [
+  { spot: 'top-left', label: 'Top left' },
+  { spot: 'top', label: 'Top centre' },
+  { spot: 'top-right', label: 'Top right' },
+  { spot: 'left', label: 'Middle left' },
+  { spot: 'center', label: 'Centre' },
+  { spot: 'right', label: 'Middle right' },
+  { spot: 'bottom-left', label: 'Bottom left' },
+  { spot: 'bottom', label: 'Bottom centre' },
+  { spot: 'bottom-right', label: 'Bottom right' },
+];
+
+/**
+ * MS-3: where a layer goes for one of nine spots, inside the safe area. {@code w} and {@code h} are the
+ * layer's size as fractions of the frame (x and y are its top-left corner).
+ */
+export function spotPosition(spot: Spot, w: number, h: number): { x: number; y: number } {
+  const col = spot.endsWith('left') ? 0 : spot.endsWith('right') ? 2 : 1;
+  const row = spot.startsWith('top') ? 0 : spot.startsWith('bottom') ? 2 : 1;
+  const at = (i: number, size: number) => (i === 0 ? SAFE : i === 1 ? 0.5 - size / 2 : 1 - SAFE - size);
+  return { x: clampPos(at(col, w)), y: clampPos(at(row, h)) };
+}
+
+/** A layer's size in the preview, as fractions of the frame; a rough guess where it can't be measured. */
+function layerSize(o: Overlay): { w: number; h: number } {
+  const el = typeof document !== 'undefined' ? document.querySelector<HTMLElement>(`[data-overlay-id="${CSS.escape(o.id)}"]`) : null;
+  const frame = el?.parentElement;
+  if (el && frame && frame.clientWidth > 0 && frame.clientHeight > 0) {
+    return { w: el.offsetWidth / frame.clientWidth, h: el.offsetHeight / frame.clientHeight };
+  }
+  return { w: o.width || 0, h: o.type === 'IMAGE' ? o.width : o.size * 1.4 };
+}
 
 function newOverlay(type: Overlay['type']): Overlay {
   const id = `${type.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -32,8 +70,49 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
   const [picking, setPicking] = useState<'image' | null>(null);
   const [imageThumbs, setImageTitles] = useState<Record<number, string>>({});
   const { busy, update } = useStreamUpdate(s.id);
-  useEffect(() => setLayers(s.overlays), [s.overlays]);
-  const dirty = JSON.stringify(layers) !== JSON.stringify(s.overlays);
+  // A newer copy from the server (e.g. a switch on Overview) replaces the layers, unless there are
+  // unsaved edits: then only show/hide is taken from it, and the edits stay.
+  const base = useRef(s.overlays);
+  const adopt = useRef(false); // just saved: take the server's copy as it is
+  useEffect(() => {
+    const before = base.current;
+    base.current = s.overlays;
+    const saved = adopt.current;
+    adopt.current = false;
+    setLayers((local) => (saved || JSON.stringify(local) === JSON.stringify(before) ? s.overlays : withVisibility(local, s.overlays)));
+  }, [s.overlays]);
+  const [scenes, setScenes] = useState<Scene[]>(s.scenes);
+  useEffect(() => setScenes(s.scenes), [s.scenes]);
+  // Show/hide of a saved layer applies at once (setVisible), so it's never an unsaved change.
+  const saved = new Set(s.overlays.map((o) => o.id));
+  const comparable = (ls: Overlay[]) => JSON.stringify(ls.map((l) => (saved.has(l.id) ? { ...l, visible: true } : l)));
+  const layersDirty = comparable(layers) !== comparable(s.overlays);
+  const scenesDirty = JSON.stringify(scenes) !== JSON.stringify(s.scenes);
+  const dirty = layersDirty || scenesDirty;
+  const what = layersDirty && scenesDirty ? 'overlays and scenes' : layersDirty ? 'overlays' : 'scenes';
+  useUnsavedChanges(dirty, what);
+  const onAir = isOnAir(s.live.state);
+  const saveAll = () =>
+    update(async () => {
+      let result: unknown;
+      if (layersDirty) result = await put(`/api/streams/${s.id}/overlays`, layers);
+      if (scenesDirty) result = await put(`/api/streams/${s.id}/scenes`, scenes);
+      adopt.current = layersDirty;
+      return result;
+    }, onAir ? 'Saved. Viewers see it within a second.' : 'Saved.');
+  const undoAll = () => {
+    setLayers(s.overlays);
+    setScenes(s.scenes);
+  };
+  /** UX audit #9: show/hide applies at once, as on Overview (for layers already saved). */
+  const setVisible = (o: Overlay, visible: boolean) => {
+    set(o.id, { visible });
+    if (saved.has(o.id)) {
+      void update(() => post(`/api/streams/${s.id}/overlays/${encodeURIComponent(o.id)}/visible`, { visible }), visible ? `${overlayName(o)} is showing.` : `${overlayName(o)} is hidden.`).then(
+        (ok) => ok || set(o.id, { visible: !visible }),
+      );
+    }
+  };
   const current = layers.find((l) => l.id === selected) ?? null;
   const vertical = s.orientation === 'VERTICAL';
 
@@ -61,18 +140,9 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
               onChange={setScene}
               options={[...(s.source === 'PLAYLIST' ? [{ value: 'ALL', label: 'All' }] : []), ...Object.entries(SCENE_LABEL).map(([value, label]) => ({ value, label }))]}
             />
-            <div className="flex flex-wrap gap-2">
-              <TemplatePicker stream={s} disabled={dirty} />
-              {dirty && (
-                <Button size="sm" variant="ghost" onClick={() => setLayers(s.overlays)}>
-                  Undo changes
-                </Button>
-              )}
-              <Button size="sm" variant="primary" busy={busy} disabled={!dirty} onClick={() => update(() => put(`/api/streams/${s.id}/overlays`, layers), isOnAir(s.live.state) ? 'Saved. Viewers see it within a second.' : 'Saved.')}>
-                Save overlays
-              </Button>
-            </div>
+            <TemplatePicker stream={s} disabled={dirty} />
           </div>
+          {dirty && <p className="text-sm text-muted">Save or undo your changes to start from a template.</p>}
           <Canvas
             vertical={vertical}
             background={sceneColor(s.scenes, scene)}
@@ -98,7 +168,7 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
                         {overlayName(o)}
                         {o.scene && <span className="ml-2 text-xs text-muted">{SCENE_LABEL[o.scene]} only</span>}
                       </button>
-                      <Toggle label={`Show ${overlayName(o)}`} checked={o.visible} onChange={(v) => set(o.id, { visible: v })} />
+                      <Toggle label={`Show ${overlayName(o)}`} checked={o.visible} onChange={(v) => setVisible(o, v)} />
                       <IconButton label={`Delete ${overlayName(o)}`} onClick={() => setLayers((ls) => ls.filter((l) => l.id !== o.id))}>
                         <Trash2 className="h-4 w-4" />
                       </IconButton>
@@ -112,7 +182,9 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
         </div>
       </div>
 
-      <ScenesPanel stream={s} />
+      <ScenesPanel stream={s} scenes={scenes} setScenes={setScenes} />
+
+      <SaveBar dirty={dirty} busy={busy} what={what} onSave={saveAll} onUndo={undoAll} />
 
       <MediaPicker
         open={picking === 'image'}
@@ -134,6 +206,12 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
       />
     </div>
   );
+}
+
+/** Local layers with show/hide taken from the server's copy. */
+export function withVisibility(local: Overlay[], server: Overlay[]): Overlay[] {
+  const visible = new Map(server.map((o) => [o.id, o.visible]));
+  return local.map((l) => (visible.has(l.id) && visible.get(l.id) !== l.visible ? { ...l, visible: visible.get(l.id)! } : l));
 }
 
 function sceneColor(scenes: Scene[], scene: string): string {
@@ -232,7 +310,8 @@ function Canvas({
     const rect = ref.current!.getBoundingClientRect();
     onSelect(o.id);
     drag.current = { id: o.id, dx: (e.clientX - rect.left) / rect.width - o.x, dy: (e.clientY - rect.top) / rect.height - o.y };
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    // The layer itself keeps the pointer (not an image inside it), so a drag that leaves it still moves it.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const move = (e: ReactPointerEvent) => {
     if (!drag.current || !ref.current) return;
@@ -247,6 +326,7 @@ function Canvas({
       ref={ref}
       onPointerMove={move}
       onPointerUp={() => (drag.current = null)}
+      onPointerCancel={() => (drag.current = null)}
       className={clsx('relative mx-auto w-full select-none overflow-hidden rounded-md border border-line', vertical ? 'aspect-[9/16] max-w-xs' : 'aspect-video')}
       style={{ background }}
       aria-label="Overlay preview"
@@ -284,6 +364,7 @@ function Canvas({
             role="button"
             tabIndex={0}
             aria-label={`${overlayName(o)}, drag to move`}
+            data-overlay-id={o.id}
             onPointerDown={(e) => down(e, o)}
             onKeyDown={(e) => {
               const step = e.shiftKey ? 0.05 : 0.01;
@@ -294,7 +375,8 @@ function Canvas({
                 onMove(o.id, Math.max(0, Math.min(0.98, o.x + m[0])), Math.max(0, Math.min(0.98, o.y + m[1])));
               }
             }}
-            className={clsx('absolute cursor-move whitespace-pre px-[0.3em] py-[0.1em] font-semibold', selected === o.id && 'outline outline-2 outline-accent')}
+            // touch-none: on phones the browser would otherwise take the drag as a page scroll and cancel it.
+            className={clsx('absolute cursor-move touch-none whitespace-pre px-[0.3em] py-[0.1em] font-semibold', selected === o.id && 'outline outline-2 outline-accent')}
             style={style}
           >
             {content}
@@ -330,7 +412,7 @@ function LayerEditor({ overlay: o, onChange, onPickImage }: { overlay: Overlay; 
         {o.type !== 'IMAGE' && <Slider label="Text size" value={o.size} min={0.015} max={0.2} onChange={(v) => onChange({ size: v })} />}
         {o.type === 'CLOCK' && (
           <Field label="Time zone" htmlFor="ov-tz">
-            <Input id="ov-tz" value={o.timeZone ?? ''} placeholder="Asia/Kolkata" onChange={(e) => onChange({ timeZone: e.target.value })} />
+            <TimeZoneSelect id="ov-tz" value={o.timeZone ?? ''} onChange={(z) => onChange({ timeZone: z })} />
           </Field>
         )}
         {o.type === 'COUNTDOWN' && (
@@ -351,6 +433,7 @@ function LayerEditor({ overlay: o, onChange, onPickImage }: { overlay: Overlay; 
           </div>
         )}
         <Slider label="Opacity" value={o.opacity} min={0.1} max={1} onChange={(v) => onChange({ opacity: v })} />
+        <PositionPicker overlay={o} onChange={onChange} />
         <Field label="Show in" htmlFor="ov-scene">
           <Select id="ov-scene" value={o.scene ?? ''} onChange={(e) => onChange({ scene: e.target.value || null })}>
             <option value="">Every scene</option>
@@ -363,6 +446,56 @@ function LayerEditor({ overlay: o, onChange, onPickImage }: { overlay: Overlay; 
         </Field>
       </div>
     </Panel>
+  );
+}
+
+/** MS-3: place a layer without dragging (phones, keyboards): nine spots, and small nudges. */
+function PositionPicker({ overlay: o, onChange }: { overlay: Overlay; onChange: (p: Partial<Overlay>) => void }) {
+  const nudge = (dx: number, dy: number) => onChange({ x: clampPos(o.x + dx), y: clampPos(o.y + dy) });
+  const step = 0.01;
+  const arrow = 'grid h-10 w-10 place-items-center rounded border border-line text-muted hover:bg-raised hover:text-ink';
+  return (
+    <div>
+      <span className="block text-sm font-medium">Position</span>
+      <div className="mt-2 flex flex-wrap items-center gap-6">
+        <div role="group" aria-label="Place it" className="grid grid-cols-3 gap-1 rounded border border-line p-1">
+          {SPOTS.map(({ spot, label }) => (
+            <button
+              key={spot}
+              type="button"
+              aria-label={label}
+              title={label}
+              onClick={() => {
+                const { w, h } = layerSize(o);
+                onChange(spotPosition(spot, w, h));
+              }}
+              className="grid h-9 w-9 place-items-center rounded hover:bg-raised"
+            >
+              <span aria-hidden className="h-2 w-2 rounded-full bg-muted" />
+            </button>
+          ))}
+        </div>
+        <div role="group" aria-label="Nudge it" className="grid grid-cols-3 gap-1">
+          <span />
+          <button type="button" aria-label="Move up" className={arrow} onClick={() => nudge(0, -step)}>
+            <ArrowUp className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+          <button type="button" aria-label="Move left" className={arrow} onClick={() => nudge(-step, 0)}>
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+          <button type="button" aria-label="Move right" className={arrow} onClick={() => nudge(step, 0)}>
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+          <button type="button" aria-label="Move down" className={arrow} onClick={() => nudge(0, step)}>
+            <ArrowDown className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -406,22 +539,11 @@ function ColorField({ label, value, onChange, allowNone }: { label: string; valu
   );
 }
 
-function ScenesPanel({ stream: s }: { stream: StreamView }) {
-  const [scenes, setScenes] = useState<Scene[]>(s.scenes);
+function ScenesPanel({ stream: s, scenes, setScenes }: { stream: StreamView; scenes: Scene[]; setScenes: (f: (sc: Scene[]) => Scene[]) => void }) {
   const [picking, setPicking] = useState<string | null>(null);
-  const { busy, update } = useStreamUpdate(s.id);
-  useEffect(() => setScenes(s.scenes), [s.scenes]);
-  const dirty = JSON.stringify(scenes) !== JSON.stringify(s.scenes);
   const set = (name: string, p: Partial<Scene>) => setScenes((sc) => sc.map((x) => (x.name === name ? { ...x, ...p } : x)));
   return (
-    <Panel
-      title="Scenes"
-      action={
-        <Button size="sm" variant="primary" disabled={!dirty} busy={busy} onClick={() => update(() => put(`/api/streams/${s.id}/scenes`, scenes), 'Scenes saved.')}>
-          Save scenes
-        </Button>
-      }
-    >
+    <Panel title="Scenes">
       <p className="mb-4 text-muted">
         {s.source === 'PHONE'
           ? 'Switch scenes while live from the Overview tab or the remote. BRB shows automatically when your phone drops.'

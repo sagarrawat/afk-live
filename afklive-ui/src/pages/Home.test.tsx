@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { App, makeQueryClient } from '@/App';
 import type { Me, StreamSummary } from '@/lib/types';
 
@@ -65,5 +65,43 @@ describe('Home', () => {
     mockApi({ '/api/me': { ...me, onboarded: false }, '/api/streams': [], '/api/notifications': { unread: 0, emailAlerts: true, items: [] } });
     render(<App client={makeQueryClient()} />);
     expect(await screen.findByText('Set up your first stream')).toBeInTheDocument();
+  });
+});
+
+describe('Home: why streams stopped, and hours left (UX audit 6, 7, 11)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const free: Me = { ...me, plan: { ...me.plan, id: 'FREE', name: 'Free', maxHeight: 720, monthlyHours: 10 }, hoursUsed: 8.5 };
+
+  it('says why each off-air stream stopped, and how many free hours are left', async () => {
+    window.history.pushState({}, '', '/studio');
+    mockApi({
+      '/api/me': free,
+      '/api/notifications': { unread: 0, emailAlerts: true, items: [] },
+      '/api/streams': [
+        stream({ id: 1, name: 'Bhajans morning', live: { state: 'ENDED', uptimeSeconds: 0, endReason: "This month's free streaming hours are used up" } }),
+        stream({ id: 2, name: 'Lofi 24/7', live: { state: 'ENDED', uptimeSeconds: 0, endReason: 'Scheduled stop' } }),
+        stream({ id: 3, name: 'Rain sounds', live: { state: 'ERROR', uptimeSeconds: 0, endReason: 'Stream kept failing: connection refused' } }),
+        stream({ id: 4, name: 'Never run' }),
+      ],
+    });
+    render(<App client={makeQueryClient()} />);
+    const row = async (name: string) => (await screen.findByText(name)).closest('li')!;
+    expect(within(await row('Bhajans morning')).getByText("Stopped because this month's free streaming hours are used up.")).toHaveClass('text-muted');
+    expect(within(await row('Lofi 24/7')).getByText('Stopped at its scheduled time.')).toBeInTheDocument();
+    expect(within(await row('Rain sounds')).getByText('Stream kept failing: connection refused')).toHaveClass('text-bad');
+    expect(within(await row('Never run')).getByText('4 videos, 1080p')).toBeInTheDocument();
+    // Hours left sit in the page description, so they show on phones too (the sidebar is hidden there).
+    expect(screen.getAllByText(/1\.5 of 10 h left this month/).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: 'Upgrade' })[0]).toHaveAttribute('href', '/studio/settings/billing');
+  });
+
+  it('has no retired "YouTube upload tools" link in the account menu', async () => {
+    window.history.pushState({}, '', '/studio');
+    mockApi({ '/api/me': me, '/api/notifications': { unread: 0, emailAlerts: true, items: [] }, '/api/streams': [stream({})] });
+    render(<App client={makeQueryClient()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Account menu' }));
+    expect(await screen.findByText('Help')).toBeInTheDocument();
+    expect(screen.queryByText('YouTube upload tools')).not.toBeInTheDocument();
+    expect(document.querySelector('a[href="/classic"]')).toBeNull();
   });
 });

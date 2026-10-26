@@ -166,6 +166,12 @@ public class LiveStreamController {
         return ResponseEntity.noContent().build();
     }
 
+    /** GL-3: take back "stop after this playlist pass". */
+    @DeleteMapping("/{id}/finish-after-pass")
+    public LiveState cancelFinishAfterPass(@PathVariable Long id, Principal principal) {
+        return service.cancelFinishAfterPass(email(principal), id);
+    }
+
     @GetMapping("/{id}/runs")
     public List<RunView> runs(@PathVariable Long id, Principal principal) {
         return service.runs(email(principal), id);

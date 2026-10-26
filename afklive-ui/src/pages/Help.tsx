@@ -1,5 +1,7 @@
-import { Activity, ChevronRight } from 'lucide-react';
-import { PageHeader, Panel } from '@/components/ui';
+import { Activity, ChevronRight, LifeBuoy } from 'lucide-react';
+import { useState } from 'react';
+import { ContactSupportDialog } from '@/components/ContactSupport';
+import { Button, PageHeader, Panel } from '@/components/ui';
 import { HELP, type HelpArticle } from '@/lib/help';
 
 /** MK-4: the help centre's articles (public, at /help), first, because they answer the most tickets. */
@@ -19,9 +21,19 @@ const FAQ: [string, string][] = [
 ];
 
 export function Help() {
+  const [support, setSupport] = useState(false);
   return (
     <>
-      <PageHeader title="Help" description="Answers to the common questions. Stuck? Email support@afklive.in and we reply within a day." />
+      <PageHeader
+        title="Help"
+        description="Answers to the common questions. Stuck? Send us a message and we reply within a day."
+        actions={
+          <Button variant="primary" icon={<LifeBuoy className="h-4 w-4" />} onClick={() => setSupport(true)}>
+            Contact support
+          </Button>
+        }
+      />
+      <ContactSupportDialog open={support} onClose={() => setSupport(false)} />
       <Panel title="Guides" pad={false} className="mb-4">
         <ul className="divide-y divide-line">
           {ARTICLES.map(([to, title, blurb]) => (

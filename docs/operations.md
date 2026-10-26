@@ -98,6 +98,13 @@ requests, no errors, the signed-in visitor stayed signed in throughout.
   are in a cookie. Remember-me cookies need `REMEMBER_ME_KEY` set (otherwise each slot makes up its own
   key). The release that brings this signs everyone out once, because sessions were in memory before
   (Spring Boot 4 had stopped auto-configuring the JDBC store).
+  "Sign out other devices" and a password change (Settings > Sign-in & security) delete the account's
+  other rows in `spring_session` (found by principal name, which is the email for password and Google
+  sign-ins) and raise `users.sessions_version`, which is part of every remember-me cookie's signature
+  once above 0 (`SessionRememberMeServices`), so those cookies stop working too; the device that asked
+  gets a fresh cookie. Confirming a new email ends every sign-in of the account (sessions are filed
+  under the old address). Changing email needs email to be on (`ZEPTOMAIL_*`); without it the page says
+  it isn't available yet.
 - **Every background job claims its work in the database**, so the two slots never do it twice:
 
 | Job (web side) | Every | Why two instances are safe |
@@ -662,6 +669,164 @@ Set these before taking payments:
 | `APP_BILLING_SELLER_STATE` | Two-digit GST state code, e.g. `29` for Karnataka |
 | `APP_BILLING_SAC` | Service code, default `998439` |
 
+## Object storage
+
+Library files, thumbnails and prepared copies live in one bucket (`STORAGE_TYPE=s3`) or, on a single
+dev or small server, on disk (`STORAGE_TYPE=local`, `data/storage/` under the unit's working
+directory). Any S3-compatible store works; **Cloudflare R2** is the default choice because it charges
+nothing for egress (workers download every file they play; browsers read previews) and its free tier
+covers 10 GB-month of storage, 1 million writes and 10 million reads a month (then $0.015 per GB-month).
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `STORAGE_TYPE` | `local` | `s3` for any bucket (R2 included) |
+| `STORAGE_ENDPOINT` | `DO_SPACES_ENDPOINT` | R2: `https://<accountid>.r2.cloudflarestorage.com` (no bucket in it) |
+| `STORAGE_REGION` | `DO_SPACES_REGION`, then `auto` on R2 / `us-east-1` elsewhere | R2 only accepts `auto` |
+| `STORAGE_BUCKET` | `DO_SPACES_BUCKET` | |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | `DO_SPACES_KEY` / `DO_SPACES_SECRET` | |
+| `STORAGE_PATH_STYLE` | `true` on R2, `false` elsewhere | `https://host/bucket/key` instead of `https://bucket.host/key` |
+
+The `DO_SPACES_*` names keep working, so an existing server needs no change until it moves (a
+`STORAGE_*` variable that is set, even to an empty value, wins over its `DO_SPACES_*` fallback). Web
+instances, workers and the optimizer Lambda read the same names. Objects are always private: the app
+sends no ACL headers (R2 has no ACLs) and gives out only presigned URLs (1 hour) for previews, probing
+and browser part uploads. The AWS SDK is 2.21, which sends no CRC32 "flexible checksum" headers;
+**before upgrading it to 2.30 or later**, set `requestChecksumCalculation(WHEN_REQUIRED)` and
+`responseChecksumValidation(WHEN_REQUIRED)` on the client and presigner (`S3StorageService`), or
+presigned part uploads start carrying checksum parameters a browser can't satisfy.
+`S3StorageServiceR2Test` pins the request shapes.
+
+### Moving to Cloudflare R2
+
+1. **Bucket.** Cloudflare dashboard → R2 → Create bucket, e.g. `afklive-media`, location hint
+   Asia-Pacific (close to the servers and Indian creators). Leave public access off.
+2. **CORS** (bucket → Settings → CORS policy), so browsers can PUT upload parts and read the ETag:
+   ```json
+   [{"AllowedOrigins": ["https://afk.live"], "AllowedMethods": ["PUT", "GET", "HEAD"],
+     "AllowedHeaders": ["*"], "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3600}]
+   ```
+3. **Lifecycle** (bucket → Settings → Object lifecycle rules): abort incomplete multipart uploads after
+   2 days.
+4. **Token.** R2 → Manage R2 API tokens → Create API token: permission *Object Read & Write*, applied
+   to this bucket only. Copy the Access Key ID, the Secret Access Key (shown once) and the S3 endpoint
+   `https://<accountid>.r2.cloudflarestorage.com`. Don't use an account-wide token.
+5. **Copy what's there today** (the app keeps working on the old store meanwhile). Install rclone on
+   the server (`sudo apt-get install -y rclone`, or `curl https://rclone.org/install.sh | sudo bash`
+   for a current version) and define both ends with environment variables, so no keys land in a file:
+   ```sh
+   set +o history   # keep the keys out of shell history
+   export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_REGION=auto \
+     RCLONE_CONFIG_R2_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
+     RCLONE_CONFIG_R2_ACCESS_KEY_ID=... RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=...
+   # From DigitalOcean Spaces:
+   export RCLONE_CONFIG_OLD_TYPE=s3 RCLONE_CONFIG_OLD_PROVIDER=DigitalOcean \
+     RCLONE_CONFIG_OLD_ENDPOINT=blr1.digitaloceanspaces.com RCLONE_CONFIG_OLD_ACCESS_KEY_ID=... RCLONE_CONFIG_OLD_SECRET_ACCESS_KEY=...
+   rclone copy old:<spaces-bucket> r2:afklive-media --transfers 8 --checksum --progress
+   rclone check old:<spaces-bucket> r2:afklive-media --one-way     # must report 0 differences
+   # Or from local disk (STORAGE_TYPE=local), skipping half-finished uploads:
+   rclone copy /opt/afklive/data/storage r2:afklive-media --exclude '.uploads/**' --transfers 8 --progress
+   rclone check /opt/afklive/data/storage r2:afklive-media --one-way --exclude '.uploads/**'
+   ```
+   Storage keys are file names (`<uuid>_<name>`), the same in every store, so nothing in the database
+   changes. `copy` never deletes; run it as often as you like.
+6. **Switch** (no downtime; streams keep running):
+   - [ ] Run the `rclone copy` again right before switching (it copies only what's new).
+   - [ ] In `/opt/afklive/afklive.env` set `STORAGE_TYPE=s3` and the `STORAGE_*` values above (the
+         file stays root-owned, mode 600). The `DO_SPACES_*` lines can stay; `STORAGE_*` wins.
+   - [ ] Deploy the stream workers (Actions → Deploy stream worker): the handover starts them on the
+         new settings without a break. Then redeploy the web app (re-run the last web deploy, method
+         zero-downtime). Do both back to back.
+   - [ ] Straight after, run the `rclone copy` one last time: it picks up anything uploaded to the old
+         store between the two switches. Until then a file uploaded in those few minutes can't be read
+         by the processes already switched; nothing else is affected.
+   - [ ] Check: upload a file in the Library (it reaches Ready with a thumbnail), open an old file's
+         preview, start a test stream with an old file, and look at the logs for storage errors.
+   - [ ] Uploads in progress at the switch can't resume (their parts are in the old store); they
+         restart from the beginning. Do it at a quiet hour.
+   - [ ] Keep the old bucket (or folder) untouched for two weeks as a fallback, then delete it.
+
+   Reading from both stores at once isn't needed: everything is copied before the switch and the final
+   copy closes the gap. Rolling back is the same switch in reverse (copy R2 → old store first).
+7. If the optimizer Lambda is in use, give it the same `STORAGE_*` variables.
+
+## Database backups
+
+Every night `afklive-db-backup.timer` runs `afklive-scripts/db-backup.sh`: `pg_dump` in custom format,
+checked with `pg_restore --list`, uploaded to its own R2 bucket with rclone, then pruned to the newest
+**7 daily and 4 weekly** (Sunday) backups, only after that night's upload succeeded. A failure exits
+non-zero, writes `db-backup: FAILED: <why>` to the journal and leaves the unit failed
+(`systemctl --failed`); with `BACKUP_PING_URL` set, a dead man's switch (e.g. healthchecks.io's free
+plan) also emails when a night fails or never runs. Keys come from the environment and are never
+printed or put on a command line. Eleven dumps of a database this size fit easily in R2's free 10 GB.
+
+Setup (once, on the database server):
+
+```sh
+# 1. Tools. pg_dump must be the database server's major version or newer.
+sudo apt-get install -y postgresql-client rclone
+# 2. In Cloudflare: R2 → Create bucket "afklive-backups" (no public access), and an API token with
+#    Object Read & Write on that bucket only. Separate from the media bucket and its token, so the
+#    app's credentials can't touch backups.
+# 3. Settings, root-only (systemd reads them as root before starting the service as afklive)
+sudo install -m 600 -o root -g root /dev/null /opt/afklive/backup.env
+sudoedit /opt/afklive/backup.env
+#   BACKUP_S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+#   BACKUP_S3_BUCKET=afklive-backups
+#   BACKUP_S3_ACCESS_KEY=...
+#   BACKUP_S3_SECRET_KEY=...
+#   BACKUP_PING_URL=https://hc-ping.com/<uuid>     (optional)
+# 4. Scripts and units
+sudo install -d -m 755 /opt/afklive/bin
+sudo install -m 755 afklive-scripts/db-backup.sh afklive-scripts/db-restore.sh /opt/afklive/bin/
+sudo install -m 644 afklive-scripts/systemd/afklive-db-backup.service afklive-scripts/systemd/afklive-db-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now afklive-db-backup.timer
+# 5. A first run now, and check it
+sudo systemctl start afklive-db-backup.service; journalctl -u afklive-db-backup -n 20 --no-pager
+systemctl list-timers afklive-db-backup.timer
+```
+
+It runs at 21:30 UTC (03:00 IST) with `Nice=10` and idle I/O priority, so streams on the same server
+aren't disturbed. Retention and folder: `BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`, `BACKUP_WEEKLY_DAY`,
+`BACKUP_PREFIX` (default `db`). Without `BACKUP_S3_*` the script falls back to `STORAGE_*`, then
+`DO_SPACES_*`. The old `backup_db.sh` now just runs `db-backup.sh` (an old crontab entry keeps
+working once rclone is installed); remove that crontab line once the timer is on.
+
+### Restore drill (monthly, about 10 minutes)
+
+A backup is only proven by restoring it. On the first Monday of the month, as root:
+
+```sh
+sudo -u postgres createdb -O afklive afklive_drill
+bash -c 'set -a; . /opt/afklive/afklive.env; . /opt/afklive/backup.env; set +a; /opt/afklive/bin/db-restore.sh latest afklive_drill'
+#   → "restored: N tables, M changesets, U users": compare with the live database
+sudo -u postgres psql -d afklive_drill -c "select max(dateexecuted) from databasechangelog"   # last night's schema
+sudo -u postgres dropdb afklive_drill
+```
+
+`db-restore.sh --list` shows every backup; one restores by name too, e.g.
+`db-restore.sh afklive-2026-10-25.dump afklive_drill`. Write down the date and result where the team
+sees it.
+
+### Restoring production (disaster only)
+
+Streams stop while the database is replaced. Stop the web app and workers
+(`systemctl stop 'afklive-web@*' 'afklive-worker@*'`), then
+`sudo -u postgres dropdb afklive && sudo -u postgres createdb -O afklive afklive`, run
+`db-restore.sh latest afklive --into-live` the same way as the drill, and start the services again.
+The script never drops or overwrites anything itself: it refuses a database that has tables, and the
+live database's name without `--into-live`.
+
+## CI checks
+
+`.github/workflows/pr-checks.yml` runs only what a pull request can affect
+(`.github/scripts/changed-areas.sh`): docs-only changes (`docs/**`, any `*.md`) build nothing; changes
+only under `afklive-ui/` run the UI typecheck, tests and build (a couple of minutes, no Java or
+FFmpeg); anything else runs the full `mvn -B verify`. A new push to a PR cancels the run for the old
+commit. The **"PR checks passed"** job always runs and fails only if a job the change needed failed,
+so it's the one check to require in branch protection (Settings → Rules → the `main` ruleset →
+Require status checks to pass → "PR checks passed"); requiring the individual jobs would block
+docs-only PRs, whose jobs are skipped. Deploy workflows are unchanged.
+
 ## Media library and uploads
 
 Uploads are resumable (ML-1): the browser asks `/api/media/uploads` for an upload, then sends 16 MB
@@ -671,14 +836,8 @@ upload traffic never touches the web servers; with local storage (dev) parts com
 file's size is reserved against the plan's storage when the upload starts; uploads untouched for 24 h
 are aborted and give the space back.
 
-The bucket needs a CORS rule so browsers can PUT parts and read the ETag:
-
-```json
-[{"AllowedOrigins": ["https://afk.live"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"],
-  "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3600}]
-```
-
-Also add a lifecycle rule that aborts incomplete multipart uploads after 2 days, as a backstop.
+The bucket needs a CORS rule so browsers can PUT parts and read the ETag, and a lifecycle rule that
+aborts incomplete multipart uploads after 2 days as a backstop: see "Object storage" above.
 
 New files start as Processing. A web instance claims each one, probes it with ffprobe over a
 presigned URL (ranged reads, no full download), stores a thumbnail and marks it Ready or Failed with a

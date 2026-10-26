@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isOnAir } from '@/components/status';
+import { TimeZoneSelect } from '@/components/TimeZoneSelect';
 import { Button, Dialog, Field, Input, Panel, Segmented, Select, useAction } from '@/components/ui';
 import clsx from 'clsx';
 import { del, patch, post, put } from '@/lib/api';
@@ -33,7 +34,7 @@ export function SettingsTab({ stream: s }: { stream: StreamView }) {
             <Input id="st-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
           </Field>
           <Field label="Time zone" htmlFor="st-tz" hint="Schedules, the clock overlay and stop times use this.">
-            <Input id="st-tz" value={tz} onChange={(e) => setTz(e.target.value)} />
+            <TimeZoneSelect id="st-tz" value={tz} onChange={setTz} />
           </Field>
           <Button type="submit" variant="primary" busy={busy} disabled={name.trim() === s.name && tz.trim() === s.timeZone}>
             Save changes
@@ -167,6 +168,7 @@ function DangerZone({ stream: s }: { stream: StreamView }) {
       <Button variant="danger" disabled={onAir} title={onAir ? 'Stop the stream first' : undefined} onClick={() => setConfirm(true)}>
         Delete {s.name}
       </Button>
+      {onAir && <p className="mt-2 text-sm text-muted">It&apos;s on air. Stop the stream first to delete it.</p>}
       <Dialog
         open={confirm}
         onClose={() => setConfirm(false)}

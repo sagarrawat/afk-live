@@ -6,6 +6,7 @@ import { Button, Empty, Field, IconButton, Input, Panel, Segmented } from '@/com
 import { patch, put } from '@/lib/api';
 import { clock, duration } from '@/lib/format';
 import type { MediaRef, StreamView } from '@/lib/types';
+import { SaveBar, useUnsavedChanges } from '@/components/unsaved';
 import { SortableList } from './SortableList';
 import { useStreamUpdate } from './useStreamUpdate';
 import { resetVerticalHint, ShapeNotes, VerticalHint } from './VerticalHint';
@@ -20,13 +21,15 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
   const [items, setItems] = useState<MediaRef[]>(source);
   const [picking, setPicking] = useState(false);
   const [hintKey, setHintKey] = useState(0);
+  const [removing, setRemoving] = useState(false); // a removal on its way: not an unsaved change
   const { busy, update } = useStreamUpdate(s.id);
   useEffect(() => setItems(source), [source]);
-  const dirty = items.map((i) => i.id).join(',') !== source.map((i) => i.id).join(',');
+  const dirty = !removing && items.map((i) => i.id).join(',') !== source.map((i) => i.id).join(',');
   const total = items.reduce((t, i) => t + (i.durationSeconds ?? 0), 0);
   const onAir = isOnAir(s.live.state);
-  const save = (next: MediaRef[]) =>
-    update(() => put(`/api/streams/${s.id}/${kind}`, { mediaIds: next.map((i) => i.id) }), onAir ? 'Saved. The change applies after the current track.' : 'Saved.');
+  const save = (next: MediaRef[], done = 'Saved.') =>
+    update(() => put(`/api/streams/${s.id}/${kind}`, { mediaIds: next.map((i) => i.id) }), onAir ? `${done} The change applies after the current ${kind === 'playlist' ? 'video' : 'track'}.` : done);
+  useUnsavedChanges(dirty, kind === 'playlist' ? 'the playlist order' : 'the music order');
 
   const order = kind === 'playlist' ? s.playbackOrder : s.musicOrder;
   return (
@@ -66,46 +69,55 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
                     )}
                   </span>
                   {kind === 'playlist' && (
+                    // UX audit #16: on phones too, on its own line under the title.
                     <select
                       aria-label={`How ${m.title} fills the frame`}
-                      title={dirty ? 'Save the order first' : 'How this video fills the frame'}
                       disabled={dirty || busy}
                       value={m.fit ?? ''}
                       onChange={(e) => update(() => put(`/api/streams/${s.id}/playlist/${i}/fit`, { fit: e.target.value || null }), 'Saved.')}
-                      className="hidden h-8 rounded border border-line bg-bg px-2 text-sm text-muted sm:block"
+                      className="order-last h-8 basis-full rounded border border-line bg-bg px-2 text-sm text-muted sm:order-none sm:basis-auto"
                     >
-                      <option value="">Like the stream</option>
+                      <option value="">Fit: like the stream</option>
                       <option value="BLUR">Blurred background</option>
                       <option value="FIT">Bars</option>
                       <option value="FILL">Fill and crop</option>
                     </select>
                   )}
                   <span className="tnum text-sm text-muted">{clock(m.durationSeconds)}</span>
-                  <IconButton label={`Remove ${m.title}`} onClick={() => setItems(items.filter((_, j) => j !== i))}>
+                  {/* UX audit #9: removing saves at once, like adding; only a new order waits for Save. */}
+                  <IconButton
+                    label={`Remove ${m.title}`}
+                    disabled={busy}
+                    onClick={() => {
+                      const next = items.filter((_, j) => j !== i);
+                      setItems(next);
+                      setRemoving(true);
+                      void save(next, `Removed ${m.title}.`).finally(() => setRemoving(false));
+                    }}
+                  >
                     <Trash2 className="h-4 w-4" />
                   </IconButton>
                 </>
               )}
             />
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
-              <span className="tnum text-sm text-muted">
-                {items.length} {kind === 'playlist' ? 'video' : 'track'}
-                {items.length === 1 ? '' : 's'}, {duration(total)}
-              </span>
-              <div className="flex gap-2">
-                {dirty && (
-                  <Button size="sm" variant="ghost" onClick={() => setItems(source)}>
-                    Undo changes
-                  </Button>
-                )}
-                <Button size="sm" variant="primary" disabled={!dirty} busy={busy} onClick={() => save(items)}>
-                  Save order
-                </Button>
-              </div>
+              {dirty ? (
+                <span className="text-sm font-medium" role="status">
+                  New order not saved yet.
+                  {kind === 'playlist' && <span className="block font-normal text-muted">Save it to choose how a single video fills the frame.</span>}
+                </span>
+              ) : (
+                <span className="tnum text-sm text-muted">
+                  {items.length} {kind === 'playlist' ? 'video' : 'track'}
+                  {items.length === 1 ? '' : 's'}, {duration(total)}
+                </span>
+              )}
             </div>
           </>
         )}
       </Panel>
+
+      <SaveBar dirty={dirty} busy={busy} what={kind === 'playlist' ? 'the playlist order' : 'the music order'} onSave={() => save(items)} onUndo={() => setItems(source)} />
 
       <Panel title="Playback">
         <div className="flex flex-wrap gap-8">

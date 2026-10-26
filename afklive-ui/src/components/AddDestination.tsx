@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { post } from '@/lib/api';
+import { post, put } from '@/lib/api';
 import { keys, useInvalidate } from '@/lib/queries';
 import type { Destination } from '@/lib/types';
 import clsx from 'clsx';
@@ -27,6 +27,17 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
   RUMBLE: 'Rumble',
   CUSTOM: 'Other',
 };
+
+/**
+ * UX audit #22: a destination in plain words, "YouTube, key ending 1234", instead of its server address.
+ * Only an "Other" server shows its address (there's no better name for it); the edit dialog shows it for all.
+ */
+export function destinationSummary(d: { platform: string; server: string; keyHint: string }): string {
+  const end = d.keyHint.replace(/^[•*]+/, '');
+  const key = end ? `key ending ${end}` : d.keyHint ? 'key saved' : 'no key yet';
+  if (d.platform === 'CUSTOM' || !(d.platform in PLATFORM_NAMES)) return `${d.server}, ${key}`;
+  return `${PLATFORM_NAMES[d.platform as Platform]}, ${key}`;
+}
 
 const WHERE: Record<Platform, string> = {
   YOUTUBE: 'In YouTube Studio, choose Go live, then Stream. Copy the stream key there. No Google sign-in needed.',
@@ -185,6 +196,105 @@ export function AddDestinationDialog({ open, onClose, onAdded }: { open: boolean
         </Field>
         <Field label="Name" htmlFor="dest-name" hint="So you can tell your channels apart.">
           <Input id="dest-name" value={name} placeholder={`My ${label} channel`} onChange={(e) => setName(e.target.value)} />
+        </Field>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * DS-8: change a saved destination's name, server or stream key. The saved key never reaches the
+ * browser, so the key box starts empty and stays write-only: left empty, the saved key is kept. The
+ * platform can't change (add a new destination for another platform).
+ */
+export function EditDestinationDialog({
+  destination: d,
+  onClose,
+  onSaved,
+}: {
+  destination: Destination;
+  onClose: () => void;
+  /** keyChanged: the address changed, so it should be tested again */
+  onSaved?: (d: Destination, keyChanged: boolean) => void;
+}) {
+  const platform = (d.platform in PLATFORM_NAMES ? d.platform : 'CUSTOM') as Platform;
+  const [name, setName] = useState(d.name);
+  const [key, setKey] = useState('');
+  const [server, setServer] = useState(needsServer(platform) ? d.server : '');
+  const { busy, run } = useAction();
+  const invalidate = useInvalidate();
+  const twoFields = needsServer(platform);
+  const { problem } = readKey(platform, key, server);
+  const serverChanged = twoFields && server.trim().replace(/\/+$/, '') !== d.server.replace(/\/+$/, '');
+  const needKey = serverChanged && !key.trim() ? 'Paste the stream key again when you change the stream URL.' : null;
+  const badServer = twoFields && !/^(rtmps?|srt):\/\//i.test(server.trim());
+  const keyChanged = !!key.trim();
+  const live = d.liveIn ?? [];
+  const what = platform === 'CUSTOM' ? 'stream address' : 'stream key';
+  const ending = d.keyHint.replace(/•/g, '');
+  const submit = async () => {
+    if (problem || needKey) return;
+    let saved: Destination | undefined;
+    const body: Record<string, string> = { name: name.trim() || d.name };
+    if (keyChanged) body.key = destinationUrl(platform, key, server);
+    const ok = await run(async () => {
+      saved = await put<Destination>(`/api/destinations/${d.id}`, body);
+    }, `${body.name} saved.`);
+    if (ok && saved) {
+      await invalidate([...keys.destinations], [...keys.streams]);
+      onSaved?.(saved, keyChanged);
+      onClose();
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Edit ${d.name}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" busy={busy} disabled={!!problem || !!needKey || badServer} onClick={submit}>
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <p className="flex items-center gap-2 text-sm text-muted">
+          <PlatformIcon platform={platform} className="h-5 w-5" />
+          {platform === 'CUSTOM' ? 'Custom server' : PLATFORM_NAMES[platform]}
+        </p>
+        {live.length > 0 && (
+          <p role="note" className="rounded-md border border-warn/40 bg-warn/5 px-3 py-2 text-sm">
+            {live.join(', ')} {live.length === 1 ? 'is' : 'are'} live with this destination now. A new {what} applies the next time the stream goes live; the stream on air now keeps going as it is.
+          </p>
+        )}
+        {twoFields && (
+          <Field label="Stream URL" htmlFor="edit-server">
+            <Input id="edit-server" value={server} autoComplete="off" spellCheck={false} placeholder="rtmps://…" onChange={(e) => setServer(e.target.value)} />
+          </Field>
+        )}
+        <Field
+          label={platform === 'CUSTOM' ? 'New stream address' : 'New stream key'}
+          htmlFor="edit-key"
+          error={problem ?? needKey}
+          hint={`Leave empty to keep the saved one${ending ? ` (ending ${ending})` : ''}. ${WHERE[platform]}`}
+        >
+          <Input
+            id="edit-key"
+            value={key}
+            aria-invalid={!!(problem ?? needKey)}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={platform === 'CUSTOM' ? 'rtmp://live.example.com/app/your-key' : 'Paste the new key'}
+            onChange={(e) => setKey(e.target.value)}
+          />
+        </Field>
+        <Field label="Name" htmlFor="edit-name" hint="So you can tell your channels apart.">
+          <Input id="edit-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
         </Field>
       </div>
     </Dialog>

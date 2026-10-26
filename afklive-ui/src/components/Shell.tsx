@@ -1,10 +1,12 @@
 import clsx from 'clsx';
 import { Logo } from './Logo';
-import { Activity, Bell, CalendarDays, FolderOpen, HelpCircle, Home, LifeBuoy, LogOut, Moon, Radio, Settings, Shield, Sun, Wrench } from 'lucide-react';
+import { Activity, Bell, CalendarDays, FolderOpen, HelpCircle, Home, LifeBuoy, LogOut, Moon, Radio, Settings, Shield, Sun } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { csrfToken, post } from '@/lib/api';
 import { PushPrompt } from '@/components/PushPrompt';
+import { HoursLeft } from '@/components/HoursLeft';
+import { ContactSupportDialog } from '@/components/ContactSupport';
 import { relative } from '@/lib/format';
 import { appLink } from '@/lib/links';
 import { keys, useInvalidate, useMe, useNotifications } from '@/lib/queries';
@@ -137,6 +139,12 @@ function Notifications() {
               </li>
             ))}
           </ul>
+          {/* UX audit #19: which alerts arrive, and how, is one tap away. */}
+          <div className="border-t border-line px-4 py-2.5 text-sm">
+            <Link to="/studio/settings/notifications" onClick={() => setOpen(false)} className="text-accent hover:underline">
+              Alert settings
+            </Link>
+          </div>
         </div>
       )}
     </div>
@@ -147,6 +155,7 @@ function UserMenu() {
   const { data: me } = useMe();
   const [theme, toggle] = useTheme();
   const [open, setOpen] = useState(false);
+  const [support, setSupport] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -172,17 +181,21 @@ function UserMenu() {
             <div className="truncate font-medium">{me?.name}</div>
             <div className="truncate text-sm text-muted">{me?.email}</div>
             {me && <div className="mt-1 text-xs text-muted">{me.plan.name} plan</div>}
+            {me && <HoursLeft me={me} className="mt-0.5 text-xs" />}
           </div>
           <MenuItem onClick={toggle} icon={theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}>
             {theme === 'dark' ? 'Light theme' : 'Dark theme'}
           </MenuItem>
-          <MenuItem href="/classic" icon={<Wrench className="h-4 w-4" />}>
-            YouTube upload tools
-          </MenuItem>
           <MenuItem href="/studio/help" icon={<HelpCircle className="h-4 w-4" />}>
             Help
           </MenuItem>
-          <MenuItem href="mailto:support@afklive.in" icon={<LifeBuoy className="h-4 w-4" />}>
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              setSupport(true);
+            }}
+            icon={<LifeBuoy className="h-4 w-4" />}
+          >
             Contact support
           </MenuItem>
           <MenuItem href="/status" icon={<Activity className="h-4 w-4" />}>
@@ -193,6 +206,7 @@ function UserMenu() {
           </MenuItem>
         </div>
       )}
+      <ContactSupportDialog open={support} onClose={() => setSupport(false)} />
     </div>
   );
 }
@@ -241,9 +255,10 @@ export function Shell({ children }: { children: ReactNode }) {
         {me && (
           <Link to="/studio/settings/billing" className="mt-auto block rounded border border-line px-3 py-2.5 text-sm hover:border-muted/60">
             <span className="block font-medium">{me.plan.name} plan</span>
-            <span className="text-xs text-muted">
+            <span className="block text-xs text-muted">
               {me.plan.streams} stream{me.plan.streams === 1 ? '' : 's'} at once, up to {me.plan.maxHeight}p
             </span>
+            <HoursLeft me={me} link={false} className="mt-1 block text-xs" />
           </Link>
         )}
       </aside>

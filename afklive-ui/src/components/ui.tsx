@@ -67,7 +67,7 @@ export function IconButton({ label, className, children, ...rest }: ButtonHTMLAt
     <button
       aria-label={label}
       title={label}
-      className={clsx('inline-flex h-9 w-9 items-center justify-center rounded text-muted hover:bg-raised hover:text-ink', className)}
+      className={clsx('inline-flex h-9 w-9 items-center justify-center rounded text-muted hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent', className)}
       {...rest}
     >
       {children}

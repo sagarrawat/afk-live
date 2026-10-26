@@ -3,7 +3,7 @@ import { PushPrompt } from '@/components/PushPrompt';
 import clsx from 'clsx';
 import { CircleCheck, ListVideo, Loader2, Smartphone, TriangleAlert, Upload as UploadIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { destinationUrl, readKey } from '@/components/AddDestination';
 import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { MediaPicker } from '@/components/MediaPicker';
@@ -17,6 +17,7 @@ import { browserTimeZone } from '@/lib/format';
 import { keys, useInvalidate, useMe, useStream } from '@/lib/queries';
 import type { Destination, LiveState, MediaItem, StreamView } from '@/lib/types';
 import { useUploads } from '@/lib/uploads-context';
+import type { Progress } from '@/lib/upload';
 import { PhoneTab } from './stream/PhoneTab';
 
 /** ON-2: live in under five minutes. Three steps, each skippable; ends live or as a saved draft. */
@@ -86,6 +87,37 @@ function ChooseSource({ onCreated }: { onCreated: (id: number) => void }) {
         Stream from a free phone app. We add overlays and keep you on air when your signal drops. No subscriber minimum.
       </Choice>
     </div>
+  );
+}
+
+/** One upload in setup. UX audit #17: a failure says why, with Try again (and Free up space when storage is full). */
+export function SetupUploadRow({ name, progress: p, onRetry }: { name: string; progress: Progress; onRetry: () => void }) {
+  return (
+    <li>
+      <div className="flex items-center justify-between gap-3">
+        <span className="truncate">{name}</span>
+        {p.state === 'failed' ? (
+          <Button size="sm" variant="ghost" onClick={onRetry}>
+            Try again
+          </Button>
+        ) : (
+          <span className="tnum text-muted">{p.state === 'done' ? 'Uploaded' : `${Math.round((p.sent / Math.max(1, p.total)) * 100)}%`}</span>
+        )}
+      </div>
+      {p.state === 'failed' && (
+        <p className="text-bad">
+          Didn&apos;t upload. {p.error ?? 'Try again.'}
+          {/storage|space/i.test(p.error ?? '') && (
+            <>
+              {' '}
+              <Link to="/studio/library" className="text-accent hover:underline">
+                Free up space
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+    </li>
   );
 }
 
@@ -209,10 +241,7 @@ function Content({ streamId, onNext }: { streamId: number; onNext: () => void })
       {uploads.entries.length > 0 && (
         <ul className="mt-4 space-y-1.5 text-sm">
           {uploads.entries.map((e) => (
-            <li key={e.key} className="flex justify-between gap-3">
-              <span className="truncate">{e.file.name}</span>
-              <span className="tnum text-muted">{e.progress.state === 'done' ? 'Uploaded' : e.progress.state === 'failed' ? 'Failed' : `${Math.round((e.progress.sent / Math.max(1, e.progress.total)) * 100)}%`}</span>
-            </li>
+            <SetupUploadRow key={e.key} name={e.file.name} progress={e.progress} onRetry={() => uploads.retry(e.key)} />
           ))}
         </ul>
       )}
@@ -313,7 +342,7 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
               </Button>
             </div>
           ) : (
-            <FirstLiveProof live={s.live} onFinish={onFinish} streamId={s.id} />
+            <FirstLiveProof live={s.live} onFinish={onFinish} streamId={s.id} destinationId={added.id} />
           )}
         </>
       )}
@@ -336,7 +365,7 @@ export function firstLiveStep(live: LiveState): { step: 'off' | 'waiting' | 'on'
 }
 
 /** ON-8: after Go live, the setup waits for proof that YouTube receives the stream, then says so. */
-export function FirstLiveProof({ live, streamId, onFinish }: { live: LiveState; streamId: number; onFinish: (to: string) => void }) {
+export function FirstLiveProof({ live, streamId, onFinish, destinationId }: { live: LiveState; streamId: number; onFinish: (to: string) => void; destinationId?: number }) {
   const { step, message } = firstLiveStep(live);
   const open = () => onFinish(`/studio/streams/${streamId}`);
   if (step === 'on') {
@@ -367,7 +396,8 @@ export function FirstLiveProof({ live, streamId, onFinish }: { live: LiveState; 
         {message && <p className="mt-1 break-words">{message}</p>}
         <p className="mt-1 text-muted">{step === 'stopped' ? 'Fix the problem, then go live again.' : "We keep trying. Most often the stream key is wrong or YouTube's live dashboard isn't open yet."}</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button variant="primary" onClick={() => onFinish(`/studio/streams/${streamId}/destinations`)}>
+          {/* DS-8: straight to changing the key that was saved, not a list of switches. */}
+          <Button variant="primary" onClick={() => onFinish(destinationId != null ? `/studio/destinations?edit=${destinationId}` : `/studio/streams/${streamId}/destinations`)}>
             Check the stream key
           </Button>
           <Button variant="ghost" onClick={open}>

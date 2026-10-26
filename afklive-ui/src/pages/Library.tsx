@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { MediaThumb, StatusBadge } from '@/components/MediaPicker';
 import { AddTagDialog, FileTags, ManageTagsDialog, TagChips, TagFilter } from '@/components/MediaTags';
 import { Badge, Button, Dialog, Empty, ErrorNote, Field, IconButton, Input, PageHeader, Segmented, Select, Spinner, useAction, useToast } from '@/components/ui';
-import { patch, post } from '@/lib/api';
+import { del, patch, post } from '@/lib/api';
 import { bytes, clock, date, duration } from '@/lib/format';
 import { keys, useInvalidate, useMedia, useOpenUploads, useStorage } from '@/lib/queries';
 import type { DeleteResult, MediaItem } from '@/lib/types';
@@ -193,6 +193,7 @@ export function Library() {
                     <StatusBadge item={m} />
                     {m.inLiveUse && <Badge tone="live">On air</Badge>}
                   </span>
+                  {m.inLiveUse && <span className="mt-1 block text-xs text-muted">Stop the stream to delete it</span>}
                   <TagChips tags={m.tags} max={2} className="mt-1" />
                 </span>
               </button>
@@ -248,6 +249,7 @@ export function Library() {
                   <td className="px-3 py-2">
                     {m.status === 'READY' ? <span className="text-muted">Ready</span> : <StatusBadge item={m} />}
                     {m.inLiveUse && <Badge tone="live" className="ml-1">On air</Badge>}
+                    {m.inLiveUse && <span className="mt-0.5 block text-xs text-muted">Stop the stream to delete it</span>}
                   </td>
                   <td className="px-1 py-1 text-right">
                     <DeleteOne item={m} onDelete={() => setDeleting([m])} />
@@ -298,6 +300,8 @@ export function Library() {
 
 function StorageMeter({ used, limit, warning, full, onFreeUp }: { used: number; limit: number; warning: boolean; full: boolean; onFreeUp: () => void }) {
   const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 100;
+  const stale = useStaleUploads();
+  const held = stale.reduce((n, u) => n + u.sizeBytes, 0);
   return (
     <div className="rounded-md border border-line bg-panel px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
@@ -319,6 +323,11 @@ function StorageMeter({ used, limit, warning, full, onFreeUp }: { used: number; 
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-raised" role="progressbar" aria-label="Storage used" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
         <div className={clsx('h-full', full ? 'bg-bad' : warning ? 'bg-warn' : 'bg-accent')} style={{ width: `${pct}%` }} />
       </div>
+      {held > 0 && (warning || full) && (
+        <p className="mt-2 text-sm text-muted">
+          {bytes(held)} of this is held by unfinished uploads. Discard them below to free it.
+        </p>
+      )}
     </div>
   );
 }
@@ -386,19 +395,55 @@ function UploadQueue() {
   );
 }
 
-function UnfinishedUploads() {
+/** Uploads left unfinished in another visit or browser: each still holds its full size of storage. */
+function useStaleUploads() {
   const { data } = useOpenUploads();
   const { entries } = useUploads();
   const active = new Set(entries.map((e) => e.upload.id).filter(Boolean));
-  const stale = (data ?? []).filter((u) => !active.has(u.id));
+  return (data ?? []).filter((u) => u.status === 'UPLOADING' && !active.has(u.id));
+}
+
+/** ML-1: continue an unfinished upload by choosing the file again, or discard it to free its space. */
+function UnfinishedUploads() {
+  const stale = useStaleUploads();
+  const { busy, run } = useAction();
+  const invalidate = useInvalidate();
   if (stale.length === 0) return null;
+  const held = stale.reduce((n, u) => n + u.sizeBytes, 0);
   return (
-    <div className="mt-4 flex items-start gap-3 rounded-md border border-warn/40 bg-warn/5 px-4 py-3 text-sm">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden />
-      <p>
-        {stale.length === 1 ? `${stale[0].filename} didn't finish uploading` : `${stale.length} uploads didn't finish`} ({stale.map((u) => `${Math.round((u.uploadedBytes / u.sizeBytes) * 100)}%`).join(', ')} done). Choose the same file again to continue from there.
-      </p>
-    </div>
+    <section aria-label="Unfinished uploads" className="mt-4 rounded-md border border-warn/40 bg-warn/5 text-sm">
+      <div className="flex items-start gap-3 px-4 py-3">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden />
+        <p>
+          {stale.length === 1 ? "1 upload didn't finish" : `${stale.length} uploads didn't finish`}. They hold {bytes(held)} of your space until you finish or discard them. Choose the same file again to continue from where it stopped.
+        </p>
+      </div>
+      <ul className="divide-y divide-warn/20 border-t border-warn/20">
+        {stale.map((u) => (
+          <li key={u.id} className="flex items-center gap-3 px-4 py-2">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{u.filename}</span>
+              <span className="tnum block text-muted">
+                {Math.round((u.uploadedBytes / Math.max(1, u.sizeBytes)) * 100)}% done, holds {bytes(u.sizeBytes)}
+              </span>
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              aria-label={`Discard ${u.filename}`}
+              onClick={async () => {
+                if (await run(() => del(`/api/media/uploads/${u.id}`), `${u.filename} discarded. Its space is free again.`)) {
+                  invalidate([...keys.uploads], [...keys.storage]);
+                }
+              }}
+            >
+              Discard
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

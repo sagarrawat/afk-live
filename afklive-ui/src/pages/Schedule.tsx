@@ -1,8 +1,8 @@
 import clsx from 'clsx';
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Badge, Button, Empty, ErrorNote, IconButton, PageHeader, Segmented, Spinner, useAction } from '@/components/ui';
+import { Badge, Button, buttonClass, Dialog, Empty, ErrorNote, IconButton, PageHeader, Segmented, Spinner, useAction } from '@/components/ui';
 import { put } from '@/lib/api';
 import {
   addDays,
@@ -21,9 +21,9 @@ import {
   weekdayShort,
 } from '@/lib/calendar';
 import { browserTimeZone } from '@/lib/format';
-import { keys, useInvalidate, useMe, useScheduleCalendar } from '@/lib/queries';
+import { keys, useInvalidate, useMe, useScheduleCalendar, useStream } from '@/lib/queries';
 import type { CalendarClash, CalendarOccurrence, ScheduleCalendar } from '@/lib/types';
-import { localInZone } from './stream/ScheduleTab';
+import { localInZone, ScheduleDialog, skipDay } from './stream/ScheduleTab';
 
 type View = 'week' | 'month';
 
@@ -59,6 +59,11 @@ export function Schedule() {
   const range = view === 'week' ? { from: weekStart(at), days: 7 } : monthGrid(at);
   const { data, error, isLoading } = useScheduleCalendar(range.from, range.days);
   const wide = useWide();
+  const navigate = useNavigate();
+  // SC-2: a repeating run opens a small dialog (skip this day, or open the schedule); a one-time run opens its schedule.
+  const [picked, setPicked] = useState<CalendarOccurrence | null>(null);
+  const [adding, setAdding] = useState(false);
+  const open = (o: CalendarOccurrence) => (o.kind === 'ONCE' ? navigate(scheduleLink(o)) : setPicked(o));
 
   const step = (n: number) => setAnchor(view === 'week' ? addDays(at, 7 * n) : addMonths(at, n));
   const colour = useMemo(() => {
@@ -71,6 +76,13 @@ export function Schedule() {
       <PageHeader
         title="Schedule"
         description={`Every scheduled run across your streams, in ${data?.timeZone ?? tz} time.`}
+        actions={
+          data && data.streams.length > 0 ? (
+            <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setAdding(true)}>
+              Add a time
+            </Button>
+          ) : undefined
+        }
       />
       {data && <ClashBanner calendar={data} />}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -99,24 +111,120 @@ export function Schedule() {
         </Empty>
       ) : data ? (
         <>
-          {wide && view === 'week' && <WeekGrid calendar={data} today={today} colour={colour} />}
+          {wide && data.occurrences.length === 0 && (
+            // UX audit #18: an empty week or month says what to do next (the phone agenda already does).
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-line px-4 py-3">
+              <p className="text-muted">Nothing scheduled {view === 'week' ? 'this week' : 'this month'}. Add a time and the stream goes live and stops by itself.</p>
+              <Button size="sm" onClick={() => setAdding(true)}>
+                Add a time
+              </Button>
+            </div>
+          )}
+          {wide && view === 'week' && <WeekGrid calendar={data} today={today} colour={colour} onOpen={open} />}
           {wide && view === 'month' && (
             <MonthGrid
               calendar={data}
               month={at.slice(0, 7)}
               today={today}
               colour={colour}
+              onOpen={open}
               onOpenDay={(d) => {
                 setAnchor(d);
                 setView('week');
               }}
             />
           )}
-          {!wide && <Agenda calendar={data} month={view === 'month' ? at.slice(0, 7) : null} colour={colour} />}
+          {!wide && <Agenda calendar={data} month={view === 'month' ? at.slice(0, 7) : null} colour={colour} onOpen={open} />}
           <Legend calendar={data} colour={colour} />
         </>
       ) : null}
+      {picked && <OccurrenceDialog o={picked} onClose={() => setPicked(null)} />}
+      {adding && data && <AddTimeDialog streams={data.streams} onClose={() => setAdding(false)} />}
     </>
+  );
+}
+
+/** UX audit #18: "Add a time" from the calendar: which stream, then the same dialog as its Schedule tab. */
+export function AddTimeDialog({ streams, onClose }: { streams: { id: number; name: string }[]; onClose: () => void }) {
+  const [chosen, setChosen] = useState<number | null>(streams.length === 1 ? streams[0].id : null);
+  const [confirmed, setConfirmed] = useState(streams.length === 1);
+  const invalidate = useInvalidate();
+  const close = () => {
+    void invalidate(['schedules']);
+    onClose();
+  };
+  if (confirmed && chosen !== null) return <StreamScheduleDialog id={chosen} onClose={close} />;
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Add a time"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={chosen === null} onClick={() => setConfirmed(true)}>
+            Next
+          </Button>
+        </>
+      }
+    >
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium">Which stream?</legend>
+        {streams.map((st) => (
+          <label key={st.id} className="flex items-center gap-2 py-1.5">
+            <input type="radio" name="add-stream" checked={chosen === st.id} onChange={() => setChosen(st.id)} />
+            <span>{st.name}</span>
+          </label>
+        ))}
+      </fieldset>
+    </Dialog>
+  );
+}
+
+function StreamScheduleDialog({ id, onClose }: { id: number; onClose: () => void }) {
+  const { data: stream } = useStream(id);
+  if (!stream) return null;
+  return <ScheduleDialog stream={stream} schedule={null} onClose={onClose} />;
+}
+
+/** SC-2: one day of a repeating schedule: skip it (the rest of the schedule stays), or open the schedule. */
+function OccurrenceDialog({ o, onClose }: { o: CalendarOccurrence; onClose: () => void }) {
+  const { busy, run } = useAction();
+  const invalidate = useInvalidate();
+  // The schedule's own date for this run, in the schedule's time zone (a run after midnight elsewhere is still this day).
+  const date = localInZone(o.start, o.scheduleTimeZone).slice(0, 10);
+  const skip = async () => {
+    const ok = await run(() => skipDay(o.streamId, o.scheduleId, date), `${o.streamName} won't start on ${dayLabel(date)}.`);
+    if (ok) {
+      await invalidate(['schedules'], [...keys.stream(o.streamId)]);
+      onClose();
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={o.streamName}
+      footer={
+        <>
+          <Link to={scheduleLink(o)} className={buttonClass('ghost')}>
+            Open the schedule
+          </Link>
+          <Button variant="primary" busy={busy} onClick={skip}>
+            Skip this day
+          </Button>
+        </>
+      }
+    >
+      <p className="tnum">
+        {rangeLabel(o.startLocal, o.endLocal)}, {KIND[o.kind].toLowerCase()}
+      </p>
+      <p className="mt-2 text-muted">
+        Skip only {dayLabel(date)}: the stream won&apos;t start by itself that day. Every other day stays as it is. You can undo it in the stream&apos;s schedule.
+      </p>
+    </Dialog>
   );
 }
 
@@ -184,11 +292,10 @@ interface Drag {
   moved: boolean;
 }
 
-function WeekGrid({ calendar: c, today, colour }: { calendar: ScheduleCalendar; today: string; colour: (id: number, a?: number) => string }) {
+function WeekGrid({ calendar: c, today, colour, onOpen }: { calendar: ScheduleCalendar; today: string; colour: (id: number, a?: number) => string; onOpen: (o: CalendarOccurrence) => void }) {
   const days = dayList(c.from, 7);
   const scroller = useRef<HTMLDivElement>(null);
   const columns = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
   const invalidate = useInvalidate();
   const { run } = useAction();
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -293,7 +400,7 @@ function WeekGrid({ calendar: c, today, colour }: { calendar: ScheduleCalendar; 
                         aria-label={`${o.streamName}, ${rangeLabel(o.startLocal, o.endLocal)}, ${KIND[o.kind]}${o.movable ? '. Drag to move' : ''}`}
                         onPointerDown={(e) => startDrag(e, o)}
                         onClick={() => {
-                          if (!justDragged.current) navigate(scheduleLink(o));
+                          if (!justDragged.current) onOpen(o);
                         }}
                         className={clsx(
                           'absolute overflow-hidden rounded-sm border-l-[3px] px-1.5 py-0.5 text-left text-xs leading-4 text-ink',
@@ -320,7 +427,7 @@ function WeekGrid({ calendar: c, today, colour }: { calendar: ScheduleCalendar; 
           </div>
         </div>
       </div>
-      <p className="border-t border-line px-3 py-2 text-xs text-muted">Drag a one-time run to move it. Repeating runs open their stream's schedule.</p>
+      <p className="border-t border-line px-3 py-2 text-xs text-muted">Drag a one-time run to move it. Tap a repeating run to skip that day or open its schedule.</p>
     </div>
   );
 }
@@ -332,16 +439,17 @@ function MonthGrid({
   month,
   today,
   colour,
+  onOpen,
   onOpenDay,
 }: {
   calendar: ScheduleCalendar;
   month: string;
   today: string;
   colour: (id: number, a?: number) => string;
+  onOpen: (o: CalendarOccurrence) => void;
   onOpenDay: (day: string) => void;
 }) {
   const days = dayList(c.from, c.days);
-  const navigate = useNavigate();
   return (
     <div className="overflow-hidden rounded-md border border-line bg-panel">
       <div className="grid grid-cols-7 border-b border-line">
@@ -373,7 +481,7 @@ function MonthGrid({
                   <li key={occKey(o)}>
                     <button
                       type="button"
-                      onClick={() => navigate(scheduleLink(o))}
+                      onClick={() => onOpen(o)}
                       className="flex w-full items-center gap-1 truncate rounded-sm px-1 text-left text-xs hover:bg-raised"
                       title={`${o.streamName}, ${rangeLabel(o.startLocal, o.endLocal)}`}
                     >
@@ -401,7 +509,7 @@ function MonthGrid({
 
 // ------------------------------------------------------------------ phone
 
-function Agenda({ calendar: c, month, colour }: { calendar: ScheduleCalendar; month: string | null; colour: (id: number, a?: number) => string }) {
+function Agenda({ calendar: c, month, colour, onOpen }: { calendar: ScheduleCalendar; month: string | null; colour: (id: number, a?: number) => string; onOpen: (o: CalendarOccurrence) => void }) {
   const days = dayList(c.from, c.days).filter((d) => !month || d.slice(0, 7) === month);
   const groups = days
     .map((d) => ({
@@ -428,12 +536,21 @@ function Agenda({ calendar: c, month, colour }: { calendar: ScheduleCalendar; mo
           <ul className="divide-y divide-line overflow-hidden rounded-md border border-line bg-panel">
             {g.runs.map((o) => (
               <li key={occKey(o)}>
-                <Link to={scheduleLink(o)} className="flex items-center gap-3 px-3 py-2.5 hover:bg-raised">
-                  <span aria-hidden className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: colour(o.streamId) }} />
-                  <span className="min-w-0 flex-1">
-                    <OccurrenceText o={o} />
-                  </span>
-                </Link>
+                {o.kind === 'ONCE' ? (
+                  <Link to={scheduleLink(o)} className="flex items-center gap-3 px-3 py-2.5 hover:bg-raised">
+                    <span aria-hidden className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: colour(o.streamId) }} />
+                    <span className="min-w-0 flex-1">
+                      <OccurrenceText o={o} />
+                    </span>
+                  </Link>
+                ) : (
+                  <button type="button" onClick={() => onOpen(o)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-raised">
+                    <span aria-hidden className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: colour(o.streamId) }} />
+                    <span className="min-w-0 flex-1">
+                      <OccurrenceText o={o} />
+                    </span>
+                  </button>
+                )}
               </li>
             ))}
           </ul>

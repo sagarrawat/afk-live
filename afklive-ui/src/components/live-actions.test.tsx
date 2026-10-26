@@ -204,7 +204,8 @@ describe('Go live checks the destinations first (GL-1)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Go live' }));
     expect(await screen.findByText('Not reaching YouTube')).toBeInTheDocument();
     expect(screen.getByText('YouTube refused the stream key. Copy the key again from YouTube and save it.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Fix key' })).toHaveAttribute('href', '/studio/streams/7/destinations');
+    // DS-8: straight to editing the destination that failed, not the stream's list of switches.
+    expect(screen.getByRole('link', { name: 'Fix key' })).toHaveAttribute('href', '/studio/destinations?edit=1');
     expect(wentLive(calls)).toHaveLength(0);
     await userEvent.click(screen.getByRole('button', { name: 'Go live anyway' }));
     await waitFor(() => expect(wentLive(calls)).toHaveLength(1));

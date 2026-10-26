@@ -37,7 +37,7 @@ function Row({ id, children }: { id: string; children: ReactNode }) {
         <button className="cursor-grab touch-none rounded p-1.5 text-muted hover:bg-raised hover:text-ink" aria-label="Drag to reorder" {...attributes} {...listeners}>
           <GripVertical className="h-4 w-4" />
         </button>
-        <div className="flex min-w-0 flex-1 items-center gap-3">{children}</div>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 sm:flex-nowrap">{children}</div>
       </div>
     </li>
   );

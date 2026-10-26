@@ -1,17 +1,53 @@
 name: PR checks
 
-# Builds and tests every module on each pull request, so nothing reaches main
-# (which deploys automatically) without passing the full test suite.
+# Builds and tests what a pull request changed, so nothing reaches main (which deploys automatically)
+# without passing the tests that cover it, and no CI minutes go on tests a change can't affect:
+#   - docs only (docs/**, *.md): no build
+#   - app/site only (afklive-ui/**, besides docs): UI typecheck, tests and build (no Java, no FFmpeg)
+#   - anything else: the full build, mvn -B verify (Java + FFmpeg + UI tests)
+# Rules: .github/scripts/changed-areas.sh. Manual runs always do the full build.
+#
+# Branch protection: require only the "PR checks passed" job. It always runs and passes when every
+# job the change needed passed (jobs a change didn't need count as passed), so a docs-only PR can merge.
 on:
   pull_request:
   workflow_dispatch:
 
+# A new push to the same PR cancels the run still going for the old commit.
 concurrency:
-  group: pr-checks-${{ github.ref }}
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      java: ${{ steps.areas.outputs.java }}
+      ui: ${{ steps.areas.outputs.ui }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: What changed
+        id: areas
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            printf 'java=true\nui=false\n' | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # HEAD is the PR merged into its base, so this is exactly what the PR changes.
+          git diff --name-only --no-renames "$BASE" HEAD | tee changed.txt
+          .github/scripts/changed-areas.sh < changed.txt | tee -a "$GITHUB_OUTPUT"
+
   build-and-test:
+    needs: changes
+    if: needs.changes.outputs.java == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -44,3 +80,57 @@ jobs:
         with:
           name: surefire-reports
           path: '**/target/surefire-reports/'
+
+  ui-tests:
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: afklive-ui
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: afklive-ui/package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build the app and the site
+        run: npm run build
+
+  # The one check to require in branch protection (see the top of this file).
+  pr-checks-passed:
+    name: PR checks passed
+    needs: [changes, build-and-test, ui-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every needed check passed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          JAVA: ${{ needs.build-and-test.result }}
+          UI: ${{ needs.ui-tests.result }}
+        run: |
+          echo "changes=$CHANGES build-and-test=$JAVA ui-tests=$UI"
+          [ "$CHANGES" = success ] || { echo "Could not tell what changed"; exit 1; }
+          for r in "$JAVA" "$UI"; do
+            case "$r" in
+              success | skipped) ;;
+              *) echo "A needed check did not pass"; exit 1 ;;
+            esac
+          done
