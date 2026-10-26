@@ -825,3 +825,12 @@ storage by kind, and how many are due for deletion.
 
 Worker CPU and memory are the machine's (or container's), since FFmpeg runs as child processes;
 memory "used" leaves out reclaimable page cache (`MemAvailable`).
+
+## Deleted library files (ML-6)
+
+Creators can delete any file from the Library, one at a time (the bin on each file) or several at once,
+whether or not storage is full; files a live stream is playing are refused. Every delete writes a row to
+`media_deletions` in the same transaction (title, type, size, the storage keys it had, the non-live streams
+it was taken out of, when it was uploaded and deleted). The file and its prepared copies are removed from
+storage; the row stays for support. Admins see it on the user's admin page under "Deleted files"
+(`GET /api/admin/users/{id}/deletions`).

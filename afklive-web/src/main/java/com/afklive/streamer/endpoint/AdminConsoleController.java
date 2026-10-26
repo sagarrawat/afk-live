@@ -24,11 +24,30 @@ public class AdminConsoleController {
     private final AdminConsoleService console;
     private final CostMeter costs;
     private final PlayoutCopies copies;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public AdminConsoleController(AdminConsoleService console, CostMeter costs, PlayoutCopies copies) {
+    public AdminConsoleController(AdminConsoleService console, CostMeter costs, PlayoutCopies copies,
+                                  org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
         this.console = console;
         this.costs = costs;
         this.copies = copies;
+    }
+
+    /** A deleted library file, as recorded when the creator deleted it (ML-6). */
+    public record Deletion(Long mediaId, String title, String type, long sizeBytes, String removedFrom,
+                           java.time.LocalDateTime uploadedAt, java.time.OffsetDateTime deletedAt) {
+    }
+
+    /** The files this account deleted from its library, newest first (at most 200). */
+    @GetMapping("/users/{id}/deletions")
+    public List<Deletion> deletions(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        return jdbc.query("SELECT media_id, title, media_type, file_size, removed_from, created_at, deleted_at FROM media_deletions "
+                        + "WHERE user_id = ? ORDER BY deleted_at DESC, id DESC LIMIT 200",
+                (rs, i) -> new Deletion(rs.getLong("media_id"), rs.getString("title"), rs.getString("media_type"), rs.getLong("file_size"),
+                        rs.getString("removed_from"), rs.getTimestamp("created_at").toLocalDateTime(),
+                        rs.getObject("deleted_at", java.time.OffsetDateTime.class)),
+                id);
     }
 
     /** What needs attention now, streams by health, today's sign-ups and first go-lives. */

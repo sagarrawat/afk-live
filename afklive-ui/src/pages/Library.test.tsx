@@ -26,6 +26,7 @@ function file(id: number, title: string, tags: { id: number; name: string }[] = 
 const files = [file(1, 'rain.mp4', [{ id: 3, name: 'Chill' }]), file(2, 'storm.mp4'), file(4, 'lofi.mp4', [{ id: 3, name: 'Chill' }, { id: 5, name: 'Night' }])];
 let tags: MediaTag[] = [];
 let calls: { method: string; url: string; body?: unknown }[] = [];
+let storageFull = false;
 
 function mockApi() {
   vi.stubGlobal(
@@ -39,7 +40,14 @@ function mockApi() {
       let body: unknown = {};
       if (path === '/api/me') body = me;
       else if (path === '/api/notifications') body = { unread: 0, emailAlerts: true, items: [] };
-      else if (path === '/api/media/storage') body = { usedBytes: 0, limitBytes: 10_000_000, percent: 0, warning: false, full: false, plan: 'ESSENTIALS' };
+      else if (path === '/api/media/storage')
+        body = storageFull
+          ? { usedBytes: 10_000_000, limitBytes: 10_000_000, percent: 100, warning: true, full: true, plan: 'ESSENTIALS' }
+          : { usedBytes: 0, limitBytes: 10_000_000, percent: 0, warning: false, full: false, plan: 'ESSENTIALS' };
+      else if (path === '/api/media/delete' && method === 'POST') {
+        const ids = (JSON.parse(String(init!.body)) as { ids: number[] }).ids;
+        body = { deleted: ids, blocked: [], freedBytes: ids.length * 1000 };
+      }
       else if (path === '/api/media/uploads') body = [];
       else if (path === '/api/media/tags' && method === 'GET') body = tags;
       else if (path === '/api/media/tags' && method === 'POST') body = { id: 9, name: (JSON.parse(String(init!.body)) as { name: string }).name, fileCount: 0 };
@@ -166,5 +174,43 @@ describe('MediaPicker tag filter (ML-8)', () => {
     await waitFor(() => expect(screen.queryByText('storm.mp4')).not.toBeInTheDocument());
     expect(screen.getByText('rain.mp4')).toBeInTheDocument();
     expect(mediaRequests().at(-1)!.url).toMatch(/tag=3/);
+  });
+});
+
+describe('Deleting files (ML-6)', () => {
+  beforeEach(() => {
+    calls = [];
+    tags = [];
+    storageFull = false;
+    files[1] = { ...file(2, 'storm.mp4'), inLiveUse: false };
+    mockApi();
+    window.history.pushState({}, '', '/studio/library');
+  });
+  afterEach(() => {
+    files[1] = file(2, 'storm.mp4');
+    vi.unstubAllGlobals();
+  });
+
+  it('every file has its own delete button, even when storage is not full', async () => {
+    render(<App client={makeQueryClient()} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete rain.mp4' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete “rain.mp4”?' });
+    expect(within(dialog).getByText(/frees up about/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/media/delete')?.body).toEqual({ ids: [1] }));
+  });
+
+  it("a file that's on air can't be deleted from its button", async () => {
+    files[1] = { ...file(2, 'storm.mp4'), inLiveUse: true };
+    render(<App client={makeQueryClient()} />);
+    expect(await screen.findByRole('button', { name: "storm.mp4 is on air and can't be deleted" })).toBeDisabled();
+  });
+
+  it('when storage is full, "Free up space" lists the largest files first', async () => {
+    storageFull = true;
+    render(<App client={makeQueryClient()} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Free up space' }));
+    await waitFor(() => expect(mediaRequests().at(-1)!.url).toContain('sort=size'));
+    expect(screen.getByRole('link', { name: 'Get more space' })).toHaveAttribute('href', '/studio/settings/billing');
   });
 });

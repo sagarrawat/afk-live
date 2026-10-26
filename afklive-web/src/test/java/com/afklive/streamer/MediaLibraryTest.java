@@ -368,6 +368,33 @@ class MediaLibraryTest extends PostgresIntegrationTest {
     // ------------------------------------------------------------------ ML-6
 
     @Test
+    void aDeletedFileIsRecordedForSupportAndOnlyAdminsCanSeeIt() throws Exception {
+        long id = upload("old-loop.mp4", video);
+        processor.sweep();
+        LiveStream draft = liveStreams.create(email, new StreamDtos.CreateStream("Morning aarti", null, null, 720, 30));
+        liveStreams.setItems(email, draft.getId(), StreamItem.Kind.VIDEO, List.of(id));
+        Long userId = users.findByEmail(email).orElseThrow().getId();
+
+        mvc.perform(post("/api/media/delete").with(user(email)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of("ids", List.of(id)))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.deleted[0]").value(id));
+        assertThat(assets.findById(id)).isEmpty();
+
+        // The file is gone; what it was stays, for later debugging.
+        mvc.perform(get("/api/admin/users/" + userId + "/deletions").with(user("ops@example.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].mediaId").value(id))
+                .andExpect(jsonPath("$[0].title").value("old-loop.mp4"))
+                .andExpect(jsonPath("$[0].type").value("VIDEO"))
+                .andExpect(jsonPath("$[0].sizeBytes").value(video.length))
+                .andExpect(jsonPath("$[0].removedFrom").value("Morning aarti"))
+                .andExpect(jsonPath("$[0].deletedAt").exists());
+        // Creators can't read the audit, their own or anyone's.
+        mvc.perform(get("/api/admin/users/" + userId + "/deletions").with(user(email))).andExpect(status().isForbidden());
+    }
+
+
+    @Test
     void filesUsedByALiveStreamCantBeDeletedOthersCan() throws Exception {
         long onAir = upload("on-air.mp4", video);
         long draftOnly = upload("draft.mp4", video);
