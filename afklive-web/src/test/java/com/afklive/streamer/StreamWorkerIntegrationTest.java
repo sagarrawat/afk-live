@@ -166,6 +166,42 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
         }
     }
 
+    /**
+     * FO-8: a worker in a remote pool (it can't read the phone ingest) runs a file stream but never claims a
+     * phone run or one whose kind isn't known; the owner records the kind of a run created without one.
+     */
+    @Test
+    void aRemotePoolWorkerLeavesPhoneRunsAloneAndTheOwnerRecordsWhereARunBelongs() throws Exception {
+        User owner = account("worker-pools@example.com");
+        StreamWorker remote = newWorker("w-remote");
+        remote.setPools(com.afklive.streamer.streaming.WorkerPools.of("remote", "main", ""));
+        StreamJob phone = job(owner, "{}", null, null);
+        phone.setPlacement(com.afklive.streamer.streaming.WorkerPools.PHONE);
+        jobs.save(phone);
+        long unknown = job(owner, fileSpec(owner, uploadSource(), dir.resolve("pool-unknown.flv")).toJson(), null, null).getId();
+        StreamJob file = job(owner, fileSpec(owner, uploadSource(), dir.resolve("pool-file.flv")).toJson(), null, null);
+        file.setPlacement(com.afklive.streamer.streaming.WorkerPools.OTHER);
+        long fileId = jobs.save(file).getId();
+        StreamWorker local = newWorker("w-local");
+        try {
+            tickUntil(remote, () -> onAir(fileId), Duration.ofSeconds(40));
+            assertThat(jobs.findById(phone.getId()).orElseThrow().getWorkerId()).isNull();
+            assertThat(jobs.findById(unknown).orElseThrow().getWorkerId()).isNull();
+            assertThat(remote.runningCount()).isEqualTo(1);
+
+            // A main-pool worker takes the run of unknown kind and records what it is.
+            tickUntil(local, () -> "w-local".equals(jobs.findById(unknown).orElseThrow().getWorkerId())
+                    && com.afklive.streamer.streaming.WorkerPools.OTHER.equals(jobs.findById(unknown).orElseThrow().getPlacement()),
+                    Duration.ofSeconds(40));
+        } finally {
+            remote.shutdown();
+            local.shutdown();
+            for (long id : new long[]{phone.getId(), unknown, fileId}) {
+                streamService.finalizeJob(id, "test");
+            }
+        }
+    }
+
     @Test
     void anOrphanedStreamIsTakenOverAndRunsUntilStopped() throws Exception {
         User owner = account("worker-e2e@example.com");
