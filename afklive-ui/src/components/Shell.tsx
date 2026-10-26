@@ -4,6 +4,7 @@ import { Activity, Bell, CalendarDays, FolderOpen, HelpCircle, Home, LifeBuoy, L
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { csrfToken, post } from '@/lib/api';
+import { PushPrompt } from '@/components/PushPrompt';
 import { relative } from '@/lib/format';
 import { appLink } from '@/lib/links';
 import { keys, useInvalidate, useMe, useNotifications } from '@/lib/queries';
@@ -101,6 +102,7 @@ function Notifications() {
               </button>
             )}
           </div>
+          <PushPrompt compact className="m-3" />
           <ul className="max-h-96 overflow-y-auto">
             {(data?.items ?? []).length === 0 && <li className="px-4 py-6 text-center text-muted">Nothing yet. Alerts about your streams show up here.</li>}
             {(data?.items ?? []).map((n) => (

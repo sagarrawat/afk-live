@@ -1,4 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
+import { PushPrompt } from '@/components/PushPrompt';
 import clsx from 'clsx';
 import { CircleCheck, ListVideo, Loader2, Smartphone, TriangleAlert, Upload as UploadIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -353,6 +354,7 @@ export function FirstLiveProof({ live, streamId, onFinish }: { live: LiveState; 
             See it in YouTube Studio
           </a>
         </div>
+        <PushPrompt className="mt-4" />
       </div>
     );
   }
