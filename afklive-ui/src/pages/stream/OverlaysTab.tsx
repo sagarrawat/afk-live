@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Clock, Image as ImageIcon, Music, Plus, Timer, Trash2, Type, Rss } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock, Image as ImageIcon, Music, Plus, Timer, Trash2, Type, Rss } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { MediaPicker } from '@/components/MediaPicker';
 import { isOnAir } from '@/components/status';
@@ -13,6 +13,42 @@ import { useStreamUpdate } from './useStreamUpdate';
 
 const SCENE_LABEL: Record<string, string> = { STARTING: 'Starting soon', LIVE: 'Live', BRB: 'Be right back', ENDING: 'Ending' };
 const SAFE = 0.05;
+
+const clampPos = (v: number) => Math.round(Math.max(0, Math.min(0.98, v)) * 1000) / 1000;
+
+export type Spot = 'top-left' | 'top' | 'top-right' | 'left' | 'center' | 'right' | 'bottom-left' | 'bottom' | 'bottom-right';
+export const SPOTS: { spot: Spot; label: string }[] = [
+  { spot: 'top-left', label: 'Top left' },
+  { spot: 'top', label: 'Top centre' },
+  { spot: 'top-right', label: 'Top right' },
+  { spot: 'left', label: 'Middle left' },
+  { spot: 'center', label: 'Centre' },
+  { spot: 'right', label: 'Middle right' },
+  { spot: 'bottom-left', label: 'Bottom left' },
+  { spot: 'bottom', label: 'Bottom centre' },
+  { spot: 'bottom-right', label: 'Bottom right' },
+];
+
+/**
+ * MS-3: where a layer goes for one of nine spots, inside the safe area. {@code w} and {@code h} are the
+ * layer's size as fractions of the frame (x and y are its top-left corner).
+ */
+export function spotPosition(spot: Spot, w: number, h: number): { x: number; y: number } {
+  const col = spot.endsWith('left') ? 0 : spot.endsWith('right') ? 2 : 1;
+  const row = spot.startsWith('top') ? 0 : spot.startsWith('bottom') ? 2 : 1;
+  const at = (i: number, size: number) => (i === 0 ? SAFE : i === 1 ? 0.5 - size / 2 : 1 - SAFE - size);
+  return { x: clampPos(at(col, w)), y: clampPos(at(row, h)) };
+}
+
+/** A layer's size in the preview, as fractions of the frame; a rough guess where it can't be measured. */
+function layerSize(o: Overlay): { w: number; h: number } {
+  const el = typeof document !== 'undefined' ? document.querySelector<HTMLElement>(`[data-overlay-id="${CSS.escape(o.id)}"]`) : null;
+  const frame = el?.parentElement;
+  if (el && frame && frame.clientWidth > 0 && frame.clientHeight > 0) {
+    return { w: el.offsetWidth / frame.clientWidth, h: el.offsetHeight / frame.clientHeight };
+  }
+  return { w: o.width || 0, h: o.type === 'IMAGE' ? o.width : o.size * 1.4 };
+}
 
 function newOverlay(type: Overlay['type']): Overlay {
   const id = `${type.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -232,7 +268,8 @@ function Canvas({
     const rect = ref.current!.getBoundingClientRect();
     onSelect(o.id);
     drag.current = { id: o.id, dx: (e.clientX - rect.left) / rect.width - o.x, dy: (e.clientY - rect.top) / rect.height - o.y };
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    // The layer itself keeps the pointer (not an image inside it), so a drag that leaves it still moves it.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const move = (e: ReactPointerEvent) => {
     if (!drag.current || !ref.current) return;
@@ -247,6 +284,7 @@ function Canvas({
       ref={ref}
       onPointerMove={move}
       onPointerUp={() => (drag.current = null)}
+      onPointerCancel={() => (drag.current = null)}
       className={clsx('relative mx-auto w-full select-none overflow-hidden rounded-md border border-line', vertical ? 'aspect-[9/16] max-w-xs' : 'aspect-video')}
       style={{ background }}
       aria-label="Overlay preview"
@@ -284,6 +322,7 @@ function Canvas({
             role="button"
             tabIndex={0}
             aria-label={`${overlayName(o)}, drag to move`}
+            data-overlay-id={o.id}
             onPointerDown={(e) => down(e, o)}
             onKeyDown={(e) => {
               const step = e.shiftKey ? 0.05 : 0.01;
@@ -294,7 +333,8 @@ function Canvas({
                 onMove(o.id, Math.max(0, Math.min(0.98, o.x + m[0])), Math.max(0, Math.min(0.98, o.y + m[1])));
               }
             }}
-            className={clsx('absolute cursor-move whitespace-pre px-[0.3em] py-[0.1em] font-semibold', selected === o.id && 'outline outline-2 outline-accent')}
+            // touch-none: on phones the browser would otherwise take the drag as a page scroll and cancel it.
+            className={clsx('absolute cursor-move touch-none whitespace-pre px-[0.3em] py-[0.1em] font-semibold', selected === o.id && 'outline outline-2 outline-accent')}
             style={style}
           >
             {content}
@@ -351,6 +391,7 @@ function LayerEditor({ overlay: o, onChange, onPickImage }: { overlay: Overlay; 
           </div>
         )}
         <Slider label="Opacity" value={o.opacity} min={0.1} max={1} onChange={(v) => onChange({ opacity: v })} />
+        <PositionPicker overlay={o} onChange={onChange} />
         <Field label="Show in" htmlFor="ov-scene">
           <Select id="ov-scene" value={o.scene ?? ''} onChange={(e) => onChange({ scene: e.target.value || null })}>
             <option value="">Every scene</option>
@@ -363,6 +404,56 @@ function LayerEditor({ overlay: o, onChange, onPickImage }: { overlay: Overlay; 
         </Field>
       </div>
     </Panel>
+  );
+}
+
+/** MS-3: place a layer without dragging (phones, keyboards): nine spots, and small nudges. */
+function PositionPicker({ overlay: o, onChange }: { overlay: Overlay; onChange: (p: Partial<Overlay>) => void }) {
+  const nudge = (dx: number, dy: number) => onChange({ x: clampPos(o.x + dx), y: clampPos(o.y + dy) });
+  const step = 0.01;
+  const arrow = 'grid h-10 w-10 place-items-center rounded border border-line text-muted hover:bg-raised hover:text-ink';
+  return (
+    <div>
+      <span className="block text-sm font-medium">Position</span>
+      <div className="mt-2 flex flex-wrap items-center gap-6">
+        <div role="group" aria-label="Place it" className="grid grid-cols-3 gap-1 rounded border border-line p-1">
+          {SPOTS.map(({ spot, label }) => (
+            <button
+              key={spot}
+              type="button"
+              aria-label={label}
+              title={label}
+              onClick={() => {
+                const { w, h } = layerSize(o);
+                onChange(spotPosition(spot, w, h));
+              }}
+              className="grid h-9 w-9 place-items-center rounded hover:bg-raised"
+            >
+              <span aria-hidden className="h-2 w-2 rounded-full bg-muted" />
+            </button>
+          ))}
+        </div>
+        <div role="group" aria-label="Nudge it" className="grid grid-cols-3 gap-1">
+          <span />
+          <button type="button" aria-label="Move up" className={arrow} onClick={() => nudge(0, -step)}>
+            <ArrowUp className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+          <button type="button" aria-label="Move left" className={arrow} onClick={() => nudge(-step, 0)}>
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+          <button type="button" aria-label="Move right" className={arrow} onClick={() => nudge(step, 0)}>
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+          <button type="button" aria-label="Move down" className={arrow} onClick={() => nudge(0, step)}>
+            <ArrowDown className="h-4 w-4" aria-hidden />
+          </button>
+          <span />
+        </div>
+      </div>
+    </div>
   );
 }
 

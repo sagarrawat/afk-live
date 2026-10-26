@@ -3,7 +3,8 @@ import { ListVideo, Plus, Smartphone } from 'lucide-react';
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { GoLiveButton, StopButton } from '@/components/live-actions';
-import { HealthDot, isOnAir, LiveBadge, reachProblem, Uptime } from '@/components/status';
+import { HoursLeft } from '@/components/HoursLeft';
+import { HealthDot, isOnAir, LiveBadge, reachProblem, stopReason, Uptime } from '@/components/status';
 import { Button, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Segmented, Select, Spinner, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
 import { keys, useInvalidate, useMe, useQualityOptions, useStreams } from '@/lib/queries';
@@ -25,7 +26,19 @@ export function Home() {
     <>
       <PageHeader
         title="Streams"
-        description={streams && streams.length > 0 ? (live > 0 ? `${live} of ${streams.length} on air right now.` : 'Nothing is on air right now.') : undefined}
+        description={
+          streams && streams.length > 0 ? (
+            <>
+              {live > 0 ? `${live} of ${streams.length} on air right now.` : 'Nothing is on air right now.'}
+              {me && (
+                <>
+                  {' '}
+                  <HoursLeft me={me} />
+                </>
+              )}
+            </>
+          ) : undefined
+        }
         actions={
           <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
             New stream
@@ -72,6 +85,7 @@ function rank(s: StreamSummary): number {
 function StreamRow({ stream: s }: { stream: StreamSummary }) {
   const onAir = isOnAir(s.live.state);
   const np = s.live.nowPlaying;
+  const why = stopReason(s.live);
   return (
     <li className="relative">
       {/* The tally: a red edge on every stream that's on air. */}
@@ -84,7 +98,7 @@ function StreamRow({ stream: s }: { stream: StreamSummary }) {
             <LiveBadge state={s.live.state} reach={s.live.reach} />
             {onAir && <HealthDot level={s.live.health?.overall} />}
           </span>
-          <span className={clsx('mt-1 block truncate text-sm', onAir && reachProblem(s.live) ? 'text-bad' : 'text-muted')}>
+          <span className={clsx('mt-1 block text-sm', onAir && reachProblem(s.live) ? 'text-bad' : !onAir && why?.problem ? 'text-bad' : 'text-muted', !(!onAir && why) && 'truncate')}>
             {onAir && reachProblem(s.live)
               ? reachProblem(s.live)
               : onAir
@@ -95,8 +109,8 @@ function StreamRow({ stream: s }: { stream: StreamSummary }) {
                 : np?.title
                   ? `Now playing ${np.title}`
                   : 'Starting the playlist'
-              : s.live.state === 'ERROR'
-                ? (s.live.endReason ?? 'Stopped with a problem')
+              : why
+                ? why.text
                 : s.source === 'PHONE'
                   ? `Phone stream, ${s.qualityHeight}p`
                   : `${s.playlistCount} video${s.playlistCount === 1 ? '' : 's'}, ${s.qualityHeight}p`}

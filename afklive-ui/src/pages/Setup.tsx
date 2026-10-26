@@ -313,7 +313,7 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
               </Button>
             </div>
           ) : (
-            <FirstLiveProof live={s.live} onFinish={onFinish} streamId={s.id} />
+            <FirstLiveProof live={s.live} onFinish={onFinish} streamId={s.id} destinationId={added.id} />
           )}
         </>
       )}
@@ -336,7 +336,7 @@ export function firstLiveStep(live: LiveState): { step: 'off' | 'waiting' | 'on'
 }
 
 /** ON-8: after Go live, the setup waits for proof that YouTube receives the stream, then says so. */
-export function FirstLiveProof({ live, streamId, onFinish }: { live: LiveState; streamId: number; onFinish: (to: string) => void }) {
+export function FirstLiveProof({ live, streamId, onFinish, destinationId }: { live: LiveState; streamId: number; onFinish: (to: string) => void; destinationId?: number }) {
   const { step, message } = firstLiveStep(live);
   const open = () => onFinish(`/studio/streams/${streamId}`);
   if (step === 'on') {
@@ -367,7 +367,8 @@ export function FirstLiveProof({ live, streamId, onFinish }: { live: LiveState; 
         {message && <p className="mt-1 break-words">{message}</p>}
         <p className="mt-1 text-muted">{step === 'stopped' ? 'Fix the problem, then go live again.' : "We keep trying. Most often the stream key is wrong or YouTube's live dashboard isn't open yet."}</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button variant="primary" onClick={() => onFinish(`/studio/streams/${streamId}/destinations`)}>
+          {/* DS-8: straight to changing the key that was saved, not a list of switches. */}
+          <Button variant="primary" onClick={() => onFinish(destinationId != null ? `/studio/destinations?edit=${destinationId}` : `/studio/streams/${streamId}/destinations`)}>
             Check the stream key
           </Button>
           <Button variant="ghost" onClick={open}>

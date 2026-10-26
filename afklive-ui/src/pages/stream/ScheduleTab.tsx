@@ -1,8 +1,10 @@
 import clsx from 'clsx';
-import { CalendarClock, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { CalendarClock, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Dialog, Empty, Field, IconButton, Input, Panel, Segmented, Toggle } from '@/components/ui';
-import { del, post, put } from '@/lib/api';
+import { del, get, post, put } from '@/lib/api';
+import { shortDate } from '@/lib/calendar';
+import { isOnAir } from '@/components/status';
 import { dateTime } from '@/lib/format';
 import type { ScheduleView, StreamView } from '@/lib/types';
 import { MediaPicker } from '@/components/MediaPicker';
@@ -26,7 +28,7 @@ export function describe(sc: ScheduleView, tz: string): string {
   return `${days}, ${time}`;
 }
 
-function toRequest(sc: ScheduleView, enabled = sc.enabled) {
+export function toRequest(sc: ScheduleView, enabled = sc.enabled) {
   return {
     kind: sc.kind,
     startAt: sc.startAt ? localInZone(sc.startAt, sc.timeZone) : null,
@@ -41,9 +43,22 @@ function toRequest(sc: ScheduleView, enabled = sc.enabled) {
   };
 }
 
+/**
+ * SC-2: skip one day of a repeating schedule. {@code date} is the run's date in the schedule's own time
+ * zone (yyyy-MM-dd). The rest of the schedule is sent back as it is.
+ */
+export async function skipDay(streamId: number, scheduleId: number, date: string): Promise<void> {
+  const s = await get<StreamView>(`/api/streams/${streamId}`);
+  const sc = s.schedules.find((x) => x.id === scheduleId);
+  if (!sc) throw new Error('This schedule no longer exists.');
+  if (sc.skipDates.includes(date)) return;
+  await put(`/api/streams/${streamId}/schedules/${scheduleId}`, { ...toRequest(sc), skipDates: [...sc.skipDates, date].sort() });
+}
+
 /** SC-1..SC-5: run this stream on a timetable; windows that span midnight are fine. */
 export function ScheduleTab({ stream: s }: { stream: StreamView }) {
   const [editing, setEditing] = useState<ScheduleView | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<ScheduleView | null>(null);
   const { busy, update } = useStreamUpdate(s.id);
   return (
     <Panel
@@ -71,6 +86,7 @@ export function ScheduleTab({ stream: s }: { stream: StreamView }) {
                   {sc.enabled ? (sc.nextStart ? `Next start ${dateTime(sc.nextStart, sc.timeZone)}` : 'No upcoming start') : 'Paused'}
                   {sc.timeZone !== Intl.DateTimeFormat().resolvedOptions().timeZone && `, ${sc.timeZone} time`}
                   {(sc.playlist?.length ?? 0) > 0 && `. Plays its own ${sc.playlist!.length} video${sc.playlist!.length === 1 ? '' : 's'}`}
+                  {sc.kind !== 'ONCE' && sc.skipDates.length > 0 && `. Skips ${sc.skipDates.length} day${sc.skipDates.length === 1 ? '' : 's'}`}
                 </span>
                 {sc.lastError && (
                   <span className="mt-1 block">
@@ -84,7 +100,7 @@ export function ScheduleTab({ stream: s }: { stream: StreamView }) {
                 </Button>
               )}
               <Toggle label={sc.enabled ? 'Pause this schedule' : 'Resume this schedule'} checked={sc.enabled} onChange={(v) => update(() => put(`/api/streams/${s.id}/schedules/${sc.id}`, toRequest(sc, v)))} />
-              <IconButton label="Delete this schedule" onClick={() => update(() => del(`/api/streams/${s.id}/schedules/${sc.id}`), 'Schedule deleted.')}>
+              <IconButton label="Delete this schedule" onClick={() => setDeleting(sc)}>
                 <Trash2 className="h-4 w-4" />
               </IconButton>
             </li>
@@ -92,6 +108,31 @@ export function ScheduleTab({ stream: s }: { stream: StreamView }) {
         </ul>
       )}
       {editing && <ScheduleDialog stream={s} schedule={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      <Dialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        title={deleting ? `Delete ${describe(deleting, deleting.timeZone)}?` : 'Delete this schedule?'}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleting(null)}>
+              Keep it
+            </Button>
+            <Button
+              variant="danger"
+              busy={busy}
+              onClick={async () => {
+                if (deleting && (await update(() => del(`/api/streams/${s.id}/schedules/${deleting.id}`), 'Schedule deleted.'))) setDeleting(null);
+              }}
+            >
+              Delete schedule
+            </Button>
+          </>
+        }
+      >
+        <p>This stream won&apos;t start by itself at these times any more.</p>
+        {isOnAir(s.live.state) && <p className="mt-2">The stream that&apos;s live now keeps running; it won&apos;t start again from this schedule.</p>}
+        {deleting?.enabled && <p className="mt-2 text-muted">To stop it for a while instead, use the switch to pause it.</p>}
+      </Dialog>
     </Panel>
   );
 }
@@ -106,10 +147,12 @@ function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; 
   const [days, setDays] = useState<string[]>(init?.daysOfWeek ?? ['MON', 'TUE', 'WED', 'THU', 'FRI']);
   const [tz, setTz] = useState(schedule?.timeZone ?? s.timeZone);
   const [slot, setSlot] = useState<{ id: number; title: string }[]>(schedule?.playlist ?? []);
+  const [skips, setSkips] = useState<string[]>(schedule?.skipDates ?? []);
+  const [skipping, setSkipping] = useState('');
   const [picking, setPicking] = useState(false);
   const { busy, update } = useStreamUpdate(s.id);
   const save = async () => {
-    const body = { kind, startAt: kind === 'ONCE' ? startAt : null, endAt: kind === 'ONCE' ? endAt : null, daysOfWeek: kind === 'WEEKLY' ? days : [], startTime, endTime, timeZone: tz, skipDates: schedule?.skipDates ?? [], enabled: schedule?.enabled ?? true, playlist: slot.map((m) => m.id) };
+    const body = { kind, startAt: kind === 'ONCE' ? startAt : null, endAt: kind === 'ONCE' ? endAt : null, daysOfWeek: kind === 'WEEKLY' ? days : [], startTime, endTime, timeZone: tz, skipDates: kind === 'ONCE' ? [] : skips, enabled: schedule?.enabled ?? true, playlist: slot.map((m) => m.id) };
     const ok = await update(() => (schedule ? put(`/api/streams/${s.id}/schedules/${schedule.id}`, body) : post(`/api/streams/${s.id}/schedules`, body)), 'Schedule saved.');
     if (ok) onClose();
   };
@@ -169,6 +212,37 @@ function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; 
               </Field>
             </div>
           </>
+        )}
+        {kind !== 'ONCE' && (
+          <div>
+            <span className="block text-sm font-medium">Skip days</span>
+            <p className="text-sm text-muted">The stream won&apos;t start by itself on these dates ({tz} dates). Every other day stays as it is.</p>
+            {skips.length > 0 && (
+              <ul aria-label="Skipped days" className="mt-2 flex flex-wrap gap-1.5">
+                {skips.map((d) => (
+                  <li key={d} className="inline-flex items-center gap-1 rounded-sm border border-line py-0.5 pl-2 pr-0.5 text-sm">
+                    <span className="tnum">{shortDate(d)}</span>
+                    <button type="button" aria-label={`Don't skip ${shortDate(d)}`} onClick={() => setSkips(skips.filter((x) => x !== d))} className="grid h-7 w-7 place-items-center rounded text-muted hover:bg-raised hover:text-ink">
+                      <X className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <Input aria-label="Day to skip" type="date" value={skipping} onChange={(e) => setSkipping(e.target.value)} className="w-44" />
+              <Button
+                size="sm"
+                disabled={!/^\d{4}-\d{2}-\d{2}$/.test(skipping) || skips.includes(skipping)}
+                onClick={() => {
+                  setSkips([...skips, skipping].sort());
+                  setSkipping('');
+                }}
+              >
+                Skip this day
+              </Button>
+            </div>
+          </div>
         )}
         <Field label="Time zone" htmlFor="sc-tz">
           <Input id="sc-tz" value={tz} onChange={(e) => setTz(e.target.value)} />

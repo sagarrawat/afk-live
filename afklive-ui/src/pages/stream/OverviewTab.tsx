@@ -385,7 +385,7 @@ function RecentRuns({ stream: s }: { stream: StreamView }) {
             <li key={r.jobId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
               <span>{dateTime(r.startedAt, s.timeZone)}</span>
               <span className="tnum text-muted">{duration(secs)}</span>
-              <span className="min-w-0 flex-1 truncate text-right text-muted">{r.endedAt ? r.endReason || 'Ended' : 'On air'}</span>
+              <span className="min-w-0 flex-1 break-words text-right text-muted">{r.endedAt ? r.endReason || 'Ended' : 'On air'}</span>
             </li>
           );
         })}

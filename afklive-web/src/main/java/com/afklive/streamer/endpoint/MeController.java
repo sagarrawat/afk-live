@@ -36,19 +36,24 @@ public class MeController {
     private final UserRepository users;
     private final PlanService plans;
     private final StreamJobRepository jobs;
+    private final com.afklive.streamer.repository.UsageRepository usage;
 
-    public MeController(UserRepository users, PlanService plans, StreamJobRepository jobs) {
+    public MeController(UserRepository users, PlanService plans, StreamJobRepository jobs,
+                        com.afklive.streamer.repository.UsageRepository usage) {
         this.users = users;
         this.plans = plans;
         this.jobs = jobs;
+        this.usage = usage;
     }
 
     public record Plan(String id, String name, int streams, int maxHeight, int maxFps, long storageBytes, int monthlyHours,
                        int destinations, boolean watermark) {
     }
 
+    /** {@code hoursUsed}: hours streamed this calendar month (UTC), against {@code plan.monthlyHours} (0 = no limit). */
     public record Me(Long id, String email, String name, String picture, boolean admin, Plan plan, String timeZone,
-                     String currency, boolean onboarded, boolean emailAlerts, List<String> dismissedHints, long goLives) {
+                     String currency, boolean onboarded, boolean emailAlerts, List<String> dismissedHints, long goLives,
+                     double hoursUsed) {
     }
 
     /**
@@ -126,7 +131,8 @@ public class MeController {
                 new Plan(u.getPlanType().name(), c.getDisplayName(), c.getMaxActiveStreams(), c.getMaxResolution(), c.getMaxFps(),
                         c.getMaxStorageBytes(), c.getMonthlyHours(), c.getMaxDestinations(), c.isWatermark()),
                 u.getTimeZone(), u.getCurrency(), u.getOnboardedAt() != null, u.isEmailAlerts(), dismissed(u),
-                jobs.countGoLives(u.getId()));
+                jobs.countGoLives(u.getId()),
+                Math.round(usage.secondsIn(u.getId(), com.afklive.streamer.service.BillingService.month(ZonedDateTime.now(ZoneId.of("UTC")))) / 36.0) / 100.0);
     }
 
     private static List<String> dismissed(User u) {

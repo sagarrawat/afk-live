@@ -1,7 +1,8 @@
 import { CheckCircle2, CircleAlert, Gauge, Loader2, Play, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, get, patch, post } from '@/lib/api';
+import { ApiError, del, get, patch, post } from '@/lib/api';
+import { dateTime } from '@/lib/format';
 import { appLink } from '@/lib/links';
 import { keys, useInvalidate } from '@/lib/queries';
 import type { CapacityEstimate, DestinationChecks, LiveState, Preflight, Quality, StreamSummary, StreamView } from '@/lib/types';
@@ -214,6 +215,8 @@ export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream
   const testing = !!checks?.checks.some((c) => c.state === 'TESTING');
   const destFailed = !!checks && !testing && !checks.ready;
   const suggestion = capacity?.suggestion;
+  // DS-8: "Fix key" opens the edit for the destination that failed, not a list of switches.
+  const failedId = checks?.checks.find((c) => c.state === 'FAILED')?.destinationId;
   const title = testing ? 'Checking your destinations' : destFailed && capacity ? 'Before you go live' : destFailed && checks ? checksTitle(checks) : CAPACITY_TITLE;
   return (
     <>
@@ -243,7 +246,7 @@ export function GoLiveButton({ stream, size = 'md', scene }: { stream: AnyStream
                 </Button>
               )}
               {destFailed && (
-                <Link to={`/studio/streams/${stream.id}/destinations`} onClick={close} className={buttonClass('primary')}>
+                <Link to={failedId != null ? `/studio/destinations?edit=${failedId}` : `/studio/streams/${stream.id}/destinations`} onClick={close} className={buttonClass('primary')}>
                   Fix key
                 </Link>
               )}
@@ -291,6 +294,37 @@ export function SlowNotice({ live, streamId }: { live: Pick<LiveState, 'slowSinc
         (stop, change it, and go live again).
       </span>
     </p>
+  );
+}
+
+/**
+ * GL-3: a planned stop, shown on the stream with a way to take it back: "Stops 23:00" (a stop time) and
+ * "Ends after this playlist pass". Cancelling keeps the stream on air; nothing reconnects.
+ */
+export function PlannedStop({ stream, timeZone }: { stream: Pick<StreamView, 'id' | 'live'>; timeZone?: string }) {
+  const { busy, run } = useAction();
+  const invalidate = useInvalidate();
+  const live = stream.live;
+  if (!isOnAir(live.state) || live.state === 'STOPPING' || (!live.stopAt && !live.finishAfterPass)) return null;
+  const cancel = async (path: string, done: string) => {
+    if (await run(() => del(`/api/streams/${stream.id}/${path}`), done)) {
+      invalidate([...keys.streams], [...keys.stream(stream.id)]);
+    }
+  };
+  const row = (text: string, label: string, onCancel: () => void) => (
+    <p className="mt-1 flex flex-wrap items-baseline gap-x-3 text-sm text-muted">
+      <span>{text}</span>
+      <button type="button" disabled={busy} aria-label={label} onClick={onCancel} className="text-accent hover:underline disabled:opacity-50">
+        Cancel
+      </button>
+    </p>
+  );
+  return (
+    <>
+      {live.stopAt && row(`Stops ${dateTime(live.stopAt, timeZone)}`, 'Cancel the scheduled stop', () => void cancel('stop-at', 'Scheduled stop cancelled. The stream keeps going.'))}
+      {live.finishAfterPass &&
+        row('Ends after this playlist pass', 'Cancel ending after this playlist pass', () => void cancel('finish-after-pass', 'It will keep playing the playlist. The stream keeps going.'))}
+    </>
   );
 }
 

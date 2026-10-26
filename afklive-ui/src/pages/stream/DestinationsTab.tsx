@@ -66,6 +66,9 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
                         {d.server} {d.keyHint}
                       </span>
                     </span>
+                    <Link to={`/studio/destinations?edit=${d.id}`} aria-label={`Edit ${d.name}`} className="text-sm text-accent hover:underline">
+                      Edit
+                    </Link>
                     <Toggle label={`Send to ${d.name}`} checked={on} disabled={busy || full || last} onChange={(v) => setEnabled(d.id, v)} />
                   </div>
                   <TestNote state={tests[d.id]} platform={d.platform} />
