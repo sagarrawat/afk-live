@@ -115,12 +115,17 @@ public class AdminService {
                           String worker, Long heartbeatAgeSeconds, String status, String health, long uptimeSeconds,
                           String nowPlaying, Boolean inputLive, int restarts, Double bitrateKbps, Double fps, Double speed,
                           String lastError, int destinations, List<StreamDtos.DestinationHealth> destinationHealth,
-                          ZonedDateTime slowSince, String problem, String quality) {
+                          ZonedDateTime slowSince, String problem, String quality, String pool) {
     }
 
     public List<LiveRow> liveStreams(String q, String health, String worker) {
         ZonedDateTime now = now();
         List<LiveRow> out = new ArrayList<>();
+        // FO-8: the pool of the worker running each stream (null: unassigned, or the worker hasn't reported one).
+        Map<String, String> poolOf = new HashMap<>();
+        for (WorkerStatus w : workerStatus.findAllByHeartbeatAtAfterOrderByWorkerIdAsc(now.minusHours(1))) {
+            poolOf.put(w.getWorkerId(), w.getPool());
+        }
         Map<Long, Optional<LiveStream>> streamCache = new HashMap<>();
         // RE-10: runs slower than real time for a minute or more, with the fix.
         Map<Long, ZonedDateTime> slow = new HashMap<>();
@@ -146,7 +151,8 @@ public class AdminService {
                     j.getStatus(), h.overall(), j.getStartTime() == null ? 0 : Math.max(0, Duration.between(j.getStartTime(), now).getSeconds()),
                     j.getNowPlaying(), j.getInputLive(), j.getRestarts(), j.getBitrateKbps(), j.getFps(), j.getSpeed(), j.getLastError(),
                     h.destinations().size(), h.destinations(), slowSince, problem,
-                    s.isPresent() ? height + "p " + fps + " fps" : null);
+                    s.isPresent() ? height + "p " + fps + " fps" : null,
+                    j.getWorkerId() == null ? null : poolOf.get(j.getWorkerId()));
             if (q != null && !q.isBlank()) {
                 String needle = q.trim().toLowerCase(Locale.ROOT);
                 boolean match = row.userEmail().toLowerCase(Locale.ROOT).contains(needle)
@@ -176,10 +182,10 @@ public class AdminService {
     /**
      * A worker as admins see it (AD-1, AD-2): streams it runs, when it last reported, and the machine's
      * CPU and memory from its own report (null for a worker that hasn't sent one), and (OPS-3) whether it
-     * is draining: a new version is taking its streams over.
+     * is draining: a new version is taking its streams over. FO-8: the pool it belongs to (null: it hasn't said).
      */
     public record WorkerRow(String worker, int streams, long lastHeartbeatAgeSeconds, boolean healthy, Integer capacity,
-                            Double cpuPercent, Long memoryUsedBytes, Long memoryTotalBytes, boolean draining) {
+                            Double cpuPercent, Long memoryUsedBytes, Long memoryTotalBytes, boolean draining, String pool) {
     }
 
     /** Workers that reported in the last hour, plus any worker named on a live stream. */
@@ -206,7 +212,7 @@ public class AdminService {
             boolean healthy = list.isEmpty() ? reportAge >= 0 && reportAge < timeout : jobAge >= 0 && jobAge < timeout;
             out.add(new WorkerRow(w, list.size(), newest, healthy, r == null ? null : r.getCapacity(),
                     r == null ? null : r.getCpuPercent(), r == null ? null : r.getMemoryUsedBytes(), r == null ? null : r.getMemoryTotalBytes(),
-                    r != null && r.getDrainingSince() != null));
+                    r != null && r.getDrainingSince() != null, r == null ? null : r.getPool()));
         });
         out.sort(Comparator.comparing(WorkerRow::worker));
         return out;

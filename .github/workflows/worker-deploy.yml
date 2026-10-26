@@ -7,6 +7,11 @@ name: Deploy stream worker
 # in docs/operations.md, "Worker deploys without interruption"). "restart" is the old way: the worker
 # restarts and every stream drops for about 30-90 s; use it for the first deploy of the handover itself,
 # or if the handover can't run (the script says so, and changes nothing).
+#
+# FO-8: "hosts" picks where. The default (main) is the main server only, as before. "main+extra" then deploys
+# the extra worker hosts listed in the WORKER_HOSTS secret (remote pools, e.g. Oracle or Hetzner), one at a
+# time, with the same handover on each (afklive-scripts/deploy-worker-hosts.sh); "extra" deploys only those.
+# Setup: docs/operations.md, "Worker pools".
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +22,14 @@ on:
           - handover
           - restart
         default: handover
+      hosts:
+        description: 'main = the main server only (default); main+extra = then each host in WORKER_HOSTS, one at a time; extra = only those'
+        type: choice
+        options:
+          - main
+          - main+extra
+          - extra
+        default: main
       ref:
         description: 'Commit SHA, tag or branch to deploy (empty = the branch chosen above, normally main)'
         type: string
@@ -50,7 +63,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg && mvn -B verify -pl afklive-web -am -DskipUi -DskipUiTests  # workers don't serve the app UI
 
       - name: Copy JAR to the worker (handover)
-        if: ${{ inputs.method != 'restart' }}
+        if: ${{ inputs.method != 'restart' && inputs.hosts != 'extra' }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_HOST }}
@@ -61,7 +74,7 @@ jobs:
           strip_components: 2
 
       - name: Hand streams over to the new version
-        if: ${{ inputs.method != 'restart' }}
+        if: ${{ inputs.method != 'restart' && inputs.hosts != 'extra' }}
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
@@ -77,7 +90,7 @@ jobs:
             sudo /opt/afklive/scripts/worker-handover-deploy.sh /opt/afklive/worker/incoming/app.jar
 
       - name: Copy JAR to the worker (restart)
-        if: ${{ inputs.method == 'restart' }}
+        if: ${{ inputs.method == 'restart' && inputs.hosts != 'extra' }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_HOST }}
@@ -88,7 +101,7 @@ jobs:
           strip_components: 2
 
       - name: Restart worker
-        if: ${{ inputs.method == 'restart' }}
+        if: ${{ inputs.method == 'restart' && inputs.hosts != 'extra' }}
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
@@ -102,3 +115,22 @@ jobs:
             else
               sudo systemctl restart afklive-worker
             fi
+
+      # FO-8: opt-in. Runs only when asked (hosts = main+extra or extra), after the main server, one host at a
+      # time; the first failure stops the rest. Secrets: WORKER_HOSTS ([user@]host[:port], separated by spaces,
+      # commas or new lines), WORKER_HOSTS_KNOWN_HOSTS (their pinned host keys), WORKER_HOSTS_SSH_KEY (empty:
+      # DO_SSH_KEY), WORKER_HOSTS_USER (empty: deploy).
+      - name: Deploy the extra worker hosts
+        if: ${{ inputs.hosts == 'main+extra' || inputs.hosts == 'extra' }}
+        env:
+          WORKER_HOSTS: ${{ secrets.WORKER_HOSTS }}
+          WORKER_HOSTS_USER: ${{ secrets.WORKER_HOSTS_USER }}
+          KNOWN_HOSTS: ${{ secrets.WORKER_HOSTS_KNOWN_HOSTS }}
+          SSH_KEY: ${{ secrets.WORKER_HOSTS_SSH_KEY || secrets.DO_SSH_KEY }}
+          METHOD: ${{ inputs.method }}
+        run: |
+          if [ "$METHOD" = restart ]; then
+            bash afklive-scripts/deploy-worker-hosts.sh --restart afklive-web/target/app.jar
+          else
+            bash afklive-scripts/deploy-worker-hosts.sh afklive-web/target/app.jar
+          fi

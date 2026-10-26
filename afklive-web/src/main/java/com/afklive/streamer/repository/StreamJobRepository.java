@@ -353,6 +353,136 @@ public interface StreamJobRepository extends JpaRepository<StreamJob, Long> {
     int releaseOnShutdown(@org.springframework.data.repository.query.Param("id") Long id,
                           @org.springframework.data.repository.query.Param("worker") String worker);
 
+    // ---- FO-8: worker pools. The same conditions go into the lookup and into the fenced claim itself. ----
+
+    /** Hard rule: a worker that may not read the phone ingest takes only runs known not to need it. */
+    String POOL_FILTER = "(:mayIngest = true OR j.placement IN ('PLAYOUT', 'PLAYLIST', 'OTHER'))";
+    /** The pool this run prefers, from the claiming worker's configuration ('' = none, or the claimer's own). */
+    String PREFERRED_POOL = "(CASE j.placement WHEN 'PLAYOUT' THEN CAST(:preferPlayout AS VARCHAR) "
+            + "WHEN 'PLAYLIST' THEN CAST(:preferPlaylist AS VARCHAR) WHEN 'OTHER' THEN CAST(:preferOther AS VARCHAR) ELSE '' END)";
+    /** A worker of the preferred pool that could start it now: reported recently, not draining, a free slot, CPU to spare. */
+    String PREFERRED_AVAILABLE = "EXISTS (SELECT 1 FROM stream_workers w WHERE COALESCE(w.pool, 'main') = " + PREFERRED_POOL
+            + " AND w.heartbeat_at > :availableAfter AND w.draining_since IS NULL AND w.streams < w.capacity "
+            + "AND (w.cpu_percent IS NULL OR w.cpu_percent < :maxCpuPercent))";
+    /*
+     * Soft rule: leave a run to its preferred pool while that pool can take it, until it has waited long enough
+     * (since it went live or was moved; for a handover, since it was offered). Annotation values must be
+     * constants, hence spelled out twice.
+     */
+    String NEW_SINCE = "GREATEST(j.start_time, j.move_requested_at)";
+    String CLAIMABLE = "j.is_live = true AND j.desired_state = 'RUN' AND j.worker_id IS NULL "
+            + "AND (j.avoid_worker IS NULL OR j.avoid_worker <> :worker OR j.move_requested_at IS NULL OR j.move_requested_at < :avoidUntil) "
+            + "AND " + POOL_FILTER + " AND (" + PREFERRED_POOL + " = '' OR " + NEW_SINCE + " IS NULL OR " + NEW_SINCE
+            + " < :waitedBefore OR NOT " + PREFERRED_AVAILABLE + ")";
+    String OFFERED = "j.is_live = true AND j.desired_state = 'RUN' AND j.handover_from IS NOT NULL AND j.handover_from = j.worker_id "
+            + "AND j.handover_to IS NULL AND j.worker_id <> :worker AND " + POOL_FILTER + " AND (" + PREFERRED_POOL
+            + " = '' OR j.handover_offered_at IS NULL OR j.handover_offered_at < :waitedBefore OR NOT " + PREFERRED_AVAILABLE + ")";
+
+    /** New streams this worker may claim now (pool rules applied), oldest first; like {@link #findUnclaimedIds}. */
+    @Query(value = "SELECT j.id FROM stream_jobs j WHERE " + CLAIMABLE + " ORDER BY j.start_time", nativeQuery = true)
+    List<Long> findClaimableIds(@org.springframework.data.repository.query.Param("worker") String worker,
+                                @org.springframework.data.repository.query.Param("avoidUntil") java.time.ZonedDateTime avoidUntil,
+                                @org.springframework.data.repository.query.Param("mayIngest") boolean mayIngest,
+                                @org.springframework.data.repository.query.Param("preferPlayout") String preferPlayout,
+                                @org.springframework.data.repository.query.Param("preferPlaylist") String preferPlaylist,
+                                @org.springframework.data.repository.query.Param("preferOther") String preferOther,
+                                @org.springframework.data.repository.query.Param("waitedBefore") java.time.ZonedDateTime waitedBefore,
+                                @org.springframework.data.repository.query.Param("availableAfter") java.time.ZonedDateTime availableAfter,
+                                @org.springframework.data.repository.query.Param("maxCpuPercent") double maxCpuPercent);
+
+    default List<Long> findClaimableIds(String worker, java.time.ZonedDateTime avoidUntil, com.afklive.streamer.streaming.WorkerPools.Claim c) {
+        return findClaimableIds(worker, avoidUntil, c.mayIngest(), c.preferPlayout(), c.preferPlaylist(), c.preferOther(),
+                c.waitedBefore(), c.availableAfter(), c.maxCpuPercent());
+    }
+
+    /** {@link #claim}, fenced on the same pool rules as {@link #findClaimableIds}, so a stale lookup never claims what this worker mustn't run. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query(value = "UPDATE stream_jobs j SET worker_id = :worker, heartbeat_at = :now WHERE j.id = :id AND " + CLAIMABLE, nativeQuery = true)
+    int claimFor(@org.springframework.data.repository.query.Param("id") Long id,
+                 @org.springframework.data.repository.query.Param("worker") String worker,
+                 @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                 @org.springframework.data.repository.query.Param("avoidUntil") java.time.ZonedDateTime avoidUntil,
+                 @org.springframework.data.repository.query.Param("mayIngest") boolean mayIngest,
+                 @org.springframework.data.repository.query.Param("preferPlayout") String preferPlayout,
+                 @org.springframework.data.repository.query.Param("preferPlaylist") String preferPlaylist,
+                 @org.springframework.data.repository.query.Param("preferOther") String preferOther,
+                 @org.springframework.data.repository.query.Param("waitedBefore") java.time.ZonedDateTime waitedBefore,
+                 @org.springframework.data.repository.query.Param("availableAfter") java.time.ZonedDateTime availableAfter,
+                 @org.springframework.data.repository.query.Param("maxCpuPercent") double maxCpuPercent);
+
+    default int claimFor(Long id, String worker, java.time.ZonedDateTime now, java.time.ZonedDateTime avoidUntil,
+                         com.afklive.streamer.streaming.WorkerPools.Claim c) {
+        return claimFor(id, worker, now, avoidUntil, c.mayIngest(), c.preferPlayout(), c.preferPlaylist(), c.preferOther(),
+                c.waitedBefore(), c.availableAfter(), c.maxCpuPercent());
+    }
+
+    /** {@link #findOrphanIds} that this worker may run (hard rule only: a stream without a live owner is rescued at once). */
+    @Query(value = "SELECT j.id FROM stream_jobs j WHERE j.is_live = true AND j.desired_state = 'RUN' AND j.worker_id IS NOT NULL "
+            + "AND j.worker_id <> :worker AND (j.heartbeat_at IS NULL OR j.heartbeat_at < :cutoff) AND " + POOL_FILTER, nativeQuery = true)
+    List<Long> findOrphanIdsFor(@org.springframework.data.repository.query.Param("cutoff") java.time.ZonedDateTime cutoff,
+                                @org.springframework.data.repository.query.Param("worker") String worker,
+                                @org.springframework.data.repository.query.Param("mayIngest") boolean mayIngest);
+
+    /** {@link #takeOver}, fenced on the hard pool rule. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query(value = "UPDATE stream_jobs j SET worker_id = :worker, heartbeat_at = :now, restarts = j.restarts + 1, handover_from = NULL, "
+            + "handover_to = NULL, handover_offered_at = NULL, handover_position = NULL, handover_claimed_at = NULL, handover_beat_at = NULL, "
+            + "handover_ready_at = NULL WHERE j.id = :id AND j.is_live = true AND j.desired_state = 'RUN' "
+            + "AND (j.heartbeat_at IS NULL OR j.heartbeat_at < :cutoff) AND " + POOL_FILTER, nativeQuery = true)
+    int takeOverFor(@org.springframework.data.repository.query.Param("id") Long id,
+                    @org.springframework.data.repository.query.Param("worker") String worker,
+                    @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                    @org.springframework.data.repository.query.Param("cutoff") java.time.ZonedDateTime cutoff,
+                    @org.springframework.data.repository.query.Param("mayIngest") boolean mayIngest);
+
+    /** {@link #findHandoverOfferIds} with the pool rules (a remote deploy's offers go to the same pool's new version first). */
+    @Query(value = "SELECT j.id FROM stream_jobs j WHERE " + OFFERED + " ORDER BY j.handover_offered_at", nativeQuery = true)
+    List<Long> findHandoverOfferIdsFor(@org.springframework.data.repository.query.Param("worker") String worker,
+                                       @org.springframework.data.repository.query.Param("mayIngest") boolean mayIngest,
+                                       @org.springframework.data.repository.query.Param("preferPlayout") String preferPlayout,
+                                       @org.springframework.data.repository.query.Param("preferPlaylist") String preferPlaylist,
+                                       @org.springframework.data.repository.query.Param("preferOther") String preferOther,
+                                       @org.springframework.data.repository.query.Param("waitedBefore") java.time.ZonedDateTime waitedBefore,
+                                       @org.springframework.data.repository.query.Param("availableAfter") java.time.ZonedDateTime availableAfter,
+                                       @org.springframework.data.repository.query.Param("maxCpuPercent") double maxCpuPercent);
+
+    default List<Long> findHandoverOfferIdsFor(String worker, com.afklive.streamer.streaming.WorkerPools.Claim c) {
+        return findHandoverOfferIdsFor(worker, c.mayIngest(), c.preferPlayout(), c.preferPlaylist(), c.preferOther(),
+                c.waitedBefore(), c.availableAfter(), c.maxCpuPercent());
+    }
+
+    /** {@link #claimHandover}, fenced on the pool rules. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query(value = "UPDATE stream_jobs j SET handover_to = :worker, handover_claimed_at = :now, handover_beat_at = :now, handover_ready_at = NULL "
+            + "WHERE j.id = :id AND " + OFFERED, nativeQuery = true)
+    int claimHandoverFor(@org.springframework.data.repository.query.Param("id") Long id,
+                         @org.springframework.data.repository.query.Param("worker") String worker,
+                         @org.springframework.data.repository.query.Param("now") java.time.ZonedDateTime now,
+                         @org.springframework.data.repository.query.Param("mayIngest") boolean mayIngest,
+                         @org.springframework.data.repository.query.Param("preferPlayout") String preferPlayout,
+                         @org.springframework.data.repository.query.Param("preferPlaylist") String preferPlaylist,
+                         @org.springframework.data.repository.query.Param("preferOther") String preferOther,
+                         @org.springframework.data.repository.query.Param("waitedBefore") java.time.ZonedDateTime waitedBefore,
+                         @org.springframework.data.repository.query.Param("availableAfter") java.time.ZonedDateTime availableAfter,
+                         @org.springframework.data.repository.query.Param("maxCpuPercent") double maxCpuPercent);
+
+    default int claimHandoverFor(Long id, String worker, java.time.ZonedDateTime now, com.afklive.streamer.streaming.WorkerPools.Claim c) {
+        return claimHandoverFor(id, worker, now, c.mayIngest(), c.preferPlayout(), c.preferPlaylist(), c.preferOther(),
+                c.waitedBefore(), c.availableAfter(), c.maxCpuPercent());
+    }
+
+    /** FO-8: the owner keeps the run's placement current (live edits can change it); written only when it differs. */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.transaction.annotation.Transactional
+    @Query(value = "UPDATE stream_jobs SET placement = :placement WHERE id = :id AND worker_id = :worker AND is_live = true "
+            + "AND placement IS DISTINCT FROM CAST(:placement AS VARCHAR)", nativeQuery = true)
+    int savePlacement(@org.springframework.data.repository.query.Param("id") Long id,
+                      @org.springframework.data.repository.query.Param("worker") String worker,
+                      @org.springframework.data.repository.query.Param("placement") String placement);
+
     /** Who owns the job right now (cheap check while a handover completes). */
     @Query("SELECT j.workerId FROM StreamJob j WHERE j.id = :id")
     java.util.Optional<String> findWorkerIdById(@org.springframework.data.repository.query.Param("id") Long id);

@@ -48,6 +48,7 @@ class AdminApiTest extends PostgresIntegrationTest {
     @Autowired PaymentAuditRepository payments;
     @Autowired AdminActionRepository audit;
     @Autowired StreamService streamService;
+    @Autowired com.afklive.streamer.repository.WorkerStatusRepository workerStatus;
 
     MockMvc mvc;
     User customer;
@@ -108,6 +109,25 @@ class AdminApiTest extends PostgresIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(0));
         mvc.perform(get("/api/admin/workers").with(admin()))
                 .andExpect(jsonPath("$[?(@.worker == 'worker-a')].streams").exists());
+    }
+
+    /** FO-8: Servers shows each worker's pool; Live shows the pool of the worker running each stream. */
+    @Test
+    void workersAndLiveRunsShowTheWorkersPool() throws Exception {
+        String w = "pool-w-" + UUID.randomUUID().toString().substring(0, 6);
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        workerStatus.report(w, now.minusHours(1), now, 1, 4, 10.0, 1L, 2L, 4, "playout");
+        try {
+            StreamJob j = liveJob(w);
+            StreamJob waiting = liveJob(null);
+            mvc.perform(get("/api/admin/live").param("q", customer.getEmail()).with(admin()))
+                    .andExpect(jsonPath("$[?(@.jobId == " + j.getId() + ")].pool").value("playout"))
+                    .andExpect(jsonPath("$[?(@.jobId == " + waiting.getId() + ")].pool").value(org.hamcrest.Matchers.contains((Object) null)));
+            mvc.perform(get("/api/admin/workers").with(admin()))
+                    .andExpect(jsonPath("$[?(@.worker == '" + w + "')].pool").value("playout"));
+        } finally {
+            workerStatus.remove(w);
+        }
     }
 
     @Test

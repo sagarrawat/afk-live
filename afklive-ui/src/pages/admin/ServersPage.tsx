@@ -26,6 +26,11 @@ function WorkerCard({ w, history, hours }: { w: WorkerRow; history?: ServerHisto
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-3">
         <HealthDot level={w.healthy ? 'green' : 'red'} withText />
         <span className="min-w-0 truncate font-medium">{w.worker}</span>
+        {w.pool ? (
+          <span className="shrink-0 rounded border border-line px-1.5 py-0.5 text-xs text-muted" title="Worker pool: which streams this server takes">
+            Pool {w.pool}
+          </span>
+        ) : null}
         {w.draining ? <span className="shrink-0 rounded bg-raised px-1.5 py-0.5 text-xs text-muted">Being replaced</span> : null}
         <span className="tnum ml-auto text-sm text-muted">
           <Link to={`/studio/admin/live?worker=${encodeURIComponent(w.worker)}`} className="hover:text-ink">

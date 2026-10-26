@@ -266,7 +266,7 @@ public class StudioRuns {
         }
         return new StudioSpec(s.height(), s.vertical(), s.fps(), s.source(), s.videos(), s.order(), s.loops(), s.music(),
                 s.musicOrder(), s.audioMode(), s.videoVolume(), s.musicVolume(), overlays, s.scenes(), s.initialScene(),
-                s.timeZone(), s.resume(), s.phone(), s.finishAfterPass(), s.fit(), s.crossfadeSeconds());
+                s.timeZone(), s.resume(), s.phone(), s.finishAfterPass(), s.fit(), s.crossfadeSeconds(), s.videoKbps()); // FO-4: the run's bitrate
     }
 
     public void close(Handle h) {

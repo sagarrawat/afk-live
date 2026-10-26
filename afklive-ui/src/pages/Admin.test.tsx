@@ -69,7 +69,7 @@ describe('Admin', () => {
     mockApi({
       ...base,
       '/api/admin/workers': [
-        { worker: 'worker-mumbai-1', streams: 3, lastHeartbeatAgeSeconds: 2, healthy: true, capacity: 20, cpuPercent: 92.4, memoryUsedBytes: 4 * 1024 ** 3, memoryTotalBytes: 8 * 1024 ** 3 },
+        { worker: 'worker-mumbai-1', streams: 3, lastHeartbeatAgeSeconds: 2, healthy: true, capacity: 20, cpuPercent: 92.4, memoryUsedBytes: 4 * 1024 ** 3, memoryTotalBytes: 8 * 1024 ** 3, pool: 'playout' },
         { worker: 'worker-idle', streams: 0, lastHeartbeatAgeSeconds: 5, healthy: true, capacity: 20, draining: true },
       ],
       '/api/admin/servers/history': [
@@ -91,6 +91,9 @@ describe('Admin', () => {
     render(<App client={makeQueryClient()} />);
     const card = (await screen.findByText('worker-mumbai-1')).closest('li')!;
     expect(within(card).queryByText('Being replaced')).not.toBeInTheDocument();
+    // FO-8: the worker's pool; a worker that predates pools shows none.
+    expect(within(card).getByText('Pool playout')).toBeInTheDocument();
+    expect(within((await screen.findByText('worker-idle')).closest('li')!).queryByText(/^Pool /)).not.toBeInTheDocument();
     // OPS-3: a worker handing its streams to a new version says so.
     expect(within((await screen.findByText('worker-idle')).closest('li')!).getByText('Being replaced')).toBeInTheDocument();
     // A single reading is read against its window: now, average and peak, in words.

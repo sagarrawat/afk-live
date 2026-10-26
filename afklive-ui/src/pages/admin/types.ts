@@ -38,6 +38,8 @@ export interface LiveRow {
   problem?: string | null;
   /** The stream's chosen quality, e.g. "1080p 30 fps". */
   quality?: string | null;
+  /** FO-8: the pool of the worker running it (null: unassigned, or a worker that predates pools). */
+  pool?: string | null;
 }
 
 export interface WorkerRow {
@@ -51,6 +53,8 @@ export interface WorkerRow {
   memoryTotalBytes?: number | null;
   /** OPS-3: a new version is taking this worker's streams over. */
   draining?: boolean;
+  /** FO-8: the pool it belongs to, e.g. "main" or "playout" (null: a worker that predates pools). */
+  pool?: string | null;
 }
 
 export interface Attention {

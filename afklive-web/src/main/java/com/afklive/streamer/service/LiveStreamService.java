@@ -719,6 +719,7 @@ public class LiveStreamService {
         job.setStatus(StreamStates.STARTING);
         job.setDesiredState(StreamStates.RUN);
         job.setSpec(spec.toJson());
+        job.setPlacement(com.afklive.streamer.streaming.WorkerPools.placementOf(spec)); // FO-8: which workers may claim it
         job.setStreamId(s.getId());
         job.setScene(studio.initialScene());
         job.setPlaylistOverride(override);

@@ -115,6 +115,17 @@ app:
       # OPS-3: shared with the deploy script that asks a worker to hand its streams over (/internal/worker/*,
       # worker process only, localhost only). Empty: that endpoint refuses everything and deploys use a restart.
       control-token: ${WORKER_CONTROL_TOKEN:}
+      # FO-8: the pool this worker belongs to (shown in Admin > Servers; claim rules below match on it).
+      pool: ${STREAMING_WORKER_POOL:main}
+    # FO-8: which pools take which streams (docs/operations.md, "Worker pools"). The defaults keep one pool
+    # that takes everything. Set the same values on every worker.
+    pools:
+      # Pools whose workers can read the phone ingest server: only they run phone streams (and runs whose kind
+      # isn't known). Comma separated; empty = every pool.
+      ingest: ${STREAMING_PHONE_POOLS:main}
+      # Preferred pool per kind of run, e.g. PLAYOUT=playout,PLAYLIST=playout. Other pools leave those runs to it
+      # while it has a free slot (30 s at most). Empty: no preference.
+      preference: ${STREAMING_POOL_PREFERENCE:}
     # OPS-3: planned handover of live streams to a new worker version (see docs/operations.md).
     handover:
       # A new copy that isn't on air everywhere within this many seconds is abandoned; the old one carries on.
