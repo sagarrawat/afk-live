@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { HealthDot, LiveBadge } from '@/components/status';
 import { Badge, Button, ErrorNote, Input, Panel, Spinner, useToast } from '@/components/ui';
 import { get, post } from '@/lib/api';
-import { dateTime, relative, timecode } from '@/lib/format';
+import { bytes, dateTime, relative, timecode } from '@/lib/format';
 import type { Level, LiveStateName } from '@/lib/types';
 import { ReasonDialog } from './ReasonDialog';
 
@@ -174,6 +174,7 @@ export function UserSupport({ id }: { id: number }) {
         )}
         <EmailList items={d.emails} />
       </Panel>
+      <DeletedFiles id={id} />
       {asking && (
         <ReasonDialog
           title="Make a password reset link?"
@@ -499,5 +500,46 @@ function TestResult({ id }: { id: number }) {
     <p role="status" className={clsx('break-words', t.data.status === 'OK' ? 'text-ok' : t.data.status === 'FAILED' ? 'text-bad' : 'text-muted')}>
       {done ? `Test ${t.data.status === 'OK' ? 'worked' : 'failed'}: ${t.data.message ?? ''}` : 'Test running…'}
     </p>
+  );
+}
+
+interface Deletion {
+  mediaId: number;
+  title: string | null;
+  type: string | null;
+  sizeBytes: number;
+  removedFrom: string | null;
+  uploadedAt: string;
+  deletedAt: string;
+}
+
+/** ML-6: library files this account deleted, kept for support even though the files are gone. */
+function DeletedFiles({ id }: { id: number }) {
+  const q = useQuery({ queryKey: ['admin', 'user-deletions', id], queryFn: () => get<Deletion[]>(`/api/admin/users/${id}/deletions`) });
+  return (
+    <Panel title="Deleted files" pad={false}>
+      {q.isLoading ? (
+        <Spinner />
+      ) : !q.data ? (
+        <ErrorNote error={q.error} />
+      ) : q.data.length === 0 ? (
+        <p className="px-4 py-3 text-muted">Nothing deleted.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {q.data.map((x) => (
+            <li key={`${x.mediaId}-${x.deletedAt}`} className="px-4 py-2.5 text-sm">
+              <span className="flex justify-between gap-3">
+                <span className="truncate">{x.title ?? `File ${x.mediaId}`}</span>
+                <span className="tnum shrink-0 text-muted">{bytes(x.sizeBytes)}</span>
+              </span>
+              <span className="block text-xs text-muted">
+                Deleted {dateTime(x.deletedAt)}
+                {x.removedFrom ? ` · was in ${x.removedFrom}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }

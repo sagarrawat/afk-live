@@ -73,6 +73,7 @@ public class MediaService {
     private final com.afklive.streamer.repository.MediaTagRepository tags;
     private final TransactionTemplate tx;
     private final PlayoutCopies playoutCopies;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final String role;
     private final long minPart;
     private final ScheduledExecutorService janitor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -86,6 +87,7 @@ public class MediaService {
                         UserRepository users, PlanService plans, FileStorageService storage, MediaProcessor processor,
                         LiveStreamService streams, com.afklive.streamer.repository.MediaTagRepository tags,
                         PlatformTransactionManager txManager, PlayoutCopies playoutCopies,
+                        org.springframework.jdbc.core.JdbcTemplate jdbc,
                         @Value("${app.streaming.role:all}") String role,
                         @Value("${app.media.min-part-bytes:16777216}") long minPart) {
         this.minPart = Math.max(64 * 1024, minPart);
@@ -100,6 +102,7 @@ public class MediaService {
         this.streams = streams;
         this.tags = tags;
         this.playoutCopies = playoutCopies;
+        this.jdbc = jdbc;
         this.tx = new TransactionTemplate(txManager);
         this.role = role;
     }
@@ -533,6 +536,16 @@ public class MediaService {
                         .anyMatch(LiveStreamService.MediaUse::live)) {
                     return -1L;
                 }
+                // Audit (ML-6): what was deleted and which (not live) streams it was taken out of.
+                String removedFrom = streams.mediaUses(email, List.of(fresh.getId())).getOrDefault(fresh.getId(), List.of()).stream()
+                        .map(LiveStreamService.MediaUse::streamName).distinct().collect(java.util.stream.Collectors.joining(", "));
+                jdbc.update("INSERT INTO media_deletions (user_id, media_id, title, media_type, file_size, storage_key, thumbnail_key, "
+                                + "removed_from, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        fresh.getUser().getId(), fresh.getId(), fresh.getTitle(),
+                        fresh.getContentType() == null ? null : fresh.getContentType().name(),
+                        fresh.getFileSize() == null ? 0 : fresh.getFileSize(), fresh.getS3Key(), fresh.getThumbnailKey(),
+                        removedFrom.isEmpty() ? null : removedFrom,
+                        java.sql.Timestamp.valueOf(fresh.getCreatedAt() == null ? LocalDateTime.now() : fresh.getCreatedAt()));
                 streams.forgetMedia(email, fresh.getId());
                 for (ScheduledVideo v : scheduledVideos.findAllByMediaAssetId(fresh.getId())) {
                     if (v.getStatus() == ScheduledVideo.VideoStatus.LIBRARY) {

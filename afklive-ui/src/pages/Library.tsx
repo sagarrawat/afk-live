@@ -31,7 +31,7 @@ export function Library() {
   });
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<MediaItem | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState<MediaItem[] | null>(null);
   const [tagging, setTagging] = useState(false);
   const [managingTags, setManagingTags] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -94,7 +94,15 @@ export function Library() {
           </>
         }
       />
-      {storage && <StorageMeter used={storage.usedBytes} limit={storage.limitBytes} warning={storage.warning} full={storage.full} />}
+      {storage && (
+        <StorageMeter
+          used={storage.usedBytes}
+          limit={storage.limitBytes}
+          warning={storage.warning}
+          full={storage.full}
+          onFreeUp={() => (setSort('size'), setType(''), setStatus(''), setTag(''), setQ(''), setPage(0))}
+        />
+      )}
       <UploadQueue />
       <UnfinishedUploads />
 
@@ -151,7 +159,7 @@ export function Library() {
             <Button size="sm" icon={<TagIcon className="h-4 w-4" />} onClick={() => setTagging(true)}>
               Add tag
             </Button>
-            <Button size="sm" variant="danger" icon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirmDelete(true)}>
+            <Button size="sm" variant="danger" icon={<Trash2 className="h-4 w-4" />} onClick={() => setDeleting([...selected].map((id) => items.find((i) => i.id === id) ?? ({ id, title: '', sizeBytes: 0 } as MediaItem)))}>
               Delete
             </Button>
           </div>
@@ -192,10 +200,14 @@ export function Library() {
                 aria-label={selected.has(m.id) ? `Deselect ${m.title}` : `Select ${m.title}`}
                 aria-pressed={selected.has(m.id)}
                 onClick={() => toggle(m.id)}
-                className={clsx('absolute left-2 top-2 rounded bg-black/60 p-1 text-white', selected.size === 0 && 'opacity-0 group-hover:opacity-100 focus:opacity-100')}
+                className={clsx(
+                  'absolute left-2 top-2 rounded bg-black/60 p-1 text-white',
+                  selected.size === 0 && 'opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100',
+                )}
               >
                 {selected.has(m.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
               </button>
+              <DeleteOne item={m} onDelete={() => setDeleting([m])} className="absolute right-2 top-2 h-8 w-8 bg-black/60 text-white hover:bg-black/80 hover:text-white" />
             </li>
           ))}
         </ul>
@@ -212,6 +224,9 @@ export function Library() {
                 <th className="hidden px-3 py-2 font-medium sm:table-cell">Size</th>
                 <th className="hidden px-3 py-2 font-medium md:table-cell">Added</th>
                 <th className="px-3 py-2 font-medium">Status</th>
+                <th className="w-12 px-3 py-2">
+                  <span className="sr-only">Delete</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -233,6 +248,9 @@ export function Library() {
                   <td className="px-3 py-2">
                     {m.status === 'READY' ? <span className="text-muted">Ready</span> : <StatusBadge item={m} />}
                     {m.inLiveUse && <Badge tone="live" className="ml-1">On air</Badge>}
+                  </td>
+                  <td className="px-1 py-1 text-right">
+                    <DeleteOne item={m} onDelete={() => setDeleting([m])} />
                   </td>
                 </tr>
               ))}
@@ -264,12 +282,21 @@ export function Library() {
       {previewed && <PreviewDialog item={previewed} onClose={() => setPreview(null)} />}
       {tagging && <AddTagDialog ids={[...selected]} onClose={() => setTagging(false)} />}
       {managingTags && <ManageTagsDialog onClose={() => setManagingTags(false)} onDeleted={(id) => tag === String(id) && (setTag(''), setPage(0))} />}
-      {confirmDelete && <DeleteDialog ids={[...selected]} onClose={() => setConfirmDelete(false)} onDone={(r) => setSelected(new Set(r.blocked.map((b) => b.id)))} />}
+      {deleting && deleting.length > 0 && (
+        <DeleteDialog
+          files={deleting}
+          onClose={() => setDeleting(null)}
+          onDone={(r) => {
+            const gone = new Set(r.deleted);
+            setSelected(new Set([...selected].filter((id) => !gone.has(id))));
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function StorageMeter({ used, limit, warning, full }: { used: number; limit: number; warning: boolean; full: boolean }) {
+function StorageMeter({ used, limit, warning, full, onFreeUp }: { used: number; limit: number; warning: boolean; full: boolean; onFreeUp: () => void }) {
   const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 100;
   return (
     <div className="rounded-md border border-line bg-panel px-4 py-3">
@@ -278,9 +305,15 @@ function StorageMeter({ used, limit, warning, full }: { used: number; limit: num
           <span className="tnum font-medium">{bytes(used)}</span> <span className="text-muted">of {bytes(limit)} used</span>
         </span>
         {(warning || full) && (
-          <Link to="/studio/settings/billing" className="text-accent hover:underline">
-            {full ? 'Storage full: upgrade or delete files' : 'Running low: upgrade for more'}
-          </Link>
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className={full ? 'text-bad' : 'text-warn'}>{full ? 'Storage full' : 'Running low on space'}</span>
+            <button type="button" className="text-accent hover:underline" onClick={onFreeUp}>
+              Free up space
+            </button>
+            <Link to="/studio/settings/billing" className="text-accent hover:underline">
+              Get more space
+            </Link>
+          </span>
         )}
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-raised" role="progressbar" aria-label="Storage used" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
@@ -427,7 +460,21 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DeleteDialog({ ids, onClose, onDone }: { ids: number[]; onClose: () => void; onDone: (r: DeleteResult) => void }) {
+/** The trash button on one file. Files a live stream is playing can't be deleted (the server refuses them too). */
+function DeleteOne({ item, onDelete, className }: { item: MediaItem; onDelete: () => void; className?: string }) {
+  const label = item.inLiveUse ? `${item.title} is on air and can't be deleted` : `Delete ${item.title}`;
+  return (
+    <IconButton label={label} onClick={onDelete} disabled={item.inLiveUse} className={clsx('disabled:cursor-not-allowed disabled:opacity-40', className)}>
+      <Trash2 className="h-4 w-4" />
+    </IconButton>
+  );
+}
+
+function DeleteDialog({ files, onClose, onDone }: { files: MediaItem[]; onClose: () => void; onDone: (r: DeleteResult) => void }) {
+  const ids = files.map((f) => f.id);
+  // Selections can span pages; the size is only known for files loaded here.
+  const freed = files.every((f) => f.title) ? files.reduce((sum, f) => sum + (f.sizeBytes ?? 0), 0) : null;
+  const name = files.length === 1 ? `“${files[0].title}”` : `${files.length} files`;
   const [result, setResult] = useState<DeleteResult | null>(null);
   const { busy, run } = useAction();
   const toast = useToast();
@@ -448,7 +495,7 @@ function DeleteDialog({ ids, onClose, onDone }: { ids: number[]; onClose: () => 
     <Dialog
       open
       onClose={onClose}
-      title={result ? 'Some files were kept' : `Delete ${ids.length} file${ids.length === 1 ? '' : 's'}?`}
+      title={result ? 'Some files were kept' : `Delete ${name}?`}
       footer={
         result ? (
           <Button onClick={onClose}>Close</Button>
@@ -476,7 +523,10 @@ function DeleteDialog({ ids, onClose, onDone }: { ids: number[]; onClose: () => 
           </ul>
         </div>
       ) : (
-        <p>Files are removed from any stream that isn't live. Files a live stream is playing are kept. This can't be undone.</p>
+        <p>
+          {freed != null && <>This frees up about {bytes(freed)}. </>}{files.length === 1 ? 'It' : 'They'}’ll be removed from any stream that isn’t live; a file a live stream is playing is kept.
+          This can’t be undone.
+        </p>
       )}
     </Dialog>
   );
