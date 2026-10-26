@@ -35,4 +35,6 @@ public class WorkerStatus {
     /** OPS-3: set while this worker hands its streams to a new version (null: not draining). */
     @Column(name = "draining_since")
     private ZonedDateTime drainingSince;
+    /** FO-8: the pool this worker belongs to (null: a worker that predates pools, i.e. "main"). */
+    private String pool;
 }

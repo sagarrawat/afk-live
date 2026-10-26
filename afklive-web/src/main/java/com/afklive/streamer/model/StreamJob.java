@@ -119,6 +119,9 @@ public class StreamJob {
     private java.time.ZonedDateTime handoverBeatAt;
     @com.fasterxml.jackson.annotation.JsonIgnore
     private java.time.ZonedDateTime handoverReadyAt;
+    /** FO-8: PHONE, PLAYOUT, PLAYLIST or OTHER ({@code WorkerPools}); null: not known yet (treated like PHONE). */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String placement;
     /** Why the stream ended (user, schedule, credit limit, crash, server restart). */
     private String endReason;
 

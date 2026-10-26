@@ -66,7 +66,8 @@ public class WorkerStatusReporter {
     public void report() {
         Machine m = machine();
         repository.report(worker.workerId(), startedAt, now(), worker.runningCount(), worker.capacity(),
-                m.cpuPercent(), m.memoryUsedBytes(), m.memoryTotalBytes(), Runtime.getRuntime().availableProcessors());
+                m.cpuPercent(), m.memoryUsedBytes(), m.memoryTotalBytes(), Runtime.getRuntime().availableProcessors(),
+                worker.pools().pool());
     }
 
     /** A clean shutdown takes the worker off the list straight away (a crash ages out instead). */

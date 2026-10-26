@@ -15,13 +15,21 @@ public interface WorkerStatusRepository extends JpaRepository<WorkerStatus, Stri
 
     @Modifying
     @Transactional
-    @Query(value = "INSERT INTO stream_workers(worker_id, started_at, heartbeat_at, streams, capacity, cpu_percent, memory_used_bytes, memory_total_bytes, cpus) "
-            + "VALUES (:id, :startedAt, :now, :streams, :capacity, :cpu, :memUsed, :memTotal, :cpus) "
+    @Query(value = "INSERT INTO stream_workers(worker_id, started_at, heartbeat_at, streams, capacity, cpu_percent, memory_used_bytes, memory_total_bytes, cpus, pool) "
+            + "VALUES (:id, :startedAt, :now, :streams, :capacity, :cpu, :memUsed, :memTotal, :cpus, :pool) "
             + "ON CONFLICT (worker_id) DO UPDATE SET started_at = :startedAt, heartbeat_at = :now, streams = :streams, capacity = :capacity, "
-            + "cpu_percent = :cpu, memory_used_bytes = :memUsed, memory_total_bytes = :memTotal, cpus = :cpus", nativeQuery = true)
+            + "cpu_percent = :cpu, memory_used_bytes = :memUsed, memory_total_bytes = :memTotal, cpus = :cpus, pool = :pool", nativeQuery = true)
     int report(@Param("id") String workerId, @Param("startedAt") ZonedDateTime startedAt, @Param("now") ZonedDateTime now,
                @Param("streams") int streams, @Param("capacity") int capacity, @Param("cpu") Double cpuPercent,
-               @Param("memUsed") Long memoryUsedBytes, @Param("memTotal") Long memoryTotalBytes, @Param("cpus") Integer cpus);
+               @Param("memUsed") Long memoryUsedBytes, @Param("memTotal") Long memoryTotalBytes, @Param("cpus") Integer cpus,
+               @Param("pool") String pool);
+
+    /** FO-8: a report without a pool counts as the default pool. */
+    default int report(String workerId, ZonedDateTime startedAt, ZonedDateTime now, int streams, int capacity, Double cpuPercent,
+                       Long memoryUsedBytes, Long memoryTotalBytes, Integer cpus) {
+        return report(workerId, startedAt, now, streams, capacity, cpuPercent, memoryUsedBytes, memoryTotalBytes, cpus,
+                com.afklive.streamer.streaming.WorkerPools.MAIN);
+    }
 
     default int report(String workerId, ZonedDateTime startedAt, ZonedDateTime now, int streams, int capacity, Double cpuPercent,
                        Long memoryUsedBytes, Long memoryTotalBytes) {
