@@ -193,6 +193,7 @@ export function Library() {
                     <StatusBadge item={m} />
                     {m.inLiveUse && <Badge tone="live">On air</Badge>}
                   </span>
+                  {m.inLiveUse && <span className="mt-1 block text-xs text-muted">Stop the stream to delete it</span>}
                   <TagChips tags={m.tags} max={2} className="mt-1" />
                 </span>
               </button>
@@ -248,6 +249,7 @@ export function Library() {
                   <td className="px-3 py-2">
                     {m.status === 'READY' ? <span className="text-muted">Ready</span> : <StatusBadge item={m} />}
                     {m.inLiveUse && <Badge tone="live" className="ml-1">On air</Badge>}
+                    {m.inLiveUse && <span className="mt-0.5 block text-xs text-muted">Stop the stream to delete it</span>}
                   </td>
                   <td className="px-1 py-1 text-right">
                     <DeleteOne item={m} onDelete={() => setDeleting([m])} />

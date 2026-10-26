@@ -167,6 +167,7 @@ function DangerZone({ stream: s }: { stream: StreamView }) {
       <Button variant="danger" disabled={onAir} title={onAir ? 'Stop the stream first' : undefined} onClick={() => setConfirm(true)}>
         Delete {s.name}
       </Button>
+      {onAir && <p className="mt-2 text-sm text-muted">It&apos;s on air. Stop the stream first to delete it.</p>}
       <Dialog
         open={confirm}
         onClose={() => setConfirm(false)}

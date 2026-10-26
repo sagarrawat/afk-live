@@ -249,3 +249,24 @@ describe('unfinished uploads (ML-1)', () => {
     expect(calls.filter((c) => c.url === '/api/media/storage').length).toBeGreaterThan(1);
   });
 });
+
+describe('a file on air (ML-6)', () => {
+  beforeEach(() => {
+    calls = [];
+    tags = [];
+    files[1].inLiveUse = true;
+    mockApi();
+    window.history.pushState({}, '', '/studio/library');
+  });
+  afterEach(() => {
+    files[1].inLiveUse = false;
+    vi.unstubAllGlobals();
+  });
+
+  it("says on the page why it can't be deleted, not only in a tooltip", async () => {
+    render(<App client={makeQueryClient()} />);
+    const card = (await screen.findByText('storm.mp4')).closest('li')!;
+    expect(within(card).getByText('Stop the stream to delete it')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: "storm.mp4 is on air and can't be deleted" })).toBeDisabled();
+  });
+});
