@@ -242,6 +242,7 @@ public final class SoakReport {
         config.put("minutes", round(cfg.duration().toMillis() / 60000.0, 2));
         config.put("ranMinutes", round(ranSeconds / 60, 2));
         config.put("copyMode", cfg.copyMode());
+        config.put("watermark", cfg.watermark());
         config.put("streams", cfg.streams());
         config.put("destinationsPerStream", cfg.destinations());
         config.put("canvas", cfg.height() + "p" + cfg.fps());
@@ -359,7 +360,7 @@ public final class SoakReport {
         sb.append(String.format(Locale.ROOT, "%s min (ran %s), %s stream(s) × %s destination(s), %s, %s%s.%n%n",
                 c.get("minutes"), c.get("ranMinutes"), c.get("streams"), c.get("destinationsPerStream"), c.get("canvas"),
                 Boolean.TRUE.equals(c.get("copyMode")) ? "copy mode with studio↔copy switches every " + c.get("switchEveryMinutes") + " min"
-                        : "studio (overlays on)", ""));
+                        : "studio (overlays on)", Boolean.TRUE.equals(c.get("watermark")) ? ", with the Free plan's mark" : ""));
         sb.append("Machine: ").append(m.get("cpus")).append(" CPUs, ").append(m.get("os")).append(", Java ").append(m.get("java"))
                 .append(", ").append(m.get("ffmpeg")).append(", load at the end ").append(m.get("loadAverage")).append(".\n\n");
         sb.append("| | Check | Measured | Limit |\n| --- | --- | --- | --- |\n");

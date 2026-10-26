@@ -8,6 +8,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -37,22 +38,80 @@ public class S3StorageService implements FileStorageService {
             @Value("${app.storage.region}") String region,
             @Value("${app.storage.bucket}") String bucket,
             @Value("${app.storage.access-key}") String accessKey,
-            @Value("${app.storage.secret-key}") String secretKey) {
+            @Value("${app.storage.secret-key}") String secretKey,
+            @Value("${app.storage.path-style:}") String pathStyle) {
+        this(Settings.resolve(endpoint, region, bucket, accessKey, secretKey, pathStyle));
+    }
 
-        this.bucketName = bucket;
+    S3StorageService(Settings settings) {
+        this.bucketName = settings.bucket();
+        var credentials = StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(settings.accessKey(), settings.secretKey()));
+        // Path-style (https://host/bucket/key) when asked for, or by default on Cloudflare R2. Plain
+        // requests only: no ACL headers (R2 has no ACLs; objects are private and read through presigned
+        // URLs) and no flexible-checksum headers (SDK 2.21 sends none; see docs/operations.md before
+        // upgrading the SDK past 2.30, which starts sending CRC32 checksums by default).
+        S3Configuration s3Config = S3Configuration.builder()
+                .pathStyleAccessEnabled(settings.pathStyle())
+                .build();
         this.s3Client = S3Client.builder()
-                .endpointOverride(URI.create(endpoint))
-                .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
+                .endpointOverride(settings.endpoint())
+                .region(settings.region())
+                .credentialsProvider(credentials)
+                .serviceConfiguration(s3Config)
                 .build();
 
         this.s3Presigner = S3Presigner.builder()
-                .endpointOverride(URI.create(endpoint))
-                .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)))
+                .endpointOverride(settings.endpoint())
+                .region(settings.region())
+                .credentialsProvider(credentials)
+                .serviceConfiguration(s3Config)
                 .build();
+    }
+
+    /**
+     * How to reach the bucket. Works with any S3-compatible store (Cloudflare R2, DigitalOcean Spaces,
+     * AWS S3, MinIO). On R2 ({@code *.r2.cloudflarestorage.com}) an empty region means {@code auto} and
+     * path-style is on unless {@code STORAGE_PATH_STYLE=false}; elsewhere the old defaults stay
+     * (virtual-hosted, region {@code us-east-1} when empty).
+     */
+    record Settings(URI endpoint, Region region, String bucket, String accessKey, String secretKey,
+                    boolean pathStyle) {
+
+        static Settings resolve(String endpoint, String region, String bucket, String accessKey,
+                                String secretKey, String pathStyle) {
+            if (endpoint == null || endpoint.isBlank()) {
+                throw new IllegalStateException("STORAGE_TYPE=s3 needs STORAGE_ENDPOINT (or DO_SPACES_ENDPOINT)");
+            }
+            if (bucket == null || bucket.isBlank()) {
+                throw new IllegalStateException("STORAGE_TYPE=s3 needs STORAGE_BUCKET (or DO_SPACES_BUCKET)");
+            }
+            String e = endpoint.trim();
+            if (!e.contains("://")) {
+                e = "https://" + e;
+            }
+            URI uri = URI.create(e);
+            boolean r2 = isR2(uri);
+            String r = region == null || region.isBlank() ? (r2 ? "auto" : "us-east-1") : region.trim();
+            boolean path = pathStyle == null || pathStyle.isBlank() ? r2 : Boolean.parseBoolean(pathStyle.trim());
+            return new Settings(uri, Region.of(r), bucket.trim(), nullToEmpty(accessKey), nullToEmpty(secretKey), path);
+        }
+
+        static boolean isR2(URI endpoint) {
+            String host = endpoint.getHost();
+            return host != null && host.toLowerCase(java.util.Locale.ROOT).endsWith(".r2.cloudflarestorage.com");
+        }
+
+        private static String nullToEmpty(String s) {
+            return s == null ? "" : s.trim();
+        }
+
+        @Override
+        public String toString() {
+            // Never print the keys.
+            return "Settings[endpoint=" + endpoint + ", region=" + region + ", bucket=" + bucket
+                    + ", pathStyle=" + pathStyle + "]";
+        }
     }
 
     public String uploadFile(InputStream inputStream, String originalFilename, long contentLength) {

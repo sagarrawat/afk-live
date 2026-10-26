@@ -503,6 +503,98 @@ class StreamWorkerIntegrationTest extends PostgresIntegrationTest {
         }
     }
 
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    /** FO-2: the Free plan's mark is baked into the copies, so Free streams play by copy too; a clock brings the studio back. */
+    @Test
+    void aFreePlanStreamWithItsMarkMovesToCopyModeAndBackWithoutReconnecting() throws Exception {
+        User owner = users.findByEmail("worker-copy-free@example.com").orElseGet(() -> {
+            User u = new User("worker-copy-free@example.com");
+            u.setPlanType(PlanType.FREE);
+            return users.save(u);
+        });
+        com.afklive.streamer.model.LiveStream stream = liveStreams.create(owner.getEmail(),
+                new com.afklive.streamer.dto.StreamDtos.CreateStream("Free copy test", null, null, 720, 30));
+        List<Long> ids = new java.util.ArrayList<>();
+        for (String title : List.of("first.mp4", "second.mp4")) {
+            com.afklive.streamer.model.MediaAsset m = new com.afklive.streamer.model.MediaAsset(owner, title, uploadSource(),
+                    Files.size(source), com.afklive.streamer.model.MediaAsset.ContentType.VIDEO);
+            m.setDurationSeconds(3.0);
+            m.setWidth(320);
+            m.setHeight(180);
+            m.setFps(30.0);
+            m.setHasAudio(true);
+            ids.add(mediaRepository.save(m).getId());
+        }
+        liveStreams.setItems(owner.getEmail(), stream.getId(), com.afklive.streamer.model.StreamItem.Kind.VIDEO, ids);
+        stream = streamRepository.findById(stream.getId()).orElseThrow();
+        com.afklive.streamer.streaming.StudioSpec studio = liveStreams.studioSpec(stream, null);
+        assertThat(studio.overlays()).extracting(com.afklive.streamer.streaming.StudioSpec.OverlaySetting::id)
+                .containsExactly(com.afklive.streamer.streaming.studio.OverlayCompositor.WATERMARK_ID);
+        assertThat(com.afklive.streamer.streaming.CopyRuns.ineligible(studio, "LIVE")).isNull();
+        Path out = dir.resolve("copy-mode-free.flv");
+        StreamSpec spec = StreamSpec.studio(owner.getEmail(), stream.getId(), studio, List.of(new StreamSpec.Destination("File", "file://" + out)));
+        StreamJob job = job(owner, spec.toJson(), null, null);
+        job.setStreamId(stream.getId());
+        jobs.save(job);
+        long id = job.getId();
+
+        StreamWorker w = newWorker("w-copy-free");
+        w.setCopyRuns(new com.afklive.streamer.streaming.CopyRuns(playoutCopies, mediaCache, streamRepository, jobs, preparer, true));
+        w.copyCheckEvery(Duration.ofSeconds(1));
+        try {
+            tickUntil(w, () -> onAir(id), Duration.ofSeconds(60));
+            // Asked for copies with the mark (not plain ones), made by the web side.
+            tickUntil(w, () -> jdbc.queryForObject("SELECT count(*) FROM media_playout_copies c JOIN media_assets m ON m.id = c.media_id "
+                    + "WHERE m.user_id = ? AND c.kind = 'PROFILE_OVERLAY' AND c.overlay_set <> ''", Integer.class, owner.getId()) == 2,
+                    Duration.ofSeconds(20));
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies c JOIN media_assets m ON m.id = c.media_id "
+                    + "WHERE m.user_id = ? AND c.kind = 'PROFILE'", Integer.class, owner.getId())).isZero();
+            while (playoutCopies.prepareNext()) {
+                // the web side makes them
+            }
+            tickUntil(w, () -> String.valueOf(jobs.findById(id).orElseThrow().getNowPlaying()).contains("\"mode\":\"copy\""),
+                    Duration.ofSeconds(60));
+            tickUntil(w, () -> onAir(id), Duration.ofSeconds(20));
+
+            // The creator adds a clock: it changes every minute, so the studio takes over, on the same connection...
+            liveStreams.setOverlays(owner.getEmail(), stream.getId(), List.of(new com.afklive.streamer.streaming.StudioSpec.OverlaySetting(
+                    "clock", "CLOCK", true, 0.05, 0.05, 0, 0.05, null, null, null, "#ffffff", "#99000000", 1, "Asia/Kolkata", null, 0, null)));
+            tickUntil(w, () -> {
+                w.pollCommands();
+                String np = String.valueOf(jobs.findById(id).orElseThrow().getNowPlaying());
+                return !np.contains("\"mode\":\"copy\"") && !np.equals("null");
+            }, Duration.ofSeconds(60));
+            // ...and keeps it (checks keep finding the clock).
+            for (int i = 0; i < 6; i++) {
+                w.tick();
+                Thread.sleep(500);
+            }
+            assertThat(String.valueOf(jobs.findById(id).orElseThrow().getNowPlaying())).doesNotContain("\"mode\":\"copy\"");
+            tickUntil(w, () -> onAir(id), Duration.ofSeconds(20));
+
+            assertThat(jobs.findById(id).orElseThrow().getDestinations().get(0).getRestarts())
+                    .as("the destination never reconnected").isZero();
+            assertThat(jobs.findById(id).orElseThrow().getRestarts()).isZero();
+            streamService.stopStream(id, owner.getEmail());
+            tickUntil(w, () -> !jobs.findById(id).orElseThrow().isLive(), Duration.ofSeconds(30));
+            double prev = -1;
+            double maxGap = 0;
+            for (com.afklive.streamer.streaming.TsStitcherTest.Packet p : com.afklive.streamer.streaming.TsStitcherTest.probe(out).stream()
+                    .filter(p -> p.type().equals("video")).toList()) {
+                assertThat(p.dts()).isGreaterThan(prev);
+                if (prev >= 0) {
+                    maxGap = Math.max(maxGap, p.dts() - prev);
+                }
+                prev = p.dts();
+            }
+            assertThat(maxGap).isLessThan(0.25);
+        } finally {
+            w.shutdown();
+            streamService.finalizeJob(id, "test");
+        }
+    }
+
     @Test
     void aPhoneStreamShowsBrbWhenTheSignalDropsAndComesBack() throws Exception {
         User owner = account("worker-phone@example.com");

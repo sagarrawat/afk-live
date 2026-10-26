@@ -13,12 +13,14 @@ import com.afklive.streamer.streaming.IngestReader;
 import com.afklive.streamer.streaming.MediaCache;
 import com.afklive.streamer.streaming.StreamPreparer;
 import com.afklive.streamer.streaming.StreamRunner;
+import com.afklive.streamer.streaming.StaticOverlays;
 import com.afklive.streamer.streaming.StreamSpec;
 import com.afklive.streamer.streaming.StudioBuilder;
 import com.afklive.streamer.streaming.StudioRuns;
 import com.afklive.streamer.streaming.StudioSpec;
 import com.afklive.streamer.streaming.TsStitcherTest;
 import com.afklive.streamer.streaming.studio.Canvas;
+import com.afklive.streamer.streaming.studio.OverlayCompositor;
 import com.afklive.streamer.streaming.studio.Studio;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -75,11 +77,20 @@ public final class SoakHarness {
     /** What to run. See {@link #fromSystemProperties()} for the names and defaults. */
     public record Config(Duration duration, boolean copyMode, int streams, int destinations, int height, int fps,
                          Duration switchEvery, Duration sampleEvery, Duration captureEvery, Duration memoryWarmup,
-                         Duration gcEvery, Path outDir) {
+                         Duration gcEvery, Path outDir, boolean watermark) {
+
+        /** Without the Free plan's mark. */
+        public Config(Duration duration, boolean copyMode, int streams, int destinations, int height, int fps,
+                      Duration switchEvery, Duration sampleEvery, Duration captureEvery, Duration memoryWarmup,
+                      Duration gcEvery, Path outDir) {
+            this(duration, copyMode, streams, destinations, height, fps, switchEvery, sampleEvery, captureEvery, memoryWarmup,
+                    gcEvery, outDir, false);
+        }
 
         /**
          * soak.minutes (360), soak.copyMode (false), soak.streams (2), soak.destinations (2), soak.height (720),
-         * soak.fps (30), soak.switchMinutes (10, or a sixth of a run shorter than an hour), soak.out.
+         * soak.fps (30), soak.switchMinutes (10, or a sixth of a run shorter than an hour), soak.out, soak.watermark
+         * (false: with it, every stream shows the Free plan's mark, baked into the profile copies in copy mode).
          */
         public static Config fromSystemProperties() {
             double minutes = Double.parseDouble(System.getProperty("soak.minutes", "360"));
@@ -97,8 +108,9 @@ public final class SoakHarness {
             Duration gcEvery = minutes >= 60 ? Duration.ofMinutes(5) : Duration.ofMinutes(1);
             String out = System.getProperty("soak.out", "");
             Path outDir = out.isBlank() ? Path.of("target", "soak", Instant.now().toString().replace(":", "-")) : Path.of(out);
+            boolean watermark = Boolean.parseBoolean(System.getProperty("soak.watermark", "false"));
             return new Config(d, copy, streams, dests, height, fps, switchEvery, Duration.ofSeconds(10), captureEvery, warm,
-                    gcEvery, outDir.toAbsolutePath());
+                    gcEvery, outDir.toAbsolutePath(), watermark);
         }
     }
 
@@ -408,12 +420,19 @@ public final class SoakHarness {
             String key = "soak/clip-" + c.id() + ".mp4";
             library.put(key, src);
             if (cfg.copyMode()) {
-                // The FO-2 profile copy, made with the same command the web side uses.
-                Path prof = media.resolve("profile-" + c.id() + "-" + canvas.width() + "x" + canvas.height() + "-" + cfg.fps() + ".ts");
+                // The FO-2 profile copy, made with the same command the web side uses (with the mark drawn by the
+                // studio's compositor, as the web side does it, when the streams show it).
+                Path prof = media.resolve("profile-" + c.id() + "-" + canvas.width() + "x" + canvas.height() + "-" + cfg.fps()
+                        + (cfg.watermark() ? "-mark" : "") + ".ts");
                 if (!Files.exists(prof)) {
                     say("Preparing profile copy " + prof.getFileName());
+                    Path layer = null;
+                    if (cfg.watermark()) {
+                        layer = media.resolve("mark-" + canvas.width() + "x" + canvas.height() + ".yuva");
+                        StaticOverlays.writeLayer(overlays(), k -> null, canvas, layer);
+                    }
                     run(PlayoutCopies.profileCommand(src.toString(), prof, canvas.width(), canvas.height(), cfg.fps(), "FIT", 0,
-                            true, EncoderSettings.DEFAULT_PRESET));
+                            true, EncoderSettings.DEFAULT_PRESET, layer));
                 }
                 String pkey = "soak/profile-" + c.id() + ".ts";
                 library.put(pkey, prof);
@@ -440,8 +459,10 @@ public final class SoakHarness {
         PlayoutCopies copies = mock(PlayoutCopies.class);
         // The studio plays the originals (no FO-1 playout copy); copy mode gets the profile copies.
         when(copies.keyFor(anyString(), anyInt(), anyInt(), anyInt())).thenAnswer(inv -> inv.getArgument(0));
-        when(copies.profileKeyFor(anyString(), anyInt(), anyInt(), anyInt(), anyString(), anyDouble(), anyBoolean()))
-                .thenAnswer(inv -> profileKeys.get(inv.<String>getArgument(0)));
+        // Only for the overlays the copies were made with: a run asking for another set (or none) gets nothing.
+        String madeWith = StaticOverlays.identity(overlays(), Canvas.of(cfg.height(), false, cfg.fps()));
+        when(copies.profileKeyFor(anyString(), anyInt(), anyInt(), anyInt(), anyString(), anyDouble(), any(), any(), anyBoolean()))
+                .thenAnswer(inv -> madeWith.equals(inv.getArgument(6)) ? profileKeys.get(inv.<String>getArgument(0)) : null);
 
         // The database: only the saved playlist position matters, and it round-trips like the real column.
         LiveStreamRepository streams = mock(LiveStreamRepository.class);
@@ -467,8 +488,9 @@ public final class SoakHarness {
         for (Clip c : CLIPS) {
             videos.add(new StudioSpec.Media(c.id(), "soak/clip-" + c.id() + ".mp4", "Clip " + c.id(), c.seconds(), true));
         }
-        // Copy mode needs a stream with nothing drawn live; the studio-only soak carries the overlays most streams have.
-        List<StudioSpec.OverlaySetting> overlays = cfg.copyMode() ? List.of() : List.of(
+        // Copy mode needs a stream with nothing drawn live but static overlays (the mark with soak.watermark); the
+        // studio-only soak carries the overlays most streams have.
+        List<StudioSpec.OverlaySetting> overlays = cfg.copyMode() ? overlays() : List.of(
                 new StudioSpec.OverlaySetting("np", "TEXT", true, 0.03, 0.05, 0.5, 0.045, "Now playing: {title}", null, null,
                         "#ffffff", "#99000000", 1, null, null, 0, null),
                 new StudioSpec.OverlaySetting("clock", "CLOCK", true, 0.8, 0.05, 0.15, 0.04, null, null, null,
@@ -480,6 +502,12 @@ public final class SoakHarness {
             dests.add(new StreamSpec.Destination("sink " + d, "unused", false));
         }
         return StreamSpec.studio("soak", 7000L + k, studio, dests);
+    }
+
+    /** The static overlays copy-mode streams show: the Free plan's mark (soak.watermark), as LiveStreamService adds it. */
+    private List<StudioSpec.OverlaySetting> overlays() {
+        return cfg.watermark() ? List.of(new StudioSpec.OverlaySetting(OverlayCompositor.WATERMARK_ID, "TEXT", true, 0.8, 0.92, 0, 0.03,
+                "AFK Live", null, null, "#ffffff", "#66000000", 0.8, null, null, 0, null)) : List.of();
     }
 
     private void start(Run r) throws Exception {

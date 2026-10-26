@@ -6,6 +6,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { csrfToken, post } from '@/lib/api';
 import { PushPrompt } from '@/components/PushPrompt';
 import { HoursLeft } from '@/components/HoursLeft';
+import { ContactSupportDialog } from '@/components/ContactSupport';
 import { relative } from '@/lib/format';
 import { appLink } from '@/lib/links';
 import { keys, useInvalidate, useMe, useNotifications } from '@/lib/queries';
@@ -138,6 +139,12 @@ function Notifications() {
               </li>
             ))}
           </ul>
+          {/* UX audit #19: which alerts arrive, and how, is one tap away. */}
+          <div className="border-t border-line px-4 py-2.5 text-sm">
+            <Link to="/studio/settings/notifications" onClick={() => setOpen(false)} className="text-accent hover:underline">
+              Alert settings
+            </Link>
+          </div>
         </div>
       )}
     </div>
@@ -148,6 +155,7 @@ function UserMenu() {
   const { data: me } = useMe();
   const [theme, toggle] = useTheme();
   const [open, setOpen] = useState(false);
+  const [support, setSupport] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -181,7 +189,13 @@ function UserMenu() {
           <MenuItem href="/studio/help" icon={<HelpCircle className="h-4 w-4" />}>
             Help
           </MenuItem>
-          <MenuItem href="mailto:support@afklive.in" icon={<LifeBuoy className="h-4 w-4" />}>
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              setSupport(true);
+            }}
+            icon={<LifeBuoy className="h-4 w-4" />}
+          >
             Contact support
           </MenuItem>
           <MenuItem href="/status" icon={<Activity className="h-4 w-4" />}>
@@ -192,6 +206,7 @@ function UserMenu() {
           </MenuItem>
         </div>
       )}
+      <ContactSupportDialog open={support} onClose={() => setSupport(false)} />
     </div>
   );
 }

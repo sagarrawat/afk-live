@@ -28,11 +28,15 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
 
     // Default constructor for AWS Lambda
     public VideoOptimizerHandler() {
-        String endpoint = System.getenv("DO_SPACES_ENDPOINT");
-        String region = System.getenv("DO_SPACES_REGION");
-        String key = System.getenv("DO_SPACES_KEY");
-        String secret = System.getenv("DO_SPACES_SECRET");
-        this.bucketName = System.getenv("DO_SPACES_BUCKET");
+        // STORAGE_* (same names as the web app) win; DO_SPACES_* still work.
+        String endpoint = env("STORAGE_ENDPOINT", "DO_SPACES_ENDPOINT");
+        String region = env("STORAGE_REGION", "DO_SPACES_REGION");
+        String key = env("STORAGE_ACCESS_KEY", "DO_SPACES_KEY");
+        String secret = env("STORAGE_SECRET_KEY", "DO_SPACES_SECRET");
+        this.bucketName = env("STORAGE_BUCKET", "DO_SPACES_BUCKET");
+        if (endpoint != null && region == null && endpoint.contains(".r2.cloudflarestorage.com")) {
+            region = "auto";
+        }
 
         if (endpoint != null && region != null && key != null && secret != null) {
             this.s3 = S3Client.builder()
@@ -49,6 +53,14 @@ public class VideoOptimizerHandler implements RequestHandler<Map<String, String>
             // This prevents NPE during class instantiation in tests if we use a different constructor
             this.s3 = null;
         }
+    }
+
+    private static String env(String name, String fallback) {
+        String v = System.getenv(name);
+        if (v == null || v.isBlank()) {
+            v = System.getenv(fallback);
+        }
+        return v == null || v.isBlank() ? null : v;
     }
 
     // Constructor for testing

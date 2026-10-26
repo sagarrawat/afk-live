@@ -210,12 +210,17 @@ app:
     daily-limit-free: ${AI_DAILY_LIMIT_FREE:20}
     daily-limit-paid: ${AI_DAILY_LIMIT_PAID:100}
   storage:
+    # local | s3 (any S3-compatible store: Cloudflare R2, DigitalOcean Spaces, AWS S3, MinIO).
+    # STORAGE_* names win; the older DO_SPACES_* names still work as fallbacks. See docs/operations.md#object-storage.
     type: ${STORAGE_TYPE:local}
-    endpoint: ${DO_SPACES_ENDPOINT:}
-    region: ${DO_SPACES_REGION:}
-    bucket: ${DO_SPACES_BUCKET:}
-    access-key: ${DO_SPACES_KEY:}
-    secret-key: ${DO_SPACES_SECRET:}
+    endpoint: ${STORAGE_ENDPOINT:${DO_SPACES_ENDPOINT:}}
+    # Empty: "auto" on R2, us-east-1 elsewhere.
+    region: ${STORAGE_REGION:${DO_SPACES_REGION:}}
+    bucket: ${STORAGE_BUCKET:${DO_SPACES_BUCKET:}}
+    access-key: ${STORAGE_ACCESS_KEY:${DO_SPACES_KEY:}}
+    secret-key: ${STORAGE_SECRET_KEY:${DO_SPACES_SECRET:}}
+    # true|false; empty: path-style on R2, virtual-hosted elsewhere.
+    path-style: ${STORAGE_PATH_STYLE:}
   aws:
     access-key: ${AWS_ACCESS_KEY_ID:}
     secret-key: ${AWS_SECRET_ACCESS_KEY:}

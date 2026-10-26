@@ -28,6 +28,17 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
   CUSTOM: 'Other',
 };
 
+/**
+ * UX audit #22: a destination in plain words, "YouTube, key ending 1234", instead of its server address.
+ * Only an "Other" server shows its address (there's no better name for it); the edit dialog shows it for all.
+ */
+export function destinationSummary(d: { platform: string; server: string; keyHint: string }): string {
+  const end = d.keyHint.replace(/^[•*]+/, '');
+  const key = end ? `key ending ${end}` : d.keyHint ? 'key saved' : 'no key yet';
+  if (d.platform === 'CUSTOM' || !(d.platform in PLATFORM_NAMES)) return `${d.server}, ${key}`;
+  return `${PLATFORM_NAMES[d.platform as Platform]}, ${key}`;
+}
+
 const WHERE: Record<Platform, string> = {
   YOUTUBE: 'In YouTube Studio, choose Go live, then Stream. Copy the stream key there. No Google sign-in needed.',
   FACEBOOK: 'In Facebook Live Producer, choose Streaming software and copy the stream key.',

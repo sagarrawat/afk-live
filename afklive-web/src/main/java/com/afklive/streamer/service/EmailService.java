@@ -20,7 +20,7 @@ import java.util.List;
 public class EmailService {
 
     /** What an email is for; recorded with every send (OPS-1). */
-    public enum Kind { VERIFY, RESET, WELCOME, UPGRADE, UPLOAD, DELETION, ALERT, SUPPORT, TEST }
+    public enum Kind { VERIFY, RESET, WELCOME, UPGRADE, UPLOAD, DELETION, ALERT, SUPPORT, TEST, EMAIL_CHANGE }
 
     /** Whether the mail service took an email; {@code error} says why not, in short. */
     public record Result(boolean ok, String error) {
@@ -187,13 +187,33 @@ public class EmailService {
         sendEmail(Kind.UPGRADE, to, "You've upgraded to " + planName + "!", html);
     }
 
+    /** ON-6: the link that confirms a new email address (sent to the new address). */
+    public void sendEmailChangeLink(String to, String link) {
+        String content = "<p>Confirm this is the address you want to use for AFK Live. Your email changes when you open the link; "
+                + "until then, nothing changes.</p>"
+                + "<p style='margin: 30px 0; text-align: center;'><a href='" + escape(link) + "' style='background: #21245C; color: #ffffff; "
+                + "padding: 12px 26px; text-decoration: none; border-radius: 999px; display: inline-block; font-weight: bold;'>Use this email</a></p>"
+                + "<p style='font-size: 14px; color: #888;'>The link works for 24 hours. Didn't ask for this? Ignore this email.</p>";
+        sendEmail(Kind.EMAIL_CHANGE, to, "Confirm your new email - AFK Live", createBaseHtml("Confirm your new email", content));
+    }
+
+    /** ON-6: tells the current address that a change was asked for, so a takeover doesn't go unnoticed. */
+    public void sendEmailChangeNotice(String to, String newEmail) {
+        String content = "<p>Someone signed in to your AFK Live account asked to change its email to <strong>" + escape(newEmail)
+                + "</strong>. It changes only if the link sent there is opened.</p>"
+                + "<p>Wasn't you? Sign in, change your password and choose <strong>Sign out other devices</strong> in "
+                + "Settings &gt; Sign-in &amp; security.</p>";
+        sendEmail(Kind.EMAIL_CHANGE, to, "Your AFK Live email is being changed", createBaseHtml("Email change requested", content));
+    }
+
     @Async
     public void sendSupportTicket(String userEmail, String category, String message) {
+        // Everything here comes from the creator, so it's escaped before it goes into the HTML.
         String subject = "[Support] " + category + " - " + userEmail;
-        String content = "<p><strong>User:</strong> " + userEmail + "</p>" +
-                         "<p><strong>Category:</strong> " + category + "</p>" +
+        String content = "<p><strong>User:</strong> " + escape(userEmail) + "</p>" +
+                         "<p><strong>Category:</strong> " + escape(category) + "</p>" +
                          "<hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>" +
-                         "<p style='white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 6px; border: 1px solid #eee;'>" + message + "</p>";
+                         "<p style='white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 6px; border: 1px solid #eee;'>" + escape(message) + "</p>";
 
         String html = createBaseHtml("New Support Ticket", content);
         sendEmail(Kind.SUPPORT, supportEmail, subject, html);

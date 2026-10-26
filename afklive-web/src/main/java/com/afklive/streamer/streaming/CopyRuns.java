@@ -20,8 +20,10 @@ import java.util.Random;
 
 /**
  * FO-2, the worker's side of copy mode. A studio stream that needs nothing drawn or mixed live (a
- * playlist, no overlays, no music bed, no phone, on its LIVE scene) can be played from profile copies
- * by stream copy instead of decoding and encoding every frame. This decides when that's possible,
+ * playlist, no music bed, no phone, on its LIVE scene, and only overlays that never change, such as the
+ * Free plan's mark or a logo: {@link StaticOverlays}) can be played from profile copies by stream copy
+ * instead of decoding and encoding every frame. Static overlays are baked into the copies, which are
+ * kept per overlay set. This decides when that's possible,
  * builds the {@link CopyPlayer}, reports what's playing and saves the position like the studio does.
  * The worker hands a run between the studio and copy mode with {@link StreamRunner#handOff}, so
  * neither direction disconnects a destination.
@@ -60,16 +62,24 @@ public class CopyRuns {
         final Long streamId;
         final StudioSpec spec;
         final List<String> pinned;
+        /** The identity of the overlays its copies carry ('' for none). */
+        final String overlaySet;
         long lastSaveNanos;
+        long lastTouchNanos = System.nanoTime();
         String lastPosition;
         volatile boolean closed;
 
-        Handle(CopyPlayer player, Path workDir, Long streamId, StudioSpec spec, List<String> pinned) {
+        Handle(CopyPlayer player, Path workDir, Long streamId, StudioSpec spec, List<String> pinned, String overlaySet) {
             this.player = player;
             this.workDir = workDir;
             this.streamId = streamId;
             this.spec = spec;
             this.pinned = pinned;
+            this.overlaySet = overlaySet;
+        }
+
+        public String overlaySet() {
+            return overlaySet;
         }
 
         public CopyPlayer player() {
@@ -83,8 +93,9 @@ public class CopyRuns {
 
     /**
      * Why this run can't play by copy, in a few words; null when it can. Anything the studio draws or
-     * mixes live rules it out: overlays, a music bed or changed video volume, the phone, another scene,
-     * or an end-after-this-pass request.
+     * mixes live rules it out: an overlay that changes (clock, countdown, ticker, text with a placeholder),
+     * a music bed or changed video volume, the phone, another scene, or an end-after-this-pass request.
+     * Static overlays don't: the copies carry them.
      */
     public static String ineligible(StudioSpec s, String scene) {
         if (s == null || !"PLAYLIST".equals(s.source()) || s.videos() == null || s.videos().isEmpty()) {
@@ -93,8 +104,9 @@ public class CopyRuns {
         if (s.phone() != null) {
             return "phone input";
         }
-        if (s.overlays() != null && !s.overlays().isEmpty()) {
-            return "overlays";
+        String dynamic = StaticOverlays.dynamicReason(s);
+        if (dynamic != null) {
+            return dynamic;
         }
         if (s.music() != null && !s.music().isEmpty() && !"KEEP".equals(s.audioMode())) {
             return "music bed";
@@ -132,11 +144,16 @@ public class CopyRuns {
         }
         Canvas canvas = Canvas.of(spec.height(), spec.vertical(), spec.fps());
         String streamFit = StudioBuilder.fitOf(spec.fit()).name();
+        // The static overlays (the mark, a logo) are in the copies: copies for this exact set only.
+        List<StudioSpec.OverlaySetting> overlays = StaticOverlays.staticSet(spec);
+        String overlaySet = StaticOverlays.identity(overlays, canvas);
+        String overlaySpec = overlaySet.isEmpty() ? null : StudioSpec.json(overlays);
         List<String> keys = new ArrayList<>();
         boolean ready = true;
         for (StudioSpec.Media m : spec.videos()) {
             String fit = m.fit() != null && !m.fit().isBlank() ? StudioBuilder.fitOf(m.fit()).name() : streamFit;
-            String key = copies.profileKeyFor(m.key(), canvas.width(), canvas.height(), canvas.fps(), fit, m.gainDb(), true);
+            String key = copies.profileKeyFor(m.key(), canvas.width(), canvas.height(), canvas.fps(), fit, m.gainDb(),
+                    overlaySet, overlaySpec, true);
             if (key == null) {
                 ready = false; // keep asking for the rest
             }
@@ -160,7 +177,7 @@ public class CopyRuns {
             Path workDir = preparer.newWorkDir(jobId);
             CopyPlayer player = new CopyPlayer(entries, StudioBuilder.order(spec.order()), spec.loops(), resume, workDir,
                     CopyPlayer.defaultFfmpeg(), new Random());
-            return new Handle(player, workDir, streamId, spec, pinned);
+            return new Handle(player, workDir, streamId, spec, pinned, overlaySet);
         } catch (IOException | RuntimeException e) {
             pinned.forEach(cache::release);
             log.warn("Copy mode for job {} couldn't start, staying in the studio: {}", jobId, e.getMessage());
@@ -194,7 +211,18 @@ public class CopyRuns {
         if (h.streamId != null && System.nanoTime() - h.lastSaveNanos >= StudioRuns.SAVE_POSITION_MILLIS * 1_000_000) {
             savePosition(jobId, workerId, h);
         }
+        if (System.nanoTime() - h.lastTouchNanos >= TOUCH_EVERY.toNanos()) {
+            h.lastTouchNanos = System.nanoTime();
+            try {
+                copies.touch(h.pinned); // FO-6: still played, so the clean-up keeps them
+            } catch (RuntimeException e) {
+                log.warn("Couldn't record that job {} still plays its copies: {}", jobId, e.getMessage());
+            }
+        }
     }
+
+    /** How often a run playing by copy records that its copies are still played (FO-6 keeps unplayed ones 30 days). */
+    static final java.time.Duration TOUCH_EVERY = java.time.Duration.ofHours(6);
 
     /** Saves the position now: before handing over to the studio, which resumes from it. */
     public void savePosition(long jobId, String workerId, Handle h) {

@@ -1,7 +1,7 @@
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AddDestinationDialog } from '@/components/AddDestination';
+import { AddDestinationDialog, destinationSummary } from '@/components/AddDestination';
 import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { PlatformIcon } from '@/components/PlatformIcon';
 import { isOnAir } from '@/components/status';
@@ -62,8 +62,8 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
                     <PlatformIcon platform={d.platform} className="h-5 w-5 text-muted" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{d.name}</span>
-                      <span className="block truncate text-sm text-muted">
-                        {d.server} {d.keyHint}
+                      <span className="block truncate text-sm text-muted" title={d.server}>
+                        {destinationSummary(d)}
                       </span>
                     </span>
                     <Link to={`/studio/destinations?edit=${d.id}`} aria-label={`Edit ${d.name}`} className="text-sm text-accent hover:underline">
@@ -71,6 +71,17 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
                     </Link>
                     <Toggle label={`Send to ${d.name}`} checked={on} disabled={busy || full || last} onChange={(v) => setEnabled(d.id, v)} />
                   </div>
+                  {/* UX audit #13: why the switch can't be used, on the page (a tooltip never shows on a phone). */}
+                  {full && (
+                    <p className="mt-1 pl-8 text-sm text-muted">
+                      Your plan sends to {limit} destination{limit === 1 ? '' : 's'} at once. Turn one off or{' '}
+                      <Link to="/studio/settings/billing" className="text-accent hover:underline">
+                        upgrade
+                      </Link>
+                      .
+                    </p>
+                  )}
+                  {last && <p className="mt-1 pl-8 text-sm text-muted">A live stream needs one destination. Stop the stream to turn this off.</p>}
                   <TestNote state={tests[d.id]} platform={d.platform} />
                 </li>
               );

@@ -115,6 +115,104 @@ public final class OverlayCompositor {
         }
     }
 
+    /**
+     * FO-2: every visible overlay drawn once into a transparent, canvas-sized layer, in yuva420p (planes
+     * Y, U, V, then A at full size), for FFmpeg's overlay filter to put on a profile copy. The layer holds
+     * the very patches {@link #blend} uses (same Java2D render, same YUV conversion, same chroma alpha),
+     * stacked "over" one another in order, so blending it once gives what the studio's blends give, to a
+     * rounding step. Only for overlays that never change: a clock, countdown or ticker is refused.
+     */
+    public byte[] renderLayer(Map<String, String> vars) {
+        int w = canvas.width();
+        int h = canvas.height();
+        int cw = w / 2;
+        int ch = h / 2;
+        byte[] y = new byte[w * h];
+        byte[] a = new byte[w * h];
+        byte[] u = new byte[cw * ch];
+        byte[] v = new byte[cw * ch];
+        byte[] ca = new byte[cw * ch];
+        java.util.Arrays.fill(u, (byte) 128);
+        java.util.Arrays.fill(v, (byte) 128);
+        for (Overlay o : overlays) {
+            if (!o.visible() || o.opacity() <= 0) {
+                continue;
+            }
+            if (o.type() != Overlay.Type.IMAGE && o.type() != Overlay.Type.TEXT) {
+                throw new IllegalArgumentException("Overlay " + o.id() + " (" + o.type() + ") changes over time");
+            }
+            Patch p = patchFor(o, o.type() == Overlay.Type.TEXT ? resolve(o.text(), vars) : "");
+            if (p == null) {
+                continue;
+            }
+            for (int r = 0; r < p.h(); r++) {
+                int dy = p.y() + r;
+                if (dy < 0 || dy >= h) {
+                    continue;
+                }
+                for (int c = 0; c < p.w(); c++) {
+                    int dx = p.x() + c;
+                    if (dx >= 0 && dx < w) {
+                        int si = r * p.w() + c;
+                        stack(y, a, dy * w + dx, p.luma()[si], p.lumaAlpha()[si] & 0xff);
+                    }
+                }
+            }
+            int pcw = p.w() / 2;
+            for (int r = 0; r < p.h() / 2; r++) {
+                int dy = p.y() / 2 + r;
+                if (dy < 0 || dy >= ch) {
+                    continue;
+                }
+                for (int c = 0; c < pcw; c++) {
+                    int dx = p.x() / 2 + c;
+                    if (dx >= 0 && dx < cw) {
+                        int si = r * pcw + c;
+                        int di = dy * cw + dx;
+                        int alpha = p.chromaAlpha()[si] & 0xff;
+                        byte under = ca[di];
+                        stack(u, ca, di, p.u()[si], alpha);
+                        ca[di] = under;
+                        stack(v, ca, di, p.v()[si], alpha);
+                    }
+                }
+            }
+        }
+        byte[] out = new byte[w * h * 2 + 2 * cw * ch];
+        System.arraycopy(y, 0, out, 0, y.length);
+        System.arraycopy(u, 0, out, y.length, u.length);
+        System.arraycopy(v, 0, out, y.length + u.length, v.length);
+        System.arraycopy(a, 0, out, y.length + u.length + v.length, a.length);
+        return out;
+    }
+
+    /**
+     * Puts {@code src} at {@code alpha} over what the layer has at {@code i} ("over" with straight alpha):
+     * over nothing it's the source as is, so one overlay alone is exactly its patch.
+     */
+    private static void stack(byte[] value, byte[] alphas, int i, byte src, int alpha) {
+        if (alpha == 0) {
+            return;
+        }
+        int under = alphas[i] & 0xff;
+        if (under == 0 || alpha == 255) {
+            value[i] = src;
+            alphas[i] = (byte) alpha;
+            return;
+        }
+        long keep = (long) under * (255 - alpha); // the part of the lower layer still showing, x255
+        long outA255 = (long) alpha * 255 + keep;
+        int outA = (int) ((outA255 + 127) / 255);
+        long num = (long) (src & 0xff) * alpha * 255 + (long) (value[i] & 0xff) * keep;
+        value[i] = (byte) Math.min(255, (num + outA255 / 2) / outA255);
+        alphas[i] = (byte) outA;
+    }
+
+    /** The font overlays are drawn in, for the identity of copies with overlays baked in. */
+    public static String fontName() {
+        return BASE_FONT.getFontName();
+    }
+
     private Patch patchFor(Overlay o, String text) {
         String key = cacheKey(o);
         Cached c = cache.get(key);

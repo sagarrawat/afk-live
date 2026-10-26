@@ -82,4 +82,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/135-media-deletions.sql
   - include:
+      file: db/changelog/changes/145-copy-overlay-variants.sql
+  - include:
       file: db/changelog/changes/155-worker-pools.sql
+  - include:
+      file: db/changelog/changes/160-account-security.sql
