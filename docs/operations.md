@@ -120,7 +120,7 @@ requests, no errors, the signed-in visitor stayed signed in throughout.
 | New media processing | 1 min | Claimed per file; a claim older than 10 minutes is taken over. The loudness backfill may measure one file twice during the overlap (same result) |
 | Playout copies | 1 min | `FOR UPDATE SKIP LOCKED` claim. A slot that stops mid-copy hands it back at once (otherwise it waited out the 8-hour stale claim) |
 | Clean-ups (commands, old alerts, unplayed copies, expired sessions) | various | Conditional or idempotent deletes |
-| Unplayed copies (FO-6) | 1 min | Each delete is conditional on the row as read (status, file, age), so only one slot deletes a copy and its file; never a copy of a video a live run plays |
+| Unplayed copies (FO-6) | 1 min | Each delete is conditional on the row as read (status, file, age), so only one slot deletes a copy and its file; never a copy without overlays of a video a live run plays (copies with overlays go by their own last play, refreshed every 6 h while played) |
 | Traffic budget alerts (FO-5) | 10 min | The `transfer_alerts (month, threshold)` insert is the claim: only the slot whose insert lands alerts admins |
 | Stored-secret re-encryption, plan defaults | startup | Conditional updates; only the starting slot runs them |
 
@@ -265,11 +265,39 @@ hour. So:
 ## Copy mode (FO-2)
 
 **A playlist that needs nothing drawn or mixed live plays by stream copy: about 0.01 of a CPU instead
-of about 0.6.** A stream qualifies when it is a playlist with no overlays, no music bed, normal video
-volume, no phone input and is on its LIVE scene. For each video the web side prepares a *profile copy*
-once (`media_playout_copies`, kind `PROFILE`): the file encoded exactly as the stream sends it (canvas,
-frame rate, fit, loudness, bitrate, and the requesting worker's x264 preset; see "Live encoder"), at the
-lowest priority.
+of about 0.6.** A stream qualifies when it is a playlist with only static overlays (below), no music bed,
+normal video volume, no phone input and is on its LIVE scene. For each video the web side prepares a
+*profile copy* once (`media_playout_copies`, kind `PROFILE`): the file encoded exactly as the stream sends
+it (canvas, frame rate, fit, loudness, bitrate, and the requesting worker's x264 preset; see "Live
+encoder"), at the lowest priority.
+
+**Static overlays are baked into the copies, so Free plan streams (the "AFK Live" mark) qualify too.**
+Static means drawn the same every frame: the Free plan's mark, fixed text, and a logo (image) at a fixed
+place, size and opacity. Dynamic overlays keep a stream in the studio: a clock, a countdown, a scrolling
+ticker, and text with a placeholder (`{title}`, `{next}`, `{track}`, or anything in braces). Hidden
+overlays and overlays on other scenes don't count. (`StaticOverlays`; the reason a stream stays in the
+studio is in the worker's debug log.)
+- Copies with overlays are kind `PROFILE_OVERLAY`, one per *overlay set*: `overlay_set` is a SHA-256 of
+  everything that decides the picture (canvas, kind, mark or not, position, size, text, image library id
+  and stored file, colours, opacity, font, drawing version); `overlay_spec` is what to draw. Copies
+  without overlays keep `overlay_set = ''`. The set is part of the unique key, so a copy with the mark is
+  never played for a stream without it (after an upgrade, or a logo hidden live) and the other way round.
+- The web side draws the set once with the studio's own `OverlayCompositor` into one transparent
+  canvas-sized frame (raw yuva420p, the studio's own colour conversion and edge alpha) and FFmpeg's
+  `overlay` filter puts it on every frame after fitting and before encoding, where the studio blends. A
+  copy's picture matches the studio's to within 1 level per pixel (`StaticOverlayCopyPixelTest`), so a
+  switch shows no jump. `made_overlay_set` records what the maker drew; a copy without it (made by an
+  older release mid-rollout) is never played and is made again.
+- A live change to the set (logo moved or resized, mark gone after an upgrade, a clock added) moves the
+  stream to the studio as any live change does; the next check asks for copies for the new set and moves
+  back to copy mode once they're ready (or stays in the studio if something dynamic was added).
+- **Cost:** every overlay set is another full set of profile copies of the stream's videos, in storage
+  (the stream's bitrate × the playlist's length: ~1.9 GB per hour of playlist at 720p30, ~2.8 GB at
+  1080p30; at DigitalOcean Spaces' $0.02 per GB-month beyond its included 250 GB, about $0.04–0.06 a
+  month per playlist hour) and one
+  background encode per video. Most streams have one set (the mark, or one logo), so for most it replaces
+  the plain copies rather than adding to them. Moving a logo makes a new set; the old one is deleted 30
+  days after it was last played (FO-6 below), even while the stream stays live.
 
 - A qualifying stream starts in copy mode when its copies are ready; otherwise it starts in the studio
   and moves to copy mode within a minute of its copies being ready.
@@ -317,6 +345,7 @@ written. In copy mode every stream switches studio↔copy every 10 minutes, the 
 
 ```sh
 afklive-scripts/soak.sh --minutes 10 --copy-mode --streams 2   # smoke run, ~13 min including the build
+afklive-scripts/soak.sh --minutes 10 --copy-mode --watermark   # the same with the Free plan's mark baked into the copies
 afklive-scripts/soak.sh --copy-mode                            # the real one: 6 h, 2 streams, 2 destinations each
 afklive-scripts/soak.sh                                        # 6 h studio-only (copy mode off, as production today)
 # --streams K, --destinations D, --height 720|1080, --fps 30|60, --switch-minutes M, --out DIR
@@ -976,9 +1005,11 @@ Overview lists it under "needs attention" from 70% (red from 90%) for the rest o
 Playout copies (smaller files the studio decodes) and profile copies (stream-ready files for copy mode)
 are made on demand and deleted by the web sweeper (every minute, 50 at a time) when nobody has played them
 for 30 days, or, never played, 30 days after they were made; failed ones go after 30 days too. The stored
-file goes with the row. A copy of a video that any live run plays (its stream's items, a schedule slot's
-list, or a key in the run's spec) is never deleted, because copy mode only looks its copies up when a run
-starts. A deleted copy is made again the next time a stream needs it. Copy sizes are recorded when made
+file goes with the row. A copy without overlays of a video that any live run plays (its stream's items, a
+schedule slot's list, or a key in the run's spec) is never deleted, because copy mode only looks its
+copies up when a run starts. Copies with overlays (`PROFILE_OVERLAY`, one per overlay set) aren't spared
+that way, or a stream whose logo moved would keep its old sets as long as it runs: a run playing them by
+copy records a play every 6 hours (`CopyRuns.TOUCH_EVERY`), and sets nobody has played for 30 days go. A deleted copy is made again the next time a stream needs it. Copy sizes are recorded when made
 (older copies are measured from storage a few a minute); admin Servers shows how many there are, their
 storage by kind, and how many are due for deletion.
 

@@ -247,7 +247,7 @@ public class PlayoutCopies {
                 "UPDATE media_playout_copies SET status = 'WORKING', claimed_at = ? WHERE id = ("
                         + " SELECT id FROM media_playout_copies WHERE status = 'PENDING' OR (status = 'WORKING' AND claimed_at < ?)"
                         + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)"
-                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, x264_preset",
+                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, x264_preset, overlay_set, overlay_spec",
                 Timestamp.from(claimedAt), Timestamp.from(claimedAt.minus(STALE_CLAIM)));
         if (claimed.isEmpty()) {
             return false;
@@ -274,7 +274,9 @@ public class PlayoutCopies {
         int w = ((Number) c.get("canvas_width")).intValue();
         int h = ((Number) c.get("canvas_height")).intValue();
         int fps = ((Number) c.get("fps")).intValue();
-        boolean profile = "PROFILE".equals(c.get("kind"));
+        boolean profile = "PROFILE".equals(c.get("kind")) || PROFILE_OVERLAY.equals(c.get("kind"));
+        String overlaySet = c.get("overlay_set") == null ? "" : (String) c.get("overlay_set");
+        String overlaySpec = (String) c.get("overlay_spec");
         String fit = (String) c.get("fit");
         double gainDb = ((Number) c.get("gain_tenths")).intValue() / 10.0;
         boolean hasAudio = !Boolean.FALSE.equals(media.getFirst().get("has_audio"));
@@ -287,10 +289,16 @@ public class PlayoutCopies {
         long size = 0;
         long started = System.nanoTime();
         Path out = null;
+        Path layerDir = null;
         try {
             out = Files.createTempFile("playout-", profile ? ".ts" : ".mp4");
+            Path layer = null;
+            if (profile && !overlaySet.isEmpty()) {
+                layerDir = Files.createTempDirectory("copy-overlays-");
+                layer = overlayLayer(overlaySpec, overlaySet, w, h, fps, layerDir);
+            }
             List<String> cmd = profile
-                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio, preset)
+                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio, preset, layer)
                     : command(storage.readLocation(original), out, w, h, fps, sourceFps);
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             current.process().set(p);
@@ -317,11 +325,14 @@ public class PlayoutCopies {
                     // temp file
                 }
             }
+            deleteTree(layerDir);
         }
-        // A profile copy records the preset it was made with (PLAYOUT copies are an intermediate: none).
+        // A profile copy records the preset it was made with (PLAYOUT copies are an intermediate: none), and the
+        // overlays it carries: only a copy that records its set is ever played for it.
         int saved = jdbc.update("UPDATE media_playout_copies SET status = ?, storage_key = ?, reason = ?, finished_at = now(), "
-                        + "x264_preset = ?, size_bytes = ? WHERE id = ? AND status = 'WORKING' AND claimed_at = ?",
-                key != null ? "READY" : "FAILED", key, reason, profile ? preset : null, key != null ? size : null, id, Timestamp.from(claimedAt));
+                        + "x264_preset = ?, size_bytes = ?, made_overlay_set = ? WHERE id = ? AND status = 'WORKING' AND claimed_at = ?",
+                key != null ? "READY" : "FAILED", key, reason, profile ? preset : null, key != null ? size : null,
+                key != null && profile ? overlaySet : null, id, Timestamp.from(claimedAt));
         if (saved != 1 && key != null) {
             deleteQuietly(key); // deleted or taken over meanwhile
         }
@@ -358,6 +369,10 @@ public class PlayoutCopies {
      * read (status, file and age), so a play recorded meanwhile keeps it, a copy being made again is left
      * alone, and with two web instances only one deletes it (and its file). Safe even so: a worker that still
      * had one in mind falls back to the original (StudioBuilder) and asks again.
+     * <p>
+     * Copies with overlays baked in (one per overlay set: the mark, a logo where it was) are not spared for
+     * their video being in a live run: a run whose logo moved would keep every old variant as long as it runs.
+     * They go by their own last play, which a run playing them refreshes every few hours ({@link #touch}).
      */
     public int deleteUnplayed() {
         Instant cutoff = Instant.now().minus(KEEP_UNPLAYED);
@@ -370,7 +385,7 @@ public class PlayoutCopies {
         }
         List<Map<String, Object>> old = jdbc.query(con -> {
             var ps = con.prepareStatement("SELECT id, status, storage_key FROM media_playout_copies WHERE status IN ('READY', 'FAILED') "
-                    + "AND COALESCE(last_played_at, finished_at, created_at) < ? AND NOT (media_id = ANY (?)) ORDER BY id LIMIT 50");
+                    + "AND COALESCE(last_played_at, finished_at, created_at) < ? AND NOT (overlay_set = '' AND media_id = ANY (?)) ORDER BY id LIMIT 50");
             ps.setTimestamp(1, Timestamp.from(cutoff));
             ps.setArray(2, con.createArrayOf("bigint", inUse));
             return ps;
@@ -505,6 +520,21 @@ public class PlayoutCopies {
      */
     public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
                                 boolean request) {
+        return profileKeyFor(originalKey, canvasWidth, canvasHeight, fps, fit, gainDb, "", null, request);
+    }
+
+    /** Profile copies with static overlays baked in (FO-2): their own kind, so a release before them never plays one. */
+    public static final String PROFILE_OVERLAY = "PROFILE_OVERLAY";
+
+    /**
+     * The profile copy with these static overlays drawn on it ({@code overlaySet}: their identity,
+     * {@link com.afklive.streamer.streaming.StaticOverlays#identity}, '' for none; {@code overlaySpec}: what
+     * to draw, as JSON, stored with the request for the web side that makes it). A copy only counts when its
+     * maker recorded drawing exactly this set, so a copy made by a release that can't draw overlays is made
+     * again rather than played without them.
+     */
+    public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
+                                String overlaySet, String overlaySpec, boolean request) {
         List<Long> ids = jdbc.queryForList("SELECT id FROM media_assets WHERE s3_key = ? AND content_type = 'VIDEO' LIMIT 1",
                 Long.class, originalKey);
         if (ids.isEmpty()) {
@@ -513,16 +543,19 @@ public class PlayoutCopies {
         long mediaId = ids.getFirst();
         String f = fit == null ? "FIT" : fit.toUpperCase(Locale.ROOT);
         int gain = (int) Math.round(gainDb * 10);
-        List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, status, storage_key, x264_preset FROM media_playout_copies "
-                + "WHERE media_id = ? AND kind = 'PROFILE' AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? "
-                + "AND gain_tenths = ?", mediaId, canvasWidth, canvasHeight, fps, f, gain);
+        String set = overlaySet == null ? "" : overlaySet;
+        String kind = set.isEmpty() ? "PROFILE" : PROFILE_OVERLAY;
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, status, storage_key, x264_preset, made_overlay_set FROM media_playout_copies "
+                + "WHERE media_id = ? AND kind = ? AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? "
+                + "AND gain_tenths = ? AND overlay_set = ?", mediaId, kind, canvasWidth, canvasHeight, fps, f, gain, set);
         if (rows.isEmpty()) {
             if (request) {
-                jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, x264_preset) "
-                        + "VALUES (?, 'PROFILE', ?, ?, ?, ?, ?, 'PENDING', ?) ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
-                        mediaId, canvasWidth, canvasHeight, fps, f, gain, encoder.preset());
-                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({}, x264 {})", mediaId, canvasWidth, canvasHeight, fps, f,
-                        encoder.preset());
+                jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, "
+                        + "x264_preset, overlay_set, overlay_spec) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?) "
+                        + "ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
+                        mediaId, kind, canvasWidth, canvasHeight, fps, f, gain, encoder.preset(), set, set.isEmpty() ? null : overlaySpec);
+                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({}, x264 {}{})", mediaId, canvasWidth, canvasHeight, fps, f,
+                        encoder.preset(), set.isEmpty() ? "" : ", overlays " + set.substring(0, Math.min(12, set.length())));
             }
             return null;
         }
@@ -538,6 +571,16 @@ public class PlayoutCopies {
             return null;
         }
         if (!"READY".equals(status) || storageKey == null) {
+            return null;
+        }
+        if (!set.isEmpty() && !set.equals(c.get("made_overlay_set"))) {
+            // Made by a release that doesn't draw overlays (mid-rollout): never played, made again.
+            if (request && jdbc.update("UPDATE media_playout_copies SET status = 'PENDING', storage_key = NULL, reason = NULL, "
+                    + "claimed_at = NULL, finished_at = NULL, x264_preset = ? WHERE id = ? AND status = 'READY' AND storage_key = ?",
+                    encoder.preset(), id, storageKey) == 1) {
+                deleteQuietly(storageKey);
+                log.info("Profile copy {} was made without its overlays; asked for it again", id);
+            }
             return null;
         }
         jdbc.update("UPDATE media_playout_copies SET last_played_at = now() WHERE id = ? "
@@ -585,6 +628,16 @@ public class PlayoutCopies {
      */
     public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
                                        double gainDb, boolean hasAudio, String x264Preset) {
+        return profileCommand(input, output, canvasWidth, canvasHeight, fps, fit, gainDb, hasAudio, x264Preset, null);
+    }
+
+    /**
+     * The profile copy with static overlays: {@code overlayLayer} is the layer the studio's compositor drew
+     * ({@link com.afklive.streamer.streaming.StaticOverlays#writeLayer}), put on every frame after the picture
+     * is placed on the canvas and before encoding, where the studio blends its overlays.
+     */
+    public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
+                                       double gainDb, boolean hasAudio, String x264Preset, Path overlayLayer) {
         com.afklive.streamer.streaming.studio.Canvas canvas = new com.afklive.streamer.streaming.studio.Canvas(canvasWidth, canvasHeight, fps, 44100);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit parsed = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit f = parsed == null ? com.afklive.streamer.streaming.studio.DecoderSource.Fit.FIT : parsed;
@@ -593,12 +646,17 @@ public class PlayoutCopies {
             cmd.addAll(List.of("/usr/bin/nice", "-n", "19"));
         }
         cmd.addAll(List.of(FFmpegCommandBuilder.ffmpegBinary(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", input));
-        String graph = com.afklive.streamer.streaming.studio.DecoderSource.videoChain(canvas, f, false);
+        int next = 1;
+        if (overlayLayer != null) {
+            cmd.addAll(com.afklive.streamer.streaming.StaticOverlays.layerInput(overlayLayer, canvas));
+            next++;
+        }
+        String graph = profileVideoGraph(canvas, f, overlayLayer != null);
         if (hasAudio) {
             graph += ";[0:a:0]" + com.afklive.streamer.streaming.studio.DecoderSource.audioChain(canvas, gainDb, false) + "[a]";
         } else {
             cmd.addAll(List.of("-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"));
-            graph += ";[1:a]anull[a]";
+            graph += ";[" + next + ":a]anull[a]";
         }
         cmd.addAll(List.of("-filter_complex", graph, "-map", "[v]", "-map", "[a]"));
         if (!hasAudio) {
@@ -609,6 +667,82 @@ public class PlayoutCopies {
         cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvasWidth, canvasHeight), fps, new EncoderSettings(x264Preset, 0)));
         cmd.addAll(List.of("-threads", "1", "-f", "mpegts", "-mpegts_flags", "+resend_headers", "-muxdelay", "0", output.toString()));
         return cmd;
+    }
+
+    /**
+     * The picture of a profile copy, ending in {@code [v]}: placed on the canvas exactly as the studio's
+     * decoder does it ({@code [0:v:0]}), then, with {@code overlays}, the layer from input 1 blended once over
+     * every frame (the layer is one frame, repeated). Public so a test can compare it with the studio.
+     */
+    public static String profileVideoGraph(com.afklive.streamer.streaming.studio.Canvas canvas,
+                                           com.afklive.streamer.streaming.studio.DecoderSource.Fit fit, boolean overlays) {
+        String chain = com.afklive.streamer.streaming.studio.DecoderSource.videoChain(canvas, fit, false);
+        if (!overlays) {
+            return chain;
+        }
+        if (!chain.endsWith("[v]")) {
+            throw new IllegalStateException("Unexpected video chain " + chain);
+        }
+        return chain.substring(0, chain.length() - 3) + "[base];"
+                + "[base][1:v]overlay=x=0:y=0:format=yuv420:eof_action=repeat,format=yuv420p[v]";
+    }
+
+    /** Draws a copy's overlays (the request's JSON) into a layer file, after checking they are the set asked for. */
+    private Path overlayLayer(String specJson, String overlaySet, int w, int h, int fps, Path dir) throws java.io.IOException {
+        if (specJson == null || specJson.isBlank()) {
+            throw new java.io.IOException("No overlays recorded for this copy");
+        }
+        List<com.afklive.streamer.streaming.StudioSpec.OverlaySetting> set = com.afklive.streamer.streaming.StudioSpec.parse(specJson,
+                new com.fasterxml.jackson.core.type.TypeReference<List<com.afklive.streamer.streaming.StudioSpec.OverlaySetting>>() { });
+        com.afklive.streamer.streaming.studio.Canvas canvas = new com.afklive.streamer.streaming.studio.Canvas(w, h, fps, 44100);
+        if (!overlaySet.equals(com.afklive.streamer.streaming.StaticOverlays.identity(set, canvas))) {
+            throw new java.io.IOException("The recorded overlays don't match their identity (drawn by another version?)");
+        }
+        Map<String, Path> images = new java.util.HashMap<>();
+        for (com.afklive.streamer.streaming.StudioSpec.OverlaySetting o : set) {
+            if (o.imageKey() != null && !images.containsKey(o.imageKey())) {
+                Path p = dir.resolve("image-" + images.size());
+                storage.downloadFileToPath(o.imageKey(), p);
+                images.put(o.imageKey(), p);
+            }
+        }
+        Path layer = dir.resolve("overlays.yuva");
+        com.afklive.streamer.streaming.StaticOverlays.writeLayer(set, images::get, canvas, layer);
+        return layer;
+    }
+
+    private static void deleteTree(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        try (var files = Files.walk(dir)) {
+            files.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (Exception ignored) {
+                    // temp file
+                }
+            });
+        } catch (Exception ignored) {
+            // temp dir
+        }
+    }
+
+    /**
+     * FO-6: a run playing by copy says, every few hours, that its copies are still played. Copy mode looks
+     * them up only when it starts, and copies with overlays aren't spared by "a live run plays this video"
+     * ({@link #deleteUnplayed}): a run's earlier overlay sets would otherwise be kept as long as it runs.
+     */
+    public void touch(List<String> storageKeys) {
+        if (storageKeys == null || storageKeys.isEmpty()) {
+            return;
+        }
+        String[] keys = storageKeys.toArray(new String[0]);
+        jdbc.update(con -> {
+            var ps = con.prepareStatement("UPDATE media_playout_copies SET last_played_at = now() WHERE storage_key = ANY (?)");
+            ps.setArray(1, con.createArrayOf("text", keys));
+            return ps;
+        });
     }
 
     /** Storage keys of a file's copies, to delete with it. */

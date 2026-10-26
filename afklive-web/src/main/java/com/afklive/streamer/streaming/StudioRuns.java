@@ -43,6 +43,8 @@ public class StudioRuns {
         final Path workDir;
         final Long streamId;
         volatile StudioSpec spec;
+        /** Overlays shown or hidden live (OVERLAY commands): the studio keeps these over the spec's, and so does {@link #spec}. */
+        final Map<String, Boolean> visibility = new java.util.concurrent.ConcurrentHashMap<>();
         long lastSaveNanos;
         String lastPosition;
         boolean closed;
@@ -132,6 +134,7 @@ public class StudioRuns {
             case OVERLAY -> {
                 Map<String, Object> m = StudioSpec.parse(c.getPayload(), new com.fasterxml.jackson.core.type.TypeReference<>() { });
                 studio.setOverlayVisible(String.valueOf(m.get("id")), Boolean.TRUE.equals(m.get("visible")));
+                h.visibility.put(String.valueOf(m.get("id")), Boolean.TRUE.equals(m.get("visible")));
             }
             case FINISH_PASS -> {
                 if (h.built.playlist() != null) {
@@ -244,9 +247,25 @@ public class StudioRuns {
         return p.itemId() == null ? null : new StudioSpec.Position(p.itemId(), p.offsetSeconds(), p.loopsCompleted());
     }
 
-    /** The run's settings as they are now, live changes included. */
+    /**
+     * The run's settings as they are now, live changes included: an overlay shown or hidden live is as the
+     * studio shows it (FO-2: copy mode bakes the shown static overlays into its copies).
+     */
     public StudioSpec spec(Handle h) {
-        return h.spec;
+        StudioSpec s = h.spec;
+        if (h.visibility.isEmpty() || s.overlays() == null) {
+            return s;
+        }
+        List<StudioSpec.OverlaySetting> overlays = new ArrayList<>();
+        for (StudioSpec.OverlaySetting o : s.overlays()) {
+            Boolean v = h.visibility.get(o.id());
+            overlays.add(v == null || v == o.visible() ? o : new StudioSpec.OverlaySetting(o.id(), o.type(), v, o.x(), o.y(),
+                    o.width(), o.size(), o.text(), o.imageMediaId(), o.imageKey(), o.color(), o.background(), o.opacity(),
+                    o.timeZone(), o.target(), o.speed(), o.scene()));
+        }
+        return new StudioSpec(s.height(), s.vertical(), s.fps(), s.source(), s.videos(), s.order(), s.loops(), s.music(),
+                s.musicOrder(), s.audioMode(), s.videoVolume(), s.musicVolume(), overlays, s.scenes(), s.initialScene(),
+                s.timeZone(), s.resume(), s.phone(), s.finishAfterPass(), s.fit(), s.crossfadeSeconds());
     }
 
     public void close(Handle h) {
