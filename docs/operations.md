@@ -200,7 +200,7 @@ chmod 0440 /etc/sudoers.d/afklive-web-deploy && visudo -c   # DEPLOY_USER: the u
 ```
 
 From then on every push deploys without downtime, alternating between slots a and b (the workflow
-uploads to `/opt/afklive/incoming/web/`). Re-run step 4 whenever the script changes. The old
+uploads to `/opt/afklive/incoming/web/`, only what changed: "Deploy uploads" below). Re-run step 4 whenever the script changes. The old
 `afklive.service` stays installed but disabled. To undo: `systemctl enable --now afklive` (it takes
 port 8080, so first `systemctl disable --now afklive-web@a` if a runs), then
 `systemctl disable --now afklive-web@b`, restore `/etc/caddy/Caddyfile.before-ops4` and reload Caddy,
@@ -455,6 +455,52 @@ Useful: `sudo /opt/afklive/scripts/worker-handover-deploy.sh --status` (which sl
 owns); `journalctl -u afklive-worker@b -f`. To deploy a specific commit (or roll back), give its SHA
 in the workflow's `ref` input; it is built, tested and handed over the same way. Worker and web deploys
 share one GitHub concurrency group (`production-deploy`), so they never run at the same time.
+
+## Deploy uploads: only what changed
+
+**Both deploy workflows send only the parts of `app.jar` that changed since the jar already on the
+server: about 2 MB after a code or UI change instead of the whole ~110 MB.** The jar is built the same
+way, lands in the same place and runs the same way; the deploy scripts, slots and rollback are
+untouched.
+
+`afklive-scripts/upload-jar.sh` runs rsync over ssh (same `DO_HOST`, `DO_USER`, `DO_SSH_KEY` secrets)
+onto the jar the previous deploy left in the target folder (`web-deploy.sh` and
+`worker-handover-deploy.sh` copy it into a slot and leave it there). About 100 MB of the jar is
+libraries stored uncompressed in `BOOT-INF/lib`, identical from build to build, so rsync's delta
+transfer finds them in the old jar and sends only the changed classes and assets plus checksums. The new
+file is written next to the old one and renamed over it, so a process that has the old jar open keeps
+reading the old one. rsync checks the result, and the script compares SHA-256 on both sides.
+
+| Upload of `app.jar` (112 MB) after… | Bytes sent |
+| --- | --- |
+| Nothing on the server yet (first run) | ~98 MB (the whole jar, compressed) |
+| A one-line Java change | 1.85 MB (1.78 MB sent + 74 KB of checksums) |
+| A one-line UI change | 1.92 MB |
+| The same jar again | 74 KB |
+
+| Folder (workflow) | Jar the delta starts from |
+| --- | --- |
+| `/opt/afklive/incoming/web/` (web) | The previous web deploy's jar |
+| `/opt/afklive/worker/incoming/` (worker, `handover`) | The previous handover's jar |
+| `/opt/afklive/worker/` (worker, `restart`) | The running legacy worker's jar (renamed over, not overwritten) |
+
+**Fallback.** If the delta upload can't run (rsync isn't installed on the server, the folder isn't
+writable by the deploy user, ssh trouble), the step fails with a warning and the workflow copies the
+whole jar the old way (`appleboy/scp-action`), then deploys as usual. Manual runs have an `upload` input:
+`delta` (default) or `full` (the old copy, always). Like the actions it sits next to, the script doesn't
+pin the server's host key.
+
+One-time server step (nothing breaks without it; the workflow just keeps copying the whole jar):
+
+```sh
+command -v rsync || sudo apt-get install -y rsync    # Ubuntu droplet images usually have it
+# The deploy user must be able to create files in each upload folder (rsync renames the new jar into place):
+sudo -u DEPLOY_USER test -w /opt/afklive/incoming/web && sudo -u DEPLOY_USER test -w /opt/afklive/worker/incoming && echo ok
+```
+
+Not done, possible follow-ups: start the JVM faster with a CDS / AOT cache (`-XX:AOTCache`, built once
+per release on the server); leave `lombok` (compile-time only, 2 MB) out of the jar. The AWS Lambda SDK
+(2.2 MB) is still used, by `VideoConversionService` when `app.aws.function-name` is set, so it stays.
 
 ## Capacity guard (GL-7, RE-10)
 
