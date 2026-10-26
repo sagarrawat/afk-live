@@ -279,7 +279,11 @@ export interface CopyStats {
   keepDays: number;
 }
 
-const KIND = { PLAYOUT: 'Smaller copies (studio)', PROFILE: 'Stream-ready copies (copy mode)' } as Record<string, string>;
+const KIND = {
+  PLAYOUT: 'Smaller copies (studio)',
+  PROFILE: 'Stream-ready copies (copy mode)',
+  PROFILE_OVERLAY: 'Stream-ready copies with a logo or the Free mark (copy mode, one set per look)',
+} as Record<string, string>;
 
 export function CopiesPanel() {
   const q = useQuery({ queryKey: ['admin', 'copies'], queryFn: () => get<CopyStats>('/api/admin/copies'), refetchInterval: 300000 });
