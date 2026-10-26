@@ -227,6 +227,7 @@ public class StreamService {
         job.setStatus(StreamStates.STARTING);
         job.setDesiredState(StreamStates.RUN);
         job.setSpec(spec.toJson());
+        job.setPlacement(com.afklive.streamer.streaming.WorkerPools.placementOf(spec)); // FO-8: which workers may claim it
         for (int i = 0; i < destinations.size(); i++) {
             job.getDestinations().add(new StreamJobDestination(job, i, destinations.get(i).name()));
         }

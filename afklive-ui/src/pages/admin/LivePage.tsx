@@ -207,6 +207,7 @@ export function LivePage() {
                 </td>
                 <td className="whitespace-nowrap px-2.5 py-2">
                   <span className="block">{r.worker ?? 'Unassigned'}</span>
+                  {r.pool ? <span className="block text-xs text-muted">Pool {r.pool}</span> : null}
                   <span className="tnum text-xs text-muted">{r.heartbeatAgeSeconds == null ? '' : `${r.heartbeatAgeSeconds}s ago`}</span>
                 </td>
                 <td className="sticky right-0 whitespace-nowrap bg-panel px-2.5 py-2 shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.5)]">
@@ -244,6 +245,7 @@ export function LivePage() {
                   FPS <Fps r={r} />
                 </span>
                 <span>{r.plan}</span>
+                {r.pool ? <span>Pool {r.pool}</span> : null}
               </span>
             </Link>
             {(r.destinationHealth ?? []).length > 0 && (

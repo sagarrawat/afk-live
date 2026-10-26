@@ -231,6 +231,16 @@ less is enough for most content. Confirm on real gameplay and music footage befo
 
 Both depend on OPS-3 (draining without interruption) and FO-3 (knowing the cost).
 
+**FO-8 groundwork, as built** (branch `feature/worker-pools`, changeset 155): workers report a pool
+(`STREAMING_WORKER_POOL`, default `main`); runs carry a placement (PHONE, PLAYOUT, PLAYLIST, OTHER). The
+claim, takeover and handover-claim updates match on it: phone runs (and runs of unknown kind) only on
+`STREAMING_PHONE_POOLS`; preferred kinds (`STREAMING_POOL_PREFERENCE`) wait up to 30 s for an available
+worker of their pool, otherwise anyone takes them. Defaults behave exactly as before. Remote workers reach
+the database over WireGuard and media over S3/R2; `provision-remote-worker.sh` sets one up (arm64 or
+amd64), and the worker deploy workflow can deploy extra hosts one at a time (opt-in). Operations:
+`docs/operations.md` ("Worker pools"). Not done yet: the FO-7 scheduler, placement by region, moving
+running streams between pools other than through a deploy or an admin move.
+
 ## Order of delivery
 
 1. **In review now:** #162 (key checks), #163 (CPU), #164 (roadmap), #160 (admin).

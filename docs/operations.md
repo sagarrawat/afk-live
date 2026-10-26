@@ -229,6 +229,9 @@ put MediaMTX back, remove `/opt/afklive/scripts/web-deploy.sh` (the workflow the
 | `STREAMING_HANDOVER_RETURN_TO_PRIMARY` | `true` | After a handover, move YouTube destinations from the backup ingest back to the primary (make-before-break, same encoder) |
 | `APP_STREAMING_X264PRESET` | `superfast` | x264 speed preset of the live encoder (below). Set the same value on workers and web |
 | `APP_STREAMING_X264THREADS` | `0` | Threads per live encoder; `0` lets x264 decide (below) |
+| `STREAMING_WORKER_POOL` | `main` | FO-8: the pool this worker belongs to (shown in Admin > Servers). See "Worker pools" |
+| `STREAMING_PHONE_POOLS` | `main` | FO-8: pools whose workers can read the phone ingest server; only they run phone streams. Empty: every pool. Same value on every worker |
+| `STREAMING_POOL_PREFERENCE` | empty | FO-8: preferred pool per kind of run, e.g. `PLAYOUT=playout,PLAYLIST=playout`. Same value on every worker |
 
 ## Live encoder
 
@@ -519,7 +522,147 @@ Destinations are validated to be public, but FFmpeg resolves hosts again when co
 worker as its own user and load `afklive-scripts/worker-egress.nft`, which blocks that user from
 private, loopback and cloud-metadata addresses. Edit the allowed entries (database, DNS resolver, Loki, storage) for
 your setup first. The role, profiles and worker id are passed as `-D` properties in the units, so
-`afklive.env` can't accidentally override them.
+`afklive.env` can't accidentally override them. Remote workers (FO-8) get their own version from
+`afklive-scripts/provision-remote-worker.sh`: the database and Loki over the WireGuard tunnel, the local DNS
+resolver, nothing else private (see "Worker pools").
+
+## Worker pools: extra workers on other providers (FO-8)
+
+**Extra workers can run on other providers (Oracle Cloud's Always Free ARM server: 4 cores, 24 GB, 10 TB
+of traffic a month; Hetzner: 20 TB included) and take the 24/7 playlists, where traffic is cheap; phone
+streams stay on the main server, next to the ingest server.** With the defaults (one pool, `main`, no
+preference) nothing changes: every worker takes every stream, as before.
+
+**How streams are placed.** Every worker belongs to a pool (`STREAMING_WORKER_POOL`) and reports it in
+`stream_workers.pool`. Every run records its kind in `stream_jobs.placement`:
+
+| Placement | What it is | Who may run it |
+| --- | --- | --- |
+| `PHONE` | Reads a phone's feed from the ingest server (MediaMTX) | Only pools in `STREAMING_PHONE_POOLS` (default `main`) |
+| (none) | A run created by an older web version, until its worker records the kind | Same as `PHONE` |
+| `PLAYOUT` | A playlist that can play by copy (FO-2: nothing drawn or mixed live) | Any pool; prefers its pool in `STREAMING_POOL_PREFERENCE` |
+| `PLAYLIST` | A playlist that needs the studio (overlays, music bed, scenes) | Same |
+| `OTHER` | A classic single-file run | Same |
+
+The web app sets the placement when it creates a run; the owning worker re-derives it from the run's spec
+once a minute (live edits can change it) and fills it in for runs created before pools existed.
+
+The rules are part of the claim itself (`StreamJobRepository.claimFor`, `takeOverFor`, `claimHandoverFor`:
+one conditional update, as before), so a stale lookup can never claim a run its worker mustn't run, and two
+workers never both get one:
+
+- **Hard rule:** a worker whose pool isn't in `STREAMING_PHONE_POOLS` never claims, takes over or accepts a
+  handover of a `PHONE` run or one without a placement, however long it has waited.
+- **Preference:** a worker outside the preferred pool leaves a preferred run alone while a worker of that
+  pool is available: reported in the last 30 s, not draining, a free slot (`streams < capacity`) and CPU
+  below its claim threshold. If the pool is full, busy, draining or absent, it claims at once; if the
+  preferred pool hasn't taken the run within 30 s, anyone may. Applies to new runs and to handover offers
+  (so a remote host's deploy hands its streams to its own new version, and a main-server deploy can move
+  24/7 playlists to the playout pool). Orphans (a worker died) are rescued by any allowed pool at once.
+
+Set `STREAMING_PHONE_POOLS` and `STREAMING_POOL_PREFERENCE` to the **same values on every worker**
+(each worker applies its own copy of the rules). Admin > Servers shows each worker's pool; Admin > Live
+shows the pool of the worker running each stream.
+
+### What a remote worker needs
+
+| Need | How | Notes |
+| --- | --- | --- |
+| The database | **WireGuard tunnel** to the main server (below). PostgreSQL listens on the tunnel address only | Alternative: PostgreSQL with TLS (`hostssl`, `scram-sha-256`) and a firewall allow-list of the worker's IP, `SPRING_DATASOURCE_URL=jdbc:postgresql://HOST:5432/afklive?sslmode=verify-full&reWriteBatchedInserts=true`. More moving parts and an open port; prefer WireGuard |
+| Library files | `STORAGE_TYPE=s3` with DigitalOcean Spaces or Cloudflare R2 (`DO_SPACES_*`); `MediaCache` fetches what a run needs | A remote worker can't read the main server's local disk: **with `STORAGE_TYPE=local` don't run remote workers** |
+| Stream keys | `APP_ENCRYPTION_KEY` (and `APP_ENCRYPTION_OLD_KEYS`) as on the main server | It decrypts every stream key it runs: the remote server must be as trusted as the main one (SSH keys only, unattended upgrades on) |
+| Platforms | Outbound RTMP/RTMPS/SRT to the internet | The egress firewall below keeps it off private and metadata addresses |
+| Phone ingest | Not needed: remote pools don't run phone streams | To let a pool run them, add it to `STREAMING_PHONE_POOLS` and give it a read address over the tunnel (`INGEST_READ_URL=rtmp://10.77.0.1:1935/...`, `INGEST_READ_ALLOWED` on the web side incl. `10.77.0.0/24`). Latency to India matters for phones |
+| Logs | Loki over the tunnel (`LOKI_URL=http://10.77.0.1:3100/...`), or drop `loki` from the unit's profiles | Loki on the main server must listen on the tunnel address too |
+| Deploy token | Its own `WORKER_CONTROL_TOKEN` (generated by the script; used only on that host) | |
+
+The same `APP_STREAMING_X264PRESET` on every worker (profile copies are made for that preset). Copy mode
+(`APP_STREAMING_COPYMODE`) is per worker: turn it on on the playout pool after a soak there.
+
+**ARM (arm64).** The worker is pure Java (no native libraries; Spring Boot, the PostgreSQL driver and the
+AWS SDK are all JVM code) plus FFmpeg as a separate process. It uses only `libx264` and FFmpeg's built-in
+filters and formats, no hardware encoders or x86-only flags, and passes audio as explicit `s16le`, so
+Ubuntu's own `ffmpeg` and `openjdk-21-jre-headless` on arm64 run it unchanged. Two things to watch: the
+app prefers `./bin/ffmpeg` in its working directory over the system one, so never copy a static x86 FFmpeg
+there (the provisioning script warns); and x264 on an Ampere A1 core is slower than on a modern x86 core, so
+size `STREAMING_WORKER_MAX_STREAMS` from a soak on that machine (`afklive-scripts/soak.sh`) and use the ARM
+pool for copy-mode playout, where CPU barely matters. CI builds and tests on x86 only; arm64 is proved by the
+soak on the first ARM worker.
+
+### Add an Oracle or Hetzner worker (step by step)
+
+On the **main server** (as root), once: the tunnel's server side.
+
+```sh
+apt-get install -y wireguard-tools
+umask 077; wg genkey > /etc/wireguard/afklive.key; wg pubkey < /etc/wireguard/afklive.key   # note the public key
+cat > /etc/wireguard/wg-afklive.conf <<EOF
+[Interface]
+Address = 10.77.0.1/24
+ListenPort = 51820
+PrivateKey = $(cat /etc/wireguard/afklive.key)
+EOF
+systemctl enable --now wg-quick@wg-afklive
+ufw allow 51820/udp            # better: from the worker's address only: ufw allow from WORKER_IP to any port 51820 proto udp
+# PostgreSQL: also listen on the tunnel, and only the tunnel's peers may log in (password as for the web app)
+#   postgresql.conf: listen_addresses = 'localhost,10.77.0.1'
+#   pg_hba.conf:     host afklive afklive 10.77.0.0/24 scram-sha-256
+systemctl restart postgresql   # a second or two; web and workers reconnect on their own
+# Keep 5432 closed to the internet (ufw default deny); the tunnel is the only way in.
+```
+
+On the **new server** (Ubuntu 24.04, arm64 or amd64), with a checkout of `afklive-scripts`:
+
+```sh
+sudo ./provision-remote-worker.sh --dry-run --pool playout \
+     --main-wg-endpoint MAIN_PUBLIC_IP:51820 --main-wg-pubkey 'MAIN_PUBLIC_KEY' \
+     --wg-address 10.77.0.2/24 --max-streams 4 --deploy-key 'ssh-ed25519 AAAA... afklive-deploy'
+# Read what it would do, then run it without --dry-run. It prints this server's WireGuard public key.
+```
+
+It installs Java 21, FFmpeg (checks it has libx264), WireGuard and nftables; creates the `afklive-worker`
+user, the `deploy` user (allowed to run only the handover script with sudo), the slot units, the handover
+script, `/opt/afklive/afklive.env` (pool, database over the tunnel; secrets left empty) and the worker
+egress firewall (`/etc/nftables.d/afklive-worker-egress.nft`: the worker user reaches the database and Loki
+over the tunnel and the local DNS resolver, nothing else private, no cloud metadata at 169.254.169.254;
+platforms and object storage are public and stay allowed). Re-running keeps keys and settings.
+
+Then:
+
+1. **Main server:** add the peer it printed to `/etc/wireguard/wg-afklive.conf`
+   (`[Peer]`, `PublicKey = ...`, `AllowedIPs = 10.77.0.2/32`) and `systemctl restart wg-quick@wg-afklive`.
+   Check from the new server: `ping 10.77.0.1`, `pg_isready -h 10.77.0.1` (package `postgresql-client`).
+2. **New server:** fill in the empty secrets in `/opt/afklive/afklive.env` from the main server's file
+   (copy them over SSH; never paste them anywhere else).
+3. **Every worker, main included:** set the rules and restart them (on the main server with a normal worker
+   deploy): `STREAMING_PHONE_POOLS=main` and, to send 24/7 playlists to the new pool,
+   `STREAMING_POOL_PREFERENCE=PLAYOUT=playout` (add `,PLAYLIST=playout` to send studio playlists too). The
+   main server needs no `STREAMING_WORKER_POOL` (default `main`).
+4. **GitHub secrets** (repository settings): `WORKER_HOSTS` = `deploy@NEW_SERVER_IP` (several: separated by
+   spaces or new lines; `host:port` for another SSH port); `WORKER_HOSTS_KNOWN_HOSTS` = the output of
+   `ssh-keyscan -H NEW_SERVER_IP`, after checking the fingerprint against the server's own
+   (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on it); `WORKER_HOSTS_SSH_KEY` if the deploy key
+   differs from `DO_SSH_KEY`.
+5. **First deploy:** Actions > Deploy stream worker with hosts `extra` and method `restart` (nothing runs
+   there yet). From then on, `main+extra` with `handover` deploys the main server and then each extra host
+   in turn, each without interruption; `main` (the default) leaves the extra hosts alone.
+6. Watch Admin > Servers: the new worker appears with "Pool playout"; new 24/7 playlists start there, phone
+   streams never do. Before moving many streams, run the soak on it (`afklive-scripts/soak.sh`) and set
+   `STREAMING_WORKER_MAX_STREAMS` from the result.
+
+**Costs.** Nothing changes until a remote worker is added. Oracle Always Free: no charge (Oracle may
+reclaim an Always Free server it considers idle; keep it busy or use a paid shape). Hetzner ARM (CAX21,
+4 vCPU / 8 GB, 20 TB included): a few euros a month (check the current price). Add the bill to
+`APP_MONTHLY_SERVER_COST` and the included traffic to `APP_INCLUDED_TRANSFER_GB` (FO-3/FO-5 count all
+servers together). WireGuard adds no cost and about 60 bytes per packet of database traffic only (stream
+traffic goes straight to the platforms).
+
+**Remove a remote worker:** on it, ask the running slot to drain, so its streams move to other workers one
+at a time without interruption: `curl -X POST -H "X-Worker-Token: TOKEN" http://127.0.0.1:8081/internal/worker/drain`
+(token from its `afklive.env`; port 8082 for slot b; `sudo /opt/afklive/scripts/worker-handover-deploy.sh
+--status` shows which slot runs and what it still owns). When it owns nothing, stop and disable its unit.
+Just stopping it also works: other workers take its streams over within 45 s (a short reconnect). Then
+remove it from `WORKER_HOSTS` and its peer from the main server's WireGuard config.
 
 ## Phone streaming: the ingest server
 

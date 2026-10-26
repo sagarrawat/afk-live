@@ -211,6 +211,28 @@ public class StreamWorker {
                 Duration.ofSeconds(Math.max(1, readySeconds)), d.beatStale());
     }
 
+    // ------------------------------------------------ FO-8: pools
+    private volatile WorkerPools pools = WorkerPools.defaults();
+    /** How often the owner re-derives a run's placement from its (live-edited) spec. */
+    static final Duration PLACEMENT_EVERY = Duration.ofSeconds(60);
+
+    /** Pool and claim rules from configuration (defaults: pool "main", phone runs on "main", no preference). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void configurePools(@Value("${app.streaming.worker.pool:main}") String pool,
+                               @Value("${app.streaming.pools.ingest:main}") String ingestPools,
+                               @Value("${app.streaming.pools.preference:}") String preference) {
+        this.pools = WorkerPools.of(pool, ingestPools, preference);
+        if (!pools.mayReadIngest() || !pools.preference().isEmpty() || !WorkerPools.MAIN.equals(pools.pool())) {
+            log.info("Worker pool {}: phone streams {}, preferences {}", pools.pool(),
+                    pools.mayReadIngest() ? "allowed" : "never (pools " + pools.ingestPools() + " only)", pools.preference());
+        }
+    }
+
+    /** For tests: pool and claim rules. */
+    public void setPools(WorkerPools pools) {
+        this.pools = pools;
+    }
+
     /** For tests: handover timings. */
     public void setHandoverSettings(Handover.Settings settings) {
         this.handoverSettings = settings;
@@ -420,6 +442,7 @@ public class StreamWorker {
                     if (!draining) {
                         maybeMoveToCopy(r); // a draining worker leaves that to the new version
                     }
+                    keepPlacement(job, r);
                     StudioRuns.Handle h = r.studio;
                     if (h != null) {
                         try {
@@ -453,9 +476,12 @@ public class StreamWorker {
         // 2. New streams, then 3. other workers' streams that stopped reporting. A draining worker leaves new
         // streams to the new version, unless they've waited long (the new version died: late beats never), and
         // still rescues orphans (whatever it takes on, it offers again like the rest).
+        // FO-8: both lookups and the claims themselves apply this worker's pool rules (default: none).
         {
             boolean busy = ownedCount() > 0 && cpuBusy();
-            for (Long id : jobs.findUnclaimedIds(workerId, now.minusMinutes(1))) {
+            WorkerPools.Claim rules = pools.claim(now, maxCpuToClaim);
+            ZonedDateTime avoidUntil = now.minusMinutes(1);
+            for (Long id : jobs.findClaimableIds(workerId, avoidUntil, rules)) {
                 Running r = running.get(id);
                 if (r != null && r.incoming) {
                     // Its worker let go of it (shut down, or an admin moved it) mid-handover: our copy is already on air.
@@ -470,12 +496,12 @@ public class StreamWorker {
                 if ((busy || draining) && !waitedLong(id, now)) {
                     continue; // leave it to a less busy worker (or the new version) for now
                 }
-                if (r == null && jobs.claim(id, workerId, now) == 1) {
+                if (r == null && jobs.claimFor(id, workerId, now, avoidUntil, rules) == 1) {
                     jobs.findById(id).ifPresent(j -> start(j, now));
                 }
             }
             ZonedDateTime cutoff = now.minus(StreamService.HEARTBEAT_TIMEOUT);
-            for (Long id : jobs.findOrphanIds(cutoff, workerId)) {
+            for (Long id : jobs.findOrphanIdsFor(cutoff, workerId, rules.mayIngest())) {
                 Running r = running.get(id);
                 if (r != null && r.incoming) {
                     // The owner died mid-handover: our copy, already on air, takes over.
@@ -488,7 +514,7 @@ public class StreamWorker {
                 if (running.size() >= maxStreams) {
                     break;
                 }
-                if (r == null && jobs.takeOver(id, workerId, now, cutoff) == 1) {
+                if (r == null && jobs.takeOverFor(id, workerId, now, cutoff, rules.mayIngest()) == 1) {
                     log.warn("Took over stream {} from a worker that stopped reporting", id);
                     jobs.findById(id).ifPresent(j -> start(j, now));
                 }
@@ -510,6 +536,27 @@ public class StreamWorker {
         }
         firstPassDone = true;
         lastSuccessfulTickNanos = System.nanoTime();
+    }
+
+    /**
+     * FO-8: keeps the run's placement (what claim rules match on) current. The web app sets it when it creates
+     * the run; live edits (an overlay added, say) can change it, and runs created before pools existed have
+     * none. Checked once a minute per run; written only when it differs.
+     */
+    private void keepPlacement(StreamJob job, Running r) {
+        long nowNanos = System.nanoTime();
+        if (r.placementCheckedNanos != 0 && nowNanos - r.placementCheckedNanos < PLACEMENT_EVERY.toNanos()) {
+            return;
+        }
+        r.placementCheckedNanos = nowNanos;
+        try {
+            String placement = WorkerPools.placementOf(job.getSpec());
+            if (placement != null && !placement.equals(job.getPlacement())) {
+                jobs.savePlacement(job.getId(), workerId, placement);
+            }
+        } catch (Exception e) {
+            log.debug("Couldn't save the placement of {}: {}", job.getId(), e.getMessage());
+        }
     }
 
     /** CPU use of the whole machine, smoothed over a few ticks so one spike doesn't turn work away. */
@@ -664,11 +711,12 @@ public class StreamWorker {
         }
         long nowNanos = System.nanoTime();
         failedHandovers.values().removeIf(t -> nowNanos - t > FAILED_HANDOVER_COOLDOWN.toNanos());
-        for (Long id : jobs.findHandoverOfferIds(workerId)) {
+        WorkerPools.Claim rules = pools.claim(now, maxCpuToClaim); // FO-8: a remote pool's deploy hands its streams to its own new version
+        for (Long id : jobs.findHandoverOfferIdsFor(workerId, rules)) {
             if (running.containsKey(id) || failedHandovers.containsKey(id)) {
                 continue;
             }
-            if (jobs.claimHandover(id, workerId, now) == 1) {
+            if (jobs.claimHandoverFor(id, workerId, now, rules) == 1) {
                 StreamJob job = jobs.findById(id).orElse(null);
                 if (job == null) {
                     jobs.abandonHandoverClaim(id, workerId);
@@ -1348,6 +1396,11 @@ public class StreamWorker {
         return maxStreams;
     }
 
+    /** FO-8: this worker's pool and the claim rules it applies. */
+    public WorkerPools pools() {
+        return pools;
+    }
+
     // ------------------------------------------------------------------ one running stream
 
     private record DestinationState(String status, int restarts, String error) {
@@ -1381,6 +1434,8 @@ public class StreamWorker {
         volatile boolean switching;
         final List<com.afklive.streamer.model.StreamCommand> deferred = new java.util.ArrayList<>();
         long nextCopyCheckNanos;
+        /** FO-8: when this run's placement was last checked against its spec (0: not yet). */
+        long placementCheckedNanos;
         /** Commands this worker applied recently (bounded). */
         final java.util.Set<Long> appliedCommands = java.util.Collections.newSetFromMap(new java.util.LinkedHashMap<>() {
             @Override
