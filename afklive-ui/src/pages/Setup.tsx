@@ -3,7 +3,7 @@ import { PushPrompt } from '@/components/PushPrompt';
 import clsx from 'clsx';
 import { CircleCheck, ListVideo, Loader2, Smartphone, TriangleAlert, Upload as UploadIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { destinationUrl, readKey } from '@/components/AddDestination';
 import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { MediaPicker } from '@/components/MediaPicker';
@@ -17,6 +17,7 @@ import { browserTimeZone } from '@/lib/format';
 import { keys, useInvalidate, useMe, useStream } from '@/lib/queries';
 import type { Destination, LiveState, MediaItem, StreamView } from '@/lib/types';
 import { useUploads } from '@/lib/uploads-context';
+import type { Progress } from '@/lib/upload';
 import { PhoneTab } from './stream/PhoneTab';
 
 /** ON-2: live in under five minutes. Three steps, each skippable; ends live or as a saved draft. */
@@ -86,6 +87,37 @@ function ChooseSource({ onCreated }: { onCreated: (id: number) => void }) {
         Stream from a free phone app. We add overlays and keep you on air when your signal drops. No subscriber minimum.
       </Choice>
     </div>
+  );
+}
+
+/** One upload in setup. UX audit #17: a failure says why, with Try again (and Free up space when storage is full). */
+export function SetupUploadRow({ name, progress: p, onRetry }: { name: string; progress: Progress; onRetry: () => void }) {
+  return (
+    <li>
+      <div className="flex items-center justify-between gap-3">
+        <span className="truncate">{name}</span>
+        {p.state === 'failed' ? (
+          <Button size="sm" variant="ghost" onClick={onRetry}>
+            Try again
+          </Button>
+        ) : (
+          <span className="tnum text-muted">{p.state === 'done' ? 'Uploaded' : `${Math.round((p.sent / Math.max(1, p.total)) * 100)}%`}</span>
+        )}
+      </div>
+      {p.state === 'failed' && (
+        <p className="text-bad">
+          Didn&apos;t upload. {p.error ?? 'Try again.'}
+          {/storage|space/i.test(p.error ?? '') && (
+            <>
+              {' '}
+              <Link to="/studio/library" className="text-accent hover:underline">
+                Free up space
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+    </li>
   );
 }
 
@@ -209,10 +241,7 @@ function Content({ streamId, onNext }: { streamId: number; onNext: () => void })
       {uploads.entries.length > 0 && (
         <ul className="mt-4 space-y-1.5 text-sm">
           {uploads.entries.map((e) => (
-            <li key={e.key} className="flex justify-between gap-3">
-              <span className="truncate">{e.file.name}</span>
-              <span className="tnum text-muted">{e.progress.state === 'done' ? 'Uploaded' : e.progress.state === 'failed' ? 'Failed' : `${Math.round((e.progress.sent / Math.max(1, e.progress.total)) * 100)}%`}</span>
-            </li>
+            <SetupUploadRow key={e.key} name={e.file.name} progress={e.progress} onRetry={() => uploads.retry(e.key)} />
           ))}
         </ul>
       )}

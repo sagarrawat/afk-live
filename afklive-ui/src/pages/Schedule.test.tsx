@@ -210,4 +210,30 @@ describe('Schedule calendar', () => {
     expect(put.url).toBe('/api/streams/1/schedules/10');
     expect(put.body).toMatchObject({ kind: 'DAILY', startTime: '19:00', endTime: '21:00', timeZone: 'America/Los_Angeles', enabled: true, skipDates: ['2026-11-04', '2026-12-25'] });
   });
+
+  it('on a wide screen, an empty week says what to do next, and Add a time asks which stream (UX audit #18)', async () => {
+    wideScreen(true);
+    const calls = mockApi({ ...week, occurrences: [], clashes: [] });
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/streams/2' && (init?.method ?? 'GET') === 'GET') {
+        const stream = { id: 2, name: 'Kirtan', source: 'PLAYLIST', timeZone: 'Asia/Kolkata', live: { state: 'DRAFT' }, schedules: [], playlist: [], music: [], overlays: [], scenes: [], destinations: [] };
+        return new Response(JSON.stringify(stream), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return base(input, init);
+    });
+    window.history.pushState({}, '', '/studio/schedule');
+    render(<App client={makeQueryClient()} />);
+    expect(await screen.findByText(/Nothing scheduled this week/)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a time' })[0]);
+    const pick = await screen.findByRole('dialog', { name: 'Add a time' });
+    expect(within(pick).getByRole('button', { name: 'Next' })).toBeDisabled();
+    fireEvent.click(within(pick).getByRole('radio', { name: 'Kirtan' }));
+    fireEvent.click(within(pick).getByRole('button', { name: 'Next' }));
+    // The stream's own schedule dialog, ready to save a new time.
+    const dialog = await screen.findByRole('dialog', { name: 'Add a time' });
+    expect(await within(dialog).findByRole('button', { name: 'Save schedule' })).toBeInTheDocument();
+    expect(calls.some((c) => c.url === '/api/schedules/calendar?from=2026-11-02&days=7')).toBe(true);
+  });
 });

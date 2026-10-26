@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { TimeZoneSelect } from '@/components/TimeZoneSelect';
 import { Button, Field, Input, Panel, Select, Spinner, useAction } from '@/components/ui';
 import { patch } from '@/lib/api';
 import { browserTimeZone, guessCurrency } from '@/lib/format';
 import { keys, useInvalidate, useMe } from '@/lib/queries';
-
-function zones(): string[] {
-  try {
-    return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
-  } catch {
-    return [];
-  }
-}
 
 /** ON-3: name, time zone and currency (detected, editable). */
 export function ProfileSettings() {
@@ -27,7 +21,6 @@ export function ProfileSettings() {
     setCurrency(me.currency ?? guessCurrency());
   }, [me]);
   if (!me) return <Spinner />;
-  const all = zones();
   return (
     <Panel title="Profile">
       <form
@@ -37,24 +30,26 @@ export function ProfileSettings() {
           if (await run(() => patch('/api/me', { name, timeZone: tz, currency }), 'Profile saved.')) invalidate([...keys.me]);
         }}
       >
-        <Field label="Email">
-          <Input value={me.email} disabled />
+        <Field
+          label="Email"
+          htmlFor="p-email"
+          hint={
+            <>
+              To use another address, go to{' '}
+              <Link to="/studio/settings/security" className="text-accent hover:underline">
+                Sign-in &amp; security
+              </Link>
+              .
+            </>
+          }
+        >
+          <Input id="p-email" value={me.email} readOnly className="text-muted" />
         </Field>
         <Field label="Name" htmlFor="p-name">
           <Input id="p-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="Time zone" htmlFor="p-tz" hint="New streams and schedules start in this time zone.">
-          {all.length ? (
-            <Select id="p-tz" value={tz} onChange={(e) => setTz(e.target.value)}>
-              {all.map((z) => (
-                <option key={z} value={z}>
-                  {z.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <Input id="p-tz" value={tz} onChange={(e) => setTz(e.target.value)} />
-          )}
+          <TimeZoneSelect id="p-tz" value={tz} onChange={setTz} />
         </Field>
         <Field label="Currency" htmlFor="p-cur" hint="Prices are shown in this currency.">
           <Select id="p-cur" value={currency} onChange={(e) => setCurrency(e.target.value as 'INR' | 'USD')}>

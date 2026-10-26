@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { TimeZoneSelect } from '@/components/TimeZoneSelect';
 import { CalendarClock, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Dialog, Empty, Field, IconButton, Input, Panel, Segmented, Toggle } from '@/components/ui';
@@ -137,7 +138,7 @@ export function ScheduleTab({ stream: s }: { stream: StreamView }) {
   );
 }
 
-function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; schedule: ScheduleView | null; onClose: () => void }) {
+export function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; schedule: ScheduleView | null; onClose: () => void }) {
   const init = schedule ? toRequest(schedule) : null;
   const [kind, setKind] = useState<'ONCE' | 'DAILY' | 'WEEKLY'>(schedule?.kind ?? 'WEEKLY');
   const [startAt, setStartAt] = useState(init?.startAt ?? '');
@@ -245,7 +246,7 @@ function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; 
           </div>
         )}
         <Field label="Time zone" htmlFor="sc-tz">
-          <Input id="sc-tz" value={tz} onChange={(e) => setTz(e.target.value)} />
+          <TimeZoneSelect id="sc-tz" value={tz} onChange={setTz} />
         </Field>
         {s.source === 'PLAYLIST' && (
           <div>

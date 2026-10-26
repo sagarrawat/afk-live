@@ -46,6 +46,7 @@
             <p th:if="${param.logout}" class="note-ok">You're signed out.</p>
             <p th:if="${param.restored}" class="note-ok">Your account is kept. Sign in to carry on.</p>
             <p th:if="${success}" class="note-ok" th:text="${success}"></p>
+            <p th:if="${error}" class="note-bad" role="alert" th:text="${error}"></p>
             <div>
                 <label for="email" class="label">Email</label>
                 <input id="email" type="email" name="username" required autocomplete="email" class="field">

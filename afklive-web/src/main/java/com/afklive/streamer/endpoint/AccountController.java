@@ -1,6 +1,8 @@
 package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.security.AccountGate;
+import com.afklive.streamer.security.SessionRememberMeServices;
+import com.afklive.streamer.service.AccountSecurityService;
 import com.afklive.streamer.service.AccountService;
 import com.afklive.streamer.service.IngestService;
 import com.afklive.streamer.service.TwoFactorService;
@@ -35,14 +37,40 @@ public class AccountController {
     private final TwoFactorService twoFactor;
     private final AccountService accounts;
     private final IngestService qr;
+    private final AccountSecurityService signIn;
+    private final SessionRememberMeServices rememberMe;
+    private final String baseUrl;
 
-    public AccountController(TwoFactorService twoFactor, AccountService accounts, IngestService qr) {
+    public AccountController(TwoFactorService twoFactor, AccountService accounts, IngestService qr, AccountSecurityService signIn,
+                             SessionRememberMeServices rememberMe,
+                             @org.springframework.beans.factory.annotation.Value("${app.base-url:http://localhost:8080}") String baseUrl) {
         this.twoFactor = twoFactor;
         this.accounts = accounts;
         this.qr = qr;
+        this.signIn = signIn;
+        this.rememberMe = rememberMe;
+        this.baseUrl = AuthController.publicBaseUrl(baseUrl);
     }
 
-    public record Security(boolean twoFactorEnabled, long recoveryCodesLeft, ZonedDateTime twoFactorSince) {
+    /**
+     * {@code hasPassword}: false for accounts that only sign in with Google. {@code emailChangeAvailable}:
+     * whether a confirmation email can be sent. {@code pendingEmail}: an address waiting for its link.
+     */
+    public record Security(boolean twoFactorEnabled, long recoveryCodesLeft, ZonedDateTime twoFactorSince, boolean hasPassword,
+                           boolean emailChangeAvailable, String pendingEmail) {
+    }
+
+    public record PasswordChange(String currentPassword, String newPassword) {
+    }
+
+    public record EmailChange(String newEmail, String password) {
+    }
+
+    /** How many other sessions were signed out. */
+    public record SignedOut(int otherSessions) {
+    }
+
+    public record PendingEmail(String pendingEmail) {
     }
 
     public record CodeRequest(String code) {
@@ -59,8 +87,46 @@ public class AccountController {
 
     @GetMapping("/security")
     public Security security(Principal p) {
-        TwoFactorService.Status s = twoFactor.status(email(p));
-        return new Security(s.enabled(), s.recoveryCodesLeft(), s.enabledAt());
+        String email = email(p);
+        TwoFactorService.Status s = twoFactor.status(email);
+        AccountSecurityService.Status a = signIn.status(email);
+        return new Security(s.enabled(), s.recoveryCodesLeft(), s.enabledAt(), a.hasPassword(), a.emailChangeAvailable(), a.pendingEmail());
+    }
+
+    /** ON-6: needs the current password; signs out every other device. */
+    @PostMapping("/password")
+    public SignedOut changePassword(@RequestBody PasswordChange body, Principal p, HttpServletRequest request,
+                                    jakarta.servlet.http.HttpServletResponse response) {
+        int ended = signIn.changePassword(email(p), body == null ? null : body.currentPassword(), body == null ? null : body.newPassword(),
+                currentSessionId(request));
+        rememberMe.reissue(request, response, SecurityContextHolder.getContext().getAuthentication());
+        return new SignedOut(ended);
+    }
+
+    /** ON-6: ends every other session and "keep me signed in" cookie; this browser stays signed in. */
+    @PostMapping("/sign-out-others")
+    public SignedOut signOutOthers(Principal p, HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
+        int ended = signIn.signOutOthers(email(p), currentSessionId(request));
+        rememberMe.reissue(request, response, SecurityContextHolder.getContext().getAuthentication());
+        return new SignedOut(ended);
+    }
+
+    /** ON-6: needs the password; the change happens when the link sent to the new address is opened. */
+    @PostMapping("/email")
+    public PendingEmail changeEmail(@RequestBody EmailChange body, Principal p) {
+        return new PendingEmail(signIn.requestEmailChange(email(p), body == null ? null : body.newEmail(),
+                body == null ? null : body.password(), baseUrl));
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/email")
+    public ResponseEntity<Void> cancelEmailChange(Principal p) {
+        signIn.cancelEmailChange(email(p));
+        return ResponseEntity.noContent().build();
+    }
+
+    private static String currentSessionId(HttpServletRequest request) {
+        HttpSession s = request.getSession(false);
+        return s == null ? null : s.getId();
     }
 
     /** Starts two-step setup: the key to type in (if the QR code can't be scanned) and the app link. */

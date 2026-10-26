@@ -98,6 +98,13 @@ requests, no errors, the signed-in visitor stayed signed in throughout.
   are in a cookie. Remember-me cookies need `REMEMBER_ME_KEY` set (otherwise each slot makes up its own
   key). The release that brings this signs everyone out once, because sessions were in memory before
   (Spring Boot 4 had stopped auto-configuring the JDBC store).
+  "Sign out other devices" and a password change (Settings > Sign-in & security) delete the account's
+  other rows in `spring_session` (found by principal name, which is the email for password and Google
+  sign-ins) and raise `users.sessions_version`, which is part of every remember-me cookie's signature
+  once above 0 (`SessionRememberMeServices`), so those cookies stop working too; the device that asked
+  gets a fresh cookie. Confirming a new email ends every sign-in of the account (sessions are filed
+  under the old address). Changing email needs email to be on (`ZEPTOMAIL_*`); without it the page says
+  it isn't available yet.
 - **Every background job claims its work in the database**, so the two slots never do it twice:
 
 | Job (web side) | Every | Why two instances are safe |
