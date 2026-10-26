@@ -27,6 +27,8 @@ export interface Me {
   dismissedHints?: string[];
   /** GL-6: how many times this account has gone live (1 during the first). */
   goLives?: number;
+  /** BI-1: hours streamed this month, against plan.monthlyHours (0 = no limit). */
+  hoursUsed?: number;
 }
 
 export type Level = 'green' | 'amber' | 'red';
@@ -80,6 +82,8 @@ export interface LiveState {
   reach?: StreamReach | null;
   /** RE-10: running slower than real time since then (a minute or more); null when it isn't. */
   slowSince?: string | null;
+  /** GL-3: "stop after this playlist pass" is armed. */
+  finishAfterPass?: boolean;
 }
 
 export interface StreamSummary {
@@ -256,6 +260,8 @@ export interface Destination {
   server: string;
   keyHint: string;
   selected: boolean;
+  /** Live streams sending here now: it can't be removed, and a new key reaches them at their next go-live. */
+  liveIn?: string[];
 }
 
 export interface MediaItem {

@@ -63,7 +63,40 @@ export function reachProblem(live: LiveState | undefined): string | null {
   return d?.message ?? null;
 }
 
-export const levelText: Record<Level, string> = { green: 'Healthy', amber: 'Needs a look', red: 'Problem' };
+export interface StopReason {
+  text: string;
+  /** a problem (red), or just information (muted) */
+  problem: boolean;
+  /** the free hours ran out: offer the upgrade */
+  hoursUsedUp: boolean;
+}
+
+/**
+ * Why a stream that's off air stopped, in plain words, from the last run's end reason: free hours used
+ * up, stopped by schedule, stopped by you, the playlist finished, the phone stayed away, or a problem.
+ * Null for a stream that never ran or a run without a reason.
+ */
+export function stopReason(live: Pick<LiveState, 'state' | 'endReason'> | undefined): StopReason | null {
+  if (!live || (live.state !== 'ENDED' && live.state !== 'ERROR')) return null;
+  const raw = (live.endReason ?? '').trim();
+  if (!raw) return live.state === 'ERROR' ? { text: 'Stopped with a problem', problem: true, hoursUsedUp: false } : null;
+  const r = raw.toLowerCase();
+  if (r.includes('free streaming hours')) {
+    return { text: "Stopped because this month's free streaming hours are used up.", problem: false, hoursUsedUp: true };
+  }
+  if (live.state === 'ERROR') return { text: raw, problem: true, hoursUsedUp: false };
+  const known: Record<string, string> = {
+    'stopped by user': 'Stopped by you.',
+    'scheduled stop': 'Stopped at its scheduled time.',
+    'playlist finished': 'Stopped after the playlist played through.',
+    'phone input lost for too long': 'Stopped because your phone was disconnected for longer than the wait time.',
+    stopped: 'Stopped.',
+    ended: 'Stopped.',
+  };
+  return { text: known[r] ?? raw, problem: false, hoursUsedUp: false };
+}
+
+export const levelText: Record<Level, string> ={ green: 'Healthy', amber: 'Needs a look', red: 'Problem' };
 
 export function HealthDot({ level, withText }: { level: Level | undefined | null; withText?: boolean }) {
   if (!level) return null;

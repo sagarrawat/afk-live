@@ -42,6 +42,9 @@ public class DestinationControllerTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private com.afklive.streamer.service.LiveStreamService liveStreams;
+
     @InjectMocks
     private DestinationController destinationController;
 

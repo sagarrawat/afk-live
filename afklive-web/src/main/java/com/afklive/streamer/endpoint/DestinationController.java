@@ -23,12 +23,16 @@ public class DestinationController {
     private final StreamDestinationRepository destinationRepository;
     private final UserService userService;
     private final com.afklive.streamer.service.DestinationTestService testService;
+    private final com.afklive.streamer.service.LiveStreamService liveStreams;
 
     @GetMapping
     public ResponseEntity<?> getDestinations(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        User user = userService.getOrCreateUser(SecurityUtils.getEmail(principal));
-        return ResponseEntity.ok(destinationRepository.findByUser(user).stream().map(DestinationView::of).toList());
+        String email = SecurityUtils.getEmail(principal);
+        User user = userService.getOrCreateUser(email);
+        Map<Long, List<String>> live = liveStreams.destinationsLive(email);
+        return ResponseEntity.ok(destinationRepository.findByUser(user).stream()
+                .map(d -> DestinationView.of(d, live.getOrDefault(d.getId(), List.of()))).toList());
     }
 
     @PostMapping
@@ -59,20 +63,12 @@ public class DestinationController {
         return ResponseEntity.ok(DestinationView.of(saved));
     }
 
+    /** Refused (409) while a live stream is sending to it: nothing that is live may be deleted. */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteDestination(@PathVariable Long id, Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
-        String email = SecurityUtils.getEmail(principal);
-
-        return destinationRepository.findById(id)
-                .map(dest -> {
-                    if (!dest.getUser().getUsername().equals(email)) {
-                        return ResponseEntity.status(403).build();
-                    }
-                    destinationRepository.delete(dest);
-                    return ResponseEntity.ok(ApiResponse.success("Deleted", null));
-                })
-                .orElse(ResponseEntity.notFound().build());
+        liveStreams.deleteDestination(SecurityUtils.getEmail(principal), id);
+        return ResponseEntity.ok(ApiResponse.success("Deleted", null));
     }
 
     @PutMapping("/{id}")
@@ -85,8 +81,9 @@ public class DestinationController {
                     if (!dest.getUser().getUsername().equals(email)) {
                         return ResponseEntity.status(403).build();
                     }
-                    if (body.containsKey("name")) dest.setName((String) body.get("name"));
-                    if (body.containsKey("key")) {
+                    if (body.get("name") instanceof String n && !n.isBlank()) dest.setName(n.trim());
+                    // The key is write-only: the app never has it, so an empty key means "keep the saved one".
+                    if (body.get("key") instanceof String k && !k.isBlank()) {
                         String newKey = body.get("key") == null ? null : ((String) body.get("key")).trim();
                         StreamAddresses.requireWellFormed(newKey);
                         com.afklive.streamer.util.NetworkSafety.requireSafeStreamDestination(newKey);
@@ -101,7 +98,9 @@ public class DestinationController {
                     }
                     if (body.containsKey("selected")) dest.setSelected((Boolean) body.get("selected"));
 
-                    return ResponseEntity.ok(DestinationView.of(destinationRepository.save(dest)));
+                    StreamDestination saved = destinationRepository.save(dest);
+                    // A live run keeps the address it started with (its own copy); the app says so.
+                    return ResponseEntity.ok(DestinationView.of(saved, liveStreams.destinationsLive(email).getOrDefault(saved.getId(), List.of())));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -135,8 +134,13 @@ public class DestinationController {
      * whole key (a leaked key lets anyone stream to the channel).
      */
     public record DestinationView(Long id, String name, String type, String platform, String server, String keyHint,
-                                  boolean selected) {
+                                  boolean selected, List<String> liveIn) {
         static DestinationView of(StreamDestination d) {
+            return of(d, List.of());
+        }
+
+        /** {@code liveIn}: the live streams sending to it now (a key change reaches them only at their next go-live). */
+        static DestinationView of(StreamDestination d, List<String> liveIn) {
             String url = d.getStreamKey() == null ? "" : d.getStreamKey();
             String server = url;
             String key = "";
@@ -155,7 +159,7 @@ public class DestinationController {
             }
             String hint = key.length() <= 4 ? (key.isEmpty() ? "" : "••••") : "••••" + key.substring(key.length() - 4);
             String platform = com.afklive.streamer.util.Platforms.code(server);
-            return new DestinationView(d.getId(), d.getName(), d.getType(), platform, server, hint, d.isSelected());
+            return new DestinationView(d.getId(), d.getName(), d.getType(), platform, server, hint, d.isSelected(), liveIn);
         }
     }
 }

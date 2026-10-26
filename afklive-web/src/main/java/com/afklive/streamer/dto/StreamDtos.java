@@ -65,14 +65,21 @@ public final class StreamDtos {
      * GL-2: DRAFT, STARTING, LIVE, STOPPING, ENDED or ERROR. {@code slowSince} (RE-10): running slower than
      * real time since then. {@code reach} (RE-8), while LIVE: ALL (every destination that has been checked is
      * receiving: "Live"), SOME ("Live with problems"), NONE ("Not reaching anyone") or CONNECTING (none
-     * confirmed yet, none given up on); null otherwise.
+     * confirmed yet, none given up on); null otherwise. {@code finishAfterPass} (GL-3): the creator asked to
+     * stop when the playlist's current pass ends and hasn't taken it back.
      */
     public record LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds,
                             ZonedDateTime stopAt, String scene, Boolean inputLive, Map<String, Object> nowPlaying,
-                            Health health, String endReason, ZonedDateTime slowSince, String reach) {
+                            Health health, String endReason, ZonedDateTime slowSince, String reach, boolean finishAfterPass) {
         public LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds, ZonedDateTime stopAt,
                          String scene, Boolean inputLive, Map<String, Object> nowPlaying, Health health, String endReason) {
-            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null, null);
+            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, null, null, false);
+        }
+
+        public LiveState(String state, Long jobId, ZonedDateTime startedAt, long uptimeSeconds, ZonedDateTime stopAt,
+                         String scene, Boolean inputLive, Map<String, Object> nowPlaying, Health health, String endReason,
+                         ZonedDateTime slowSince, String reach) {
+            this(state, jobId, startedAt, uptimeSeconds, stopAt, scene, inputLive, nowPlaying, health, endReason, slowSince, reach, false);
         }
     }
 

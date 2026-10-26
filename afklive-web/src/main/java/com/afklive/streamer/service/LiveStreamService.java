@@ -795,6 +795,28 @@ public class LiveStreamService {
         streamService.setStopAt(job.getId(), email, null);
     }
 
+    /**
+     * GL-3: takes back "stop after this playlist pass". The run's spec loses the flag (so a worker that
+     * restarts or takes the run over keeps going), and the running studio gets the playlist again, which
+     * resets the pass count the flag had capped (PlaylistFeed.setItems). Nothing restarts and no
+     * destination disconnects.
+     */
+    @Transactional
+    public LiveState cancelFinishAfterPass(String email, Long id) {
+        LiveStream s = get(email, id);
+        StreamJob job = currentJob(s).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
+        StreamSpec current = StreamSpec.fromJson(job.getSpec());
+        if (current.studio() != null && current.studio().finishAfterPass()) {
+            StudioSpec next = studioSpec(s, job.getScene(), job.getPlaylistOverride());
+            String spec = StreamSpec.studio(current.username(), current.streamId(), next, current.destinations()).toJson();
+            if (jobs.updateSpec(job.getId(), spec) != 1) {
+                throw new com.afklive.streamer.exception.ConflictException("This stream isn't live.");
+            }
+            command(job, StreamCommand.Type.RELOAD, StudioSpec.json(next));
+        }
+        return liveState(get(email, id));
+    }
+
     // ------------------------------------------------------------------ live control (MS-5)
 
     @Transactional
@@ -982,7 +1004,17 @@ public class LiveStreamService {
         // RE-8: whether the platforms are receiving it.
         String reach = "LIVE".equals(state) ? StreamHealth.reach(j.getDestinations()) : null;
         return new LiveState(state, j.getId(), j.getStartTime(), uptime, j.getStopAt(), j.getScene(), j.getInputLive(), np,
-                StreamHealth.of(j, s.getQualityHeight(), s.getFps()), null, slowSince, reach);
+                StreamHealth.of(j, s.getQualityHeight(), s.getFps()), null, slowSince, reach, finishAfterPass(j));
+    }
+
+    /** GL-3: whether "stop after this playlist pass" is armed on this run (it lives in the run's spec). */
+    private static boolean finishAfterPass(StreamJob j) {
+        try {
+            StreamSpec spec = j.getSpec() == null ? null : StreamSpec.fromJson(j.getSpec());
+            return spec != null && spec.studio() != null && spec.studio().finishAfterPass();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private Optional<StreamJob> currentJob(LiveStream s) {
@@ -1142,6 +1174,65 @@ public class LiveStreamService {
             }
         }
         return out;
+    }
+
+    // ------------------------------------------------------------------ destinations in live use (DS-8)
+
+    /**
+     * For each of the creator's destinations that a live run is sending to now, the names of those
+     * streams: the destinations switched on for a live stream (DS-5 keeps the run in step with them),
+     * plus any whose address is in the run's own list (runs keep a copy of each address in their spec;
+     * this also covers runs without a saved stream). Destinations turned off for the run are left out.
+     */
+    public Map<Long, List<String>> destinationsLive(String email) {
+        Map<Long, List<String>> out = new HashMap<>();
+        List<StreamJob> live = jobs.findAllByUserEmailAndIsLiveTrue(email);
+        if (live.isEmpty()) {
+            return out;
+        }
+        List<StreamDestination> mine = destinations.findByUser(live.getFirst().getUser());
+        for (StreamJob j : live) {
+            List<StreamSpec.Destination> sending;
+            try {
+                StreamSpec spec = j.getSpec() == null ? null : StreamSpec.fromJson(j.getSpec());
+                sending = spec == null || spec.destinations() == null ? List.of() : spec.destinations();
+            } catch (Exception e) {
+                sending = List.of();
+            }
+            Set<Long> on = new HashSet<>();
+            if (j.getStreamId() != null) {
+                targets.findAllByStreamId(j.getStreamId()).stream().filter(StreamTarget::isEnabled)
+                        .forEach(t -> on.add(t.getDestinationId()));
+            }
+            String name = j.getStreamId() == null ? j.getTitle()
+                    : streams.findById(j.getStreamId()).map(LiveStream::getName).orElse(j.getTitle());
+            final List<StreamSpec.Destination> list = sending;
+            for (StreamDestination d : mine) {
+                boolean used = on.contains(d.getId())
+                        || list.stream().anyMatch(x -> !x.off() && java.util.Objects.equals(x.url(), d.getStreamKey()));
+                if (used) {
+                    out.computeIfAbsent(d.getId(), k -> new ArrayList<>()).add(name == null ? "a stream" : name);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Deletes a destination unless a live run is sending to it. Taken under the same user lock as
+     * going live, so a go-live can't start sending to it between the check and the delete.
+     */
+    @Transactional
+    public void deleteDestination(String email, Long id) {
+        users.lockByEmail(email).orElseThrow(() -> new com.afklive.streamer.exception.NotFoundException("Account not found."));
+        StreamDestination d = destinations.findByIdAndUserEmail(id, email)
+                .orElseThrow(() -> new com.afklive.streamer.exception.NotFoundException("Destination not found."));
+        List<String> live = destinationsLive(email).get(d.getId());
+        if (live != null && !live.isEmpty()) {
+            throw new com.afklive.streamer.exception.ConflictException(d.getName() + " is sending to a live stream (" + String.join(", ", live)
+                    + "). Stop the stream or turn this destination off for it first.");
+        }
+        destinations.delete(d);
     }
 
     // ------------------------------------------------------------------ library files in use (ML-6)

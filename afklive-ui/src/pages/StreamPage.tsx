@@ -1,10 +1,9 @@
 import clsx from 'clsx';
 import { ChevronLeft } from 'lucide-react';
 import { NavLink, Navigate, useParams } from 'react-router-dom';
-import { GoLiveButton, SlowNotice, StopButton } from '@/components/live-actions';
-import { HealthDot, isOnAir, LiveBadge, reachProblem, Uptime } from '@/components/status';
+import { GoLiveButton, PlannedStop, SlowNotice, StopButton } from '@/components/live-actions';
+import { HealthDot, isOnAir, LiveBadge, reachProblem, stopReason, Uptime } from '@/components/status';
 import { ErrorNote, Spinner } from '@/components/ui';
-import { dateTime } from '@/lib/format';
 import { useStream } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { AudioTab } from './stream/AudioTab';
@@ -51,6 +50,7 @@ export function StreamPage() {
   const tabs = tabsFor(s);
   if (!tabs.some(([t]) => t === tab)) return <Navigate to={`/studio/streams/${id}`} replace />;
   const onAir = isOnAir(s.live.state);
+  const why = onAir ? null : stopReason(s.live);
 
   return (
     <>
@@ -69,8 +69,20 @@ export function StreamPage() {
             </div>
             <h1 className="mt-2 truncate text-2xl font-bold tracking-tight">{s.name}</h1>
             {onAir && reachProblem(s.live) && <p className="mt-1 text-sm text-bad">{reachProblem(s.live)}</p>}
-            {s.live.stopAt && onAir && <p className="mt-1 text-sm text-muted">Stops {dateTime(s.live.stopAt, s.timeZone)}</p>}
-            {!onAir && s.live.state === 'ERROR' && s.live.endReason && <p className="mt-1 text-sm text-bad">{s.live.endReason}</p>}
+            <PlannedStop stream={s} timeZone={s.timeZone} />
+            {why && (
+              <p className={clsx('mt-1 text-sm', why.problem ? 'text-bad' : 'text-muted')}>
+                {why.text}
+                {why.hoursUsedUp && (
+                  <>
+                    {' '}
+                    <Link to="/studio/settings/billing" className="text-accent hover:underline">
+                      Upgrade for more hours
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
             {onAir && <SlowNotice live={s.live} streamId={s.id} />}
           </div>
           <div className="flex items-center gap-5">
