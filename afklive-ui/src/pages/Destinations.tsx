@@ -1,7 +1,7 @@
 import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AddDestinationDialog, EditDestinationDialog } from '@/components/AddDestination';
+import { AddDestinationDialog, destinationSummary, EditDestinationDialog } from '@/components/AddDestination';
 import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { PlatformIcon } from '@/components/PlatformIcon';
 import { Button, Dialog, Empty, ErrorNote, IconButton, PageHeader, Spinner, useAction } from '@/components/ui';
@@ -61,8 +61,8 @@ export function Destinations() {
                   <PlatformIcon platform={d.platform} className="h-5 w-5 text-muted" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{d.name}</span>
-                    <span className="block truncate text-sm text-muted">
-                      {d.server} {d.keyHint}
+                    <span className="block truncate text-sm text-muted" title={d.server}>
+                      {destinationSummary(d)}
                     </span>
                   </span>
                   <Button size="sm" variant="ghost" disabled={t === 'running'} onClick={() => test(d)}>

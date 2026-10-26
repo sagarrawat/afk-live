@@ -139,9 +139,10 @@ describe('Admin billing: cost per stream-hour', () => {
       kinds: [
         { kind: 'PLAYOUT', ready: 12, bytes: 3 * 1024 ** 3, unknownSize: 0, waiting: 1, failed: 0, dueForDeletion: 2 },
         { kind: 'PROFILE', ready: 3, bytes: 1024 ** 3, unknownSize: 1, waiting: 0, failed: 1, dueForDeletion: 0 },
+        { kind: 'PROFILE_OVERLAY', ready: 2, bytes: 1024 ** 3, unknownSize: 0, waiting: 0, failed: 0, dueForDeletion: 0 },
       ],
-      ready: 15,
-      bytes: 4 * 1024 ** 3,
+      ready: 17,
+      bytes: 5 * 1024 ** 3,
       keepDays: 30,
     };
     mockApi({ ...base, '/api/admin/workers': [], '/api/admin/servers/history': [], '/api/admin/copies': copies, '/api/admin/quota': { usedToday: 0, dailyLimit: 10000, percent: 0, resetsAt: new Date().toISOString(), breakdown: [] }, '/api/admin/incidents': [] });
@@ -150,6 +151,7 @@ describe('Admin billing: cost per stream-hour', () => {
     expect(screen.getByText(/nobody plays for 30 days are deleted/)).toBeInTheDocument();
     expect(screen.getByText(/2 due for deletion/)).toBeInTheDocument();
     expect(screen.getByText(/1 not measured yet/)).toBeInTheDocument();
+    expect(screen.getByText(/with a logo or the Free mark/)).toBeInTheDocument();
   });
 
   it('formats small per-hour amounts with enough digits', () => {

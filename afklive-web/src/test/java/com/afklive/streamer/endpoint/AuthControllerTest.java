@@ -29,7 +29,8 @@ class AuthControllerTest {
     final UserService userService = new UserService(users, NoOpPasswordEncoder.getInstance(), email, mock(PlanService.class));
 
     private AuthController controller(String baseUrl) {
-        return new AuthController(userService, email, mock(com.afklive.streamer.service.ReferralService.class), baseUrl);
+        return new AuthController(userService, email, mock(com.afklive.streamer.service.ReferralService.class),
+                mock(com.afklive.streamer.service.AccountSecurityService.class), baseUrl);
     }
 
     @Test

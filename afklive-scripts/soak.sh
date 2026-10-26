@@ -4,11 +4,12 @@
 # pass/fail checks (leaks, file descriptors, threads, timestamps, A/V drift, reconnects, encoder speed,
 # CPU per stream). Nothing leaves the machine; no database or cloud account is needed.
 #
-#   afklive-scripts/soak.sh [--minutes N] [--copy-mode] [--streams K] [--destinations D]
+#   afklive-scripts/soak.sh [--minutes N] [--copy-mode] [--watermark] [--streams K] [--destinations D]
 #                           [--height 720] [--fps 30] [--switch-minutes M] [--out DIR]
 #
 #   --minutes N         how long to stream (default 360 = 6 h; 10 is the smoke run)
 #   --copy-mode         start in copy mode (FO-2) and switch studio<->copy every M minutes
+#   --watermark         streams show the Free plan's mark (in copy mode: baked into the profile copies)
 #   --streams K         streams at once (default 2); --destinations D sinks per stream (default 2)
 #   --switch-minutes M  default 10, or a sixth of a run shorter than an hour
 #
@@ -19,6 +20,7 @@ set -euo pipefail
 
 minutes=360
 copy=false
+watermark=false
 streams=2
 dests=2
 height=720
@@ -29,13 +31,14 @@ while [ $# -gt 0 ]; do
   case $1 in
     --minutes) minutes=$2; shift 2 ;;
     --copy-mode) copy=true; shift ;;
+    --watermark) watermark=true; shift ;;
     --streams) streams=$2; shift 2 ;;
     --destinations) dests=$2; shift 2 ;;
     --height) height=$2; shift 2 ;;
     --fps) fps=$2; shift 2 ;;
     --switch-minutes) switch=$2; shift 2 ;;
     --out) out=$2; shift 2 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "Unknown option $1 (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -43,6 +46,7 @@ done
 command -v ffmpeg >/dev/null || { echo "FFmpeg must be on PATH." >&2; exit 2; }
 repo=$(cd "$(dirname "$0")/.." && pwd)
 mode=$([ "$copy" = true ] && echo copy || echo studio)
+[ "$watermark" = true ] && mode="$mode-mark"
 out=${out:-$repo/afklive-web/target/soak/$(date -u +%Y%m%dT%H%M%SZ)-$mode-${minutes}m}
 mkdir -p "$out"
 echo "Soak: $minutes min, $streams stream(s) x $dests destination(s), ${height}p$fps, $mode mode -> $out"
@@ -52,7 +56,7 @@ status=0
 (cd "$repo" && mvn -B -pl afklive-web -am test -DskipUi -DskipUiTests \
   -Dtest=SoakTest -Dsurefire.failIfNoSpecifiedTests=false -Dsoak.excludedGroups=none \
   -DargLine="-Xmx512m" \
-  -Dsoak.minutes="$minutes" -Dsoak.copyMode="$copy" -Dsoak.streams="$streams" -Dsoak.destinations="$dests" \
+  -Dsoak.minutes="$minutes" -Dsoak.copyMode="$copy" -Dsoak.watermark="$watermark" -Dsoak.streams="$streams" -Dsoak.destinations="$dests" \
   -Dsoak.height="$height" -Dsoak.fps="$fps" -Dsoak.switchMinutes="$switch" -Dsoak.out="$out") \
   >"$out/maven.log" 2>&1 || status=$?
 

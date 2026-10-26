@@ -1,0 +1,29 @@
+# Nightly PostgreSQL backup to object storage (Cloudflare R2): afklive-scripts/db-backup.sh.
+# Started by afklive-db-backup.timer. A failure leaves "db-backup: FAILED" in the journal and the unit
+# in the failed state (systemctl --failed); BACKUP_PING_URL in backup.env adds an outside alert.
+# Setup: docs/operations.md#database-backups.
+[Unit]
+Description=AFK Live database backup
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Any non-root user works: pg_dump connects with the app's password over TCP.
+User=afklive
+Group=afklive
+EnvironmentFile=/opt/afklive/afklive.env
+# Bucket and token for backups (BACKUP_S3_*), root-owned, mode 600.
+EnvironmentFile=/opt/afklive/backup.env
+ExecStart=/opt/afklive/bin/db-backup.sh
+# rclone gets its remote from the environment; give it a writable home for anything else.
+Environment=HOME=/var/tmp XDG_CACHE_HOME=/var/tmp
+# Keep a dump from competing with live streams for CPU and disk.
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/tmp
+TimeoutStartSec=2h

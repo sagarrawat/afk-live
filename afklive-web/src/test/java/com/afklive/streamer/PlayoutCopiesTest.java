@@ -279,6 +279,171 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
         com.afklive.streamer.streaming.TsStitcherTest.assertContinuous(com.afklive.streamer.streaming.TsStitcherTest.probe(joined), 9);
     }
 
+    // ---------------------------------------------------------------- FO-2: copies with static overlays
+
+    private static final com.afklive.streamer.streaming.studio.Canvas VERTICAL = new com.afklive.streamer.streaming.studio.Canvas(180, 320, 30, 44100);
+
+    private static com.afklive.streamer.streaming.StudioSpec.OverlaySetting mark() {
+        return new com.afklive.streamer.streaming.StudioSpec.OverlaySetting(
+                com.afklive.streamer.streaming.studio.OverlayCompositor.WATERMARK_ID, "TEXT", true, 0.6, 0.92, 0, 0.03, "AFK Live",
+                null, null, "#ffffff", "#66000000", 0.8, null, null, 0, null);
+    }
+
+    private com.afklive.streamer.streaming.StudioSpec.OverlaySetting logo(double x) throws Exception {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(40, 40, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = img.createGraphics();
+        for (int py = 0; py < 40; py += 4) {
+            for (int px = 0; px < 40; px += 4) {
+                g.setColor((px + py) % 8 == 0 ? java.awt.Color.WHITE : java.awt.Color.BLACK); // nothing a test picture matches
+                g.fillRect(px, py, 4, 4);
+            }
+        }
+        g.dispose();
+        java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", png);
+        String key = storage.uploadFile(new java.io.ByteArrayInputStream(png.toByteArray()), "logo.png", png.size());
+        return new com.afklive.streamer.streaming.StudioSpec.OverlaySetting("logo", "IMAGE", true, x, 0.05, 0.4, 0, null, 99L, key,
+                null, null, 1, null, null, 0, null);
+    }
+
+    private String ask(MediaAsset a, List<com.afklive.streamer.streaming.StudioSpec.OverlaySetting> set, boolean request) {
+        String id = com.afklive.streamer.streaming.StaticOverlays.identity(set, VERTICAL);
+        return copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, id.isEmpty() ? null : com.afklive.streamer.streaming.StudioSpec.json(set),
+                request);
+    }
+
+    /** Frame 15 of a copy, luma only. */
+    private byte[] frame(String storageKey) throws Exception {
+        Process p = new ProcessBuilder("ffmpeg", "-v", "error", "-i", storage.readLocation(storageKey), "-vf", "select=eq(n\\,15)",
+                "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1").redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        byte[] f = p.getInputStream().readAllBytes();
+        assertThat(p.waitFor()).isZero();
+        assertThat(f.length).isEqualTo(180 * 320);
+        return f;
+    }
+
+    /** How different two copies' pictures are in a region: mean absolute luma difference per pixel. */
+    private double diff(String one, String other, int x, int y, int w, int h) throws Exception {
+        byte[] a = frame(one);
+        byte[] b = frame(other);
+        long sum = 0;
+        for (int r = y; r < y + h; r++) {
+            for (int c = x; c < x + w; c++) {
+                sum += Math.abs((a[r * 180 + c] & 0xff) - (b[r * 180 + c] & 0xff));
+            }
+        }
+        return (double) sum / (w * h);
+    }
+
+    @Test
+    void copiesWithTheMarkOrALogoAreKeptApartFromPlainOnesAndCarryThem() throws Exception {
+        MediaAsset a = upload("copies-overlays-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com");
+        var logoHere = logo(0.05);
+        var logoMoved = new com.afklive.streamer.streaming.StudioSpec.OverlaySetting("logo", "IMAGE", true, 0.5, 0.05, 0.4, 0, null,
+                99L, logoHere.imageKey(), null, null, 1, null, null, 0, null);
+        List<List<com.afklive.streamer.streaming.StudioSpec.OverlaySetting>> sets = List.of(List.of(), List.of(mark()), List.of(logoHere),
+                List.of(logoMoved));
+        for (var set : sets) {
+            assertThat(ask(a, set, true)).isNull();
+            assertThat(ask(a, set, true)).isNull(); // asked once per set
+        }
+        assertThat(jdbc.queryForList("SELECT kind || ':' || (overlay_set = '') FROM media_playout_copies WHERE media_id = ? ORDER BY id",
+                String.class, a.getId())).containsExactly("PROFILE:true", "PROFILE_OVERLAY:false", "PROFILE_OVERLAY:false", "PROFILE_OVERLAY:false");
+        while (copies.prepareNext()) {
+            // the web side makes all four
+        }
+        String plain = ask(a, List.of(), false);
+        String marked = ask(a, List.of(mark()), false);
+        String withLogo = ask(a, List.of(logoHere), false);
+        String moved = ask(a, List.of(logoMoved), false);
+        assertThat(List.of(plain, marked, withLogo, moved)).doesNotContainNull().doesNotHaveDuplicates();
+        // A run without overlays (the old 7-argument lookup: what the previous release asks) gets only the plain one.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, false)).isEqualTo(plain);
+        assertThat(jdbc.queryForList("SELECT made_overlay_set = overlay_set FROM media_playout_copies WHERE media_id = ?", Boolean.class,
+                a.getId())).containsOnly(true);
+
+        // The pictures: the logo where it was placed (left), or moved (right); the mark at the bottom.
+        assertThat(diff(withLogo, plain, 12, 20, 40, 40)).isGreaterThan(30);
+        assertThat(diff(withLogo, plain, 100, 20, 40, 40)).isLessThan(3);
+        assertThat(diff(moved, plain, 12, 20, 40, 40)).isLessThan(3);
+        assertThat(diff(moved, plain, 100, 20, 40, 40)).isGreaterThan(30);
+        assertThat(diff(marked, plain, 110, 296, 60, 16)).isGreaterThan(5);
+        assertThat(diff(marked, plain, 12, 20, 40, 40)).isLessThan(3);
+    }
+
+    @Test
+    void aCopyMadeWithoutItsOverlaysIsNeverPlayedButMadeAgain() throws Exception {
+        MediaAsset a = upload("copies-overlays-old-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com");
+        List<com.afklive.streamer.streaming.StudioSpec.OverlaySetting> set = List.of(mark());
+        ask(a, set, true);
+        while (copies.prepareNext()) {
+            // made
+        }
+        String made = ask(a, set, false);
+        assertThat(made).isNotNull();
+        // As if the previous release's web side had made it (it doesn't draw overlays, nor record them).
+        jdbc.update("UPDATE media_playout_copies SET made_overlay_set = NULL WHERE media_id = ? AND kind = 'PROFILE_OVERLAY'", a.getId());
+        assertThat(ask(a, set, true)).isNull();
+        assertThat(jdbc.queryForMap("SELECT status, storage_key FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE_OVERLAY'",
+                a.getId())).containsEntry("status", "PENDING").containsEntry("storage_key", null);
+        assertThatThrownBy(() -> storage.size(made)).isInstanceOf(Exception.class);
+        while (copies.prepareNext()) {
+            // made again, with the mark
+        }
+        assertThat(ask(a, set, false)).isNotNull().isNotEqualTo(made);
+
+        // Overlays recorded that don't match the identity asked for (another drawing version): the copy fails, nothing played.
+        String id = com.afklive.streamer.streaming.StaticOverlays.identity(set, VERTICAL);
+        jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, x264_preset, "
+                + "overlay_set, overlay_spec) VALUES (?, 'PROFILE_OVERLAY', 180, 320, 30, 'FILL', 0, 'PENDING', 'superfast', ?, ?)",
+                a.getId(), id, com.afklive.streamer.streaming.StudioSpec.json(List.of(new com.afklive.streamer.streaming.StudioSpec.OverlaySetting(
+                        "x", "TEXT", true, 0.1, 0.1, 0, 0.05, "Something else", null, null, "#ffffff", "#000000", 1, null, null, 0, null))));
+        while (copies.prepareNext()) {
+            // fails
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM media_playout_copies WHERE media_id = ? AND fit = 'FILL'", String.class, a.getId()))
+                .isEqualTo("FAILED");
+    }
+
+    @Test
+    void oldOverlayVariantsGoAfter30DaysEvenWhileTheVideoIsLiveAndTheOnePlayedStays() throws Exception {
+        String email = "copies-variants-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+        MediaAsset a = upload(email);
+        var old = logo(0.05);
+        var now = new com.afklive.streamer.streaming.StudioSpec.OverlaySetting("logo", "IMAGE", true, 0.5, 0.05, 0.4, 0, null, 99L,
+                old.imageKey(), null, null, 1, null, null, 0, null);
+        ask(a, List.of(), true);
+        ask(a, List.of(old), true);
+        ask(a, List.of(now), true);
+        while (copies.prepareNext()) {
+            // made
+        }
+        String plain = ask(a, List.of(), false);
+        String oldKey = ask(a, List.of(old), false);
+        String nowKey = ask(a, List.of(now), false);
+        jdbc.update("UPDATE media_playout_copies SET created_at = now() - interval '40 days', finished_at = now() - interval '40 days', "
+                + "last_played_at = now() - interval '35 days' WHERE media_id = ?", a.getId());
+        // The run playing the moved logo by copy says so (CopyRuns, every few hours).
+        copies.touch(List.of(nowKey));
+        Long jobId = jdbc.queryForObject("INSERT INTO stream_jobs (user_id, stream_key, is_live, pid, start_time, status, desired_state, spec, "
+                        + "applied_command_id, restarts, accumulated_cost) VALUES (?, 'k', TRUE, 0, now() - interval '31 days', 'LIVE', 'RUN', ?, 0, 0, 0) RETURNING id",
+                Long.class, a.getUser().getId(), com.afklive.streamer.util.SecretBox.encrypt("{\"maxHeight\":320,\"studio\":{\"height\":180,\"vertical\":true,\"fps\":30,"
+                        + "\"videos\":[{\"id\":\"" + a.getId() + "\",\"key\":\"" + a.getS3Key() + "\",\"duration\":3.0}]}}"));
+        try {
+            // The plain copy is spared (its video is live, as before); the variant nobody plays goes; the played one stays.
+            assertThat(copies.deleteUnplayed()).isGreaterThanOrEqualTo(1);
+            assertThat(jdbc.queryForList("SELECT storage_key FROM media_playout_copies WHERE media_id = ?", String.class, a.getId()))
+                    .containsExactlyInAnyOrder(plain, nowKey);
+            assertThatThrownBy(() -> storage.size(oldKey)).isInstanceOf(Exception.class);
+            assertThat(storage.size(plain)).isPositive();
+            assertThat(storage.size(nowKey)).isPositive();
+            assertThat(copies.stats().kinds()).extracting(PlayoutCopies.KindStats::kind).contains("PROFILE", "PROFILE_OVERLAY");
+        } finally {
+            jdbc.update("UPDATE stream_jobs SET is_live = FALSE, end_time = now() WHERE id = ?", jobId);
+            jdbc.update("DELETE FROM media_playout_copies WHERE media_id = ?", a.getId()); // aged rows would surprise other tests' sweeps
+        }
+    }
+
     /** The x264 settings line x264 writes into the first keyframe of a stream. */
     private String x264Settings(String storageKey) throws Exception {
         Path h264 = dir.resolve(UUID.randomUUID() + ".h264");
@@ -317,6 +482,9 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
     void profileCopiesAreKeptPerBitrateSoARunNeverPlaysOneMadeAtAnother() throws Exception {
         // FO-4: a 180x320 30 fps canvas is the 720 class: 4000 kbps built in. One run at that, one at a plan's 1500.
         MediaAsset a = upload("copies-bitrate@example.com");
+        // Changeset 150 appended video_kbps to the key as 145 rebuilt it (overlay_set kept), under the same name.
+        assertThat(jdbc.queryForObject("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'uq_media_playout_copies'",
+                String.class)).isEqualTo("UNIQUE (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, overlay_set, video_kbps)");
         assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true)).isNull();
         assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 1500, true)).isNull();
         // The built-in bitrate is stored as 0, like every copy made before bitrates were recorded.
@@ -344,6 +512,32 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
         assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 2500, true)).isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
                 Integer.class, a.getId())).isEqualTo(3);
+    }
+
+    @Test
+    void copiesWithOverlaysAreKeptPerBitrateTooAndCarryTheirOverlaysAtThatBitrate() throws Exception {
+        // FO-4 with FO-2's static overlays: the Free plan's mark at the built-in bitrate and at a plan's 1500 are two copies.
+        MediaAsset a = upload("copies-overlay-kbps-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com");
+        var set = List.of(mark());
+        String id = com.afklive.streamer.streaming.StaticOverlays.identity(set, VERTICAL);
+        String json = com.afklive.streamer.streaming.StudioSpec.json(set);
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, true)).isNull();
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, 1500, true)).isNull();
+        assertThat(jdbc.queryForList("SELECT kind || ':' || video_kbps FROM media_playout_copies WHERE media_id = ? ORDER BY video_kbps",
+                String.class, a.getId())).containsExactly("PROFILE_OVERLAY:0", "PROFILE_OVERLAY:1500");
+        while (copies.prepareNext()) {
+            // make both
+        }
+        String builtIn = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, false);
+        String low = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, 1500, false);
+        assertThat(builtIn).isNotNull();
+        assertThat(low).isNotNull().isNotEqualTo(builtIn);
+        assertThat(x264Settings(builtIn)).contains(" bitrate=4000 ");
+        assertThat(x264Settings(low)).contains(" bitrate=1500 ");
+        assertThat(jdbc.queryForList("SELECT made_overlay_set = overlay_set FROM media_playout_copies WHERE media_id = ?", Boolean.class,
+                a.getId())).containsOnly(true);
+        // A plain run at 1500 gets neither.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 1500, false)).isNull();
     }
 
     @Test

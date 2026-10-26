@@ -80,6 +80,11 @@
   <div><span id="health-dot" class="dot"></span><span id="health-text">Not live</span></div>
 </section>
 
+<section id="planned-box" hidden>
+  <h2>Planned stop</h2>
+  <div id="planned"></div>
+</section>
+
 <section>
   <div class="grid">
     <button id="golive" class="primary">Go live</button>
@@ -158,6 +163,26 @@
       const t = document.createElement('button'); t.className = 'toggle' + (o.visible ? ' on' : ''); t.textContent = o.visible ? 'On' : 'Off';
       t.onclick = () => act(() => api('/overlays/' + encodeURIComponent(o.id) + '/visible', 'POST', { visible: !o.visible }), (o.visible ? 'Hidden' : 'Shown'));
       row.append(label, t); list.appendChild(row);
+    }
+
+    // GL-3: a planned stop is shown, with Cancel (the stream stays on air; nothing reconnects).
+    const planned = $('#planned'); planned.innerHTML = '';
+    const stops = [];
+    if (on && state !== 'STOPPING' && live.stopAt) {
+      let when = live.stopAt;
+      try { when = new Date(live.stopAt).toLocaleString(undefined, { timeZone: stream.timeZone || undefined, weekday: 'short', hour: 'numeric', minute: '2-digit' }); } catch (e) { /* keep ISO */ }
+      stops.push(['Stops ' + when, '/stop-at', 'Scheduled stop cancelled. The stream keeps going.', 'Cancel the scheduled stop']);
+    }
+    if (on && state !== 'STOPPING' && live.finishAfterPass) {
+      stops.push(['Ends after this playlist pass', '/finish-after-pass', 'It will keep playing the playlist. The stream keeps going.', 'Cancel ending after this playlist pass']);
+    }
+    $('#planned-box').hidden = stops.length === 0;
+    for (const [text, path, done, label] of stops) {
+      const row = document.createElement('div'); row.className = 'row';
+      const t = document.createElement('span'); t.textContent = text;
+      const c = document.createElement('button'); c.className = 'toggle'; c.style.width = 'auto'; c.textContent = 'Cancel'; c.setAttribute('aria-label', label);
+      c.onclick = () => act(() => api(path, 'DELETE'), done);
+      row.append(t, c); planned.appendChild(row);
     }
 
     const h = live.health;

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { makeQueryClient } from '@/App';
 import type { StreamView } from '@/lib/types';
+import { destinationSummary } from '@/components/AddDestination';
 import { DestinationsTab } from './DestinationsTab';
 
 const me = { id: 1, email: 'a@example.com', name: 'A', admin: false, plan: { id: 'PRO', name: 'Pro', streams: 3, maxHeight: 1080, maxFps: 60, storageBytes: 1, monthlyHours: 0, destinations: 5, watermark: false }, timeZone: 'Asia/Kolkata', currency: 'INR', onboarded: true, emailAlerts: true };
@@ -38,9 +39,10 @@ describe('DestinationsTab while live (DS-5)', () => {
   const show = (s: StreamView) =>
     render(<QueryClientProvider client={makeQueryClient()}><MemoryRouter><DestinationsTab stream={s} /></MemoryRouter></QueryClientProvider>);
 
-  it("won't turn off the only destination of a live stream", async () => {
+  it("won't turn off the only destination of a live stream, and says why on the page (UX audit #13)", async () => {
     show(stream([1]));
     expect(await screen.findByRole('switch', { name: 'Send to YouTube main' })).toBeDisabled();
+    expect(screen.getByText('A live stream needs one destination. Stop the stream to turn this off.')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Send to Facebook page' })).toBeEnabled();
     expect(screen.getByText(/other destinations stay connected/)).toBeInTheDocument();
   });
@@ -86,5 +88,39 @@ describe('DestinationsTab: a new destination is tested (MS-6)', () => {
   it("doesn't test a key the live stream starts sending to (the test would fight the stream)", async () => {
     await addFacebook(stream([1]));
     expect(posts).toEqual(['/api/destinations']);
+  });
+});
+
+describe('DestinationsTab in plain words (UX audit #13, #22)', () => {
+  const free = { ...me, plan: { ...me.plan, name: 'Free', destinations: 1 } };
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input).split('?')[0];
+      const body = path === '/api/me' ? free : path === '/api/destinations' ? dests : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('says why a switch is off-limits at the plan limit, with the way to more', async () => {
+    render(<QueryClientProvider client={makeQueryClient()}><MemoryRouter><DestinationsTab stream={{ ...stream([1]), live: { state: 'DRAFT', uptimeSeconds: 0 } } as StreamView} /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByRole('switch', { name: 'Send to Facebook page' })).toBeDisabled();
+    const why = screen.getByText(/Your plan sends to 1 destination at once\. Turn one off or/);
+    expect(within(why).getByRole('link', { name: 'upgrade' })).toHaveAttribute('href', '/studio/settings/billing');
+  });
+
+  it('names the platform and the end of the key instead of the server address', async () => {
+    render(<QueryClientProvider client={makeQueryClient()}><MemoryRouter><DestinationsTab stream={stream([1])} /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText('YouTube, key ending 8f2k')).toBeInTheDocument();
+    expect(screen.getByText('Facebook, key ending a91c')).toBeInTheDocument();
+    expect(screen.queryByText(/rtmp:\/\//)).not.toBeInTheDocument();
+  });
+});
+
+describe('destinationSummary', () => {
+  it('keeps the address only for a server we have no name for', () => {
+    expect(destinationSummary({ platform: 'YOUTUBE', server: 'rtmp://a.rtmp.youtube.com/live2', keyHint: '••••1234' })).toBe('YouTube, key ending 1234');
+    expect(destinationSummary({ platform: 'CUSTOM', server: 'rtmp://my.server/live', keyHint: '••••' })).toBe('rtmp://my.server/live, key saved');
+    expect(destinationSummary({ platform: 'KICK', server: 'rtmps://x', keyHint: '' })).toBe('Kick, no key yet');
   });
 });
