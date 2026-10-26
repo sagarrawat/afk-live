@@ -83,7 +83,10 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
   }, [s.overlays]);
   const [scenes, setScenes] = useState<Scene[]>(s.scenes);
   useEffect(() => setScenes(s.scenes), [s.scenes]);
-  const layersDirty = JSON.stringify(layers) !== JSON.stringify(s.overlays);
+  // Show/hide of a saved layer applies at once (setVisible), so it's never an unsaved change.
+  const saved = new Set(s.overlays.map((o) => o.id));
+  const comparable = (ls: Overlay[]) => JSON.stringify(ls.map((l) => (saved.has(l.id) ? { ...l, visible: true } : l)));
+  const layersDirty = comparable(layers) !== comparable(s.overlays);
   const scenesDirty = JSON.stringify(scenes) !== JSON.stringify(s.scenes);
   const dirty = layersDirty || scenesDirty;
   const what = layersDirty && scenesDirty ? 'overlays and scenes' : layersDirty ? 'overlays' : 'scenes';
@@ -104,8 +107,10 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
   /** UX audit #9: show/hide applies at once, as on Overview (for layers already saved). */
   const setVisible = (o: Overlay, visible: boolean) => {
     set(o.id, { visible });
-    if (s.overlays.some((x) => x.id === o.id)) {
-      update(() => post(`/api/streams/${s.id}/overlays/${encodeURIComponent(o.id)}/visible`, { visible }), visible ? `${overlayName(o)} is showing.` : `${overlayName(o)} is hidden.`);
+    if (saved.has(o.id)) {
+      void update(() => post(`/api/streams/${s.id}/overlays/${encodeURIComponent(o.id)}/visible`, { visible }), visible ? `${overlayName(o)} is showing.` : `${overlayName(o)} is hidden.`).then(
+        (ok) => ok || set(o.id, { visible: !visible }),
+      );
     }
   };
   const current = layers.find((l) => l.id === selected) ?? null;

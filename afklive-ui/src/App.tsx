@@ -101,7 +101,12 @@ function CreatorApp() {
 export function App({ client }: { client?: QueryClient }) {
   const [qc] = useState(() => client ?? makeQueryClient());
   // A data router, so pages can warn before unsaved changes are left behind (useBlocker, UX audit #9).
-  const [router] = useState(() => createBrowserRouter([{ path: '*', element: <Routed qc={qc} /> }]));
+  const [router] = useState(() =>
+    createBrowserRouter([{ path: '*', element: <Routed qc={qc} /> }], {
+      // No loaders, actions or fetchers here, so these v7 behaviours change nothing; opting in keeps the console quiet.
+      future: { v7_fetcherPersist: true, v7_normalizeFormMethod: true, v7_partialHydration: true, v7_skipActionErrorRevalidation: true },
+    }),
+  );
   return (
     <QueryClientProvider client={qc}>
       <ToastProvider>

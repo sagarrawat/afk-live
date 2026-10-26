@@ -1,10 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Input, Select } from './ui';
 
-/** Every IANA zone the browser knows; empty where the browser can't list them. */
+/** Browsers list some zones by their old names (CLDR); people know the current IANA ones. */
+const CURRENT: Record<string, string> = {
+  'Asia/Calcutta': 'Asia/Kolkata',
+  'Asia/Katmandu': 'Asia/Kathmandu',
+  'Asia/Saigon': 'Asia/Ho_Chi_Minh',
+  'Asia/Rangoon': 'Asia/Yangon',
+  'Europe/Kiev': 'Europe/Kyiv',
+  'Atlantic/Faeroe': 'Atlantic/Faroe',
+};
+
+/** Every IANA zone the browser knows (current names, sorted); empty where the browser can't list them. */
 export function allTimeZones(): string[] {
   try {
-    return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+    const listed = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+    return [...new Set(listed.map((z) => CURRENT[z] ?? z))].sort();
   } catch {
     return [];
   }
@@ -58,6 +69,7 @@ export function searchZones(zones: string[], query: string): string[] {
 export function TimeZoneSelect({ id, value, onChange }: { id: string; value: string; onChange: (zone: string) => void }) {
   const zones = useMemo(allTimeZones, []);
   const [query, setQuery] = useState('');
+  const before = useRef(value); // the zone before this search, kept when nothing matches
   const shown = useMemo(() => searchZones(zones, query), [zones, query]);
   const labels = useMemo(() => new Map(zones.map((z) => [z, zoneLabel(z)])), [zones]);
   if (zones.length === 0) {
@@ -73,9 +85,15 @@ export function TimeZoneSelect({ id, value, onChange }: { id: string; value: str
         value={query}
         onChange={(e) => {
           const q = e.target.value;
+          if (!query.trim()) before.current = value;
           setQuery(q);
+          if (!q.trim()) return;
           const matches = searchZones(zones, q);
-          if (q.trim() && matches.length > 0 && !matches.includes(value)) onChange(matches[0]);
+          if (matches.length === 0) {
+            if (value !== before.current) onChange(before.current);
+          } else if (!matches.includes(value)) {
+            onChange(matches[0]);
+          }
         }}
       />
       <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>

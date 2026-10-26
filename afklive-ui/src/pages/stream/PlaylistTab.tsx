@@ -21,9 +21,10 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
   const [items, setItems] = useState<MediaRef[]>(source);
   const [picking, setPicking] = useState(false);
   const [hintKey, setHintKey] = useState(0);
+  const [removing, setRemoving] = useState(false); // a removal on its way: not an unsaved change
   const { busy, update } = useStreamUpdate(s.id);
   useEffect(() => setItems(source), [source]);
-  const dirty = items.map((i) => i.id).join(',') !== source.map((i) => i.id).join(',');
+  const dirty = !removing && items.map((i) => i.id).join(',') !== source.map((i) => i.id).join(',');
   const total = items.reduce((t, i) => t + (i.durationSeconds ?? 0), 0);
   const onAir = isOnAir(s.live.state);
   const save = (next: MediaRef[], done = 'Saved.') =>
@@ -90,7 +91,8 @@ export function ItemsEditor({ stream: s, kind }: { stream: StreamView; kind: 'pl
                     onClick={() => {
                       const next = items.filter((_, j) => j !== i);
                       setItems(next);
-                      save(next, `Removed ${m.title}.`);
+                      setRemoving(true);
+                      void save(next, `Removed ${m.title}.`).finally(() => setRemoving(false));
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
