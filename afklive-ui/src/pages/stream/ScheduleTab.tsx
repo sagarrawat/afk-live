@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { TimeZoneSelect } from '@/components/TimeZoneSelect';
 import { CalendarClock, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Dialog, Empty, Field, IconButton, Input, Panel, Segmented, Toggle } from '@/components/ui';
@@ -245,7 +246,7 @@ function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; 
           </div>
         )}
         <Field label="Time zone" htmlFor="sc-tz">
-          <Input id="sc-tz" value={tz} onChange={(e) => setTz(e.target.value)} />
+          <TimeZoneSelect id="sc-tz" value={tz} onChange={setTz} />
         </Field>
         {s.source === 'PLAYLIST' && (
           <div>

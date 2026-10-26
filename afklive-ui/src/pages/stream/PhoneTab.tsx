@@ -70,6 +70,13 @@ export function PhoneTab({ stream: s }: { stream: StreamView }) {
             New stream key
           </Button>
         </div>
+        <p className="mt-4 text-sm text-muted">
+          Streaming from this phone? Switch scenes, go live or stop from another phone or tablet with the{' '}
+          <a className="text-accent hover:underline" href={`/remote.html?stream=${s.id}`}>
+            remote control
+          </a>
+          .
+        </p>
       </Panel>
 
       <PhoneSettings stream={s} />

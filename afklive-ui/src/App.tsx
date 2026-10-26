@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { createBrowserRouter, Link, Navigate, Route, RouterProvider, Routes, useLocation } from 'react-router-dom';
 import { Shell, useTheme } from './components/Shell';
 import { Empty, ToastProvider } from './components/ui';
+import { LeaveGuard, UnsavedChangesProvider } from './components/unsaved';
 import { ApiError, patch } from './lib/api';
 import { browserTimeZone, guessCurrency } from './lib/format';
 import { keys, useMe } from './lib/queries';
@@ -62,40 +63,50 @@ function Routed({ qc }: { qc: QueryClient }) {
 
 function CreatorApp() {
   return (
-    <Shell>
-      <Routes>
-        <Route path="/studio" element={<LegacyRedirects />} />
-        <Route path="/studio/setup" element={<Setup />} />
-        <Route path="/studio/streams/:id" element={<StreamPage />} />
-        <Route path="/studio/streams/:id/:tab" element={<StreamPage />} />
-        <Route path="/studio/schedule" element={<Schedule />} />
-        <Route path="/studio/library" element={<Library />} />
-        <Route path="/studio/destinations" element={<Destinations />} />
-        <Route path="/studio/settings" element={<Settings />} />
-        <Route path="/studio/settings/:section" element={<Settings />} />
-        <Route path="/studio/help" element={<Help />} />
-        <Route
-          path="*"
-          element={
-            <Empty title="That page doesn't exist" action={<Link to="/studio" className="text-accent hover:underline">Go to your streams</Link>}>
-              The link may be old or mistyped.
-            </Empty>
-          }
-        />
-      </Routes>
-    </Shell>
+    <UnsavedChangesProvider>
+      <LeaveGuard />
+      <Shell>
+        <Routes>
+          <Route path="/studio" element={<LegacyRedirects />} />
+          <Route path="/studio/setup" element={<Setup />} />
+          <Route path="/studio/streams/:id" element={<StreamPage />} />
+          <Route path="/studio/streams/:id/:tab" element={<StreamPage />} />
+          <Route path="/studio/schedule" element={<Schedule />} />
+          <Route path="/studio/library" element={<Library />} />
+          <Route path="/studio/destinations" element={<Destinations />} />
+          <Route path="/studio/settings" element={<Settings />} />
+          <Route path="/studio/settings/:section" element={<Settings />} />
+          <Route path="/studio/help" element={<Help />} />
+          <Route
+            path="*"
+            element={
+              <Empty
+                title="That page doesn't exist"
+                action={
+                  <Link to="/studio" className="text-accent hover:underline">
+                    Go to your streams
+                  </Link>
+                }
+              >
+                The link may be old or mistyped.
+              </Empty>
+            }
+          />
+        </Routes>
+      </Shell>
+    </UnsavedChangesProvider>
   );
 }
 
 export function App({ client }: { client?: QueryClient }) {
-  const qc = client ?? makeQueryClient();
+  const [qc] = useState(() => client ?? makeQueryClient());
+  // A data router, so pages can warn before unsaved changes are left behind (useBlocker, UX audit #9).
+  const [router] = useState(() => createBrowserRouter([{ path: '*', element: <Routed qc={qc} /> }]));
   return (
     <QueryClientProvider client={qc}>
       <ToastProvider>
         <UploadsProvider>
-          <BrowserRouter>
-            <Routed qc={qc} />
-          </BrowserRouter>
+          <RouterProvider router={router} />
         </UploadsProvider>
       </ToastProvider>
     </QueryClientProvider>

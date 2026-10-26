@@ -24,9 +24,15 @@ const SCENES = [
 
 export function OverviewTab({ stream: s }: { stream: StreamView }) {
   const onAir = isOnAir(s.live.state);
+  // UX audit #10: status before settings. On a phone (one column) health and "is it reaching YouTube"
+  // come first; on a wide screen they sit at the top of the right column.
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <div className="space-y-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-[auto_1fr]">
+      <div className="space-y-6 lg:col-start-2 lg:row-start-1" data-testid="overview-status">
+        <HealthPanel stream={s} />
+        <DestinationsPanel stream={s} />
+      </div>
+      <div className="space-y-6 lg:col-start-1 lg:row-span-2 lg:row-start-1">
         <YouTubeSideCard stream={s} />
         <VerticalHint stream={s} />
         <GoLiveCheckCard stream={s} />
@@ -35,9 +41,7 @@ export function OverviewTab({ stream: s }: { stream: StreamView }) {
         <UptimePanel stream={s} />
         <RecentRuns stream={s} />
       </div>
-      <div className="space-y-6">
-        <HealthPanel stream={s} />
-        <DestinationsPanel stream={s} />
+      <div className="space-y-6 self-start lg:col-start-2 lg:row-start-2">
         <TimelinePanel stream={s} />
       </div>
     </div>
@@ -80,6 +84,7 @@ function NowPlaying({ stream: s }: { stream: StreamView }) {
             {s.loopCount > 0 ? `, ${s.loopCount} pass${s.loopCount === 1 ? '' : 'es'} then stop` : ', repeating forever'}.
           </p>
         )}
+        <RemoteLink stream={s} />
       </Panel>
     );
   }
@@ -118,7 +123,21 @@ function NowPlaying({ stream: s }: { stream: StreamView }) {
       ) : (
         <p className="text-muted">Starting the first video…</p>
       )}
+      <RemoteLink stream={s} />
     </Panel>
+  );
+}
+
+/** UX audit #20: the phone-friendly remote (remote.html) works for playlist streams too: go live, skip, stop, overlays. */
+export function RemoteLink({ stream: s, className = 'mt-3' }: { stream: StreamView; className?: string }) {
+  return (
+    <p className={clsx(className, 'text-sm text-muted')}>
+      On another device? Open the{' '}
+      <a className="text-accent hover:underline" href={`/remote.html?stream=${s.id}`}>
+        remote control
+      </a>
+      .
+    </p>
   );
 }
 
@@ -166,9 +185,7 @@ function PhoneControl({ stream: s }: { stream: StreamView }) {
               );
             })}
           </div>
-          <p className="mt-3 text-sm text-muted">
-            On another device? Open the <a className="text-accent hover:underline" href={`/remote.html?stream=${s.id}`}>remote control</a>.
-          </p>
+          <RemoteLink stream={s} />
         </div>
       )}
       {!onAir && (

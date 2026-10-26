@@ -2,9 +2,11 @@ import clsx from 'clsx';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock, Image as ImageIcon, Music, Plus, Timer, Trash2, Type, Rss } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { MediaPicker } from '@/components/MediaPicker';
+import { TimeZoneSelect } from '@/components/TimeZoneSelect';
 import { isOnAir } from '@/components/status';
 import { Button, Field, IconButton, Input, Panel, Segmented, Select, Toggle } from '@/components/ui';
-import { put } from '@/lib/api';
+import { post, put } from '@/lib/api';
+import { SaveBar, useUnsavedChanges } from '@/components/unsaved';
 import { browserTimeZone } from '@/lib/format';
 import type { Overlay, Scene, StreamView } from '@/lib/types';
 import { overlayName } from './OverviewTab';
@@ -68,8 +70,44 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
   const [picking, setPicking] = useState<'image' | null>(null);
   const [imageThumbs, setImageTitles] = useState<Record<number, string>>({});
   const { busy, update } = useStreamUpdate(s.id);
-  useEffect(() => setLayers(s.overlays), [s.overlays]);
-  const dirty = JSON.stringify(layers) !== JSON.stringify(s.overlays);
+  // A newer copy from the server (e.g. a switch on Overview) replaces the layers, unless there are
+  // unsaved edits: then only show/hide is taken from it, and the edits stay.
+  const base = useRef(s.overlays);
+  const adopt = useRef(false); // just saved: take the server's copy as it is
+  useEffect(() => {
+    const before = base.current;
+    base.current = s.overlays;
+    const saved = adopt.current;
+    adopt.current = false;
+    setLayers((local) => (saved || JSON.stringify(local) === JSON.stringify(before) ? s.overlays : withVisibility(local, s.overlays)));
+  }, [s.overlays]);
+  const [scenes, setScenes] = useState<Scene[]>(s.scenes);
+  useEffect(() => setScenes(s.scenes), [s.scenes]);
+  const layersDirty = JSON.stringify(layers) !== JSON.stringify(s.overlays);
+  const scenesDirty = JSON.stringify(scenes) !== JSON.stringify(s.scenes);
+  const dirty = layersDirty || scenesDirty;
+  const what = layersDirty && scenesDirty ? 'overlays and scenes' : layersDirty ? 'overlays' : 'scenes';
+  useUnsavedChanges(dirty, what);
+  const onAir = isOnAir(s.live.state);
+  const saveAll = () =>
+    update(async () => {
+      let result: unknown;
+      if (layersDirty) result = await put(`/api/streams/${s.id}/overlays`, layers);
+      if (scenesDirty) result = await put(`/api/streams/${s.id}/scenes`, scenes);
+      adopt.current = layersDirty;
+      return result;
+    }, onAir ? 'Saved. Viewers see it within a second.' : 'Saved.');
+  const undoAll = () => {
+    setLayers(s.overlays);
+    setScenes(s.scenes);
+  };
+  /** UX audit #9: show/hide applies at once, as on Overview (for layers already saved). */
+  const setVisible = (o: Overlay, visible: boolean) => {
+    set(o.id, { visible });
+    if (s.overlays.some((x) => x.id === o.id)) {
+      update(() => post(`/api/streams/${s.id}/overlays/${encodeURIComponent(o.id)}/visible`, { visible }), visible ? `${overlayName(o)} is showing.` : `${overlayName(o)} is hidden.`);
+    }
+  };
   const current = layers.find((l) => l.id === selected) ?? null;
   const vertical = s.orientation === 'VERTICAL';
 
@@ -97,18 +135,9 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
               onChange={setScene}
               options={[...(s.source === 'PLAYLIST' ? [{ value: 'ALL', label: 'All' }] : []), ...Object.entries(SCENE_LABEL).map(([value, label]) => ({ value, label }))]}
             />
-            <div className="flex flex-wrap gap-2">
-              <TemplatePicker stream={s} disabled={dirty} />
-              {dirty && (
-                <Button size="sm" variant="ghost" onClick={() => setLayers(s.overlays)}>
-                  Undo changes
-                </Button>
-              )}
-              <Button size="sm" variant="primary" busy={busy} disabled={!dirty} onClick={() => update(() => put(`/api/streams/${s.id}/overlays`, layers), isOnAir(s.live.state) ? 'Saved. Viewers see it within a second.' : 'Saved.')}>
-                Save overlays
-              </Button>
-            </div>
+            <TemplatePicker stream={s} disabled={dirty} />
           </div>
+          {dirty && <p className="text-sm text-muted">Save or undo your changes to start from a template.</p>}
           <Canvas
             vertical={vertical}
             background={sceneColor(s.scenes, scene)}
@@ -134,7 +163,7 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
                         {overlayName(o)}
                         {o.scene && <span className="ml-2 text-xs text-muted">{SCENE_LABEL[o.scene]} only</span>}
                       </button>
-                      <Toggle label={`Show ${overlayName(o)}`} checked={o.visible} onChange={(v) => set(o.id, { visible: v })} />
+                      <Toggle label={`Show ${overlayName(o)}`} checked={o.visible} onChange={(v) => setVisible(o, v)} />
                       <IconButton label={`Delete ${overlayName(o)}`} onClick={() => setLayers((ls) => ls.filter((l) => l.id !== o.id))}>
                         <Trash2 className="h-4 w-4" />
                       </IconButton>
@@ -148,7 +177,9 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
         </div>
       </div>
 
-      <ScenesPanel stream={s} />
+      <ScenesPanel stream={s} scenes={scenes} setScenes={setScenes} />
+
+      <SaveBar dirty={dirty} busy={busy} what={what} onSave={saveAll} onUndo={undoAll} />
 
       <MediaPicker
         open={picking === 'image'}
@@ -170,6 +201,12 @@ export function OverlaysTab({ stream: s }: { stream: StreamView }) {
       />
     </div>
   );
+}
+
+/** Local layers with show/hide taken from the server's copy. */
+export function withVisibility(local: Overlay[], server: Overlay[]): Overlay[] {
+  const visible = new Map(server.map((o) => [o.id, o.visible]));
+  return local.map((l) => (visible.has(l.id) && visible.get(l.id) !== l.visible ? { ...l, visible: visible.get(l.id)! } : l));
 }
 
 function sceneColor(scenes: Scene[], scene: string): string {
@@ -370,7 +407,7 @@ function LayerEditor({ overlay: o, onChange, onPickImage }: { overlay: Overlay; 
         {o.type !== 'IMAGE' && <Slider label="Text size" value={o.size} min={0.015} max={0.2} onChange={(v) => onChange({ size: v })} />}
         {o.type === 'CLOCK' && (
           <Field label="Time zone" htmlFor="ov-tz">
-            <Input id="ov-tz" value={o.timeZone ?? ''} placeholder="Asia/Kolkata" onChange={(e) => onChange({ timeZone: e.target.value })} />
+            <TimeZoneSelect id="ov-tz" value={o.timeZone ?? ''} onChange={(z) => onChange({ timeZone: z })} />
           </Field>
         )}
         {o.type === 'COUNTDOWN' && (
@@ -497,22 +534,11 @@ function ColorField({ label, value, onChange, allowNone }: { label: string; valu
   );
 }
 
-function ScenesPanel({ stream: s }: { stream: StreamView }) {
-  const [scenes, setScenes] = useState<Scene[]>(s.scenes);
+function ScenesPanel({ stream: s, scenes, setScenes }: { stream: StreamView; scenes: Scene[]; setScenes: (f: (sc: Scene[]) => Scene[]) => void }) {
   const [picking, setPicking] = useState<string | null>(null);
-  const { busy, update } = useStreamUpdate(s.id);
-  useEffect(() => setScenes(s.scenes), [s.scenes]);
-  const dirty = JSON.stringify(scenes) !== JSON.stringify(s.scenes);
   const set = (name: string, p: Partial<Scene>) => setScenes((sc) => sc.map((x) => (x.name === name ? { ...x, ...p } : x)));
   return (
-    <Panel
-      title="Scenes"
-      action={
-        <Button size="sm" variant="primary" disabled={!dirty} busy={busy} onClick={() => update(() => put(`/api/streams/${s.id}/scenes`, scenes), 'Scenes saved.')}>
-          Save scenes
-        </Button>
-      }
-    >
+    <Panel title="Scenes">
       <p className="mb-4 text-muted">
         {s.source === 'PHONE'
           ? 'Switch scenes while live from the Overview tab or the remote. BRB shows automatically when your phone drops.'
