@@ -226,9 +226,10 @@ put MediaMTX back, remove `/opt/afklive/scripts/web-deploy.sh` (the workflow the
 ## Live encoder
 
 Every studio stream (overlays, scenes, phone input, or a playlist not in copy mode) has one x264
-encoder. Fixed, because YouTube requires it: constant bitrate with filler (720p 4 Mbps, 1080p 6 Mbps,
-60 fps ×1.5), a keyframe every 2 s, AAC 128 kbps 44.1 kHz stereo. Configurable by environment, read at
-start (restart the process to change it):
+encoder. Fixed, because YouTube requires it: constant bitrate with filler, a keyframe every 2 s, AAC
+128 kbps 44.1 kHz stereo. The video bitrate is per plan (below); with nothing set it is the built-in
+ladder: 720p 4 Mbps, 1080p 6 Mbps, 1440p 9 Mbps, 2160p 15 Mbps, 60 fps ×1.5. Configurable by
+environment, read at start (restart the process to change it):
 
 - **`APP_STREAMING_X264PRESET`** (default `superfast`): one of `ultrafast`, `superfast`, `veryfast`,
   `faster`, `fast`, `medium`. Anything else is logged as a warning and `superfast` is used. Measured on
@@ -241,7 +242,63 @@ start (restart the process to change it):
   no default cap. A cap only bounds latency spikes on a crowded worker; it doesn't save CPU.
 - The worker logs `Live encoder: x264 preset …, threads …` at start.
 
-**Presets and copy mode.** Copy mode hands a stream between a profile copy and the studio encoder
+### Video bitrate per plan (FO-4)
+
+**`APP_STREAMING_BITRATE_<PLAN>_<CLASS>`** sets the video bitrate in kbps at 30 fps (60 fps streams get
+1.5× of it) for one plan and height class. `<PLAN>` is `FREE`, `ESSENTIALS` (shown as Creator), `PRO`,
+`AGENCY`, or `DEFAULT` for every plan without its own value; `<CLASS>` is the picture's short side:
+`720` (anything under 1080, vertical 720x1280 included), `1080`, `1440` or `2160`. Example:
+`APP_STREAMING_BITRATE_FREE_720=3000` (property `app.streaming.bitrate.free.720`). A plan's own value
+wins, then `DEFAULT`, then the built-in ladder. The web and worker logs print the table at start:
+`Live video bitrates (kbps at 30 fps): FREE 720=… 1080=…`.
+
+- **Floors.** A value below YouTube's ingest guidance is raised to it with a warning: 720 → 1,500
+  (the bottom of YouTube's 720p30 range), 1080 → 5,000 (repo rule: 1080p30 ≥ 5 Mbps), 1440 → 6,000,
+  2160 → 13,000. 1.5× of each floor also meets YouTube's 60 fps ranges. Anything that isn't a whole
+  number (a trailing `k` is fine) is ignored with a warning; above 50,000 is capped. A typo never stops
+  a process.
+- **Set it on the web instances.** The web app picks the bitrate once, when a run goes live, from the
+  owner's plan at that moment, and records it in the run's spec (`studio.videoKbps`). Workers encode at
+  the recorded value. So a new value or a plan change applies to the **next** run; a running stream
+  keeps its bitrate through live edits, restarts, takeovers and deploys (it never reconnects for it).
+  Runs from before this was recorded use the built-in ladder. Set the same values on workers too, so
+  the start-up logs agree (workers don't use them otherwise).
+- **Needs a worker deploy** of the release that reads `videoKbps` before any value is set: an older
+  worker ignores it and sends the built-in rate (which, unchanged, is the same thing).
+- **Copy mode.** Profile copies are made at the run's bitrate and kept per bitrate
+  (`media_playout_copies.video_kbps`; 0 = the built-in ladder's, which every copy made before this has),
+  so a copy at another bitrate is never spliced into a stream. Changing a plan's value means each video
+  gets a new profile copy, made in the background the first time a run at the new rate asks for it (those
+  runs use the studio meanwhile); copies at the old rate are deleted after 30 days unplayed (FO-6).
+- **Health.** The bitrate check on the stream page and in admin compares against the run's recorded
+  bitrate, so a lower plan bitrate doesn't show as "below the usual quality".
+- **Cost.** FO-3 (`CostMeter`) counts the bytes destinations actually sent, so a change shows up in
+  the cost panel's GB per hour on its own; it has no bitrate assumptions to update.
+
+**Traffic per 24/7 stream, per destination** (video + 128 kbps audio, 30 days, before ~2–5% protocol
+overhead; every destination is a separate copy, so two destinations send twice this):
+
+| Video bitrate | Total kbps | GB/day | TB/month |
+|---|---|---|---|
+| 2.5 Mbps | 2,628 | 28.4 | 0.85 |
+| 3 Mbps | 3,128 | 33.8 | 1.01 |
+| 3.5 Mbps | 3,628 | 39.2 | 1.18 |
+| 4 Mbps (720p30 today) | 4,128 | 44.6 | 1.34 |
+| 6 Mbps (1080p30, 720p60 today) | 6,128 | 66.2 | 1.99 |
+| 9 Mbps (1080p60 today) | 9,128 | 98.6 | 2.96 |
+
+(TB/month = kbps × 0.000324. One droplet's 5,000 GB included transfer is about 3.7 streams-and-destinations
+at 4 Mbps for a whole month, 4.9 at 3 Mbps.)
+
+**Try it on Free first.** Lower `APP_STREAMING_BITRATE_FREE_720` (Free is 720p30 only), watch a few
+Free streams on YouTube (Stats for nerds, and YouTube Studio's stream health for "lower than
+recommended" warnings) and the cost panel for a few days, then decide on paid plans. Measure first with
+`afklive-scripts/bitrate-study.sh` on real footage (gameplay, a music still, a talking head): pick the
+lowest rate whose SSIM is within 0.005 of 4 Mbps for the footage creators actually stream.
+
+### Presets and copy mode
+
+Copy mode hands a stream between a profile copy and the studio encoder
 without reconnecting, so both must write the same H.264 parameter sets. Presets fall into families
 with byte-identical SPS/PPS (checked against real x264 by `EncoderSettingsFfmpegTest`): `superfast`
 and `veryfast` are one family; `ultrafast`, `faster`, `fast` and `medium` are each their own. Each
