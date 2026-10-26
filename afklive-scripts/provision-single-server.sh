@@ -79,7 +79,7 @@ POSTGRES_DB=afklive
 POSTGRES_USER=afklive
 POSTGRES_PASSWORD=$DB_PASS
 
-# Library files on this server's disk (move to Cloudflare R2 later: STORAGE_TYPE=s3 + DO_SPACES_* with the R2 endpoint)
+# Library files on this server's disk (move to Cloudflare R2 later: STORAGE_TYPE=s3 + STORAGE_*; docs/operations.md#object-storage)
 STORAGE_TYPE=local
 STREAMING_WORKER_MAX_STREAMS=$MAX_STREAMS
 STREAMING_CACHE_GB=20
