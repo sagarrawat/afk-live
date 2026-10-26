@@ -231,7 +231,7 @@ public class StudioBuilder {
         String wanted = initialScene != null ? initialScene : spec.initialScene();
         String first = wanted != null && scenes.stream().anyMatch(sc -> sc.name().equals(wanted)) ? wanted : StudioSpec.LIVE;
         long grace = spec.phone() != null ? spec.phone().graceSeconds() * 1000L : 0;
-        Studio studio = new Studio(canvas, workDir, ffmpeg, encoderSettings, scenes, first, global, grace, listener);
+        Studio studio = new Studio(canvas, workDir, ffmpeg, encoderSettings, spec.effectiveVideoKbps(), scenes, first, global, grace, listener);
         Built built = new Built(studio, playlist, music, canvas, ffmpeg, factory);
         built.streamFit = streamFit;
         built.crossfadeSeconds = spec.crossfadeSeconds();

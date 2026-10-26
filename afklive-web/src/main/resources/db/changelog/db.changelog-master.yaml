@@ -81,3 +81,5 @@ databaseChangeLog:
       file: db/changelog/changes/130-ai-title-writer.sql
   - include:
       file: db/changelog/changes/135-media-deletions.sql
+  - include:
+      file: db/changelog/changes/150-copy-bitrate.sql

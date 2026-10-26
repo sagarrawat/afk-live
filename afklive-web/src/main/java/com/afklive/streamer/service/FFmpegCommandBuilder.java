@@ -294,8 +294,8 @@ public class FFmpegCommandBuilder {
     static final int GOP = OUTPUT_FPS * 2;
 
     /**
-     * Video bitrate ladder (kbps): target / maxrate / buffer. Each tier is at or above YouTube's
-     * minimum for that resolution at 30 fps (720p 3 Mbps, 1080p 5, 1440p 7, 2160p 11).
+     * Video bitrate ladder (kbps) for the classic single-file encoder: target / maxrate / buffer. The
+     * targets are {@link VideoBitrates#BUILT_IN}; studio runs use {@link VideoBitrates} (per plan, FO-4).
      */
     static String[] bitrateFor(int height) {
         if (height >= 2160) return new String[]{"15000k", "20000k", "40000k"};
@@ -304,10 +304,12 @@ public class FFmpegCommandBuilder {
         return new String[]{"4000k", "4500k", "8000k"};
     }
 
-    /** The live video bitrate in kbps for a picture with this short side and frame rate (60 fps gets 1.5x). */
+    /**
+     * The built-in live video bitrate in kbps for a picture with this short side and frame rate (60 fps gets
+     * 1.5x): what a run without a recorded bitrate sends. A new run records its plan's ({@link VideoBitrates}).
+     */
     public static int liveVideoKbps(int shortSide, int fps) {
-        int kbps = Integer.parseInt(bitrateFor(shortSide)[0].replace("k", ""));
-        return fps > 30 ? kbps * 3 / 2 : kbps;
+        return VideoBitrates.builtInKbps(shortSide, fps);
     }
 
     /**
@@ -317,7 +319,17 @@ public class FFmpegCommandBuilder {
      * preset and thread cap come from {@link EncoderSettings}; threads 0 leaves x264 to decide.
      */
     public static List<String> liveEncodeArgs(int shortSide, int fps, EncoderSettings encoder) {
-        int target = liveVideoKbps(shortSide, fps);
+        return liveEncodeArgsAt(liveVideoKbps(shortSide, fps), fps, encoder);
+    }
+
+    /**
+     * {@link #liveEncodeArgs} at an explicit video bitrate (FO-4: the one recorded in the run's spec, already
+     * including the 60 fps factor). Profile copies for copy mode are made with the same value as the studio.
+     */
+    public static List<String> liveEncodeArgsAt(int target, int fps, EncoderSettings encoder) {
+        if (target <= 0) {
+            throw new IllegalArgumentException("video bitrate must be positive, not " + target);
+        }
         String rate = target + "k";
         int gop = fps * 2;
         List<String> args = new ArrayList<>(List.of("-c:v", "libx264", "-preset", encoder.preset()));

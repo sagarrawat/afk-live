@@ -247,7 +247,7 @@ public class PlayoutCopies {
                 "UPDATE media_playout_copies SET status = 'WORKING', claimed_at = ? WHERE id = ("
                         + " SELECT id FROM media_playout_copies WHERE status = 'PENDING' OR (status = 'WORKING' AND claimed_at < ?)"
                         + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)"
-                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, x264_preset",
+                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, x264_preset, video_kbps",
                 Timestamp.from(claimedAt), Timestamp.from(claimedAt.minus(STALE_CLAIM)));
         if (claimed.isEmpty()) {
             return false;
@@ -281,6 +281,8 @@ public class PlayoutCopies {
         // The preset the requesting worker's studio uses, so its stream and the copy can follow each other;
         // none recorded: asked for by a worker from before the preset was configurable.
         String preset = presetOrLegacy((String) c.get("x264_preset"));
+        // FO-4: the bitrate of the run that asked for it (0: the built-in ladder's, as before it was recorded).
+        int kbps = kbpsOf(c.get("video_kbps"), w, h, fps);
 
         String key = null;
         String reason = null;
@@ -290,7 +292,7 @@ public class PlayoutCopies {
         try {
             out = Files.createTempFile("playout-", profile ? ".ts" : ".mp4");
             List<String> cmd = profile
-                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio, preset)
+                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio, preset, kbps)
                     : command(storage.readLocation(original), out, w, h, fps, sourceFps);
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             current.process().set(p);
@@ -497,6 +499,10 @@ public class PlayoutCopies {
      * sends it, with the item's fit and loudness correction baked in. Returns its storage key when ready;
      * otherwise null, after asking for it when {@code request} is set.
      * <p>
+     * Copies are kept per video bitrate ({@code videoKbps}, FO-4: the run's, the same its studio encodes at),
+     * so a run never splices a copy at another bitrate into its stream; the built-in ladder's bitrate is
+     * stored as 0, which is also what copies made before bitrates were recorded have.
+     * <p>
      * A copy only counts when it was encoded with an x264 preset of this worker's family
      * ({@link EncoderSettings#compatibleWith}): its stream must look exactly like this worker's studio
      * encoder's, or a hand-over between them could confuse a decoder. A ready copy of another family is made
@@ -505,6 +511,12 @@ public class PlayoutCopies {
      */
     public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
                                 boolean request) {
+        return profileKeyFor(originalKey, canvasWidth, canvasHeight, fps, fit, gainDb,
+                VideoBitrates.builtInKbps(Math.min(canvasWidth, canvasHeight), fps), request);
+    }
+
+    public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
+                                int videoKbps, boolean request) {
         List<Long> ids = jdbc.queryForList("SELECT id FROM media_assets WHERE s3_key = ? AND content_type = 'VIDEO' LIMIT 1",
                 Long.class, originalKey);
         if (ids.isEmpty()) {
@@ -513,16 +525,17 @@ public class PlayoutCopies {
         long mediaId = ids.getFirst();
         String f = fit == null ? "FIT" : fit.toUpperCase(Locale.ROOT);
         int gain = (int) Math.round(gainDb * 10);
+        int kbpsKey = kbpsKey(videoKbps, canvasWidth, canvasHeight, fps);
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, status, storage_key, x264_preset FROM media_playout_copies "
                 + "WHERE media_id = ? AND kind = 'PROFILE' AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? "
-                + "AND gain_tenths = ?", mediaId, canvasWidth, canvasHeight, fps, f, gain);
+                + "AND gain_tenths = ? AND video_kbps = ?", mediaId, canvasWidth, canvasHeight, fps, f, gain, kbpsKey);
         if (rows.isEmpty()) {
             if (request) {
-                jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, x264_preset) "
-                        + "VALUES (?, 'PROFILE', ?, ?, ?, ?, ?, 'PENDING', ?) ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
-                        mediaId, canvasWidth, canvasHeight, fps, f, gain, encoder.preset());
-                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({}, x264 {})", mediaId, canvasWidth, canvasHeight, fps, f,
-                        encoder.preset());
+                jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, x264_preset, video_kbps) "
+                        + "VALUES (?, 'PROFILE', ?, ?, ?, ?, ?, 'PENDING', ?, ?) ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
+                        mediaId, canvasWidth, canvasHeight, fps, f, gain, encoder.preset(), kbpsKey);
+                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({}, x264 {}, {} kbps)", mediaId, canvasWidth, canvasHeight, fps, f,
+                        encoder.preset(), kbpsOf(kbpsKey, canvasWidth, canvasHeight, fps));
             }
             return null;
         }
@@ -572,6 +585,17 @@ public class PlayoutCopies {
         }
     }
 
+    /** The {@code video_kbps} a copy at this bitrate is stored under: 0 for the built-in ladder's (and every older copy). */
+    static int kbpsKey(int videoKbps, int canvasWidth, int canvasHeight, int fps) {
+        return videoKbps <= 0 || videoKbps == VideoBitrates.builtInKbps(Math.min(canvasWidth, canvasHeight), fps) ? 0 : videoKbps;
+    }
+
+    /** The bitrate a copy row stands for: its {@code video_kbps}, or the built-in ladder's when 0 or missing. */
+    static int kbpsOf(Object stored, int canvasWidth, int canvasHeight, int fps) {
+        Integer v = stored == null ? null : ((Number) stored).intValue();
+        return VideoBitrates.recordedOrBuiltIn(v, Math.min(canvasWidth, canvasHeight), fps);
+    }
+
     /** A preset recorded on a copy row, or the legacy one when none (or something unexpected) is recorded. */
     static String presetOrLegacy(String recorded) {
         return recorded != null && EncoderSettings.PRESETS.contains(recorded) ? recorded : EncoderSettings.LEGACY_PRESET;
@@ -585,6 +609,13 @@ public class PlayoutCopies {
      */
     public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
                                        double gainDb, boolean hasAudio, String x264Preset) {
+        return profileCommand(input, output, canvasWidth, canvasHeight, fps, fit, gainDb, hasAudio, x264Preset,
+                VideoBitrates.builtInKbps(Math.min(canvasWidth, canvasHeight), fps));
+    }
+
+    /** {@link #profileCommand} at the requesting run's video bitrate (FO-4), so the copy matches its studio's stream. */
+    public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
+                                       double gainDb, boolean hasAudio, String x264Preset, int videoKbps) {
         com.afklive.streamer.streaming.studio.Canvas canvas = new com.afklive.streamer.streaming.studio.Canvas(canvasWidth, canvasHeight, fps, 44100);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit parsed = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit f = parsed == null ? com.afklive.streamer.streaming.studio.DecoderSource.Fit.FIT : parsed;
@@ -606,7 +637,7 @@ public class PlayoutCopies {
         }
         // The preset of the studio that asked for it, so the two can follow each other in one stream (copy
         // mode); one thread, because this is background work.
-        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvasWidth, canvasHeight), fps, new EncoderSettings(x264Preset, 0)));
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgsAt(videoKbps, fps, new EncoderSettings(x264Preset, 0)));
         cmd.addAll(List.of("-threads", "1", "-f", "mpegts", "-mpegts_flags", "+resend_headers", "-muxdelay", "0", output.toString()));
         return cmd;
     }

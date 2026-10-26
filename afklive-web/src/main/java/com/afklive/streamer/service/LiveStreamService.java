@@ -58,6 +58,8 @@ public class LiveStreamService {
     private final CapacityEstimator capacity;
     private final com.afklive.streamer.repository.StreamEventRepository events;
     private final DestinationTestService destinationTests;
+    /** FO-4: the live video bitrate per plan; resolved once per run at go-live and recorded in its spec. */
+    private final VideoBitrates videoBitrates;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -698,7 +700,10 @@ public class LiveStreamService {
         }
         String override = playlist == null || playlist.isEmpty() ? null
                 : String.join(",", playlist.stream().map(String::valueOf).toList());
-        StudioSpec studio = studioSpec(s, scene, override);
+        // FO-4: the bitrate for the owner's plan now, recorded in the run's spec: every rebuild of the spec keeps it
+        // (runSpec), so neither a plan change nor a new setting changes a running stream.
+        StudioSpec studio = studioSpec(s, scene, override)
+                .withVideoKbps(videoBitrates.videoKbps(s.getUser().getPlanType(), s.getQualityHeight(), s.getFps()));
         List<StreamDestination> enabled = enabledDestinations(s);
         List<StreamSpec.Destination> dests = new ArrayList<>();
         for (StreamDestination d : enabled) {
@@ -807,7 +812,7 @@ public class LiveStreamService {
         StreamJob job = currentJob(s).orElseThrow(() -> new com.afklive.streamer.exception.ConflictException("This stream isn't live."));
         StreamSpec current = StreamSpec.fromJson(job.getSpec());
         if (current.studio() != null && current.studio().finishAfterPass()) {
-            StudioSpec next = studioSpec(s, job.getScene(), job.getPlaylistOverride());
+            StudioSpec next = keepRunBitrate(studioSpec(s, job.getScene(), job.getPlaylistOverride()), current);
             String spec = StreamSpec.studio(current.username(), current.streamId(), next, current.destinations()).toJson();
             if (jobs.updateSpec(job.getId(), spec) != 1) {
                 throw new com.afklive.streamer.exception.ConflictException("This stream isn't live.");
@@ -1154,12 +1159,17 @@ public class LiveStreamService {
      */
     private StudioSpec persistSpec(StreamJob job, LiveStream s, boolean sceneFromJob) {
         StreamSpec current = StreamSpec.fromJson(job.getSpec());
-        StudioSpec next = studioSpec(s, sceneFromJob ? job.getScene() : null, job.getPlaylistOverride());
+        StudioSpec next = keepRunBitrate(studioSpec(s, sceneFromJob ? job.getScene() : null, job.getPlaylistOverride()), current);
         if (current.studio() != null && current.studio().finishAfterPass()) {
             next = next.withFinishAfterPass();
         }
         jobs.updateSpec(job.getId(), StreamSpec.studio(current.username(), current.streamId(), next, current.destinations()).toJson());
         return next;
+    }
+
+    /** FO-4: a rebuilt spec keeps the bitrate the run went live with (none recorded: the built-in ladder's, as before). */
+    static StudioSpec keepRunBitrate(StudioSpec next, StreamSpec current) {
+        return next.withVideoKbps(current.studio() == null ? null : current.studio().videoKbps());
     }
 
     private void command(StreamJob job, StreamCommand.Type type, String payload) {

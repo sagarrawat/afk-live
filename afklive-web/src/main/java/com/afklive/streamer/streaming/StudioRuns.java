@@ -220,7 +220,8 @@ public class StudioRuns {
             studio.putScene(new Studio.Scene(name, video, sceneMusic ? musicNow : null, live ? videoVolume : 0, musicVolume,
                     perScene.getOrDefault(name, List.of()), old.fallbackScene()));
         }
-        h.spec = next;
+        // FO-4: the run's bitrate is fixed at go-live; a reload (built from today's plan) never changes it.
+        h.spec = next.withVideoKbps(h.spec.videoKbps());
     }
 
     private static boolean sameBackground(StudioSpec.SceneSetting a, StudioSpec.SceneSetting b) {

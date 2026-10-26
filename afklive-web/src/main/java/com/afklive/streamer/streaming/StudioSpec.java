@@ -17,6 +17,9 @@ import java.util.List;
  * @param resume       playlist position to resume from, or null
  * @param phone        phone ingest settings (PHONE source), or null
  * @param finishAfterPass the creator asked to stop when the current pass through the playlist ends
+ * @param videoKbps    FO-4: the run's video bitrate (kbps, 60 fps factor included), resolved from the owner's
+ *                     plan once at go-live and kept for the whole run (live edits and plan changes never
+ *                     change it); null for a run from before it was recorded: the built-in ladder
  */
 public record StudioSpec(
         int height,
@@ -39,8 +42,18 @@ public record StudioSpec(
         Phone phone,
         boolean finishAfterPass,
         String fit,
-        double crossfadeSeconds
+        double crossfadeSeconds,
+        Integer videoKbps
 ) {
+
+    /** Without a recorded bitrate (the built-in ladder's applies; the web app sets it at go-live). */
+    public StudioSpec(int height, boolean vertical, int fps, String source, List<Media> videos, String order, int loops,
+                      List<Media> music, String musicOrder, String audioMode, double videoVolume, double musicVolume,
+                      List<OverlaySetting> overlays, List<SceneSetting> scenes, String initialScene, String timeZone,
+                      Position resume, Phone phone, boolean finishAfterPass, String fit, double crossfadeSeconds) {
+        this(height, vertical, fps, source, videos, order, loops, music, musicOrder, audioMode, videoVolume, musicVolume,
+                overlays, scenes, initialScene, timeZone, resume, phone, finishAfterPass, fit, crossfadeSeconds, null);
+    }
 
     /** Without fit (PL-6) and crossfade (AU-3): the stream's fit is FIT and music cuts straight. */
     public StudioSpec(int height, boolean vertical, int fps, String source, List<Media> videos, String order, int loops,
@@ -53,7 +66,20 @@ public record StudioSpec(
 
     public StudioSpec withFinishAfterPass() {
         return new StudioSpec(height, vertical, fps, source, videos, order, loops, music, musicOrder, audioMode,
-                videoVolume, musicVolume, overlays, scenes, initialScene, timeZone, resume, phone, true, fit, crossfadeSeconds);
+                videoVolume, musicVolume, overlays, scenes, initialScene, timeZone, resume, phone, true, fit, crossfadeSeconds,
+                videoKbps);
+    }
+
+    /** The same settings with this run's bitrate (FO-4): set at go-live, then carried over every rebuild of the spec. */
+    public StudioSpec withVideoKbps(Integer kbps) {
+        return new StudioSpec(height, vertical, fps, source, videos, order, loops, music, musicOrder, audioMode,
+                videoVolume, musicVolume, overlays, scenes, initialScene, timeZone, resume, phone, finishAfterPass, fit,
+                crossfadeSeconds, kbps);
+    }
+
+    /** The bitrate the run encodes at: the recorded one, or the built-in ladder's for a run without one. */
+    public int effectiveVideoKbps() {
+        return com.afklive.streamer.service.VideoBitrates.recordedOrBuiltIn(videoKbps, height, fps);
     }
 
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper()

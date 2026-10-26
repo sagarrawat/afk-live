@@ -136,7 +136,9 @@ public class CopyRuns {
         boolean ready = true;
         for (StudioSpec.Media m : spec.videos()) {
             String fit = m.fit() != null && !m.fit().isBlank() ? StudioBuilder.fitOf(m.fit()).name() : streamFit;
-            String key = copies.profileKeyFor(m.key(), canvas.width(), canvas.height(), canvas.fps(), fit, m.gainDb(), true);
+            // At the run's bitrate (FO-4), the same as its studio's: copies at another bitrate are other rows.
+            String key = copies.profileKeyFor(m.key(), canvas.width(), canvas.height(), canvas.fps(), fit, m.gainDb(),
+                    spec.effectiveVideoKbps(), true);
             if (key == null) {
                 ready = false; // keep asking for the rest
             }
