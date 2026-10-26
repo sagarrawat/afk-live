@@ -7,6 +7,10 @@ name: Afklive-web CI & CD
 # deploys without downtime"). Until that setup is done on the server, this falls back to the old restart.
 # "restart" (manual runs only) is the old way on purpose: the web app restarts and the site answers with
 # errors for about a minute; use it if the script refuses (it says why and changes nothing).
+#
+# Upload: only what changed in app.jar since the jar already on the server is sent (afklive-scripts/upload-jar.sh,
+# rsync over ssh; about 2 MB after a code change instead of the whole ~110 MB). If that can't run (rsync missing
+# on the server, first run trouble), the whole jar is copied the old way; "full" (manual runs) forces that.
 on:
   push:
     branches: [ main ]
@@ -23,6 +27,13 @@ on:
           - zero-downtime
           - restart
         default: zero-downtime
+      upload:
+        description: 'delta = send only what changed in the jar (default, about 2 MB); full = copy the whole jar the old way (about 110 MB)'
+        type: choice
+        options:
+          - delta
+          - full
+        default: delta
 
 jobs:
   # JOB 1: Deploy Web App to DigitalOcean
@@ -57,8 +68,20 @@ jobs:
       - name: Build Web Module
         run: mvn -B clean package -pl afklive-web -am -DskipTests -DskipUiTests
 
-      # Next to, never over, the jar the running web app uses.
-      - name: Copy JAR to DigitalOcean VM
+      # Next to, never over, the jar the running web app uses. The jar left there by the previous deploy is the
+      # basis for the delta (web-deploy.sh copies it into a slot and leaves it).
+      - name: Upload JAR (only what changed)
+        id: delta
+        if: ${{ inputs.upload != 'full' }}
+        continue-on-error: true
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          DO_USER: ${{ secrets.DO_USER }}
+          DO_SSH_KEY: ${{ secrets.DO_SSH_KEY }}
+        run: bash afklive-scripts/upload-jar.sh afklive-web/target/app.jar /opt/afklive/incoming/web/app.jar
+
+      - name: Copy JAR to DigitalOcean VM (whole jar)
+        if: ${{ inputs.upload == 'full' || steps.delta.outcome == 'failure' }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_HOST }}

@@ -7,6 +7,10 @@ name: Deploy stream worker
 # in docs/operations.md, "Worker deploys without interruption"). "restart" is the old way: the worker
 # restarts and every stream drops for about 30-90 s; use it for the first deploy of the handover itself,
 # or if the handover can't run (the script says so, and changes nothing).
+#
+# Upload: only what changed in app.jar since the jar already in the target folder is sent
+# (afklive-scripts/upload-jar.sh, rsync over ssh; about 2 MB instead of ~110 MB). If that can't run, the whole
+# jar is copied the old way; "full" forces that.
 on:
   workflow_dispatch:
     inputs:
@@ -22,6 +26,13 @@ on:
         type: string
         required: false
         default: ''
+      upload:
+        description: 'delta = send only what changed in the jar (default, about 2 MB); full = copy the whole jar the old way (about 110 MB)'
+        type: choice
+        options:
+          - delta
+          - full
+        default: delta
 
 jobs:
   deploy-worker:
@@ -49,8 +60,19 @@ jobs:
       - name: Build and test
         run: sudo apt-get update && sudo apt-get install -y ffmpeg && mvn -B verify -pl afklive-web -am -DskipUi -DskipUiTests  # workers don't serve the app UI
 
-      - name: Copy JAR to the worker (handover)
-        if: ${{ inputs.method != 'restart' }}
+      # The jar left in incoming/ by the previous handover is the basis for the delta.
+      - name: Upload JAR to the worker (handover, only what changed)
+        id: delta_handover
+        if: ${{ inputs.method != 'restart' && inputs.upload != 'full' }}
+        continue-on-error: true
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          DO_USER: ${{ secrets.DO_USER }}
+          DO_SSH_KEY: ${{ secrets.DO_SSH_KEY }}
+        run: bash afklive-scripts/upload-jar.sh afklive-web/target/app.jar /opt/afklive/worker/incoming/app.jar
+
+      - name: Copy JAR to the worker (handover, whole jar)
+        if: ${{ inputs.method != 'restart' && (inputs.upload == 'full' || steps.delta_handover.outcome == 'failure') }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_HOST }}
@@ -76,8 +98,19 @@ jobs:
             fi
             sudo /opt/afklive/scripts/worker-handover-deploy.sh /opt/afklive/worker/incoming/app.jar
 
-      - name: Copy JAR to the worker (restart)
-        if: ${{ inputs.method == 'restart' }}
+      # The new jar is renamed into place: a running legacy worker keeps its open file until it restarts.
+      - name: Upload JAR to the worker (restart, only what changed)
+        id: delta_restart
+        if: ${{ inputs.method == 'restart' && inputs.upload != 'full' }}
+        continue-on-error: true
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          DO_USER: ${{ secrets.DO_USER }}
+          DO_SSH_KEY: ${{ secrets.DO_SSH_KEY }}
+        run: bash afklive-scripts/upload-jar.sh afklive-web/target/app.jar /opt/afklive/worker/app.jar
+
+      - name: Copy JAR to the worker (restart, whole jar)
+        if: ${{ inputs.method == 'restart' && (inputs.upload == 'full' || steps.delta_restart.outcome == 'failure') }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_HOST }}
