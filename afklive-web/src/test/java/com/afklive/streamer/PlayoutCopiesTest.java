@@ -314,6 +314,39 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void profileCopiesAreKeptPerBitrateSoARunNeverPlaysOneMadeAtAnother() throws Exception {
+        // FO-4: a 180x320 30 fps canvas is the 720 class: 4000 kbps built in. One run at that, one at a plan's 1500.
+        MediaAsset a = upload("copies-bitrate@example.com");
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true)).isNull();
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 1500, true)).isNull();
+        // The built-in bitrate is stored as 0, like every copy made before bitrates were recorded.
+        assertThat(jdbc.queryForList("SELECT video_kbps FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE' ORDER BY video_kbps",
+                Integer.class, a.getId())).containsExactly(0, 1500);
+        // The previous release asks without a bitrate: it gets the built-in row, never a second one.
+        jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, x264_preset) "
+                + "VALUES (?, 'PROFILE', 180, 320, 30, 'FIT', 0, 'PENDING', 'superfast') ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
+                a.getId());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                Integer.class, a.getId())).isEqualTo(2);
+        while (copies.prepareNext()) {
+            // make both
+        }
+        String builtIn = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, false);
+        String low = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 1500, false);
+        assertThat(builtIn).isNotNull();
+        assertThat(low).isNotNull().isNotEqualTo(builtIn);
+        // Asking with the built-in value spelled out is the same copy.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 4000, false)).isEqualTo(builtIn);
+        // Each was encoded at its own bitrate (x264 writes its settings into the stream).
+        assertThat(x264Settings(builtIn)).contains(" bitrate=4000 ");
+        assertThat(x264Settings(low)).contains(" bitrate=1500 ");
+        // A bitrate with no copy yet: nothing to play, and a third row is asked for.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 2500, true)).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                Integer.class, a.getId())).isEqualTo(3);
+    }
+
+    @Test
     void aCopyOfAnotherPresetFamilyIsMadeAgainUnlessAWorkerIsPlayingIt() throws Exception {
         MediaAsset a = upload("copies-family@example.com");
         copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true);

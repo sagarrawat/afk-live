@@ -66,6 +66,23 @@ class StudioTest {
     }
 
     @Test
+    void theEncoderSendsTheRunsRecordedBitrateAndTheBuiltInOneWithoutIt() {
+        // FO-4: the run's bitrate comes from its spec; 0 (none recorded) is the built-in ladder's, as before.
+        PlaylistFeed playlist = new PlaylistFeed(CANVAS, List.of(a), PlaylistFeed.Order.IN_ORDER, 1, null,
+                StudioFixtures.factory(dir), false, new Random(1));
+        List<Studio.Scene> scenes = List.of(new Studio.Scene("main", playlist, null, 1.0, 0, List.of(), null));
+        Studio plan = new Studio(CANVAS, dir.resolve("kbps1"), "ffmpeg", com.afklive.streamer.service.EncoderSettings.DEFAULT, 2500,
+                scenes, "main", List.of(), 0, null);
+        assertThat(plan.videoKbps()).isEqualTo(2500);
+        assertThat(plan.encoderCommand(dir.resolve("a.pcm"))).containsSequence("-b:v", "2500k", "-minrate", "2500k", "-maxrate", "2500k");
+        Studio legacy = new Studio(CANVAS, dir.resolve("kbps2"), "ffmpeg", com.afklive.streamer.service.EncoderSettings.DEFAULT,
+                scenes, "main", List.of(), 0, null);
+        int builtIn = FFmpegCommandBuilder.liveVideoKbps(Math.min(CANVAS.width(), CANVAS.height()), CANVAS.fps());
+        assertThat(legacy.videoKbps()).isEqualTo(builtIn);
+        assertThat(legacy.encoderCommand(dir.resolve("a.pcm"))).containsSequence("-b:v", builtIn + "k");
+    }
+
+    @Test
     void aPlaylistPlaysThroughOneEncoderWithNoGapsAndOverlayChangesDontRestartIt() throws Exception {
         PlaylistFeed playlist = new PlaylistFeed(CANVAS, List.of(a, b, c), PlaylistFeed.Order.IN_ORDER, 1, null,
                 StudioFixtures.factory(dir), false, new Random(1));
