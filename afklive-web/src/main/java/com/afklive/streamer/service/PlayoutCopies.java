@@ -247,7 +247,7 @@ public class PlayoutCopies {
                 "UPDATE media_playout_copies SET status = 'WORKING', claimed_at = ? WHERE id = ("
                         + " SELECT id FROM media_playout_copies WHERE status = 'PENDING' OR (status = 'WORKING' AND claimed_at < ?)"
                         + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)"
-                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, x264_preset, overlay_set, overlay_spec",
+                        + " RETURNING id, media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, x264_preset, overlay_set, overlay_spec, video_kbps",
                 Timestamp.from(claimedAt), Timestamp.from(claimedAt.minus(STALE_CLAIM)));
         if (claimed.isEmpty()) {
             return false;
@@ -283,6 +283,8 @@ public class PlayoutCopies {
         // The preset the requesting worker's studio uses, so its stream and the copy can follow each other;
         // none recorded: asked for by a worker from before the preset was configurable.
         String preset = presetOrLegacy((String) c.get("x264_preset"));
+        // FO-4: the bitrate of the run that asked for it (0: the built-in ladder's, as before it was recorded).
+        int kbps = kbpsOf(c.get("video_kbps"), w, h, fps);
 
         String key = null;
         String reason = null;
@@ -298,7 +300,7 @@ public class PlayoutCopies {
                 layer = overlayLayer(overlaySpec, overlaySet, w, h, fps, layerDir);
             }
             List<String> cmd = profile
-                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio, preset, layer)
+                    ? profileCommand(storage.readLocation(original), out, w, h, fps, fit, gainDb, hasAudio, preset, layer, kbps)
                     : command(storage.readLocation(original), out, w, h, fps, sourceFps);
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             current.process().set(p);
@@ -523,6 +525,12 @@ public class PlayoutCopies {
         return profileKeyFor(originalKey, canvasWidth, canvasHeight, fps, fit, gainDb, "", null, request);
     }
 
+    /** Without overlays, at a run's video bitrate (FO-4). */
+    public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
+                                int videoKbps, boolean request) {
+        return profileKeyFor(originalKey, canvasWidth, canvasHeight, fps, fit, gainDb, "", null, videoKbps, request);
+    }
+
     /** Profile copies with static overlays baked in (FO-2): their own kind, so a release before them never plays one. */
     public static final String PROFILE_OVERLAY = "PROFILE_OVERLAY";
 
@@ -535,6 +543,18 @@ public class PlayoutCopies {
      */
     public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
                                 String overlaySet, String overlaySpec, boolean request) {
+        return profileKeyFor(originalKey, canvasWidth, canvasHeight, fps, fit, gainDb, overlaySet, overlaySpec,
+                VideoBitrates.builtInKbps(Math.min(canvasWidth, canvasHeight), fps), request);
+    }
+
+    /**
+     * The profile copy for a run at {@code videoKbps} (FO-4: the run's recorded bitrate, the same its studio
+     * encodes at). Copies are kept per bitrate, with or without overlays, so a run never splices a copy made at
+     * another bitrate into its stream; the built-in ladder's bitrate is stored as 0 ({@code video_kbps}), which
+     * is also what copies made before bitrates were recorded have, so older releases share those rows.
+     */
+    public String profileKeyFor(String originalKey, int canvasWidth, int canvasHeight, int fps, String fit, double gainDb,
+                                String overlaySet, String overlaySpec, int videoKbps, boolean request) {
         List<Long> ids = jdbc.queryForList("SELECT id FROM media_assets WHERE s3_key = ? AND content_type = 'VIDEO' LIMIT 1",
                 Long.class, originalKey);
         if (ids.isEmpty()) {
@@ -545,17 +565,20 @@ public class PlayoutCopies {
         int gain = (int) Math.round(gainDb * 10);
         String set = overlaySet == null ? "" : overlaySet;
         String kind = set.isEmpty() ? "PROFILE" : PROFILE_OVERLAY;
+        int kbpsKey = kbpsKey(videoKbps, canvasWidth, canvasHeight, fps);
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, status, storage_key, x264_preset, made_overlay_set FROM media_playout_copies "
                 + "WHERE media_id = ? AND kind = ? AND canvas_width = ? AND canvas_height = ? AND fps = ? AND fit = ? "
-                + "AND gain_tenths = ? AND overlay_set = ?", mediaId, kind, canvasWidth, canvasHeight, fps, f, gain, set);
+                + "AND gain_tenths = ? AND overlay_set = ? AND video_kbps = ?", mediaId, kind, canvasWidth, canvasHeight, fps, f, gain, set,
+                kbpsKey);
         if (rows.isEmpty()) {
             if (request) {
                 jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, "
-                        + "x264_preset, overlay_set, overlay_spec) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?) "
+                        + "x264_preset, overlay_set, overlay_spec, video_kbps) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?) "
                         + "ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
-                        mediaId, kind, canvasWidth, canvasHeight, fps, f, gain, encoder.preset(), set, set.isEmpty() ? null : overlaySpec);
-                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({}, x264 {}{})", mediaId, canvasWidth, canvasHeight, fps, f,
-                        encoder.preset(), set.isEmpty() ? "" : ", overlays " + set.substring(0, Math.min(12, set.length())));
+                        mediaId, kind, canvasWidth, canvasHeight, fps, f, gain, encoder.preset(), set, set.isEmpty() ? null : overlaySpec, kbpsKey);
+                log.info("Asked for a profile copy of media {} at {}x{} {} fps ({}, x264 {}, {} kbps{})", mediaId, canvasWidth, canvasHeight, fps, f,
+                        encoder.preset(), kbpsOf(kbpsKey, canvasWidth, canvasHeight, fps),
+                        set.isEmpty() ? "" : ", overlays " + set.substring(0, Math.min(12, set.length())));
             }
             return null;
         }
@@ -615,6 +638,17 @@ public class PlayoutCopies {
         }
     }
 
+    /** The {@code video_kbps} a copy at this bitrate is stored under: 0 for the built-in ladder's (and every older copy). */
+    static int kbpsKey(int videoKbps, int canvasWidth, int canvasHeight, int fps) {
+        return videoKbps <= 0 || videoKbps == VideoBitrates.builtInKbps(Math.min(canvasWidth, canvasHeight), fps) ? 0 : videoKbps;
+    }
+
+    /** The bitrate a copy row stands for: its {@code video_kbps}, or the built-in ladder's when 0 or missing. */
+    static int kbpsOf(Object stored, int canvasWidth, int canvasHeight, int fps) {
+        Integer v = stored == null ? null : ((Number) stored).intValue();
+        return VideoBitrates.recordedOrBuiltIn(v, Math.min(canvasWidth, canvasHeight), fps);
+    }
+
     /** A preset recorded on a copy row, or the legacy one when none (or something unexpected) is recorded. */
     static String presetOrLegacy(String recorded) {
         return recorded != null && EncoderSettings.PRESETS.contains(recorded) ? recorded : EncoderSettings.LEGACY_PRESET;
@@ -638,6 +672,16 @@ public class PlayoutCopies {
      */
     public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
                                        double gainDb, boolean hasAudio, String x264Preset, Path overlayLayer) {
+        return profileCommand(input, output, canvasWidth, canvasHeight, fps, fit, gainDb, hasAudio, x264Preset, overlayLayer,
+                VideoBitrates.builtInKbps(Math.min(canvasWidth, canvasHeight), fps));
+    }
+
+    /**
+     * {@link #profileCommand} at the requesting run's video bitrate (FO-4), so the copy, overlays and all, sends
+     * exactly what that run's studio sends.
+     */
+    public static List<String> profileCommand(String input, Path output, int canvasWidth, int canvasHeight, int fps, String fit,
+                                       double gainDb, boolean hasAudio, String x264Preset, Path overlayLayer, int videoKbps) {
         com.afklive.streamer.streaming.studio.Canvas canvas = new com.afklive.streamer.streaming.studio.Canvas(canvasWidth, canvasHeight, fps, 44100);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit parsed = com.afklive.streamer.streaming.studio.DecoderSource.Fit.parse(fit);
         com.afklive.streamer.streaming.studio.DecoderSource.Fit f = parsed == null ? com.afklive.streamer.streaming.studio.DecoderSource.Fit.FIT : parsed;
@@ -664,7 +708,7 @@ public class PlayoutCopies {
         }
         // The preset of the studio that asked for it, so the two can follow each other in one stream (copy
         // mode); one thread, because this is background work.
-        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvasWidth, canvasHeight), fps, new EncoderSettings(x264Preset, 0)));
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgsAt(videoKbps, fps, new EncoderSettings(x264Preset, 0)));
         cmd.addAll(List.of("-threads", "1", "-f", "mpegts", "-mpegts_flags", "+resend_headers", "-muxdelay", "0", output.toString()));
         return cmd;
     }

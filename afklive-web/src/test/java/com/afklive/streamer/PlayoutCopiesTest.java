@@ -479,6 +479,68 @@ class PlayoutCopiesTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void profileCopiesAreKeptPerBitrateSoARunNeverPlaysOneMadeAtAnother() throws Exception {
+        // FO-4: a 180x320 30 fps canvas is the 720 class: 4000 kbps built in. One run at that, one at a plan's 1500.
+        MediaAsset a = upload("copies-bitrate@example.com");
+        // Changeset 150 appended video_kbps to the key as 145 rebuilt it (overlay_set kept), under the same name.
+        assertThat(jdbc.queryForObject("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'uq_media_playout_copies'",
+                String.class)).isEqualTo("UNIQUE (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, overlay_set, video_kbps)");
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true)).isNull();
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 1500, true)).isNull();
+        // The built-in bitrate is stored as 0, like every copy made before bitrates were recorded.
+        assertThat(jdbc.queryForList("SELECT video_kbps FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE' ORDER BY video_kbps",
+                Integer.class, a.getId())).containsExactly(0, 1500);
+        // The previous release asks without a bitrate: it gets the built-in row, never a second one.
+        jdbc.update("INSERT INTO media_playout_copies (media_id, kind, canvas_width, canvas_height, fps, fit, gain_tenths, status, x264_preset) "
+                + "VALUES (?, 'PROFILE', 180, 320, 30, 'FIT', 0, 'PENDING', 'superfast') ON CONFLICT ON CONSTRAINT uq_media_playout_copies DO NOTHING",
+                a.getId());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                Integer.class, a.getId())).isEqualTo(2);
+        while (copies.prepareNext()) {
+            // make both
+        }
+        String builtIn = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, false);
+        String low = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 1500, false);
+        assertThat(builtIn).isNotNull();
+        assertThat(low).isNotNull().isNotEqualTo(builtIn);
+        // Asking with the built-in value spelled out is the same copy.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 4000, false)).isEqualTo(builtIn);
+        // Each was encoded at its own bitrate (x264 writes its settings into the stream).
+        assertThat(x264Settings(builtIn)).contains(" bitrate=4000 ");
+        assertThat(x264Settings(low)).contains(" bitrate=1500 ");
+        // A bitrate with no copy yet: nothing to play, and a third row is asked for.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 2500, true)).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_playout_copies WHERE media_id = ? AND kind = 'PROFILE'",
+                Integer.class, a.getId())).isEqualTo(3);
+    }
+
+    @Test
+    void copiesWithOverlaysAreKeptPerBitrateTooAndCarryTheirOverlaysAtThatBitrate() throws Exception {
+        // FO-4 with FO-2's static overlays: the Free plan's mark at the built-in bitrate and at a plan's 1500 are two copies.
+        MediaAsset a = upload("copies-overlay-kbps-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com");
+        var set = List.of(mark());
+        String id = com.afklive.streamer.streaming.StaticOverlays.identity(set, VERTICAL);
+        String json = com.afklive.streamer.streaming.StudioSpec.json(set);
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, true)).isNull();
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, 1500, true)).isNull();
+        assertThat(jdbc.queryForList("SELECT kind || ':' || video_kbps FROM media_playout_copies WHERE media_id = ? ORDER BY video_kbps",
+                String.class, a.getId())).containsExactly("PROFILE_OVERLAY:0", "PROFILE_OVERLAY:1500");
+        while (copies.prepareNext()) {
+            // make both
+        }
+        String builtIn = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, false);
+        String low = copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, id, json, 1500, false);
+        assertThat(builtIn).isNotNull();
+        assertThat(low).isNotNull().isNotEqualTo(builtIn);
+        assertThat(x264Settings(builtIn)).contains(" bitrate=4000 ");
+        assertThat(x264Settings(low)).contains(" bitrate=1500 ");
+        assertThat(jdbc.queryForList("SELECT made_overlay_set = overlay_set FROM media_playout_copies WHERE media_id = ?", Boolean.class,
+                a.getId())).containsOnly(true);
+        // A plain run at 1500 gets neither.
+        assertThat(copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, 1500, false)).isNull();
+    }
+
+    @Test
     void aCopyOfAnotherPresetFamilyIsMadeAgainUnlessAWorkerIsPlayingIt() throws Exception {
         MediaAsset a = upload("copies-family@example.com");
         copies.profileKeyFor(a.getS3Key(), 180, 320, 30, "FIT", 0, true);

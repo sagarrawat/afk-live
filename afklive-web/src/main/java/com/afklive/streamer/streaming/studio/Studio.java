@@ -68,6 +68,8 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
     private final Path workDir;
     private final String ffmpeg;
     private final com.afklive.streamer.service.EncoderSettings encoder;
+    /** The run's video bitrate (kbps), fixed for the studio's life: a planned change never restarts the encoder. */
+    private final int videoKbps;
     private final Listener listener;
     private final long endAfterInputLostMillis;
     private final OverlayCompositor overlays;
@@ -207,6 +209,17 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
     public Studio(Canvas canvas, Path workDir, String ffmpeg, com.afklive.streamer.service.EncoderSettings encoder,
                   List<Scene> sceneList, String initialScene, List<Overlay> global, long endAfterInputLostMillis,
                   Listener listener) {
+        this(canvas, workDir, ffmpeg, encoder, 0, sceneList, initialScene, global, endAfterInputLostMillis, listener);
+    }
+
+    /**
+     * @param videoKbps the run's video bitrate (FO-4, from its spec); 0 = the built-in ladder's for this canvas
+     */
+    public Studio(Canvas canvas, Path workDir, String ffmpeg, com.afklive.streamer.service.EncoderSettings encoder, int videoKbps,
+                  List<Scene> sceneList, String initialScene, List<Overlay> global, long endAfterInputLostMillis,
+                  Listener listener) {
+        this.videoKbps = com.afklive.streamer.service.VideoBitrates.recordedOrBuiltIn(videoKbps,
+                Math.min(canvas.width(), canvas.height()), canvas.fps());
         this.canvas = canvas;
         this.workDir = workDir;
         this.ffmpeg = ffmpeg;
@@ -229,6 +242,11 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
 
     public Canvas canvas() {
         return canvas;
+    }
+
+    /** The video bitrate this studio's encoder sends (kbps). */
+    public int videoKbps() {
+        return videoKbps;
     }
 
     public synchronized void start() {
@@ -339,7 +357,7 @@ public final class Studio implements StreamRunner.EncoderLauncher, AutoCloseable
                 "-thread_queue_size", "4096", "-probesize", "32", "-analyzeduration", "0",
                 "-f", "s16le", "-ar", String.valueOf(canvas.sampleRate()), "-ac", "2", "-i", audioFifo.toString(),
                 "-map", "0:v", "-map", "1:a"));
-        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgs(Math.min(canvas.width(), canvas.height()), canvas.fps(), encoder));
+        cmd.addAll(FFmpegCommandBuilder.liveEncodeArgsAt(videoKbps, canvas.fps(), encoder));
         cmd.addAll(List.of("-f", "mpegts", "-mpegts_flags", "+resend_headers", "-muxdelay", "0", "pipe:1"));
         return cmd;
     }

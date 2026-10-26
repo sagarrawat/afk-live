@@ -130,10 +130,23 @@ public final class StreamHealth {
         };
     }
 
-    /** Expected encoder output (kbps) for the profile, matching the bitrate ladder. */
+    /** Expected encoder output (kbps) for the profile with the built-in ladder (a run without a recorded bitrate). */
     static double expectedKbps(int height, int fps) {
-        double base = height >= 2160 ? 15000 : height >= 1440 ? 9000 : height >= 1080 ? 6000 : 4000;
-        return fps > 30 ? base * 1.5 : base;
+        return VideoBitrates.builtInKbps(height, fps);
+    }
+
+    /** FO-4: what this run encodes at: the bitrate recorded in its spec, else the built-in ladder's. */
+    static double expectedKbps(StreamJob j, int height, int fps) {
+        Integer recorded = null;
+        try {
+            if (j.getSpec() != null) {
+                com.afklive.streamer.streaming.StreamSpec spec = com.afklive.streamer.streaming.StreamSpec.fromJson(j.getSpec());
+                recorded = spec.studio() == null ? null : spec.studio().videoKbps();
+            }
+        } catch (RuntimeException ignored) {
+            // an unreadable spec: judge by the built-in ladder
+        }
+        return VideoBitrates.recordedOrBuiltIn(recorded, height, fps);
     }
 
     public static Health of(StreamJob j, int height, int fps) {
@@ -167,7 +180,7 @@ public final class StreamHealth {
 
         Double kbps = j.getBitrateKbps();
         if (kbps != null) {
-            double expected = expectedKbps(height, fps);
+            double expected = expectedKbps(j, height, fps);
             String level = kbps >= expected * 0.7 ? GREEN : kbps >= expected * 0.4 ? AMBER : RED;
             metrics.add(new Metric("bitrate", String.format("%.1f Mbps", kbps / 1000), level, switch (level) {
                 case GREEN -> "Sending at full quality.";

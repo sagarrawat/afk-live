@@ -390,7 +390,9 @@ public class SupportService {
             heightClass = spec.maxHeight() > 0 ? spec.maxHeight() : 720;
         }
         Canvas c = Canvas.of(heightClass, vertical, fps);
-        int kbps = FFmpegCommandBuilder.liveVideoKbps(Math.min(c.width(), c.height()), fps);
+        // FO-4: the run's recorded bitrate (the built-in ladder's for a run from before it was recorded).
+        int kbps = spec.studio() != null ? spec.studio().effectiveVideoKbps()
+                : FFmpegCommandBuilder.liveVideoKbps(Math.min(c.width(), c.height()), fps);
         return new Output(c.width(), c.height(), fps, vertical ? "Vertical" : "Landscape", spec.studio() != null ? kbps : null,
                 "AAC 128 kbps, 44.1 kHz stereo", "Every 2 s");
     }

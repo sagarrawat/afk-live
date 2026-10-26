@@ -208,6 +208,15 @@ streaming server). A first run on synthetic worst-case footage (noisy 1080p60 mo
 SSIM 0.952 at 2.5 Mbps, 0.955 at 3.5 and 0.955 at 4: already within 0.005, which suggests 3 Mbps or
 less is enough for most content. Confirm on real gameplay and music footage before changing the default.
 
+**As built (groundwork).** `VideoBitrates`: per plan and height class from
+`APP_STREAMING_BITRATE_<PLAN>_<CLASS>`, defaults equal to the old ladder, floors at YouTube's guidance
+(720 → 1.5 Mbps, 1080 → 5 Mbps). The web app records each run's bitrate in its spec at go-live
+(`studio.videoKbps`), so running streams never change; profile copies are keyed by bitrate
+(`media_playout_copies.video_kbps`). Defaults unchanged. A second synthetic study (Oct 2026, superfast,
+20 s clips at 1280x720 and 720x1280: fractal "gameplay", gradient "vlog", Ken Burns fractal "lofi
+still", each grainy and denoised) put 3 Mbps within 0.005 SSIM of 4 Mbps for everything except a very
+detailed still in vertical (0.015 lower). Next: set `FREE_720=3000` for a trial, see docs/operations.md.
+
 ## 10. Staging and soak: OPS-5, OPS-6 (next)
 
 - **Staging (OPS-5)** runs on the production droplet as a third web slot and a worker slot with a

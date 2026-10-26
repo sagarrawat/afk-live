@@ -62,7 +62,7 @@ class StudioRunsOverlayVisibilityTest {
         StudioSpec.OverlaySetting brand = StaticOverlaysTest.text("brand", "Chill Corner");
         StudioSpec studio = new StudioSpec(180, false, 30, "PLAYLIST", List.of(new StudioSpec.Media("1", "media/clip.mp4", "clip", 2, true)),
                 "IN_ORDER", 0, List.of(), "IN_ORDER", "KEEP", 1.0, 1.0, List.of(StaticOverlaysTest.watermark(), brand), List.of(),
-                StudioSpec.LIVE, "UTC", null, null, false, "FIT", 0);
+                StudioSpec.LIVE, "UTC", null, null, false, "FIT", 0).withVideoKbps(2500); // FO-4: the run's bitrate
         StudioRuns.Handle h = runs.start(1L, StreamSpec.studio("o@example.com", null, studio, List.of()), StudioSpec.LIVE, null);
         try {
             Canvas canvas = Canvas.of(180, false, 30);
@@ -74,9 +74,18 @@ class StudioRunsOverlayVisibilityTest {
             assertThat(StaticOverlays.staticSet(runs.spec(h))).extracting(StudioSpec.OverlaySetting::id)
                     .containsExactly(com.afklive.streamer.streaming.studio.OverlayCompositor.WATERMARK_ID);
             assertThat(StaticOverlays.identity(StaticOverlays.staticSet(runs.spec(h)), canvas)).isEqualTo(markOnly);
+            // FO-4: the spec copy mode prepares from keeps the run's bitrate, so it asks for copies at 2500.
+            assertThat(runs.spec(h).videoKbps()).isEqualTo(2500);
+            assertThat(h.studio().videoKbps()).isEqualTo(2500);
 
             runs.apply(h, new StreamCommand(1L, StreamCommand.Type.OVERLAY, "{\"id\":\"brand\",\"visible\":true}"));
             assertThat(StaticOverlays.identity(StaticOverlays.staticSet(runs.spec(h)), canvas)).isEqualTo(both);
+
+            // A reload built without a bitrate (or from a new plan) never changes the running stream's.
+            runs.apply(h, new StreamCommand(1L, StreamCommand.Type.RELOAD, StudioSpec.json(studio.withVideoKbps(6000))));
+            assertThat(runs.spec(h).videoKbps()).isEqualTo(2500);
+            runs.apply(h, new StreamCommand(1L, StreamCommand.Type.RELOAD, StudioSpec.json(studio.withVideoKbps(null))));
+            assertThat(runs.spec(h).videoKbps()).isEqualTo(2500);
         } finally {
             runs.close(h);
         }

@@ -461,7 +461,8 @@ public final class SoakHarness {
         when(copies.keyFor(anyString(), anyInt(), anyInt(), anyInt())).thenAnswer(inv -> inv.getArgument(0));
         // Only for the overlays the copies were made with: a run asking for another set (or none) gets nothing.
         String madeWith = StaticOverlays.identity(overlays(), Canvas.of(cfg.height(), false, cfg.fps()));
-        when(copies.profileKeyFor(anyString(), anyInt(), anyInt(), anyInt(), anyString(), anyDouble(), any(), any(), anyBoolean()))
+        // Asked for at the run's bitrate (FO-4); the soak's runs record none, so the built-in one the copies were made at.
+        when(copies.profileKeyFor(anyString(), anyInt(), anyInt(), anyInt(), anyString(), anyDouble(), any(), any(), anyInt(), anyBoolean()))
                 .thenAnswer(inv -> madeWith.equals(inv.getArgument(6)) ? profileKeys.get(inv.<String>getArgument(0)) : null);
 
         // The database: only the saved playlist position matters, and it round-trips like the real column.
