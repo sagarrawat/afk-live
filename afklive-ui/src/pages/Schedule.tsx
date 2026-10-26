@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge, Button, buttonClass, Dialog, Empty, ErrorNote, IconButton, PageHeader, Segmented, Spinner, useAction } from '@/components/ui';
@@ -21,9 +21,9 @@ import {
   weekdayShort,
 } from '@/lib/calendar';
 import { browserTimeZone } from '@/lib/format';
-import { keys, useInvalidate, useMe, useScheduleCalendar } from '@/lib/queries';
+import { keys, useInvalidate, useMe, useScheduleCalendar, useStream } from '@/lib/queries';
 import type { CalendarClash, CalendarOccurrence, ScheduleCalendar } from '@/lib/types';
-import { localInZone, skipDay } from './stream/ScheduleTab';
+import { localInZone, ScheduleDialog, skipDay } from './stream/ScheduleTab';
 
 type View = 'week' | 'month';
 
@@ -62,6 +62,7 @@ export function Schedule() {
   const navigate = useNavigate();
   // SC-2: a repeating run opens a small dialog (skip this day, or open the schedule); a one-time run opens its schedule.
   const [picked, setPicked] = useState<CalendarOccurrence | null>(null);
+  const [adding, setAdding] = useState(false);
   const open = (o: CalendarOccurrence) => (o.kind === 'ONCE' ? navigate(scheduleLink(o)) : setPicked(o));
 
   const step = (n: number) => setAnchor(view === 'week' ? addDays(at, 7 * n) : addMonths(at, n));
@@ -75,6 +76,13 @@ export function Schedule() {
       <PageHeader
         title="Schedule"
         description={`Every scheduled run across your streams, in ${data?.timeZone ?? tz} time.`}
+        actions={
+          data && data.streams.length > 0 ? (
+            <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setAdding(true)}>
+              Add a time
+            </Button>
+          ) : undefined
+        }
       />
       {data && <ClashBanner calendar={data} />}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -103,6 +111,15 @@ export function Schedule() {
         </Empty>
       ) : data ? (
         <>
+          {wide && data.occurrences.length === 0 && (
+            // UX audit #18: an empty week or month says what to do next (the phone agenda already does).
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-line px-4 py-3">
+              <p className="text-muted">Nothing scheduled {view === 'week' ? 'this week' : 'this month'}. Add a time and the stream goes live and stops by itself.</p>
+              <Button size="sm" onClick={() => setAdding(true)}>
+                Add a time
+              </Button>
+            </div>
+          )}
           {wide && view === 'week' && <WeekGrid calendar={data} today={today} colour={colour} onOpen={open} />}
           {wide && view === 'month' && (
             <MonthGrid
@@ -122,8 +139,54 @@ export function Schedule() {
         </>
       ) : null}
       {picked && <OccurrenceDialog o={picked} onClose={() => setPicked(null)} />}
+      {adding && data && <AddTimeDialog streams={data.streams} onClose={() => setAdding(false)} />}
     </>
   );
+}
+
+/** UX audit #18: "Add a time" from the calendar: which stream, then the same dialog as its Schedule tab. */
+export function AddTimeDialog({ streams, onClose }: { streams: { id: number; name: string }[]; onClose: () => void }) {
+  const [chosen, setChosen] = useState<number | null>(streams.length === 1 ? streams[0].id : null);
+  const [confirmed, setConfirmed] = useState(streams.length === 1);
+  const invalidate = useInvalidate();
+  const close = () => {
+    void invalidate(['schedules']);
+    onClose();
+  };
+  if (confirmed && chosen !== null) return <StreamScheduleDialog id={chosen} onClose={close} />;
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Add a time"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={chosen === null} onClick={() => setConfirmed(true)}>
+            Next
+          </Button>
+        </>
+      }
+    >
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium">Which stream?</legend>
+        {streams.map((st) => (
+          <label key={st.id} className="flex items-center gap-2 py-1.5">
+            <input type="radio" name="add-stream" checked={chosen === st.id} onChange={() => setChosen(st.id)} />
+            <span>{st.name}</span>
+          </label>
+        ))}
+      </fieldset>
+    </Dialog>
+  );
+}
+
+function StreamScheduleDialog({ id, onClose }: { id: number; onClose: () => void }) {
+  const { data: stream } = useStream(id);
+  if (!stream) return null;
+  return <ScheduleDialog stream={stream} schedule={null} onClose={onClose} />;
 }
 
 /** SC-2: one day of a repeating schedule: skip it (the rest of the schedule stays), or open the schedule. */

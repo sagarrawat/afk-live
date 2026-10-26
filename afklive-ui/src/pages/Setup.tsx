@@ -3,7 +3,7 @@ import { PushPrompt } from '@/components/PushPrompt';
 import clsx from 'clsx';
 import { CircleCheck, ListVideo, Loader2, Smartphone, TriangleAlert, Upload as UploadIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { destinationUrl, readKey } from '@/components/AddDestination';
 import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { MediaPicker } from '@/components/MediaPicker';
@@ -209,9 +209,31 @@ function Content({ streamId, onNext }: { streamId: number; onNext: () => void })
       {uploads.entries.length > 0 && (
         <ul className="mt-4 space-y-1.5 text-sm">
           {uploads.entries.map((e) => (
-            <li key={e.key} className="flex justify-between gap-3">
-              <span className="truncate">{e.file.name}</span>
-              <span className="tnum text-muted">{e.progress.state === 'done' ? 'Uploaded' : e.progress.state === 'failed' ? 'Failed' : `${Math.round((e.progress.sent / Math.max(1, e.progress.total)) * 100)}%`}</span>
+            <li key={e.key}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate">{e.file.name}</span>
+                {e.progress.state === 'failed' ? (
+                  // UX audit #17: why it failed, and a way on (as in the Library).
+                  <Button size="sm" variant="ghost" onClick={() => uploads.retry(e.key)}>
+                    Try again
+                  </Button>
+                ) : (
+                  <span className="tnum text-muted">{e.progress.state === 'done' ? 'Uploaded' : `${Math.round((e.progress.sent / Math.max(1, e.progress.total)) * 100)}%`}</span>
+                )}
+              </div>
+              {e.progress.state === 'failed' && (
+                <p className="text-bad">
+                  Didn&apos;t upload. {e.progress.error ?? 'Try again.'}
+                  {/storage|space/i.test(e.progress.error ?? '') && (
+                    <>
+                      {' '}
+                      <Link to="/studio/library" className="text-accent hover:underline">
+                        Free up space
+                      </Link>
+                    </>
+                  )}
+                </p>
+              )}
             </li>
           ))}
         </ul>

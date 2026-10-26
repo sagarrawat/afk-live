@@ -138,7 +138,7 @@ export function ScheduleTab({ stream: s }: { stream: StreamView }) {
   );
 }
 
-function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; schedule: ScheduleView | null; onClose: () => void }) {
+export function ScheduleDialog({ stream: s, schedule, onClose }: { stream: StreamView; schedule: ScheduleView | null; onClose: () => void }) {
   const init = schedule ? toRequest(schedule) : null;
   const [kind, setKind] = useState<'ONCE' | 'DAILY' | 'WEEKLY'>(schedule?.kind ?? 'WEEKLY');
   const [startAt, setStartAt] = useState(init?.startAt ?? '');

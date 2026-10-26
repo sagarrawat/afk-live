@@ -55,7 +55,7 @@ describe('placing overlays on a phone (MS-3)', () => {
     const position = screen.getByRole('group', { name: 'Place it' });
     await userEvent.click(within(position).getByRole('button', { name: 'Bottom right' }));
     await userEvent.click(within(screen.getByRole('group', { name: 'Nudge it' })).getByRole('button', { name: 'Move left' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save overlays' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(puts).toHaveLength(1));
     const [saved] = puts[0] as Overlay[];
     expect(saved.x).toBeCloseTo(0.94, 3);
