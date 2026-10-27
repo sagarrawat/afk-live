@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -63,6 +64,9 @@ import static org.mockito.Mockito.when;
  */
 @Tag("e2e")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// Close the app (and stop its worker and FFmpeg) while the database is still up, not in a JVM shutdown hook
+// racing the embedded PostgreSQL's (that leaves the fork hanging until Surefire kills it).
+@DirtiesContext
 class CreatorJourneyE2ETest {
 
     private static final String PASSWORD = "E2e-Passw0rd!";

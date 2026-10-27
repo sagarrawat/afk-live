@@ -456,6 +456,42 @@ production-like hardware passes, at the canvas production streams use (720p30 to
 you deploy. **Before a worker deploy** that touches `streaming/`: a 6-hour soak in the mode production
 runs passes, or at least the 10-minute smoke run while a 6-hour one is under way.
 
+## End-to-end test
+
+**Catches what unit tests miss: screens, API and worker disagreeing with each other.** `CreatorJourneyE2ETest`
+(`afklive-web/src/e2e/java`) starts the whole app in one JVM, as on a single server: Spring Boot on a random
+port, an embedded PostgreSQL (the one `PostgresIntegrationTest` starts), the stream worker in the same process
+(role `all`, its loop and media checks running by themselves) with real FFmpeg, and the built React app. Playwright
+for Java drives headless Chromium through:
+
+1. sign up with a password (email is off, so the account is ready at once: OPS-1), sign in, land in setup;
+2. upload a generated 6-second video through the real resumable upload, Next, "Use another platform";
+3. add a destination "Other" pointing at a local RTMP sink (FFmpeg listening on 127.0.0.1) and see it turned on;
+4. Go live (answering "Go live anyway" if the capacity estimate asks), wait for the badge "Live" and
+   "On Test sink" (RE-8) while the sink receives data, Stop now, see "Off air" and the run ended under Recent runs;
+5. at 375 px wide: setup, Streams, Library, Destinations, Schedule, Settings and Billing don't scroll sideways;
+   choose Creator, see the quote in rupees ("Prices include GST"), Pay, and land on the PhonePe page. The gateway
+   is a Mockito double that returns a sandbox URL and the browser answers that URL itself; the test checks the
+   order was created for exactly the amount the quote showed. Nothing calls PhonePe or YouTube.
+
+Production still refuses local stream addresses (DS-8): only the test JVM treats every host as public for the
+address check (`PublicDnsForTests`), so the sink on 127.0.0.1 can be saved.
+
+```sh
+afklive-scripts/e2e.sh              # builds the app, then runs the test (about 2 minutes after the build)
+afklive-scripts/e2e.sh -DskipUi     # reuse the app already built into afklive-web/target/classes/static/app
+```
+
+It needs Java 21, Maven, Node 20+, FFmpeg and Chromium for Playwright 1.56 (`npx playwright@1.56.0 install
+--with-deps chromium`, or `PLAYWRIGHT_BROWSERS_PATH` pointing at an existing install, or `E2E_CHROMIUM` at a
+chrome binary). It waits for what the screen shows, never for a fixed time. On failure a full-page screenshot and
+a Playwright trace (`npx playwright show-trace trace.zip`) are in `afklive-web/target/e2e/<test>/`.
+
+Normal builds skip it: the test lives in the `e2e` Maven profile (so they don't download Playwright's ~200 MB
+driver) and is tagged `e2e` (excluded by Surefire like `soak`). On GitHub, run **End-to-end test**
+(`.github/workflows/e2e.yml`, manual only) on a branch; it uploads the screenshots and traces when it fails.
+Upgrading Playwright means changing `playwright.version` in `afklive-web/pom.xml` and the version in that workflow.
+
 ## Worker deploys without interruption (OPS-3)
 
 **A worker deploy starts the new version next to the running one and moves live streams over one at a
