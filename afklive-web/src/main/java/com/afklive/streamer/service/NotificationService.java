@@ -51,6 +51,8 @@ public class NotificationService {
         /** RE-10: the run has been slower than real time for a minute; viewers see slow playback. */
         public static final String STREAM_SLOW = "STREAM_SLOW";
         public static final String STREAM_SPEED_OK = "STREAM_SPEED_OK";
+        /** FO-5: the account passed 80%, 100% or 110% of this month's streaming data. */
+        public static final String STREAMING_DATA = "STREAMING_DATA";
 
         private Types() {
         }

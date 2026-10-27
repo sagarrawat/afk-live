@@ -60,6 +60,8 @@ public class LiveStreamService {
     private final DestinationTestService destinationTests;
     /** FO-4: the live video bitrate per plan; resolved once per run at go-live and recorded in its spec. */
     private final VideoBitrates videoBitrates;
+    /** FO-5: the account's streaming data this month; past the allowance runs keep their first destination only. */
+    private final FairUse fairUse;
 
     // ------------------------------------------------------------------ create, read, update, delete
 
@@ -364,7 +366,7 @@ public class LiveStreamService {
      * others. Positions in the run's list never change (destination health is keyed by them): a
      * destination turned off stays in the list marked off; a new one is added at the end.
      */
-    private void applyTargetsLive(StreamJob job, LiveStream s) {
+    private boolean applyTargetsLive(StreamJob job, LiveStream s) {
         StreamSpec spec = StreamSpec.fromJson(job.getSpec());
         List<StreamSpec.Destination> current = spec.destinations() == null ? List.of() : spec.destinations();
         List<StreamSpec.Destination> next = new ArrayList<>();
@@ -388,15 +390,24 @@ public class LiveStreamService {
             next.add(current.get(i).withOff(!wanted[i]));
         }
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        // FO-5: past the streaming data allowance only the first destination that's on keeps streaming; the
+        // others (also ones turned on now) wait, off, until next month, an upgrade or a grant.
+        boolean paused = fairUse.status(s.getUser(), now).extrasPaused();
         for (StreamDestination d : added) {
             String name = d.getName() == null ? "Destination" : d.getName();
             next.add(new StreamSpec.Destination(name, d.getStreamKey()));
             StreamJobDestination row = new StreamJobDestination(job, next.size() - 1, name);
             row.setUpdatedAt(now);
+            if (paused && next.stream().filter(x -> !x.off()).count() > 1) {
+                row.setStatus("OFF");
+            }
             jobDestinations.save(row);
         }
+        if (paused) {
+            next = firstDestinationOnly(next);
+        }
         if (next.equals(current)) {
-            return;
+            return false;
         }
         for (int i = 0; i < current.size(); i++) {
             if (next.get(i).off() != current.get(i).off()) {
@@ -405,6 +416,82 @@ public class LiveStreamService {
         }
         jobs.updateSpec(job.getId(), spec.withDestinations(next).toJson());
         command(job, StreamCommand.Type.TARGETS, StreamSpec.destinationsJson(next));
+        return true;
+    }
+
+    /**
+     * FO-5: the run's destinations with only the first one that's on still on. Positions never change (DS-5), so
+     * the worker removes the others' relays and leaves the first one's connection alone.
+     */
+    static List<StreamSpec.Destination> firstDestinationOnly(List<StreamSpec.Destination> list) {
+        List<StreamSpec.Destination> out = new ArrayList<>(list.size());
+        boolean kept = false;
+        for (StreamSpec.Destination d : list) {
+            if (!d.off() && !kept) {
+                kept = true;
+                out.add(d);
+            } else {
+                out.add(d.off() ? d : d.withOff(true));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * FO-5: past the allowance, turns off every destination of a live run but its first, through the same live
+     * command a creator's own toggle uses (DS-5: the first destination's connection is never touched). Returns
+     * whether anything changed. The creator's saved destination choices stay as they are, for next month.
+     */
+    @Transactional
+    public boolean pauseExtraDestinations(long jobId, Long streamId) {
+        if (streamId != null) {
+            streams.lockById(streamId); // before reading the run: a restore or go-live of this stream waits
+        }
+        StreamJob job = jobs.findById(jobId).orElse(null);
+        if (job == null || !job.isLive() || StreamStates.STOP.equals(job.getDesiredState()) || job.getSpec() == null) {
+            return false;
+        }
+        StreamSpec spec = StreamSpec.fromJson(job.getSpec());
+        List<StreamSpec.Destination> current = spec.destinations() == null ? List.of() : spec.destinations();
+        List<StreamSpec.Destination> next = firstDestinationOnly(current);
+        if (next.equals(current)) {
+            return false;
+        }
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        for (int i = 0; i < current.size(); i++) {
+            if (next.get(i).off() != current.get(i).off()) {
+                jobDestinations.updateState(job.getId(), i, "OFF", 0, null, now);
+            }
+        }
+        jobs.updateSpec(job.getId(), spec.withDestinations(next).toJson());
+        command(job, StreamCommand.Type.TARGETS, StreamSpec.destinationsJson(next));
+        log.info("Fair use: run {} keeps its first destination only", jobId);
+        return true;
+    }
+
+    /**
+     * FO-5: back under the allowance (a new month, an upgrade or a grant): the live run sends to every destination
+     * the creator has on again, the same way as turning them on by hand. Returns whether anything changed.
+     */
+    @Transactional
+    public boolean restoreDestinations(long jobId, Long streamId) {
+        if (streamId == null) {
+            return false; // a run without a saved stream has no destination choices to go back to
+        }
+        streams.lockById(streamId);
+        StreamJob job = jobs.findById(jobId).orElse(null);
+        if (job == null || !job.isLive() || StreamStates.STOP.equals(job.getDesiredState()) || job.getSpec() == null) {
+            return false;
+        }
+        LiveStream s = streams.findById(streamId).orElse(null);
+        if (s == null) {
+            return false;
+        }
+        boolean changed = applyTargetsLive(job, s);
+        if (changed) {
+            log.info("Fair use: run {} sends to all its destinations again", jobId);
+        }
+        return changed;
     }
 
     // ------------------------------------------------------------------ overlays and scenes
@@ -572,6 +659,11 @@ public class LiveStreamService {
         } else {
             checks.add(new Check("quality", true, s.getQualityHeight() + "p" + s.getFps() + " is included in your plan.", "settings"));
         }
+        // FO-5: past the streaming data allowance a run still starts, with less; say so before it does.
+        String data = fairUseNote(fairUse.status(user, ZonedDateTime.now(ZoneId.of("UTC"))), enabled.size(), s.getQualityHeight(), s.getFps());
+        if (data != null) {
+            checks.add(new Check("streaming-data", true, data, "/pricing"));
+        }
         // GL-7: the plan's top quality isn't the server's capacity. A quality that won't keep up right now
         // is a warning with a lighter suggestion; only one no server could ever run fails the check.
         CapacityEstimator.Estimate estimate = capacity.estimate(new CapacityEstimator.Quality(s.getQualityHeight(), s.getFps()),
@@ -601,6 +693,24 @@ public class LiveStreamService {
         }
         boolean ok = checks.stream().allMatch(Check::ok);
         return new Preflight(ok, checks, estimate.freeCpus() == null ? null : estimate);
+    }
+
+    /** FO-5: what fair use changes about this start, in plain words; null when nothing. */
+    static String fairUseNote(FairUse.Status use, int destinations, int height, int fps) {
+        if (!use.extrasPaused()) {
+            return null;
+        }
+        String until = use.resetsAt().format(java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH));
+        List<String> parts = new ArrayList<>();
+        if (destinations > 1) {
+            parts.add("goes to your first destination only");
+        }
+        if (use.reduced() && (height > FairUseModel.REDUCED_HEIGHT || fps > FairUseModel.REDUCED_FPS)) {
+            parts.add("starts in 720p");
+        }
+        String what = parts.isEmpty() ? "still goes live as usual" : String.join(" and ", parts);
+        return "You've used this month's streaming data, so this stream " + what + " until " + until
+                + ". Upgrade for more.";
     }
 
     /** Qualities the creator's plan includes, for GL-7's lighter suggestion. */
@@ -702,16 +812,30 @@ public class LiveStreamService {
                 : String.join(",", playlist.stream().map(String::valueOf).toList());
         // FO-4: the bitrate for the owner's plan now, recorded in the run's spec: every rebuild of the spec keeps it
         // (runSpec), so neither a plan change nor a new setting changes a running stream.
-        StudioSpec studio = studioSpec(s, scene, override)
-                .withVideoKbps(videoBitrates.videoKbps(s.getUser().getPlanType(), s.getQualityHeight(), s.getFps()));
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
+        // FO-5 fair use: past the allowance a run starts with its first destination only (the others are in the
+        // run, off, so a grant or upgrade turns them on without touching it); past 110% it starts at 720p 30.
+        FairUse.Status use = fairUse.status(owner, now);
+        int height = s.getQualityHeight();
+        int fps = s.getFps();
+        if (use.reduced() && (height > FairUseModel.REDUCED_HEIGHT || fps > FairUseModel.REDUCED_FPS)) {
+            log.info("Fair use: stream {} starts at 720p 30 instead of {}p {} ({} of {} GB)", s.getId(), height, fps,
+                    Math.round(use.usedGb()), use.allowanceGb() == null ? "-" : Math.round(use.allowanceGb()));
+            height = Math.min(height, FairUseModel.REDUCED_HEIGHT);
+            fps = Math.min(fps, FairUseModel.REDUCED_FPS);
+        }
+        StudioSpec studio = studioSpec(s, scene, override).withQuality(height, fps)
+                .withVideoKbps(videoBitrates.videoKbps(s.getUser().getPlanType(), height, fps));
         List<StreamDestination> enabled = enabledDestinations(s);
         List<StreamSpec.Destination> dests = new ArrayList<>();
         for (StreamDestination d : enabled) {
             dests.add(new StreamSpec.Destination(d.getName() == null ? "Destination" : d.getName(), d.getStreamKey()));
         }
+        if (use.extrasPaused()) {
+            dests = firstDestinationOnly(dests);
+        }
         StreamSpec spec = StreamSpec.studio(email, s.getId(), studio, dests);
 
-        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC")).truncatedTo(ChronoUnit.MICROS);
         StreamJob job = new StreamJob(s.getUser(), dests.getFirst().url(), null, null, null, true, 0,
                 s.getName(), null, null, now,
                 String.join(", ", dests.stream().map(StreamSpec.Destination::name).toList()));
@@ -724,7 +848,11 @@ public class LiveStreamService {
         job.setScene(studio.initialScene());
         job.setPlaylistOverride(override);
         for (int i = 0; i < dests.size(); i++) {
-            job.getDestinations().add(new StreamJobDestination(job, i, dests.get(i).name()));
+            StreamJobDestination row = new StreamJobDestination(job, i, dests.get(i).name());
+            if (dests.get(i).off()) {
+                row.setStatus("OFF");
+            }
+            job.getDestinations().add(row);
         }
         // Flushed here so a second live run of this stream (refused by uq_stream_jobs_one_live_per_stream,
         // whatever path created the first) fails in this call, where the caller can return the existing run.
@@ -1170,7 +1298,12 @@ public class LiveStreamService {
 
     /** FO-4: a rebuilt spec keeps the bitrate the run went live with (none recorded: the built-in ladder's, as before). */
     static StudioSpec keepRunBitrate(StudioSpec next, StreamSpec current) {
-        return next.withVideoKbps(current.studio() == null ? null : current.studio().videoKbps());
+        if (current.studio() == null) {
+            return next.withVideoKbps(null);
+        }
+        // FO-5: and its picture size and frame rate. They can't change while live, so this only matters for a run
+        // fair use started at 720p 30: an edit must not put the stream's own quality into the run's spec.
+        return next.withQuality(current.studio().height(), current.studio().fps()).withVideoKbps(current.studio().videoKbps());
     }
 
     private void command(StreamJob job, StreamCommand.Type type, String payload) {

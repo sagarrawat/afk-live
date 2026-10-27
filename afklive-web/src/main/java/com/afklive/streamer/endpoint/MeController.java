@@ -37,9 +37,11 @@ public class MeController {
     private final PlanService plans;
     private final StreamJobRepository jobs;
     private final com.afklive.streamer.repository.UsageRepository usage;
+    private final com.afklive.streamer.service.FairUse fairUse;
 
     public MeController(UserRepository users, PlanService plans, StreamJobRepository jobs,
-                        com.afklive.streamer.repository.UsageRepository usage) {
+                        com.afklive.streamer.repository.UsageRepository usage, com.afklive.streamer.service.FairUse fairUse) {
+        this.fairUse = fairUse;
         this.users = users;
         this.plans = plans;
         this.jobs = jobs;
@@ -50,10 +52,13 @@ public class MeController {
                        int destinations, boolean watermark) {
     }
 
-    /** {@code hoursUsed}: hours streamed this calendar month (UTC), against {@code plan.monthlyHours} (0 = no limit). */
+    /**
+     * {@code hoursUsed}: hours streamed this calendar month (UTC), against {@code plan.monthlyHours} (0 = no limit).
+     * {@code traffic} (FO-5): streaming data this calendar month (UTC) against the plan's allowance (none: never limited).
+     */
     public record Me(Long id, String email, String name, String picture, boolean admin, Plan plan, String timeZone,
                      String currency, boolean onboarded, boolean emailAlerts, List<String> dismissedHints, long goLives,
-                     double hoursUsed) {
+                     double hoursUsed, com.afklive.streamer.service.FairUse.Status traffic) {
     }
 
     /**
@@ -132,7 +137,16 @@ public class MeController {
                         c.getMaxStorageBytes(), c.getMonthlyHours(), c.getMaxDestinations(), c.isWatermark()),
                 u.getTimeZone(), u.getCurrency(), u.getOnboardedAt() != null, u.isEmailAlerts(), dismissed(u),
                 jobs.countGoLives(u.getId()),
-                Math.round(usage.secondsIn(u.getId(), com.afklive.streamer.service.BillingService.month(ZonedDateTime.now(ZoneId.of("UTC")))) / 36.0) / 100.0);
+                Math.round(usage.secondsIn(u.getId(), com.afklive.streamer.service.BillingService.month(ZonedDateTime.now(ZoneId.of("UTC")))) / 36.0) / 100.0,
+                traffic(u));
+    }
+
+    private com.afklive.streamer.service.FairUse.Status traffic(User u) {
+        try {
+            return fairUse.cachedStatus(u, ZonedDateTime.now(ZoneId.of("UTC")));
+        } catch (RuntimeException e) {
+            return null; // the page works without it
+        }
     }
 
     private static List<String> dismissed(User u) {

@@ -247,6 +247,43 @@ public class CostMeter {
         return out;
     }
 
+    /**
+     * FO-5 fair use: GB (GiB) each account sent in the UTC month containing {@code now}, counted exactly as
+     * {@link #runs}: a run's bytes are the sum of its destinations' {@code bytes_sent}, which only ever grows and
+     * carries on from the last recorded value through handovers and takeovers (the new owner starts from it, and the
+     * update never lowers it), so a moved run is counted once; a run spanning two months counts in each in
+     * proportion to its time. {@code userId} null: every account with a run this month.
+     */
+    public Map<Long, Double> gbByAccount(ZonedDateTime now, Long userId) {
+        Month m = Month.of(now);
+        Map<Long, Double> out = new HashMap<>();
+        MapSqlParameterSource p = new MapSqlParameterSource().addValue("from", m.from().toOffsetDateTime())
+                .addValue("to", m.to().toOffsetDateTime()).addValue("uid", userId);
+        jdbc.query("SELECT j.user_id, j.start_time, "
+                        + "COALESCE(j.end_time, CASE WHEN j.is_live THEN CAST(:to AS timestamptz) END, j.heartbeat_at, j.start_time) AS ended, "
+                        + "COALESCE((SELECT SUM(d.bytes_sent) FROM stream_job_destinations d WHERE d.job_id = j.id), 0) AS bytes "
+                        + "FROM stream_jobs j WHERE j.start_time IS NOT NULL AND j.start_time < :to "
+                        + (userId == null ? "" : "AND j.user_id = :uid ")
+                        + "AND COALESCE(j.end_time, CASE WHEN j.is_live THEN CAST(:to AS timestamptz) END, j.heartbeat_at, j.start_time) > :from",
+                p, rs -> {
+                    double bytes = rs.getLong("bytes") * share(rs.getObject("start_time", OffsetDateTime.class),
+                            rs.getObject("ended", OffsetDateTime.class), m);
+                    out.merge(rs.getLong("user_id"), bytes / CostModel.GIB, Double::sum);
+                });
+        return out;
+    }
+
+    /** The part of a run from {@code start} to {@code end} that falls inside the month (1 for a run of no length). */
+    static double share(OffsetDateTime start, OffsetDateTime end, Month m) {
+        OffsetDateTime to = m.to().toOffsetDateTime();
+        OffsetDateTime from = m.from().toOffsetDateTime();
+        OffsetDateTime e = end.isAfter(to) ? to : end;
+        double total = Math.max(0, Duration.between(start, e).toMillis() / 1000.0);
+        OffsetDateTime inFrom = start.isBefore(from) ? from : start;
+        double inside = Math.max(0, Duration.between(inFrom, e).toMillis() / 1000.0);
+        return total > 0 ? inside / total : 1;
+    }
+
     /** The spec as written by the app: it's encrypted at rest (it holds stream keys); null when unreadable. */
     private static String plainSpec(String stored) {
         try {
