@@ -90,7 +90,7 @@ describe('Admin console', () => {
     expect(await screen.findByText('Needs attention now')).toBeInTheDocument();
     expect(window.location.pathname).toBe('/studio/admin/overview');
     const navs = screen.getAllByRole('navigation', { name: 'Admin' });
-    for (const label of ['Overview', 'Live', 'Users', 'Support', 'Billing', 'Servers', 'Growth', 'Audit']) {
+    for (const label of ['Overview', 'Live', 'Users', 'Support', 'Billing', 'Business', 'Servers', 'Growth', 'Audit']) {
       expect(within(navs[0]).getByRole('link', { name: new RegExp(`^${label}`) })).toBeInTheDocument();
     }
     expect(screen.getAllByText('Admin').length).toBeGreaterThan(0);
