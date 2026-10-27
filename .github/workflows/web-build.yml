@@ -37,6 +37,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Full history: the site build dates each page in /sitemap.xml (lastmod) from git.
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4

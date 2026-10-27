@@ -6,9 +6,22 @@ Writes site/for-<slug>.html (served at /for/<slug>); vite.site.config.ts builds 
 Pages share the site's head, header, footer and illustrations (site/partials).
 """
 import html
+import importlib.util
+import json
 import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
+
+
+def _help():
+    """site/help.py: each article names the use-case pages it helps ("for"); those pages link back to it."""
+    spec = importlib.util.spec_from_file_location("site_help", HERE / "help.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+HELP = _help()
 
 PAGES = [
     {
@@ -21,6 +34,8 @@ PAGES = [
         ], []),
         "illo": "illo-lofi",
         "title": "24/7 lofi and music channels",
+        "seo_title": "24/7 lofi stream on YouTube without a PC | AFK Live",
+        "description": "Upload your visuals and tracks once. AFK Live loops them on YouTube 24/7 from our servers, with no gaps between files and your PC off.",
         "h1": "A 24/7 music channel, without a computer left on",
         "lede": "Upload your visuals and your tracks once. AFK Live loops them on YouTube day and night from our servers, with no gaps between files and the music at one steady level.",
         "points": [
@@ -49,6 +64,8 @@ PAGES = [
         ], ["Morning and evening aarti (5:30 to 7 am, 6:30 to 8 pm)", "All-day bhajans with a midday pause (5 am to 1 pm, 4 to 10 pm)"]),
         "illo": "illo-devotional",
         "title": "Temples and devotional channels",
+        "seo_title": "24/7 aarti and bhajan live stream on YouTube | AFK Live",
+        "description": "Morning aarti and evening bhajans live on YouTube every day, right on time. Set the schedule once; AFK Live starts and stops it. No PC needed.",
         "h1": "Aarti and bhajans live every day, right on time",
         "lede": "Set the schedule once: morning aarti at 5:30, evening bhajans at 7. AFK Live starts and stops the stream on its own, every day, and tells you if anything goes wrong.",
         "points": [
@@ -76,6 +93,8 @@ PAGES = [
         ], ["Evening session (8 to 10 pm)"]),
         "illo": "illo-gaming",
         "title": "Mobile gaming streams",
+        "seo_title": "BGMI and Free Fire live from your phone, with overlays",
+        "description": "Stream BGMI, Free Fire or any phone game to YouTube with your logo and scenes added in the cloud, and a BRB screen if your signal drops.",
         "h1": "Stream from your phone with overlays, like a PC setup",
         "lede": "Your phone sends one clean stream to AFK Live; we add your logo, scenes and ticker in the cloud and send it to YouTube. When your signal drops, viewers see your Be right back screen instead of an ended stream.",
         "points": [
@@ -98,6 +117,8 @@ PAGES = [
         "slug": "podcasts",
         "illo": "illo-podcasts",
         "title": "Podcasts and reruns",
+        "seo_title": "Podcast episodes as a 24/7 YouTube live | AFK Live",
+        "description": "Past episodes play on a loop or a schedule, so your YouTube channel stays live 24/7 between new episodes. Premiere new ones at a set time.",
         "h1": "Keep your channel live between new episodes",
         "lede": "Turn your back catalogue into a channel that's always on. Past episodes play on a loop or on a schedule, so new viewers always find you live.",
         "points": [
@@ -121,6 +142,16 @@ PAGES = [
 
 def esc(s):
     return html.escape(s, quote=True)
+
+
+def ld(data):
+    """JSON-LD for a <script> block; "<" escaped so no text can end the script early."""
+    return json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+
+
+def help_for(slug):
+    """The help articles that say they're for this kind of channel (help.py "for"), in help-centre order."""
+    return [a for a in HELP.ARTICLES if slug in a["for"]]
 
 
 def page(p):
@@ -153,8 +184,18 @@ def page(p):
     faq = "\n".join(
         f'        <div class="border-b border-line py-5"><dt class="font-semibold">{esc(q)}</dt><dd class="mt-1.5 text-muted">{esc(a)}</dd></div>'
         for q, a in p["faq"])
-    title = f'{p["title"]}: AFK Live'
+    title = p["seo_title"]
     url = f'https://afklive.in/for/{p["slug"]}'
+    help_links = "\n".join(
+        f'        <li><a href="/help/{a["slug"]}" class="link">{esc(a["title"])}</a></li>' for a in help_for(p["slug"]))
+    crumbs = ld({
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://afklive.in/"},
+            {"@type": "ListItem", "position": 2, "name": p["title"], "item": url},
+        ],
+    })
     others = "\n".join(
         f'        <li><a href="/for/{o["slug"]}" class="link">{esc(o["title"])}</a></li>'
         for o in PAGES if o["slug"] != p["slug"])
@@ -164,14 +205,15 @@ def page(p):
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{esc(title)}</title>
-  <meta name="description" content="{esc(p["lede"])}" />
+  <meta name="description" content="{esc(p["description"])}" />
   <link rel="canonical" href="{url}" />
   <meta property="og:title" content="{esc(p["h1"])}" />
-  <meta property="og:description" content="{esc(p["lede"])}" />
+  <meta property="og:description" content="{esc(p["description"])}" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="{url}" />
 <!-- include:head -->
   <script type="module" src="./src/main.ts"></script>
+  <script type="application/ld+json">{crumbs}</script>
 </head>
 <body>
 <!-- generated by site/use-cases.py: edit the content there -->
@@ -180,7 +222,7 @@ def page(p):
   <section class="night">
     <div class="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.2fr_1fr] lg:py-20">
       <div>
-        <p class="text-sm font-medium text-sun">{esc(p["title"])}</p>
+        <nav aria-label="Breadcrumb" class="text-sm font-medium"><a href="/" class="text-muted hover:text-ink">Home</a> <span aria-hidden="true" class="text-muted">/</span> <span class="text-sun" aria-current="page">{esc(p["title"])}</span></nav>
         <h1 class="mt-3 text-[40px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-[56px]">{esc(p["h1"])}</h1>
         <p class="mt-6 max-w-xl text-lg text-muted">{esc(p["lede"])}</p>
         <div class="mt-8 flex flex-wrap gap-3">
@@ -216,7 +258,11 @@ def page(p):
     <dl class="mt-4">
 {faq}
     </dl>
-    <h2 class="mt-14 text-lg font-semibold">Also made for</h2>
+    <h2 class="mt-14 text-lg font-semibold">Guides for this kind of channel</h2>
+    <ul class="mt-3 space-y-2">
+{help_links}
+    </ul>
+    <h2 class="mt-10 text-lg font-semibold">Also made for</h2>
     <ul class="mt-3 space-y-2">
 {others}
     </ul>

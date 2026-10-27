@@ -101,3 +101,6 @@ build/
 
 # Local runtime data (worker downloads, local storage)
 data/
+
+# Python (site/help.py and site/use-cases.py load each other)
+__pycache__/

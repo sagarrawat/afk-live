@@ -1,12 +1,15 @@
 package com.afklive.streamer.endpoint;
 
+import com.afklive.streamer.exception.NotFoundException;
 import com.afklive.streamer.security.SignInTargets;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 
-import java.util.Set;
+import java.util.List;
 
+/** The public site's pages; the list of them is {@link PublicPages}. */
 @Controller
 public class HomeController {
 
@@ -34,19 +37,18 @@ public class HomeController {
     }
 
     /** MK-3: the use-case pages (afklive-ui/site/use-cases.py). */
-    static final Set<String> USE_CASES = Set.of("lofi", "devotional", "mobile-gaming", "podcasts");
+    static final List<String> USE_CASES = PublicPages.USE_CASES;
 
     @GetMapping("/for/{slug}")
-    public String useCase(@org.springframework.web.bind.annotation.PathVariable String slug) {
+    public String useCase(@PathVariable String slug) {
         if (!USE_CASES.contains(slug)) {
-            throw new com.afklive.streamer.exception.NotFoundException("Page not found.");
+            throw new NotFoundException("Page not found.");
         }
         return "forward:/site/for-" + slug + ".html";
     }
 
     /** MK-4: the help articles (afklive-ui/site/help.py writes site/help-&lt;slug&gt;.html). */
-    public static final Set<String> HELP_ARTICLES = Set.of("youtube-stream-key", "youtube-preparing", "vertical-or-landscape",
-            "live-here-not-on-youtube", "phone-streaming", "loops-and-youtube-rules", "titles-and-thumbnails", "music-on-your-live");
+    public static final List<String> HELP_ARTICLES = PublicPages.HELP_ARTICLES;
 
     @GetMapping("/help")
     public String help() {
@@ -54,9 +56,9 @@ public class HomeController {
     }
 
     @GetMapping("/help/{slug}")
-    public String helpArticle(@org.springframework.web.bind.annotation.PathVariable String slug) {
+    public String helpArticle(@PathVariable String slug) {
         if (!HELP_ARTICLES.contains(slug)) {
-            throw new com.afklive.streamer.exception.NotFoundException("Page not found.");
+            throw new NotFoundException("Page not found.");
         }
         return "forward:/site/help-" + slug + ".html";
     }

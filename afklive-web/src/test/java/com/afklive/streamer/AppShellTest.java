@@ -95,13 +95,13 @@ class AppShellTest extends PostgresIntegrationTest {
         for (String page : new String[]{"/login", "/register"}) {
             mvc.perform(get(page))
                     .andExpect(status().isOk())
-                    .andExpect(content().string(containsString("/site/assets/site.css")))
+                    .andExpect(content().string(containsString("/site/site.css")))
                     .andExpect(content().string(containsString("name=\"_csrf\"")));
         }
         // OPS-1: tests run with email off, so "Forgot password" offers support instead of a form.
         mvc.perform(get("/forgot-password"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("/site/assets/site.css")))
+                .andExpect(content().string(containsString("/site/site.css")))
                 .andExpect(content().string(containsString("support@afklive.in")));
         mvc.perform(get("/login").param("error", ""))
                 .andExpect(content().string(containsString("match. Try again")));
@@ -120,7 +120,7 @@ class AppShellTest extends PostgresIntegrationTest {
         while (m.find()) {
             listed.add(m.group(1));
         }
-        org.assertj.core.api.Assertions.assertThat(listed).isEqualTo(com.afklive.streamer.endpoint.HomeController.HELP_ARTICLES);
+        org.assertj.core.api.Assertions.assertThat(listed).isEqualTo(java.util.Set.copyOf(com.afklive.streamer.endpoint.HomeController.HELP_ARTICLES));
         org.assertj.core.api.Assertions.assertThat(sitemap).contains("https://afklive.in/help<");
         for (String slug : listed) {
             mvc.perform(get("/help/" + slug)).andExpect(status().isOk()).andExpect(forwardedUrl("/site/help-" + slug + ".html"));

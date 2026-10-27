@@ -69,13 +69,35 @@ export function loadPlans(currency: 'INR' | 'USD'): Promise<PlanView[]> {
   return p;
 }
 
-/** INR for visitors in India, USD elsewhere (a guess from the time zone; the toggle switches). */
-export function guessCurrency(): 'INR' | 'USD' {
+export const CURRENCY_KEY = 'afk.site.currency';
+
+function browserStorage(): Storage | null {
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return tz === 'Asia/Kolkata' || tz === 'Asia/Calcutta' ? 'INR' : 'USD';
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rupees, unless this visitor chose dollars with the toggle before. Everyone, search engines included,
+ * first sees the ₹ prices that are in the page's HTML. There is no guess from the time zone: Google
+ * renders pages from the US, so a guess showed it dollars where the page says ₹.
+ */
+export function savedCurrency(storage: Pick<Storage, 'getItem'> | null = browserStorage()): 'INR' | 'USD' {
+  try {
+    return storage?.getItem(CURRENCY_KEY) === 'USD' ? 'USD' : 'INR';
   } catch {
     return 'INR';
+  }
+}
+
+/** Remembers the toggle; without storage (a private window, storage blocked) it lasts for this page only. */
+export function saveCurrency(currency: 'INR' | 'USD', storage: Pick<Storage, 'setItem'> | null = browserStorage()) {
+  try {
+    storage?.setItem(CURRENCY_KEY, currency);
+  } catch {
+    /* nothing to do: the page still shows the chosen currency */
   }
 }
 
@@ -83,7 +105,7 @@ export function guessCurrency(): 'INR' | 'USD' {
 export function mountPricing(root: HTMLElement, lang: Lang = pageLang()) {
   const list = root.querySelector<HTMLElement>('[data-plans]');
   if (!list) return;
-  let currency = guessCurrency();
+  let currency = savedCurrency();
   let cycle: 'MONTHLY' | 'YEARLY' = 'MONTHLY';
   let cache: Partial<Record<'INR' | 'USD', PlanView[]>> = {};
   const press = () => {
@@ -103,6 +125,7 @@ export function mountPricing(root: HTMLElement, lang: Lang = pageLang()) {
   root.querySelectorAll<HTMLButtonElement>('[data-currency]').forEach((b) =>
     b.addEventListener('click', () => {
       currency = b.dataset.currency as 'INR' | 'USD';
+      saveCurrency(currency);
       render();
     }),
   );

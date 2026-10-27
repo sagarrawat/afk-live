@@ -178,7 +178,7 @@ curl -s http://127.0.0.1:8080/actuator/health/readiness        # must print {"st
 grep -q '^REMEMBER_ME_KEY=.\+' /opt/afklive/afklive.env || echo "REMEMBER_ME_KEY=$(openssl rand -hex 32)" >> /opt/afklive/afklive.env
 
 # 1. Caddy: both slot ports with health checks. Only 8080 (afklive.service) answers for now; that's fine.
-#    Replace afk.live with your domain in the file first.
+#    The file names afklive.in (and redirects www. and http:// to it); change the domain if yours differs.
 cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.before-ops4
 cp afklive-scripts/caddy/Caddyfile /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
@@ -939,7 +939,7 @@ presigned part uploads start carrying checksum parameters a browser can't satisf
    Asia-Pacific (close to the servers and Indian creators). Leave public access off.
 2. **CORS** (bucket → Settings → CORS policy), so browsers can PUT upload parts and read the ETag:
    ```json
-   [{"AllowedOrigins": ["https://afk.live"], "AllowedMethods": ["PUT", "GET", "HEAD"],
+   [{"AllowedOrigins": ["https://afklive.in"], "AllowedMethods": ["PUT", "GET", "HEAD"],
      "AllowedHeaders": ["*"], "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3600}]
    ```
 3. **Lifecycle** (bucket → Settings → Object lifecycle rules): abort incomplete multipart uploads after
@@ -1341,3 +1341,80 @@ whether or not storage is full; files a live stream is playing are refused. Ever
 it was taken out of, when it was uploaded and deleted). The file and its prepared copies are removed from
 storage; the row stays for support. Admins see it on the user's admin page under "Deleted files"
 (`GET /api/admin/users/{id}/deletions`).
+
+## SEO: what the server does, and the checks to run on production
+
+The public site (`afklive-ui/site`, served at `/`, `/hi`, `/pricing`, `/for/*`, `/help/*`, `/privacy`,
+`/terms`, `/status`) is plain HTML. What keeps it crawlable:
+
+- **One address per page.** `PublicPages` lists every public page and the built file it forwards to.
+  `SiteUrlFilter` (first in the security chain, before sign-in is checked) answers `/pricing/` and
+  `/help/x/` with a 301 to the address without the slash, and `/site/pricing.html`, `/site/for-lofi.html`
+  (the built files) with a 301 to `/pricing`, `/for/lofi`. `/site/` itself and unknown `/site/*.html` are a
+  404. Old addresses (`/pricing.html`, `/home.html`, `/features`) are 301s.
+- **A real 404.** A signed-out request for an address nothing answers (`/blog`, `/Pricing`) gets the
+  site's 404 page (`templates/error/404.html`, noindex), not a redirect to the sign-in page.
+  `PublicNotFoundEntryPoint` still sends anything that exists (the app, the API, controllers, files
+  such as `remote.html`) to sign-in.
+- **The sitemap** (`/sitemap.xml`, `SitemapController`) is written from `PublicPages`, without `/login`,
+  `/register` and `/status` (noindex). `lastmod` is the date of the last commit that changed each page
+  (the site build writes `static/site/lastmod.json`; it needs full git history, so `web-build.yml`
+  checks out with `fetch-depth: 0`; a shallow build leaves the dates out).
+- **Caching** (`MvcConfig`): hashed files under `/site/assets/` and `/app/assets/` for a year
+  (`immutable`); `/site/img/`, `/site/brand/` and `/favicon.ico` for a day; pages and `/site/site.css`
+  (the sign-in pages' stylesheet, a stable name) `no-cache` (browsers recheck, a 304 when unchanged).
+  Spring Security's `no-store` stays on everything else: signed-in pages, the API, sign-in.
+- **Structured data** is written at build time from what each page shows (`site/src/seo.ts`,
+  `help.py`, `use-cases.py`): Organization and WebSite on `/` and `/hi`, SoftwareApplication with the
+  ₹ plans (from `static-plans.ts`) on `/` and `/pricing`, FAQPage from each page's visible FAQ (each
+  question on one page only), BreadcrumbList on help and use-case pages, TechArticle on help articles.
+  `site/src/seo.test.ts` checks it matches the page.
+
+### Production checks (after a deploy that touches routing, Caddy or the site)
+
+```sh
+UA='Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+for u in https://afklive.in/ https://afklive.in/robots.txt https://afklive.in/sitemap.xml \
+         https://www.afklive.in/pricing http://afklive.in/pricing http://www.afklive.in/ \
+         https://afklive.in/pricing/ https://afklive.in/nope https://afklive.in/site/index.html \
+         https://afklive.in/studio; do
+  echo "== $u"; curl -sS -o /dev/null -D - -A "$UA" "$u" | grep -iE '^HTTP|^location|x-robots|cache-control|content-type'
+done
+# The stylesheet and a font the homepage links (hashed names change every build):
+curl -s https://afklive.in/ | grep -oE '/site/assets/[^"]+\.(css|woff2)' | sort -u | head -3 | \
+  while read -r a; do echo "== $a"; curl -sSI "https://afklive.in$a" | grep -iE '^HTTP|cache-control'; done
+```
+
+Expected:
+
+| Request | Answer |
+|---|---|
+| `/`, `/robots.txt`, `/sitemap.xml` | 200, no `X-Robots-Tag`; `/` has `Cache-Control: no-cache, public` |
+| `https://www.afklive.in/pricing`, `http://afklive.in/pricing`, `http://www.afklive.in/` | one 301 to `https://afklive.in/pricing` (or `/`) |
+| `/pricing/` | 301, `Location: /pricing` |
+| `/nope` | 404 (the "This page is off air" page), no `Location` |
+| `/site/index.html` | 301, `Location: /` |
+| `/studio` (signed out) | 302 to `/login` |
+| `/site/assets/*.css`, `*.woff2` | 200, `Cache-Control: max-age=31536000, public, immutable` |
+
+The sitemap must list 18 addresses, none of them `/login`, `/register` or `/status`.
+
+### Google Search Console checklist
+
+1. Add a **Domain property** for `afklive.in`, verified with the DNS TXT record Search Console gives
+   (covers `www`, `http` and `https`).
+2. **Sitemaps**: submit `https://afklive.in/sitemap.xml`. Expect "Success" and 18 discovered pages.
+3. **URL Inspection** → `https://afklive.in/` → **Test live URL**: "URL is available to Google",
+   status 200, the user-declared canonical is the Google-selected one, and the screenshot is the
+   homepage, not the sign-in page. Then **Request indexing**. Repeat for `/hi`, `/pricing`, `/help` and
+   the four `/for/*` pages.
+4. **Settings → robots.txt**: fetched recently with 200 (it was a 302 to sign-in before 23 Oct 2026).
+5. **Settings → Crawl stats**: 3xx responses to `/login` should fall away after this release; 404s for
+   old or mistyped addresses are expected and harmless.
+6. **Pages report**: watch "Discovered – currently not indexed" and "Duplicate, Google chose different
+   canonical" (any `/site/*.html` there should move to "Page with redirect").
+7. **Enhancements**: Breadcrumbs and FAQ should show valid items. SoftwareApplication can't become a
+   rich result until the app has real ratings or reviews (Google requires one); never add made-up ones.
+8. **Manual actions** and **Security issues**: both empty.
+9. Add the site to **Bing Webmaster Tools** (it can import the Search Console property); Bing feeds
+   DuckDuckGo and several AI search tools.

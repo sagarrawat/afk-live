@@ -1,7 +1,10 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/schibsted-grotesk';
-/* Devanagari for the Hindi homepage (and Hindi words on English pages); downloaded only when used. */
-@import '@fontsource-variable/noto-sans-devanagari';
+/*
+ * Devanagari (Noto Sans) is loaded only by the Hindi page (src/devanagari.css, linked from hi.html). The
+ * few Hindi words on English pages (the header's हिन्दी link, the आरती tab) use the phone's own font:
+ * Android and iOS ship one, and it saves every English page a 121 KB download.
+ */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

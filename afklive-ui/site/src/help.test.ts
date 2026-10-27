@@ -22,19 +22,26 @@ describe('help search', () => {
       <main data-help>
         <form data-help-form><input data-help-search /></form>
         <p data-help-count></p>
-        <ul>
+        <section data-help-group><h2>YouTube setup</h2><ul>
           <li data-help-item data-search="where to find your youtube stream key">Key</li>
           <li data-help-item data-search="youtube says preparing auto-start auto-stop">Preparing</li>
-        </ul>
+        </ul></section>
+        <section data-help-group><h2>Growing your channel</h2><ul>
+          <li data-help-item data-search="music on your live">Music</li>
+        </ul></section>
         <p class="hidden" data-help-empty>Nothing matches</p>
       </main>`;
     const root = document.querySelector<HTMLElement>('[data-help]')!;
     mountHelpSearch(root, '?q=preparing');
     const [key, prep] = Array.from(root.querySelectorAll<HTMLElement>('[data-help-item]'));
+    const [setup, growing] = Array.from(root.querySelectorAll<HTMLElement>('[data-help-group]'));
     const input = root.querySelector<HTMLInputElement>('[data-help-search]')!;
     expect(input.value).toBe('preparing');
     expect(key.hidden).toBe(true);
     expect(prep.hidden).toBe(false);
+    // A group's heading hides with its last matching article.
+    expect(setup.hidden).toBe(false);
+    expect(growing.hidden).toBe(true);
 
     input.value = 'nothing like this';
     input.dispatchEvent(new Event('input'));
@@ -45,5 +52,6 @@ describe('help search', () => {
     input.value = '';
     input.dispatchEvent(new Event('input'));
     expect(key.hidden || prep.hidden).toBe(false);
+    expect(setup.hidden || growing.hidden).toBe(false);
   });
 });

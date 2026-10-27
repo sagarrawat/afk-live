@@ -6,7 +6,7 @@ import { formula, verdict, DEFAULTS } from './calc';
 import { proofLine } from './proof';
 import { niches } from './niches';
 import { mountHero } from './hero';
-import sitemap from '../../../afklive-web/src/main/resources/static/sitemap.xml?raw';
+import publicPages from '../../../afklive-web/src/main/java/com/afklive/streamer/endpoint/PublicPages.java?raw';
 import homeController from '../../../afklive-web/src/main/java/com/afklive/streamer/endpoint/HomeController.java?raw';
 import securityConfig from '../../../afklive-web/src/main/java/com/afklive/streamer/config/SecurityConfig.java?raw';
 import siteConfig from '../../vite.site.config.ts?raw';
@@ -83,7 +83,7 @@ describe('Hindi homepage', () => {
     expect(homeController).toContain('@GetMapping("/hi")');
     expect(homeController).toContain('forward:/site/hi.html');
     expect(securityConfig).toContain('"/hi"');
-    expect(sitemap).toContain('<loc>https://afklive.in/hi</loc>');
+    expect(publicPages).toContain('pages.put("/hi", "hi.html")'); // in /sitemap.xml
   });
 
   it('declares its language, canonical and Hindi meta and Open Graph tags', () => {

@@ -37,6 +37,10 @@ export function mountHelpSearch(root: HTMLElement, search = window.location.sear
       item.hidden = !hit;
       if (hit) shown++;
     }
+    // A group's heading goes with its last matching article.
+    root.querySelectorAll<HTMLElement>('[data-help-group]').forEach((g) => {
+      g.hidden = !g.querySelector('[data-help-item]:not([hidden])');
+    });
     empty?.classList.toggle('hidden', shown > 0);
     if (count) count.textContent = countText(shown, items.length, input.value);
   };
