@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { faqEntries, jsonLd, rupees, softwareApplication, text, withStructuredData } from './seo';
+import { faqEntries, jsonLd, rupees, softwareApplication, text, withLangSwitch, withStructuredData } from './seo';
 import { STATIC_PLANS } from './static-plans';
 import siteCss from './site.css?raw';
 
@@ -11,7 +11,7 @@ const partials = import.meta.glob('../partials/*.html', { query: '?raw', import:
 const page = (name: string) => pages[`../${name}`];
 /** What the build makes of a page: partials included, then the jsonld placeholders filled. */
 const built = (name: string) =>
-  withStructuredData(page(name).replace(/<!-- include:([a-z-]+) -->/g, (_, p: string) => partials[`../partials/${p}.html`]), STATIC_PLANS);
+  withLangSwitch(withStructuredData(page(name).replace(/<!-- include:([a-z-]+) -->/g, (_, p: string) => partials[`../partials/${p}.html`]), STATIC_PLANS));
 const files = Object.keys(pages).map((p) => p.replace('../', ''));
 const helpArticles = files.filter((f) => /^help-.+\.html$/.test(f));
 const useCases = files.filter((f) => /^for-.+\.html$/.test(f));
@@ -58,7 +58,10 @@ describe('structured data', () => {
 
   it('marks up each visible FAQ, once per site', () => {
     const asked: string[] = [];
-    for (const [name, count] of [['index.html', 6], ['hi.html', 6], ['pricing.html', 7]] as const) {
+    const askedHi: string[] = [];
+    const hindiHelp = files.filter((f) => /^hi-help-.+\.html$/.test(f) && page(f).includes('data-faq'));
+    expect(hindiHelp.length).toBeGreaterThanOrEqual(4);
+    for (const [name, count] of [['index.html', 6], ['hi.html', 6], ['pricing.html', 7], ...hindiHelp.map((f) => [f, faqEntries(page(f)).length] as const)] as const) {
       const html = built(name);
       const [faq] = ofType(html, 'FAQPage');
       expect(faq.mainEntity, name).toHaveLength(count);
@@ -69,12 +72,16 @@ describe('structured data', () => {
         expect(q.acceptedAnswer.text.length).toBeGreaterThan(20);
         // The question is shown on the page, word for word.
         expect(text(html), `${name}: ${q.name}`).toContain(q.name);
-        if (name !== 'hi.html') asked.push(q.name);
+        if (/^hi/.test(name)) askedHi.push(q.name);
+        else asked.push(q.name);
       }
-      if (name === 'hi.html') for (const q of faq.mainEntity as Json[]) expect(q.name).toMatch(DEVANAGARI);
+      if (/^hi/.test(name)) for (const q of faq.mainEntity as Json[]) expect(q.name).toMatch(DEVANAGARI);
     }
-    // Google: never mark up the same question on two pages.
+    // Google: never mark up the same question on two pages (in either language).
     expect(new Set(asked).size).toBe(asked.length);
+    expect(new Set(askedHi).size).toBe(askedHi.length);
+    // No FAQ markup without questions on the page to match it.
+    for (const f of files) if (!page(f).includes('data-faq')) expect(ofType(built(f), 'FAQPage'), f).toHaveLength(0);
     expect(faqEntries(page('pricing.html')).find(([q]) => q.includes('US dollars'))?.[1]).toContain('$ USD');
   });
 
@@ -109,7 +116,7 @@ describe('structured data', () => {
 
   it('leaves no placeholder unfilled and only parseable JSON-LD', () => {
     for (const f of files) {
-      const html = f.match(/^(index|hi|pricing)\.html$/) ? built(f) : page(f);
+      const html = built(f);
       expect(html, f).not.toContain('<!-- jsonld:');
       expect(() => jsonLd(html), f).not.toThrow();
     }
@@ -174,9 +181,11 @@ describe('internal links', () => {
 });
 
 describe('fonts', () => {
-  it('loads Devanagari only on the Hindi page', () => {
+  it('loads Devanagari only on the Hindi pages', () => {
     expect(siteCss).not.toContain("@import '@fontsource-variable/noto-sans-devanagari'");
-    expect(page('hi.html')).toContain('href="./src/devanagari.css"');
-    for (const f of files.filter((x) => x !== 'hi.html')) expect(page(f), f).not.toContain('devanagari.css');
+    const hindi = files.filter((f) => page(f).includes('<html lang="hi">'));
+    expect(hindi).toEqual(expect.arrayContaining(['hi.html', 'hi-help.html', 'hi-help-24-ghante-live.html']));
+    for (const f of hindi) expect(page(f), f).toContain('href="./src/devanagari.css"');
+    for (const f of files.filter((x) => !hindi.includes(x))) expect(page(f), f).not.toContain('devanagari.css');
   });
 });

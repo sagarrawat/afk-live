@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import Beasties from 'beasties';
 import { STATIC_PLANS } from './site/src/static-plans';
-import { withStructuredData } from './site/src/seo';
+import { withLangSwitch, withStructuredData } from './site/src/seo';
 
 const outDir = resolve(__dirname, '../afklive-web/target/classes/static/site');
 
@@ -17,9 +17,12 @@ function partials(): Plugin {
   };
 }
 
-/** `<!-- jsonld:... -->` placeholders become JSON-LD from the page's own content (site/src/seo.ts). */
+/**
+ * `<!-- jsonld:... -->` placeholders become JSON-LD from the page's own content, and the language switch
+ * points at the page's twin in the other language when it has one (site/src/seo.ts).
+ */
 function structuredData(): Plugin {
-  return { name: 'site-structured-data', transformIndexHtml: (html) => withStructuredData(html, STATIC_PLANS) };
+  return { name: 'site-structured-data', transformIndexHtml: (html) => withLangSwitch(withStructuredData(html, STATIC_PLANS)) };
 }
 
 /**
@@ -136,10 +139,10 @@ export default defineConfig({
         terms: resolve(__dirname, 'site/terms.html'),
         // RE-7: the public status page (served at /status).
         status: resolve(__dirname, 'site/status.html'),
-        // MK-3: the use-case pages (site/use-cases.py); MK-4: the help centre (site/help.py).
+        // MK-3: the use-case pages (site/use-cases.py); MK-4: the help centre, in English and Hindi (site/help.py).
         ...Object.fromEntries(
           readdirSync(resolve(__dirname, 'site'))
-            .filter((f) => /^(for|help)-[a-z-]+\.html$/.test(f) || f === 'help.html')
+            .filter((f) => /^(for|help|hi-help)-[a-z0-9-]+\.html$/.test(f) || f === 'help.html' || f === 'hi-help.html')
             .map((f) => [f.replace('.html', ''), resolve(__dirname, 'site', f)]),
         ),
       },

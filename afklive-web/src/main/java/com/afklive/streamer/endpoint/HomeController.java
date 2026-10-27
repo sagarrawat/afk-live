@@ -63,6 +63,20 @@ public class HomeController {
         return "forward:/site/help-" + slug + ".html";
     }
 
+    /** The help articles in Hindi (site/help.py HI_ARTICLES); served to everyone, like /hi. */
+    @GetMapping("/hi/help")
+    public String hindiHelp() {
+        return "forward:/site/hi-help.html";
+    }
+
+    @GetMapping("/hi/help/{slug}")
+    public String hindiHelpArticle(@PathVariable String slug) {
+        if (!PublicPages.HINDI_HELP_ARTICLES.contains(slug)) {
+            throw new NotFoundException("Page not found.");
+        }
+        return "forward:/site/hi-help-" + slug + ".html";
+    }
+
     @GetMapping("/terms")
     public String terms() {
         return "forward:/site/terms.html";

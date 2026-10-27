@@ -7,7 +7,7 @@
  *   <!-- jsonld:faq -->       FAQPage from the page's own visible questions (the element marked data-faq)
  *
  * Help articles and use-case pages carry their BreadcrumbList / TechArticle from site/help.py and
- * site/use-cases.py. Imported by the build (Node) and the tests, so nothing here touches the DOM.
+ * site/use-cases.py; Hindi help articles with questions use jsonld:faq too. Imported by the build (Node) and the tests, so nothing here touches the DOM.
  */
 import type { PlanView } from './plans';
 
@@ -118,6 +118,26 @@ export function withStructuredData(html: string, plans: PlanView[]): string {
       if (!entries.length) throw new Error('jsonld:faq on a page without a data-faq block of questions');
       return ldScript(faqPage(entries));
     });
+}
+
+/** The page's hreflang alternates as language → path ("/help/youtube-stream-key"). */
+export function alternates(html: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of html.matchAll(/<link rel="alternate" hreflang="([a-z-]+)" href="https:\/\/afklive\.in(\/[^"]*)"/g)) out[m[1]] = m[2];
+  return out;
+}
+
+/**
+ * Points the header's language switch (English / हिन्दी) at the page's own twin when it has one (its
+ * hreflang links), so English on /hi/help/youtube-stream-key leads to /help/youtube-stream-key, not the
+ * homepage. Pages without a twin keep the partial's links to the two homepages.
+ */
+export function withLangSwitch(html: string): string {
+  const alt = alternates(html);
+  if (!alt.en || !alt.hi) return html;
+  return html.replace(/<nav [^>]*class="lang-switch"[\s\S]*?<\/nav>/, (nav) =>
+    nav.replace(/<a href="[^"]*" hreflang="en"/, `<a href="${alt.en}" hreflang="en"`).replace(/<a href="[^"]*" hreflang="hi"/, `<a href="${alt.hi}" hreflang="hi"`),
+  );
 }
 
 /** Every JSON-LD block in a page, parsed. */
