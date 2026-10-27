@@ -76,6 +76,8 @@ public class AdminService {
     private final AppConfigService appConfig;
     private final PlanConfigRepository planConfigs;
     private final com.afklive.streamer.repository.StreamIncidentRepository incidents;
+    private final FairUse fairUse;
+    private final FairUseSweep fairUseSweep;
 
     public AdminService(StreamJobRepository jobs, LiveStreamRepository streams, UserRepository users,
                         SubscriptionRepository subscriptions, PaymentAuditRepository payments, InvoiceRepository invoices,
@@ -83,6 +85,7 @@ public class AdminService {
                         NotificationService notifications, WorkerStatusRepository workerStatus, QuotaAuditRepository quota,
                         SupportTicketRepository tickets, FileStorageService storage, AppConfigService appConfig,
                         PlanConfigRepository planConfigs, com.afklive.streamer.repository.StreamIncidentRepository incidents,
+                        FairUse fairUse, FairUseSweep fairUseSweep,
                         @Value("${app.youtube.daily-quota:10000}") int dailyQuota,
                         @Value("${app.admin.monthly-server-cost:}") String monthlyServerCost,
                         @Value("${app.admin.server-cost-currency:INR}") String serverCostCurrency) {
@@ -91,6 +94,8 @@ public class AdminService {
         this.appConfig = appConfig;
         this.planConfigs = planConfigs;
         this.incidents = incidents;
+        this.fairUse = fairUse;
+        this.fairUseSweep = fairUseSweep;
         this.workerStatus = workerStatus;
         this.quota = quota;
         this.dailyQuota = dailyQuota;
@@ -322,7 +327,8 @@ public class AdminService {
     public record UserDetail(Long id, String email, String name, String plan, boolean enabled, String role,
                              java.time.LocalDateTime planExpiration, SubscriptionView subscription, long storageBytes,
                              long storageLimit, double hoursThisMonth, int hoursIncluded, List<StreamRow> streams,
-                             List<PaymentRow> payments, List<InvoiceRow> invoices, List<AdminAction> history) {
+                             List<PaymentRow> payments, List<InvoiceRow> invoices, List<AdminAction> history,
+                             FairUse.Status traffic) {
     }
 
     public UserDetail user(Long id) {
@@ -345,7 +351,34 @@ public class AdminService {
         double hours = Math.round(usage.secondsIn(u.getId(), BillingService.month(now())) / 36.0) / 100.0;
         return new UserDetail(u.getId(), u.getEmail(), u.getFullName(), u.getPlanType().name(), u.isEnabled(), u.getRole(),
                 u.getPlanExpiration(), sub, users.usedStorage(u.getId()), cfg.getMaxStorageBytes(), hours, cfg.getMonthlyHours(),
-                rows, pay, inv, audit.findTop50ByTargetTypeAndTargetIdOrderByCreatedAtDesc("user", String.valueOf(u.getId())));
+                rows, pay, inv, audit.findTop50ByTargetTypeAndTargetIdOrderByCreatedAtDesc("user", String.valueOf(u.getId())),
+                fairUse.status(u, now()));
+    }
+
+    /**
+     * FO-5: extra streaming data for this account, this calendar month (UTC) only, on top of its plan's allowance.
+     * Audited; applied at once (paused destinations come back if the account is under its allowance again).
+     */
+    @Transactional
+    public FairUse.Status grantTraffic(String admin, Long userId, Integer gb, String reason) {
+        String why = requireReason(reason);
+        User u = users.findById(userId).orElseThrow(() -> new NotFoundException("User not found."));
+        if (gb == null) {
+            throw new IllegalArgumentException("Say how many GB to grant.");
+        }
+        ZonedDateTime now = now();
+        fairUse.grant(admin, u.getId(), gb, why, now);
+        record(admin, "TRAFFIC_GRANT", "user", userId, "+" + gb + " GB for " + BillingService.month(now) + ": " + why);
+        return fairUse.status(u, now);
+    }
+
+    /** After a grant's transaction commits: restore the account's paused destinations now rather than in 5 minutes. */
+    public void applyFairUse(Long userId) {
+        try {
+            users.findById(userId).ifPresent(u -> fairUseSweep.sweepAccount(u, now()));
+        } catch (Exception e) {
+            log.warn("Fair use for user {} after an admin change failed (the next check applies it): {}", userId, e.getMessage());
+        }
     }
 
     /**
@@ -610,12 +643,13 @@ public class AdminService {
     /** A plan's live settings; prices are GST-inclusive, in paise (INR) and cents (USD). */
     public record PlanView(String plan, String displayName, long maxStorageBytes, int maxActiveStreams, int maxDestinations,
                            int maxChannels, int maxResolution, int maxFps, int monthlyHours, boolean watermark,
-                           int maxScheduledPosts, long priceInrMonth, long priceInrYear, long priceUsdMonth, long priceUsdYear) {
+                           int maxScheduledPosts, long priceInrMonth, long priceInrYear, long priceUsdMonth, long priceUsdYear,
+                           Integer monthlyTrafficGb) {
         static PlanView of(PlanConfig c) {
             return new PlanView(c.getPlanType().name(), c.getDisplayName(), c.getMaxStorageBytes(), c.getMaxActiveStreams(),
                     c.getMaxDestinations(), c.getMaxChannels(), c.getMaxResolution(), c.getMaxFps(), c.getMonthlyHours(),
                     c.isWatermark(), c.getMaxScheduledPosts(), c.getPriceInrMonth(), c.getPriceInrYear(), c.getPriceUsdMonth(),
-                    c.getPriceUsdYear());
+                    c.getPriceUsdYear(), c.getMonthlyTrafficGb());
         }
     }
 
@@ -627,12 +661,18 @@ public class AdminService {
         return out;
     }
 
-    /** Everything an admin can change on a plan. {@code maxChannels} / {@code maxScheduledPosts} null: keep as is. */
+    /**
+     * Everything an admin can change on a plan. {@code maxChannels} / {@code maxScheduledPosts} null: keep as is.
+     * {@code monthlyTrafficGb} (FO-5): streaming data included a month in GB; null = no allowance.
+     */
     public record PlanEdit(String displayName, Long maxStorageBytes, Integer maxActiveStreams, Integer maxDestinations,
                            Integer maxChannels, Integer maxResolution, Integer maxFps, Integer monthlyHours, Boolean watermark,
                            Integer maxScheduledPosts, Long priceInrMonth, Long priceInrYear, Long priceUsdMonth,
-                           Long priceUsdYear) {
+                           Long priceUsdYear, Integer monthlyTrafficGb) {
     }
+
+    /** FO-5: the largest monthly streaming data allowance an admin can set (a typo guard: about 330 streams 24/7 at 1080p). */
+    static final int MAX_TRAFFIC_GB = 1_000_000;
 
     static final long MAX_STORAGE_BYTES = 10L * 1024 * 1024 * 1024 * 1024; // 10 TB
     static final long MAX_PRICE_MINOR = 100_000_000L; // ₹10 lakh or $1M a period: anything above is a typo
@@ -674,6 +714,10 @@ public class AdminService {
             throw new IllegalArgumentException("Frame rate is 30 or 60.");
         }
         int hours = range(e.monthlyHours(), "monthly hours", 0, 744);
+        Integer trafficGb = e.monthlyTrafficGb();
+        if (trafficGb != null && (trafficGb < 1 || trafficGb > MAX_TRAFFIC_GB)) {
+            throw new IllegalArgumentException("Streaming data a month is between 1 and 1,000,000 GB, or empty for no limit.");
+        }
         boolean watermark = required(e.watermark(), "watermark");
         if (e.maxChannels() != null && (e.maxChannels() < 0 || e.maxChannels() > 1000)) {
             throw new IllegalArgumentException("Channels is between 0 and 1000.");
@@ -708,6 +752,8 @@ public class AdminService {
         diff(changes, "fps", c.getMaxFps(), fps);
         diff(changes, "monthlyHours", c.getMonthlyHours(), hours);
         diff(changes, "watermark", c.isWatermark(), watermark);
+        diff(changes, "trafficGb", c.getMonthlyTrafficGb() == null ? "unlimited" : c.getMonthlyTrafficGb(),
+                trafficGb == null ? "unlimited" : trafficGb);
         if (e.maxChannels() != null) {
             diff(changes, "channels", c.getMaxChannels(), e.maxChannels());
         }
@@ -729,6 +775,7 @@ public class AdminService {
         c.setMaxFps(fps);
         c.setMonthlyHours(hours);
         c.setWatermark(watermark);
+        c.setMonthlyTrafficGb(trafficGb);
         if (e.maxChannels() != null) {
             c.setMaxChannels(e.maxChannels());
         }

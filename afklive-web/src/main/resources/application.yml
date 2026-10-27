@@ -166,6 +166,15 @@ app:
     # (0.85 when the currency is INR, at 85 rupees to the dollar); no default for other currencies.
     transfer-price-per-gb: ${APP_TRANSFER_PRICE_PER_GB:}
     transfer-alerts-auto: ${APP_TRANSFER_ALERTS_AUTO:true}
+    # FO-5 fair use (admin Billing, "Worst case per plan"): the payment gateway's fee in percent of the price before
+    # GST (empty: 2), and one 24/7 stream's share of the server bill a month in the currency above (empty: this
+    # month's measured cost per stream-hour × 720, when APP_MONTHLY_SERVER_COST is set).
+    gateway-fee-percent: ${APP_GATEWAY_FEE_PERCENT:}
+    server-cost-per-stream-month: ${APP_SERVER_COST_PER_STREAM_MONTH:}
+  fair-use:
+    # FO-5: web instances check every account's streaming data against its plan's allowance every 5 minutes
+    # (alerts at 80/100/110%, extra destinations paused past 100%). false turns the sweep off (tests).
+    auto: ${APP_FAIR_USE_AUTO:true}
   youtube:
     # YT-4: the Google Cloud project's YouTube Data API units per day (10,000 unless Google raised it).
     daily-quota: ${APP_YOUTUBE_DAILY_QUOTA:10000}

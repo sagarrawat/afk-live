@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { GoLiveButton, StopButton } from '@/components/live-actions';
 import { HoursLeft } from '@/components/HoursLeft';
+import { StreamingDataBanner, StreamingDataLine } from '@/components/StreamingData';
 import { HealthDot, isOnAir, LiveBadge, reachProblem, stopReason, Uptime } from '@/components/status';
 import { Button, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Segmented, Select, Spinner, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
@@ -33,7 +34,7 @@ export function Home() {
               {me && (
                 <>
                   {' '}
-                  <HoursLeft me={me} />
+                  <HoursLeft me={me} /> <StreamingDataLine me={me} />
                 </>
               )}
             </>
@@ -46,6 +47,7 @@ export function Home() {
         }
       />
       <ErrorNote error={error} />
+      {me && <StreamingDataBanner me={me} />}
       {streams && streams.length === 0 ? (
         <Empty
           icon={<ListVideo className="h-8 w-8" />}

@@ -21,7 +21,8 @@ public final class PublicPages {
 
     /** MK-4: the help articles (afklive-ui/site/help.py writes site/help-&lt;slug&gt;.html). */
     public static final List<String> HELP_ARTICLES = List.of("youtube-stream-key", "youtube-preparing", "vertical-or-landscape",
-            "live-here-not-on-youtube", "phone-streaming", "loops-and-youtube-rules", "titles-and-thumbnails", "music-on-your-live");
+            "live-here-not-on-youtube", "phone-streaming", "loops-and-youtube-rules", "titles-and-thumbnails", "music-on-your-live",
+            "streaming-data");
 
     /** MK-1, MK-4: the help articles in Hindi, under /hi/help (site/help.py HI_ARTICLES writes site/hi-help-&lt;slug&gt;.html). */
     public static final List<String> HINDI_HELP_ARTICLES = List.of("24-ghante-live", "mobile-se-live", "recorded-video-live",

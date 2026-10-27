@@ -28,9 +28,10 @@ public final class AlertPreferences {
             new Kind("SCHEDULE", "Schedules", "A scheduled start that didn't happen.", List.of(NotificationService.Types.SCHEDULE_FAILED)),
             new Kind("FILES", "Files that can't play", "A video or track was skipped because it couldn't be read.",
                     List.of(NotificationService.Types.ITEM_FAILED)),
-            new Kind("ACCOUNT", "Storage, plan and payments", "Storage nearly full, a plan limit reached, a payment that failed.",
+            new Kind("ACCOUNT", "Storage, plan and payments", "Storage nearly full, streaming data running out, a plan limit reached, a payment that failed.",
                     List.of(NotificationService.Types.STORAGE_ALMOST_FULL, NotificationService.Types.PLAN_LIMIT,
-                            NotificationService.Types.PAYMENT_FAILED, NotificationService.Types.CREDIT_LIMIT)));
+                            NotificationService.Types.PAYMENT_FAILED, NotificationService.Types.CREDIT_LIMIT,
+                            NotificationService.Types.STREAMING_DATA)));
 
     public record Channels(boolean email, boolean push) {
     }

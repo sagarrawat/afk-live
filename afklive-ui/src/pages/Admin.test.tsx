@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App, makeQueryClient } from '@/App';
 import type { Me } from '@/lib/types';
-import { attachmentKind, loadLevel, planForm, planProblem, rate, type PlanSettings, type Ticket } from './Admin';
+import { attachmentKind, loadLevel, planForm, planProblem, rate, trafficText, type PlanSettings, type Ticket } from './Admin';
 
 const admin: Me = {
   id: 1,
@@ -250,12 +250,14 @@ describe('Admin', () => {
     const streams = within(dialog).getByLabelText('Streams at a time');
     await userEvent.clear(streams);
     await userEvent.type(streams, '4');
+    expect(screen.getAllByText('No monthly limit').length).toBeGreaterThan(0);
+    await userEvent.type(within(dialog).getByLabelText('Streaming data a month (GB)'), '6000');
     expect(within(dialog).queryByRole('alert')).toBeNull();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save plan' }));
     const call = fetch.mock.calls.find(([u]) => String(u) === '/api/admin/plans/PRO')!;
     const sent = JSON.parse(String(call[1]!.body));
     expect(sent.reason).toBe('Price review');
-    expect(sent.plan).toMatchObject({ maxActiveStreams: 4, priceInrMonth: 159900, priceInrYear: 1499000, maxStorageBytes: 100 * 1024 ** 3, maxFps: 60 });
+    expect(sent.plan).toMatchObject({ maxActiveStreams: 4, priceInrMonth: 159900, priceInrYear: 1499000, maxStorageBytes: 100 * 1024 ** 3, maxFps: 60, monthlyTrafficGb: 6000 });
   });
 
   it('validates plan edits like the server does', () => {
@@ -270,6 +272,21 @@ describe('Admin', () => {
     expect(planProblem('PRO', { ...planForm(pro), storageGb: '' })).toMatch(/Storage/);
     expect(planProblem('PRO', { ...planForm(pro), displayName: '  ' })).toMatch(/name/);
     expect(planForm(pro)).toMatchObject({ storageGb: '100', inrMonth: '1499', usdYear: '240' });
+  });
+
+  it('edits a plan’s streaming data allowance: empty is no limit (FO-5)', () => {
+    expect(planForm(pro).trafficGb).toBe('');
+    expect(planForm({ ...pro, monthlyTrafficGb: 6000 }).trafficGb).toBe('6000');
+    expect(planProblem('PRO', { ...planForm(pro), trafficGb: '6000' })).toBeNull();
+    expect(planProblem('PRO', { ...planForm(pro), trafficGb: '0' })).toMatch(/Streaming data/);
+    expect(planProblem('PRO', { ...planForm(pro), trafficGb: '12.5' })).toMatch(/Streaming data/);
+    expect(trafficText(null)).toBe('–');
+    expect(trafficText({ month: '2026-10', usedGb: 12.5, grantedGb: 0, step: 'NONE', resetsAt: '2026-11-01T00:00:00Z' })).toBe(
+      '12.5 GB of streaming data (no limit)',
+    );
+    expect(
+      trafficText({ month: '2026-10', usedGb: 2100, planGb: 2000, grantedGb: 500, allowanceGb: 2500, percent: 84, step: 'WARNED', resetsAt: '2026-11-01T00:00:00Z' }),
+    ).toBe('2,100 GB of 2,500 GB streaming data (84%), 500 GB granted');
   });
 
   it('previews only images and videos', () => {

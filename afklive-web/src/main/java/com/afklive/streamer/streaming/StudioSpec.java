@@ -77,6 +77,17 @@ public record StudioSpec(
                 crossfadeSeconds, kbps);
     }
 
+    /**
+     * The same settings at another picture size (short side) and frame rate: FO-5 fair use starts a run at 720p 30
+     * past 110% of the allowance; every rebuild of a running stream's spec keeps the run's own (quality can't
+     * change while live).
+     */
+    public StudioSpec withQuality(int newHeight, int newFps) {
+        return new StudioSpec(newHeight, vertical, newFps, source, videos, order, loops, music, musicOrder, audioMode,
+                videoVolume, musicVolume, overlays, scenes, initialScene, timeZone, resume, phone, finishAfterPass, fit,
+                crossfadeSeconds, videoKbps);
+    }
+
     /** The bitrate the run encodes at: the recorded one, or the built-in ladder's for a run without one. */
     public int effectiveVideoKbps() {
         return com.afklive.streamer.service.VideoBitrates.recordedOrBuiltIn(videoKbps, height, fps);

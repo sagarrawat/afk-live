@@ -122,6 +122,7 @@ requests, no errors, the signed-in visitor stayed signed in throughout.
 | Clean-ups (commands, old alerts, unplayed copies, expired sessions) | various | Conditional or idempotent deletes |
 | Unplayed copies (FO-6) | 1 min | Each delete is conditional on the row as read (status, file, age), so only one slot deletes a copy and its file; never a copy without overlays of a video a live run plays (copies with overlays go by their own last play, refreshed every 6 h while played) |
 | Traffic budget alerts (FO-5) | 10 min | The `transfer_alerts (month, threshold)` insert is the claim: only the slot whose insert lands alerts admins |
+| Fair use (FO-5) | 5 min | Each creator alert is claimed by the `traffic_notices (user, month, step)` insert. Pausing and restoring destinations rewrite the run's destination list under the stream's row lock and only when it changes, so two slots never send a second command |
 | Stored-secret re-encryption, plan defaults | startup | Conditional updates; only the starting slot runs them |
 
 - **Per-instance memory only holds conveniences**: rate-limit counters, the plan cache (an admin plan
@@ -1271,6 +1272,9 @@ or pay for with the free tiers; the monitors only call the public site.
 | `APP_INCLUDED_TRANSFER_GB` | empty = 5000 | Outbound transfer included in the server bill each month, in GB (GiB, as DigitalOcean counts). The default is one DigitalOcean 4 vCPU / 8 GiB droplet (Basic or CPU-optimized: 5,000 GiB). DigitalOcean pools transfer across a team's droplets, so with more servers set the sum. `0`: nothing included (every GB is paid; no budget alerts) |
 | `APP_TRANSFER_PRICE_PER_GB` | empty = DigitalOcean's $0.01 | Price of a GB beyond the included transfer, in `APP_SERVER_COST_CURRENCY`. Empty: 0.01 for USD, 0.85 for INR (at 85 rupees to the dollar; set it if the rate has moved), unknown for other currencies |
 | `APP_TRANSFER_ALERTS_AUTO` | `true` | Web instances check the traffic budget every 10 minutes (FO-5); `false` turns the check off |
+| `APP_GATEWAY_FEE_PERCENT` | empty = 2 | The payment gateway's fee, in percent of the price before GST, for the worst case per plan (fair use, below) |
+| `APP_SERVER_COST_PER_STREAM_MONTH` | empty | One 24/7 stream's share of the server bill a month, in `APP_SERVER_COST_CURRENCY`, for the worst case per plan. Empty: this month's measured server cost per stream-hour × 720 (needs `APP_MONTHLY_SERVER_COST`), else unknown (traffic only) |
+| `APP_FAIR_USE_AUTO` | `true` | Web instances apply plan streaming data allowances every 5 minutes (fair use, below); `false` turns the sweep off (tests) |
 
 ### Cost per stream-hour (FO-3)
 
@@ -1304,6 +1308,57 @@ Every 10 minutes a web instance adds up this month's GB sent. At 70% and at 90% 
 alert settings allow) linking to admin Billing: once per threshold per month, across all web instances
 (claimed in `transfer_alerts`). Passing both between two checks sends only the 90% one. The admin
 Overview lists it under "needs attention" from 70% (red from 90%) for the rest of the month.
+
+### Fair use: streaming data per plan (FO-5)
+
+Each plan can include a monthly amount of **streaming data**: the GB its account's destinations send
+(`plan_configs.monthly_traffic_gb`; empty = no limit, which is every plan until an admin sets one). Set it in
+admin, Billing, Plans, "Streaming data a month (GB)" (a reason is required and lands in `admin_actions`). It
+applies at once to everyone on the plan.
+
+- **Usage** is `CostMeter.gbByAccount`: the sum of `stream_job_destinations.bytes_sent` of the account's runs in
+  the **UTC calendar month** (like streaming hours, the cost panel and the admin traffic budget; it starts over
+  at 05:30 on the 1st in India). The counter only grows and a new owner carries on from the last recorded value,
+  so a handover or takeover is counted once; a run spanning two months counts in each by its time. Workers older
+  than the release that measures bytes report nothing, so their runs count as zero.
+- **Every 5 minutes** (`FairUseSweep`, web only) each account with a run this month on a plan with an allowance
+  is checked against the allowance plus this month's grants:
+  - **80%**: the creator is told (in-app, and push and email as their alert settings allow, kind "Storage, plan
+    and payments"), once per step per month across slots (`traffic_notices`). Passing several steps between two
+    checks sends only the highest.
+  - **100%**: every live run of the account keeps its **first destination that's on**; the others are turned
+    off with the same live command as a creator's own toggle (DS-5: positions never change, the worker removes
+    their relays, the first destination's connection is untouched). Go-lives start with the extras in the run
+    but off, and a destination turned on while capped stays off. The creator's saved choices don't change.
+  - **110%**: runs started or restarted from then on go out at **720p 30** at the plan's 720p bitrate (FO-4).
+    Running streams keep their quality: changing it needs a new encoder and a reconnect, which fair use never
+    causes. The go-live check says what will happen before the start.
+  - **Back under 100%** (an upgrade, a plan edit, an admin grant or a new month): accounts paused this month or
+    last get their destinations back on within 5 minutes; a grant or an admin plan change applies at once.
+- **Grants**: admin, Users, an account, "Grant streaming data": extra GB for the current UTC month only
+  (`traffic_grants`, audited as `TRAFFIC_GRANT`).
+- **Nothing is ever stopped** by fair use. A stream to one destination past 110% keeps streaming at its
+  quality until it's restarted; that is the honest worst case, shown below.
+
+**Worst case per plan** (admin, Billing; `GET /api/admin/costs/worst-case`), estimates:
+
+```
+GB per destination-hour = (plan's video kbps at its top quality + 128 kbps audio) × 1.04 overhead × 3600 / 8 / 2^30
+stream-hours            = streams × 720 (or the plan's monthly hours when it has a limit)
+worst GB                = stream-hours × destinations × GB/h, or with an allowance A that's reached:
+                          A + (stream-hours − A / (destinations × GB/h)) × GB/h   (one destination per stream after A)
+worst cost              = worst GB × APP_TRANSFER_PRICE_PER_GB (as if the included transfer is used up)
+                          + stream-hours × server cost per stream-hour
+net price               = monthly price / 1.18 × (1 − APP_GATEWAY_FEE_PERCENT / 100)
+meets Gate A            = worst cost ≤ 60% of net price
+```
+
+The typical case is the average account on the plan that streamed this month, projected to month end. The panel
+also shows, per plan, the largest allowance that would meet the 60% rule at the current inputs (a suggestion;
+nothing is set automatically). With DigitalOcean's ₹0.85 per GB beyond the included transfer, no paid plan meets
+it at 1080p 24/7 even with one destination (about 1.9 TB, ₹1,630 a month against ₹414 net for Creator): the
+allowance limits extra destinations, not a single 24/7 stream, so the price per GB (FO-8) and the default
+quality decide the rest.
 
 ### Prepared copies clean-up (FO-6)
 

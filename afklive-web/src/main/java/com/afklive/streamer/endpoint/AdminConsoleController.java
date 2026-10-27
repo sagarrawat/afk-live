@@ -27,9 +27,12 @@ public class AdminConsoleController {
     private final PlayoutCopies copies;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final BusinessMetrics business;
+    private final com.afklive.streamer.service.FairUse fairUse;
 
     public AdminConsoleController(AdminConsoleService console, CostMeter costs, PlayoutCopies copies,
-                                  org.springframework.jdbc.core.JdbcTemplate jdbc, BusinessMetrics business) {
+                                  org.springframework.jdbc.core.JdbcTemplate jdbc, BusinessMetrics business,
+                                  com.afklive.streamer.service.FairUse fairUse) {
+        this.fairUse = fairUse;
         this.jdbc = jdbc;
         this.business = business;
         this.console = console;
@@ -74,6 +77,12 @@ public class AdminConsoleController {
     @GetMapping("/costs")
     public CostMeter.Report costs() {
         return costs.report(ZonedDateTime.now(ZoneOffset.UTC));
+    }
+
+    /** FO-5: each plan's cost at full use (fair use applied) and typically, against its net price (Gate A: ≤ 60%). */
+    @GetMapping("/costs/worst-case")
+    public com.afklive.streamer.service.FairUse.WorstCase worstCase() {
+        return fairUse.worstCase(ZonedDateTime.now(ZoneOffset.UTC));
     }
 
     /** FO-6: prepared copies (count and storage, by kind) and how many are due for deletion. */

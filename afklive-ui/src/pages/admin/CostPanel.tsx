@@ -271,6 +271,136 @@ export function CostPanel() {
   );
 }
 
+/** FO-5: one plan at full use (fair use applied) and for its average streaming account; money in the cost currency. */
+export interface PlanCase {
+  plan: string;
+  name: string;
+  streams: number;
+  destinations: number;
+  quality: string;
+  videoKbps: number;
+  streamHours: number;
+  trafficGb?: number | null;
+  fullUseGb: number;
+  worstGb: number;
+  netPrice?: number | null;
+  trafficCost?: number | null;
+  serverCost?: number | null;
+  worstCost?: number | null;
+  worstMargin?: number | null;
+  costShare?: number | null;
+  meetsRule?: boolean | null;
+  typicalAccounts?: number | null;
+  typicalGb?: number | null;
+  typicalHours?: number | null;
+  typicalCost?: number | null;
+  typicalMargin?: number | null;
+  typicalShare?: number | null;
+}
+export interface WorstCase {
+  month: string;
+  inputs: { currency: string; pricePerGb?: number | null; serverPerStreamHour?: number | null; serverSource: string; gatewayFeePercent: number };
+  maxCostShare: number;
+  plans: PlanCase[];
+  suggestedAllowanceGb: Record<string, number>;
+}
+
+const pct = (share: number | null | undefined) => (share == null ? '–' : `${Math.round(share * 100)}%`);
+
+const SERVER_SOURCE: Record<string, string> = {
+  APP_SERVER_COST_PER_STREAM_MONTH: 'APP_SERVER_COST_PER_STREAM_MONTH',
+  measured: 'this month’s measured server cost per stream-hour',
+  unset: 'not known (set APP_MONTHLY_SERVER_COST or APP_SERVER_COST_PER_STREAM_MONTH), so only traffic is counted',
+  'no-hours': 'not known yet (no stream-hours this month), so only traffic is counted',
+};
+
+/**
+ * FO-5 on admin Billing: what each plan can cost at worst (every stream all month, every destination, top quality,
+ * with fair use applied past its allowance) and for the average account that streamed this month, against the net
+ * price. Gate A: the worst case must stay within 60% of the net price.
+ */
+export function WorstCasePanel() {
+  const q = useQuery({ queryKey: ['admin', 'worst-case'], queryFn: () => get<WorstCase>('/api/admin/costs/worst-case'), refetchInterval: 300000 });
+  if (q.isLoading) return <Spinner />;
+  if (!q.data) return <ErrorNote error={q.error} />;
+  const { inputs, plans, maxCostShare, suggestedAllowanceGb } = q.data;
+  const cur = inputs.currency;
+  const rule = Math.round(maxCostShare * 100);
+  return (
+    <Panel title="Worst case per plan (estimate)">
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Each plan used to the full: every stream all month, to every destination, at its top quality. Past a plan’s streaming data allowance, streams keep one destination each (fair use never stops a stream). The rule: the worst case costs at most {rule}% of the price before GST and the gateway fee.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="text-left text-xs text-muted">
+              <tr>
+                <th className="py-1.5 pr-3 font-medium">Plan</th>
+                <th className="py-1.5 pr-3 font-medium">At full use</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Allowance</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Traffic</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Net price</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Worst cost</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Of price</th>
+                <th className="py-1.5 text-right font-medium">Typical cost</th>
+              </tr>
+            </thead>
+            <tbody className="tnum">
+              {plans.map((p) => (
+                <tr key={p.plan} className="border-t border-line" data-testid={`worst-${p.plan}`}>
+                  <td className="py-1.5 pr-3 font-medium">{p.name}</td>
+                  <td className="py-1.5 pr-3 text-muted">
+                    {p.streams} stream{p.streams === 1 ? '' : 's'} × {p.destinations} destination{p.destinations === 1 ? '' : 's'}, {p.quality}, {hoursText(p.streamHours)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">{p.trafficGb == null ? 'none' : gbText(p.trafficGb)}</td>
+                  <td className="py-1.5 pr-3 text-right" title={p.worstGb < p.fullUseGb ? `${gbText(p.fullUseGb)} without the allowance` : undefined}>
+                    {gbText(p.worstGb)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">{p.netPrice ? cash(p.netPrice, cur, 0) : 'free'}</td>
+                  <td className="py-1.5 pr-3 text-right" title={`traffic ${cash(p.trafficCost, cur, 0)} + servers ${cash(p.serverCost, cur, 0)}`}>
+                    {cash(p.worstCost, cur, 0)}
+                  </td>
+                  <td className={clsx('py-1.5 pr-3 text-right font-medium', p.meetsRule === false && 'text-bad', p.meetsRule === true && 'text-ok')}>
+                    {p.meetsRule == null ? '–' : `${pct(p.costShare)} ${p.meetsRule ? 'ok' : `over ${rule}%`}`}
+                  </td>
+                  <td className="py-1.5 text-right" title={p.typicalAccounts ? `${p.typicalAccounts} account(s) streamed this month: ${gbText(p.typicalGb ?? 0)}, ${hoursText(p.typicalHours ?? 0)} each on average (projected)` : undefined}>
+                    {p.typicalAccounts ? `${cash(p.typicalCost, cur, 0)} (${pct(p.typicalShare)})` : 'no data yet'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {Object.keys(suggestedAllowanceGb).length > 0 && (
+          <p className="text-sm">
+            Largest allowance that meets the rule at these prices:{' '}
+            {Object.entries(suggestedAllowanceGb)
+              .map(([plan, gb]) => `${plans.find((p) => p.plan === plan)?.name ?? plan} ${gbText(gb)}`)
+              .join(', ')}
+            .
+          </p>
+        )}
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted">How this is worked out</summary>
+          <ul className="tnum mt-2 space-y-1 text-muted" aria-label="Worst case inputs">
+            <li>Traffic per destination: the plan’s video bitrate at its top quality, plus 128 kbps audio and 4% overhead.</li>
+            <li>
+              Every GB at {inputs.pricePerGb == null ? 'an unknown price (set APP_TRANSFER_PRICE_PER_GB)' : `${cash(inputs.pricePerGb, cur, inputs.pricePerGb < 0.1 ? 4 : 2)} per GB`}, the price beyond the included transfer: at worst, other streams have used it up.
+            </li>
+            <li>
+              Servers: {inputs.serverPerStreamHour == null ? SERVER_SOURCE[inputs.serverSource] ?? 'not known' : `${cash(inputs.serverPerStreamHour * 720, cur, 0)} per stream-month, from ${SERVER_SOURCE[inputs.serverSource] ?? inputs.serverSource}`}.
+            </li>
+            <li>Net price: the monthly price without 18% GST, less a {inputs.gatewayFeePercent}% gateway fee (APP_GATEWAY_FEE_PERCENT).</li>
+            <li>Typical: the average account on the plan that streamed this month, projected to month end.</li>
+            <li>Running streams keep their quality past 110% (changing it would reconnect them), so the worst case doesn’t count the 720p step.</li>
+          </ul>
+        </details>
+      </div>
+    </Panel>
+  );
+}
+
 /** FO-6 on admin Servers: prepared copies of library videos and what they take up. */
 export interface CopyStats {
   kinds: { kind: string; ready: number; bytes: number; unknownSize: number; waiting: number; failed: number; dueForDeletion: number }[];

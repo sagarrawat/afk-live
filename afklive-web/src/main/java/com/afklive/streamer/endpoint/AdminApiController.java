@@ -84,6 +84,7 @@ public class AdminApiController {
     @PostMapping("/users/{id}/plan")
     public AdminService.UserDetail plan(@PathVariable Long id, @RequestBody SetPlan body, Principal p) {
         admin.setPlan(SecurityUtils.getEmail(p), id, body.plan(), body.until(), body.reason());
+        admin.applyFairUse(id); // FO-5: a plan with a larger (or no) allowance turns paused destinations back on now
         return admin.user(id);
     }
 
@@ -93,6 +94,17 @@ public class AdminApiController {
     @PostMapping("/users/{id}/extend")
     public AdminService.UserDetail extend(@PathVariable Long id, @RequestBody Extend body, Principal p) {
         admin.extend(SecurityUtils.getEmail(p), id, body.days(), body.reason());
+        return admin.user(id);
+    }
+
+    public record TrafficGrant(Integer gb, String reason) {
+    }
+
+    /** FO-5: extra streaming data for this account this month (audited); paused destinations come back at once. */
+    @PostMapping("/users/{id}/traffic-grant")
+    public AdminService.UserDetail trafficGrant(@PathVariable Long id, @RequestBody TrafficGrant body, Principal p) {
+        admin.grantTraffic(SecurityUtils.getEmail(p), id, body.gb(), body.reason());
+        admin.applyFairUse(id);
         return admin.user(id);
     }
 

@@ -46,6 +46,12 @@ public class PlanConfig {
     private long priceUsdYear;
     @Column(name = "defaults_version", nullable = false)
     private int defaultsVersion;
+    /**
+     * FO-5 fair use: streaming data included a month, in GB (GiB); null = no allowance. Not part of the built-in
+     * defaults: only an admin sets it ({@link #applyDefaults} leaves it alone).
+     */
+    @Column(name = "monthly_traffic_gb")
+    private Integer monthlyTrafficGb;
 
     /** Price for one billing period, in the currency's minor unit. */
     public long price(String currency, boolean yearly) {

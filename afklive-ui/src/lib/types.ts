@@ -29,6 +29,24 @@ export interface Me {
   goLives?: number;
   /** BI-1: hours streamed this month, against plan.monthlyHours (0 = no limit). */
   hoursUsed?: number;
+  /** FO-5: streaming data this month (UTC) against the plan's allowance; null when it couldn't be worked out. */
+  traffic?: Traffic | null;
+}
+
+/**
+ * FO-5 fair use: GB the account's streams sent this calendar month (UTC). allowanceGb = the plan's planGb plus
+ * grantedGb (null: no allowance, never limited). At 100% each stream keeps its first destination only; at 110%
+ * new streams start in 720p.
+ */
+export interface Traffic {
+  month: string;
+  usedGb: number;
+  planGb?: number | null;
+  grantedGb: number;
+  allowanceGb?: number | null;
+  percent?: number | null;
+  step: 'NONE' | 'WARNED' | 'EXTRAS_PAUSED' | 'REDUCED';
+  resetsAt: string;
 }
 
 export type Level = 'green' | 'amber' | 'red';
