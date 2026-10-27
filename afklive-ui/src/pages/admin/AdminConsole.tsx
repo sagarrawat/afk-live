@@ -9,7 +9,7 @@ import { useMe } from '@/lib/queries';
 import { Audit, FunnelPanel, Plans, RevenuePanel, TicketPage, Tickets, UserPage } from '../Admin';
 import { AdminSearch } from './AdminSearch';
 import { BusinessPage } from './BusinessPage';
-import { CostPanel } from './CostPanel';
+import { CostPanel, WorstCasePanel } from './CostPanel';
 import { LivePage } from './LivePage';
 import { OverviewPage, useAttention } from './OverviewPage';
 import { ServersPage } from './ServersPage';
@@ -98,6 +98,7 @@ function Section() {
           <h1 className="font-display text-xl font-bold">Billing</h1>
           <RevenuePanel />
           <CostPanel />
+          <WorstCasePanel />
           <Plans />
         </div>
       );

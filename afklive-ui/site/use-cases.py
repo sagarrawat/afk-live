@@ -150,8 +150,9 @@ def ld(data):
 
 
 def help_for(slug):
-    """The help articles that say they're for this kind of channel (help.py "for"), in help-centre order."""
-    return [a for a in HELP.ARTICLES if slug in a["for"]]
+    """The help articles that say they're for this kind of channel (help.py "for"), in help-centre order. An article
+    with "link_back": False (about the plan, not the kind of channel) links to the page without the page linking back."""
+    return [a for a in HELP.ARTICLES if slug in a["for"] and a.get("link_back", True)]
 
 
 def page(p):

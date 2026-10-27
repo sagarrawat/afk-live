@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { App, makeQueryClient } from '@/App';
 import type { Me } from '@/lib/types';
-import { cash, type CopyStats, type CostReport } from './CostPanel';
+import { cash, type CopyStats, type CostReport, type WorstCase } from './CostPanel';
 
 const admin: Me = {
   id: 1,
@@ -14,12 +14,28 @@ const admin: Me = {
   onboarded: true,
   emailAlerts: true,
 };
+const worst: WorstCase = {
+  month: '2026-10',
+  inputs: { currency: 'INR', pricePerGb: 0.85, serverPerStreamHour: null, serverSource: 'unset', gatewayFeePercent: 2 },
+  maxCostShare: 0.6,
+  plans: [
+    { plan: 'FREE', name: 'Free', streams: 1, destinations: 1, quality: '720p 30 fps', videoKbps: 4000, streamHours: 10, trafficGb: null, fullUseGb: 18, worstGb: 18, netPrice: 0, trafficCost: 15.3, worstCost: 15.3 },
+    {
+      plan: 'ESSENTIALS', name: 'Creator', streams: 1, destinations: 2, quality: '1080p 30 fps', videoKbps: 6000, streamHours: 720, trafficGb: 2000, fullUseGb: 3846,
+      worstGb: 2923, netPrice: 414.42, trafficCost: 2484.6, worstCost: 2484.6, worstMargin: -2070.2, costShare: 5.995, meetsRule: false,
+      typicalAccounts: 3, typicalGb: 120, typicalHours: 90, typicalCost: 102, typicalMargin: 312.42, typicalShare: 0.246,
+    },
+  ],
+  suggestedAllowanceGb: {},
+};
+
 const base = {
   '/api/me': admin,
   '/api/notifications': { unread: 0, emailAlerts: true, items: [] },
   '/api/admin/overview': { revenue: [] },
   '/api/admin/cost': { currency: 'INR', streamHours30d: 0 },
   '/api/admin/plans': [],
+  '/api/admin/costs/worst-case': worst,
 };
 
 function mockApi(routes: Record<string, unknown>) {
@@ -152,6 +168,25 @@ describe('Admin billing: cost per stream-hour', () => {
     expect(screen.getByText(/2 due for deletion/)).toBeInTheDocument();
     expect(screen.getByText(/1 not measured yet/)).toBeInTheDocument();
     expect(screen.getByText(/with a logo or the Free mark/)).toBeInTheDocument();
+  });
+
+  it('shows each plan’s worst case against 60% of its net price, and its typical case (FO-5)', async () => {
+    window.history.pushState({}, '', '/studio/admin/billing');
+    mockApi({ ...base, '/api/admin/costs': report });
+    render(<App client={makeQueryClient()} />);
+    expect(await screen.findByText('Worst case per plan (estimate)')).toBeInTheDocument();
+    const creator = screen.getByTestId('worst-ESSENTIALS');
+    expect(within(creator).getByText('2,000 GB')).toBeInTheDocument();
+    expect(within(creator).getByText('2,923 GB')).toHaveAttribute('title', '3,846 GB without the allowance');
+    expect(within(creator).getByText('₹414')).toBeInTheDocument();
+    expect(within(creator).getByText('600% over 60%')).toHaveClass('text-bad');
+    expect(within(creator).getByText('₹102 (25%)')).toBeInTheDocument();
+    const free = screen.getByTestId('worst-FREE');
+    expect(within(free).getByText('free')).toBeInTheDocument();
+    expect(within(free).getByText('no data yet')).toBeInTheDocument();
+    const inputs = screen.getByRole('list', { name: 'Worst case inputs' });
+    expect(within(inputs).getByText(/only traffic is counted/)).toBeInTheDocument();
+    expect(within(inputs).getByText(/2% gateway fee/)).toBeInTheDocument();
   });
 
   it('formats small per-hour amounts with enough digits', () => {

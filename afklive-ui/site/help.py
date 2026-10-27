@@ -358,10 +358,58 @@ ARTICLES = [
         ],
         "related": ["loops-and-youtube-rules", "titles-and-thumbnails"],
     },
+    {
+        "slug": "streaming-data",
+        "seo_title": "Streaming data allowance and fair use | AFK Live",
+        "group": "Your plan",
+        "for": ["lofi", "devotional"],
+        "link_back": False,  # about the plan, not the kind of channel: the use-case pages keep their own three
+        "title": "Streaming data and your plan",
+        "summary": "What streaming data is, how much a 24/7 stream uses, and what happens if you use your plan's monthly allowance: your streams stay live.",
+        "keywords": "streaming data allowance fair use limit gb tb bandwidth traffic quota cap 720p destinations paused upgrade monthly reset",
+        "sections": [
+            ("", [
+                ("p", "<strong>Streaming data</strong> is what your streams send out: the video and sound that goes to YouTube and to every "
+                      "other place you stream to. Each destination gets its own copy, so a stream sent to two places uses twice as much. "
+                      "If your plan includes a monthly amount, you'll see it on your Streams page and in <strong>Settings → Billing</strong> "
+                      "as <em>Streaming data: 420 of 2,000 GB this month</em>. Plans without an amount have no limit."),
+            ]),
+            ("How much a 24/7 stream uses", [
+                ("p", "For one stream to one destination, running all day:"),
+                ("ul", [
+                    "<strong>720p:</strong> about 45 GB a day, about 1.3 TB (1,300 GB) a month.",
+                    "<strong>1080p at 30 fps:</strong> about 65 GB a day, about 2 TB a month.",
+                    "<strong>1080p at 60 fps:</strong> about 100 GB a day, about 3 TB a month.",
+                ]),
+                ("p", "Streams that only run for a few hours use a share of that. The count starts over on the 1st of every month "
+                      "(at midnight UTC, which is 5:30 am in India)."),
+            ]),
+            ("What happens when you reach it", [
+                ("p", "<strong>We never stop a stream because of streaming data.</strong> Instead, step by step:"),
+                ("ol", [
+                    "<strong>At 80%</strong> we let you know (in the app, and by email and on your phone if your alerts are on). Nothing changes yet.",
+                    "<strong>At 100%</strong> every stream stays live, but each one keeps only its <strong>first destination</strong>. "
+                    "Other destinations pause until the 1st. The first one isn't touched, so your viewers there see no break.",
+                    "<strong>At 110%</strong> streams you start or restart before the 1st go out in <strong>720p</strong>. Streams that are "
+                    "already live keep their quality, because changing it would interrupt them.",
+                ]),
+                ("p", "On the 1st, everything goes back to normal by itself: paused destinations come back on and new streams use your "
+                      "usual quality."),
+            ]),
+            ("Need more?", [
+                ("ul", [
+                    "<strong>Upgrade</strong> in Settings → Billing. A bigger plan includes more, and paused destinations come back on within minutes.",
+                    "<strong>A one-off busy month?</strong> Write to support: we can add extra streaming data for this month.",
+                    "<strong>Use less:</strong> stream to fewer places at once, or choose 720p for 24/7 replays. Most viewers watch on phones, where 720p looks sharp.",
+                ]),
+            ]),
+        ],
+        "related": ["vertical-or-landscape", "live-here-not-on-youtube"],
+    },
 ]
 
 BY_SLUG = {a["slug"]: a for a in ARTICLES}
-GROUPS = ["YouTube setup", "Phone streaming and picture", "Growing your channel"]
+GROUPS = ["YouTube setup", "Phone streaming and picture", "Growing your channel", "Your plan"]
 
 # --- Hindi help (/hi/help, /hi/help/<slug>) ------------------------------------------------------------
 #

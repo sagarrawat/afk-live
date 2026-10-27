@@ -2,12 +2,15 @@ import clsx from 'clsx';
 import { Check, Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { HelpLink } from '@/components/HelpLink';
 import { PolicyLinks } from '@/components/PolicyLinks';
+import { gbText, resetDay, streamingDataNotice } from '@/components/StreamingData';
 import { Badge, Button, Dialog, ErrorNote, Field, Input, Panel, Segmented, Spinner, useAction, useToast } from '@/components/ui';
 import { get, post, put } from '@/lib/api';
+import { HELP } from '@/lib/help';
 import { bytes, date, money } from '@/lib/format';
 import { keys, useBilling, useBillingProfile, useInvalidate, useMe, usePlans } from '@/lib/queries';
-import type { BillingOverview, PlanView, Quote } from '@/lib/types';
+import type { BillingOverview, PlanView, Quote, Traffic } from '@/lib/types';
 
 /** BI-1..BI-6: plan, usage against it, next charge, invoices, and changing plan. */
 export function BillingSettings() {
@@ -37,7 +40,7 @@ export function BillingSettings() {
   if (error || !billing) return <ErrorNote error={error} />;
   return (
     <div className="space-y-6">
-      <CurrentPlan billing={billing} />
+      <CurrentPlan billing={billing} traffic={me.traffic} />
       <Plans billing={billing} currency={me.currency ?? 'INR'} />
       <Invoices billing={billing} />
       <BillingProfileForm />
@@ -63,7 +66,24 @@ function Meter({ label, used, max, format, neutral }: { label: string; used: num
   );
 }
 
-function CurrentPlan({ billing: b }: { billing: BillingOverview }) {
+/** FO-5: streaming data this month against the plan's allowance (plus any extra granted), and what happens at the cap. */
+function StreamingDataMeter({ t }: { t: Traffic }) {
+  const notice = streamingDataNotice(t);
+  return (
+    <div>
+      <Meter label="Streaming data this month" used={t.usedGb} max={t.allowanceGb ?? 0} format={gbText} />
+      <p className="mt-1 text-xs text-muted">
+        {t.allowanceGb == null
+          ? 'What your streams send to YouTube and other platforms. Your plan has no monthly limit.'
+          : `What your streams send to each platform. Starts over on ${resetDay(t)}${t.grantedGb > 0 ? `, including ${gbText(t.grantedGb)} extra this month` : ''}.`}{' '}
+        <HelpLink to={HELP.streamingData}>How it works</HelpLink>
+      </p>
+      {notice && <p className="mt-1.5 text-sm text-warn">{notice} Upgrade below for more.</p>}
+    </div>
+  );
+}
+
+function CurrentPlan({ billing: b, traffic }: { billing: BillingOverview; traffic?: Traffic | null }) {
   const { busy, run } = useAction();
   const invalidate = useInvalidate();
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -108,6 +128,7 @@ function CurrentPlan({ billing: b }: { billing: BillingOverview }) {
           <Meter label="Streams live now" neutral used={b.usage.streamsLive} max={b.usage.streamsMax} format={(n) => String(n)} />
           <Meter label="Streaming this month" used={b.usage.hoursUsed} max={b.usage.hoursIncluded} format={(n) => `${n.toFixed(n < 10 ? 1 : 0)} h`} />
           <Meter label="Storage" used={b.usage.storageUsed} max={b.usage.storageMax} format={bytes} />
+          {traffic && <StreamingDataMeter t={traffic} />}
         </div>
       </div>
       <Dialog

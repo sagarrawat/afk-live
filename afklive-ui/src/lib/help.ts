@@ -11,6 +11,7 @@ export const HELP = {
   loops: '/help/loops-and-youtube-rules',
   titles: '/help/titles-and-thumbnails',
   music: '/help/music-on-your-live',
+  streamingData: '/help/streaming-data',
 } as const;
 
 export type HelpArticle = (typeof HELP)[keyof typeof HELP];

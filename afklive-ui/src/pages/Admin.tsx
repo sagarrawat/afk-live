@@ -8,7 +8,8 @@ import { ReasonDialog } from './admin/ReasonDialog';
 import { UserSupport } from './admin/Support';
 import { get, post } from '@/lib/api';
 import { bytes, date, dateTime, duration, money } from '@/lib/format';
-import type { Level, Page } from '@/lib/types';
+import type { Level, Page, Traffic } from '@/lib/types';
+import { gbText } from '@/components/StreamingData';
 
 export interface CostView {
   monthlyServerCost?: number | null;
@@ -57,6 +58,16 @@ interface UserDetail {
   payments: { orderId: string; amount: number; currency?: string | null; status: string; kind?: string | null; plan?: string | null; createdAt: string }[];
   invoices: { id: number; number: string; total: number; currency: string; issuedAt: string }[];
   history: AdminAction[];
+  /** FO-5: streaming data this month against the plan's allowance plus grants. */
+  traffic?: Traffic | null;
+}
+
+/** FO-5: "1,234 of 2,000 GB (62%)", "+500 GB granted", or "no limit". */
+export function trafficText(t: Traffic | null | undefined): string {
+  if (!t) return '–';
+  if (t.allowanceGb == null) return `${gbText(t.usedGb)} of streaming data (no limit)`;
+  const pct = Math.floor(t.percent ?? 0);
+  return `${gbText(t.usedGb)} of ${gbText(t.allowanceGb)} streaming data (${pct}%)${t.grantedGb > 0 ? `, ${gbText(t.grantedGb)} granted` : ''}`;
 }
 
 /** Health colour for a load percentage: green below 75, amber to 90, red above. */
@@ -611,6 +622,8 @@ export interface PlanSettings {
   priceInrYear: number;
   priceUsdMonth: number;
   priceUsdYear: number;
+  /** FO-5: streaming data included a month, in GB; null = no limit. */
+  monthlyTrafficGb?: number | null;
 }
 
 /** The plan editor's fields, as typed (prices in rupees / dollars, storage in GB). */
@@ -627,6 +640,8 @@ export interface PlanForm {
   inrYear: string;
   usdMonth: string;
   usdYear: string;
+  /** Empty: no limit. */
+  trafficGb: string;
 }
 
 const GB = 1024 ** 3;
@@ -652,6 +667,7 @@ export function planForm(p: PlanSettings): PlanForm {
     inrYear: major(p.priceInrYear),
     usdMonth: major(p.priceUsdMonth),
     usdYear: major(p.priceUsdYear),
+    trafficGb: p.monthlyTrafficGb == null ? '' : String(p.monthlyTrafficGb),
   };
 }
 
@@ -664,6 +680,7 @@ export function planProblem(plan: string, f: PlanForm): string | null {
   if (!whole(f.streams, 1, 1000)) return 'Streams at a time is a whole number from 1 to 1,000.';
   if (!whole(f.destinations, 1, 20)) return 'Destinations per stream is a whole number from 1 to 20.';
   if (!whole(f.monthlyHours, 0, 744)) return 'Monthly hours is a whole number from 0 (no limit) to 744.';
+  if (f.trafficGb.trim() !== '' && !whole(f.trafficGb, 1, 1000000)) return 'Streaming data a month is a whole number of GB from 1 to 1,000,000, or empty for no limit.';
   const prices = [f.inrMonth, f.inrYear, f.usdMonth, f.usdYear].map(num);
   if (prices.some((p) => !Number.isFinite(p) || p < 0)) return "Prices can't be empty or negative.";
   if (prices.some((p) => Math.round(p * 100) !== Math.round(p * 100 * 1000) / 1000)) return 'Prices have at most two decimals.';
@@ -692,6 +709,7 @@ function planBody(f: PlanForm) {
     priceInrYear: minor(f.inrYear),
     priceUsdMonth: minor(f.usdMonth),
     priceUsdYear: minor(f.usdYear),
+    monthlyTrafficGb: f.trafficGb.trim() === '' ? null : Number(f.trafficGb),
   };
 }
 
@@ -736,6 +754,8 @@ export function Plans() {
                 <dd className="tnum">{bytes(p.maxStorageBytes)}</dd>
                 <dt className="text-muted">Hours</dt>
                 <dd className="tnum">{p.monthlyHours === 0 ? 'No monthly limit' : `${p.monthlyHours} a month`}</dd>
+                <dt className="text-muted">Streaming data</dt>
+                <dd className="tnum">{p.monthlyTrafficGb == null ? 'No monthly limit' : `${p.monthlyTrafficGb.toLocaleString('en-US')} GB a month`}</dd>
               </dl>
             </Panel>
           </li>
@@ -792,6 +812,9 @@ function PlanDialog({ plan, onClose, onSaved }: { plan: PlanSettings; onClose: (
         <Field label="Streaming hours a month" htmlFor="ph" hint="0 means no limit.">
           <Input id="ph" type="number" min={0} max={744} value={f.monthlyHours} onChange={set('monthlyHours')} />
         </Field>
+        <Field label="Streaming data a month (GB)" htmlFor="pt" hint="Empty means no limit. Past it, streams keep their first destination only; past 110%, new streams start in 720p.">
+          <Input id="pt" type="number" min={1} max={1000000} value={f.trafficGb} onChange={set('trafficGb')} placeholder="No limit" />
+        </Field>
         <div className="flex items-center justify-between gap-3 self-start pt-7">
           <span className="text-sm font-medium">AFK Live watermark on the stream</span>
           <Toggle label="Watermark" checked={f.watermark} onChange={(v) => setF({ ...f, watermark: v })} />
@@ -820,7 +843,8 @@ function PlanDialog({ plan, onClose, onSaved }: { plan: PlanSettings; onClose: (
 
 export function UserPage({ id }: { id: number }) {
   const u = useQuery({ queryKey: ['admin', 'user', id], queryFn: () => get<UserDetail>(`/api/admin/users/${id}`) });
-  const [act, setAct] = useState<'plan' | 'extend' | 'enable' | { refund: string; amount: number } | null>(null);
+  const [act, setAct] = useState<'plan' | 'extend' | 'enable' | 'traffic' | { refund: string; amount: number } | null>(null);
+  const [grantGb, setGrantGb] = useState('100');
   const [plan, setPlan] = useState('PRO');
   const [until, setUntil] = useState('');
   const [days, setDays] = useState('7');
@@ -846,6 +870,7 @@ export function UserPage({ id }: { id: number }) {
             <p className="tnum">
               {d.hoursThisMonth} h{d.hoursIncluded > 0 ? ` of ${d.hoursIncluded}` : ''}, {bytes(d.storageBytes)} of {bytes(d.storageLimit)}
             </p>
+            <p className={clsx('tnum text-sm', d.traffic && d.traffic.step !== 'NONE' ? 'text-warn' : 'text-muted')}>{trafficText(d.traffic)}</p>
           </div>
           <div>
             <p className="text-sm text-muted">Account</p>
@@ -858,6 +883,9 @@ export function UserPage({ id }: { id: number }) {
           </Button>
           <Button size="sm" onClick={() => setAct('extend')} disabled={!d.subscription || d.subscription.status === 'CANCELED'}>
             Extend period
+          </Button>
+          <Button size="sm" onClick={() => setAct('traffic')} disabled={d.traffic?.allowanceGb == null}>
+            Grant streaming data
           </Button>
           <Button size="sm" variant={d.enabled ? 'danger' : 'secondary'} onClick={() => setAct('enable')}>
             {d.enabled ? 'Disable account' : 'Enable account'}
@@ -924,6 +952,14 @@ export function UserPage({ id }: { id: number }) {
         <ReasonDialog title="Extend the current period" action="Extend" onClose={() => setAct(null)} onSubmit={(reason) => post(`/api/admin/users/${id}/extend`, { days: Number(days), reason }).then(done)}>
           <Field label="Days" htmlFor="ad">
             <Input id="ad" type="number" min={1} max={366} value={days} onChange={(e) => setDays(e.target.value)} />
+          </Field>
+        </ReasonDialog>
+      )}
+      {act === 'traffic' && (
+        <ReasonDialog title="Grant extra streaming data" action="Grant" onClose={() => setAct(null)} onSubmit={(reason) => post(`/api/admin/users/${id}/traffic-grant`, { gb: Number(grantGb), reason }).then(done)}>
+          <p className="text-muted">For this calendar month (UTC) only, on top of the plan's allowance. If that takes them back under it, paused destinations come back on within seconds.</p>
+          <Field label="Extra GB" htmlFor="ag">
+            <Input id="ag" type="number" min={1} max={100000} value={grantGb} onChange={(e) => setGrantGb(e.target.value)} />
           </Field>
         </ReasonDialog>
       )}
