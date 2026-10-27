@@ -1,6 +1,12 @@
 import { defineConfig, type Plugin } from 'vite';
-import { readdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import Beasties from 'beasties';
+import { STATIC_PLANS } from './site/src/static-plans';
+import { withStructuredData } from './site/src/seo';
+
+const outDir = resolve(__dirname, '../afklive-web/target/classes/static/site');
 
 /** `<!-- include:header -->` pulls in site/partials/header.html, so pages share one header and footer. */
 function partials(): Plugin {
@@ -11,15 +17,106 @@ function partials(): Plugin {
   };
 }
 
+/** `<!-- jsonld:... -->` placeholders become JSON-LD from the page's own content (site/src/seo.ts). */
+function structuredData(): Plugin {
+  return { name: 'site-structured-data', transformIndexHtml: (html) => withStructuredData(html, STATIC_PLANS) };
+}
+
+/**
+ * Speed (mobile LCP): preload the two Latin fonts every page uses (Inter and Schibsted Grotesk), so
+ * they arrive with the HTML rather than after the stylesheet. Devanagari is only on /hi (devanagari.css),
+ * where it's the main text font, so it's preloaded there too (otherwise the swap moves the text: CLS).
+ */
+function preloadFonts(): Plugin {
+  const latin = [/^assets\/schibsted-grotesk-latin-wght-normal-[\w-]+\.woff2$/, /^assets\/inter-latin-wght-normal-[\w-]+\.woff2$/];
+  const devanagari = /^assets\/noto-sans-devanagari-devanagari-wght-normal-[\w-]+\.woff2$/;
+  return {
+    name: 'site-preload-fonts',
+    transformIndexHtml: {
+      order: 'post',
+      handler: (html, ctx) => {
+        const files = Object.keys(ctx.bundle ?? {});
+        const wanted = /<html lang="hi"/.test(html) ? [devanagari, ...latin] : latin;
+        const links = wanted
+          .map((re) => files.find((f) => re.test(f)))
+          .filter((f): f is string => Boolean(f))
+          .map((f) => `<link rel="preload" as="font" type="font/woff2" href="/site/${f}" crossorigin>`);
+        return html.replace('</title>', `</title>\n  ${links.join('\n  ')}`);
+      },
+    },
+  };
+}
+
+/** When each page last changed (git, else the file's time), for <lastmod> in /sitemap.xml (SitemapController). */
+function lastModified(pages: string[]): Plugin {
+  const when = (file: string) => {
+    try {
+      const date = execFileSync('git', ['log', '-1', '--format=%cI', '--', file], { cwd: resolve(__dirname, 'site'), encoding: 'utf8' }).trim();
+      if (date) return date;
+    } catch {
+      /* no git in this build: fall back to the file's time */
+    }
+    return statSync(resolve(__dirname, 'site', file)).mtime.toISOString();
+  };
+  return {
+    name: 'site-lastmod',
+    apply: 'build',
+    generateBundle() {
+      const dates = Object.fromEntries(pages.map((f) => [f, when(f)]));
+      this.emitFile({ type: 'asset', fileName: 'lastmod.json', source: JSON.stringify(dates, null, 1) });
+    },
+  };
+}
+
+/**
+ * The pages link a hashed stylesheet (cached for a year). The Thymeleaf sign-in and error pages link a
+ * stable copy, /site/site.css, which browsers recheck. assets/site.css is the old stable address, kept
+ * for one release so pages served by the previous version during a deploy keep their styles.
+ */
+function stableStylesheet(): Plugin {
+  return {
+    name: 'site-stable-css',
+    apply: 'build',
+    generateBundle(_, bundle) {
+      // The main stylesheet: the largest one (the other is /hi's few lines of Devanagari @font-face).
+      const css = Object.values(bundle)
+        .filter((a) => a.type === 'asset' && a.fileName.endsWith('.css'))
+        .sort((x, y) => String((y as { source: unknown }).source).length - String((x as { source: unknown }).source).length)[0];
+      if (!css || css.type !== 'asset') throw new Error('site stylesheet not found in the bundle');
+      for (const fileName of ['site.css', 'assets/site.css']) this.emitFile({ type: 'asset', fileName, source: css.source });
+    },
+  };
+}
+
+/**
+ * Speed: each page gets the CSS its own markup uses inlined in <head>, and loads the full stylesheet
+ * without blocking the first paint (Beasties). Runs on the written files, after Vite.
+ */
+function criticalCss(): Plugin {
+  return {
+    name: 'site-critical-css',
+    apply: 'build',
+    async writeBundle() {
+      const beasties = new Beasties({ path: outDir, publicPath: '/site/', preload: 'media', inlineThreshold: 2048, inlineFonts: true, preloadFonts: false, pruneSource: false, logLevel: 'warn' });
+      for (const f of readdirSync(outDir).filter((n) => n.endsWith('.html'))) {
+        const file = join(outDir, f);
+        writeFileSync(file, await beasties.process(readFileSync(file, 'utf8')));
+      }
+    },
+  };
+}
+
+const pages = readdirSync(resolve(__dirname, 'site')).filter((f) => f.endsWith('.html'));
+
 // The public site (MK-1, MK-2) and the sign-in pages' stylesheet: plain HTML pages, built for speed
-// and search. Served by Spring at /, /pricing and /login (templates link /site/assets/site.css).
+// and search. Served by Spring at /, /pricing and /login (templates link /site/site.css).
 export default defineConfig({
-  plugins: [partials()],
+  plugins: [partials(), structuredData(), preloadFonts(), lastModified(pages), stableStylesheet(), criticalCss()],
   root: resolve(__dirname, 'site'),
   base: '/site/',
   publicDir: resolve(__dirname, 'site/public'),
   build: {
-    outDir: resolve(__dirname, '../afklive-web/target/classes/static/site'),
+    outDir,
     emptyOutDir: true,
     rollupOptions: {
       input: {
@@ -39,8 +136,8 @@ export default defineConfig({
         ),
       },
       output: {
-        // Stable names: the Thymeleaf sign-in pages link the stylesheet directly.
-        assetFileNames: (a) => (a.names?.some((n) => n.endsWith('.css')) ? 'assets/site.css' : 'assets/[name]-[hash][extname]'),
+        // Content-hashed names, so Spring can let browsers keep them for a year (MvcConfig).
+        assetFileNames: 'assets/[name]-[hash][extname]',
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
       },

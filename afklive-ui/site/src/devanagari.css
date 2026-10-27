@@ -1,0 +1,2 @@
+/* Only the Hindi homepage links this (hi.html): the Devanagari font is 121 KB. See site.css. */
+@import '@fontsource-variable/noto-sans-devanagari';

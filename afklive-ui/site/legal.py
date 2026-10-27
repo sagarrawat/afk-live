@@ -78,6 +78,10 @@ def render(slug, title, desc, sections):
   <title>{title}: AFK Live</title>
   <meta name="description" content="{html.escape(desc)}" />
   <link rel="canonical" href="https://afklive.in/{slug}" />
+  <meta property="og:title" content="{title}: AFK Live" />
+  <meta property="og:description" content="{html.escape(desc)}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://afklive.in/{slug}" />
 <!-- include:head -->
   <script type="module" src="./src/main.ts"></script>
 </head>
@@ -97,6 +101,6 @@ def render(slug, title, desc, sections):
 """
 
 if __name__ == "__main__":
-    (HERE / "privacy.html").write_text(render("privacy", "Privacy policy", "What AFK Live collects, why, and your choices.", PRIVACY))
-    (HERE / "terms.html").write_text(render("terms", "Terms of use", "The agreement for using AFK Live.", TERMS))
+    (HERE / "privacy.html").write_text(render("privacy", "Privacy policy", "What AFK Live collects, why, who helps us run the service, how long we keep it, cookies, and your choices about your data.", PRIVACY))
+    (HERE / "terms.html").write_text(render("terms", "Terms of use", "The agreement for using AFK Live: your account, what you stream, plans and payments, the service, ending it, liability and the law.", TERMS))
     print("ok")

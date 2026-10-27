@@ -4,21 +4,28 @@
 
 Writes site/help.html (the searchable index, served at /help) and site/help-<slug>.html (served at
 /help/<slug>); vite.site.config.ts builds every help*.html. A new article also needs its slug in
-HomeController.HELP_ARTICLES, a line in afklive-web/.../static/sitemap.xml and an entry in
-src/lib/help.ts (site/src/help-pages.test.ts checks all four).
+PublicPages.HELP_ARTICLES (which also puts it in /sitemap.xml) and an entry in src/lib/help.ts
+(site/src/help-pages.test.ts checks all of them). "for" names the use-case pages (site/use-cases.py)
+the article helps: it links to them, and they link back.
 
 Article text may use a little inline HTML (links, <strong>); it is ours, not user input.
 """
 import html
+import importlib.util
+import json
 import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
-UPDATED = "24 October 2026"
+UPDATED = "27 October 2026"
+UPDATED_ISO = "2026-10-27"
 STUDIO = "https://studio.youtube.com/channel/UC/livestreaming"
 
 ARTICLES = [
     {
         "slug": "youtube-stream-key",
+        "seo_title": "Where to find your YouTube stream key | AFK Live",
+        "group": "YouTube setup",
+        "for": ["lofi", "podcasts"],
         "title": "Where to find your YouTube stream key",
         "summary": "Copy the key from YouTube Studio's live dashboard in a minute, and avoid the two mix-ups we see most.",
         "keywords": "stream key copy paste youtube studio go live live control room default key server url rtmp encoder",
@@ -61,6 +68,9 @@ ARTICLES = [
     },
     {
         "slug": "youtube-preparing",
+        "seo_title": "YouTube live stuck on Preparing? Fix it | AFK Live",
+        "group": "YouTube setup",
+        "for": ["devotional", "podcasts"],
         "title": "YouTube says “Preparing”: Auto-start and Auto-stop",
         "summary": "Why YouTube shows Preparing for a few seconds, the two settings a 24/7 stream needs, and what to do if it's stuck.",
         "keywords": "preparing waiting for stream stuck auto-start auto-stop autostart autostop end stream restart 24/7 broadcast offline",
@@ -94,6 +104,9 @@ ARTICLES = [
     },
     {
         "slug": "live-here-not-on-youtube",
+        "seo_title": "Live stream not showing on YouTube? 5 checks | AFK Live",
+        "group": "YouTube setup",
+        "for": ["devotional"],
         "title": "Live here but not on YouTube",
         "summary": "AFK Live says Live but your channel shows nothing? Check these in order: the key, a scheduled live, Auto-start, and the channel.",
         "keywords": "not showing nothing on youtube offline wrong key scheduled live auto-start no video black waiting test destination refused",
@@ -134,6 +147,9 @@ ARTICLES = [
     },
     {
         "slug": "vertical-or-landscape",
+        "seo_title": "Vertical or landscape YouTube live? | AFK Live",
+        "group": "Phone streaming and picture",
+        "for": ["mobile-gaming"],
         "title": "Vertical or landscape?",
         "summary": "Which shape to pick, what YouTube does with vertical lives, and how videos of the other shape are shown.",
         "keywords": "vertical landscape 9:16 16:9 portrait shorts phone shape orientation blurred background bars crop fit 60 fps frame rate",
@@ -173,6 +189,9 @@ ARTICLES = [
     },
     {
         "slug": "phone-streaming",
+        "seo_title": "Stream to YouTube from your phone: Larix, PRISM | AFK Live",
+        "group": "Phone streaming and picture",
+        "for": ["mobile-gaming"],
         "title": "Go live from your phone (Larix or PRISM)",
         "summary": "Send your phone's camera or screen to AFK Live with a free app; we add your overlays and keep you on air when the signal drops.",
         "keywords": "phone mobile larix broadcaster prism live studio streamlabs srt rtmp qr code camera screen gaming ingest brb signal",
@@ -221,6 +240,9 @@ ARTICLES = [
     },
     {
         "slug": "loops-and-youtube-rules",
+        "seo_title": "Are 24/7 loop streams allowed on YouTube? | AFK Live",
+        "group": "Growing your channel",
+        "for": ["lofi", "podcasts"],
         "title": "24/7 loops and YouTube's rules",
         "summary": "What YouTube's inauthentic content and spam rules mean for a looped live, and the three things the stream check looks for.",
         "keywords": "monetisation monetization demonetised inauthentic repetitive reused content loop still image static slideshow spam repeated message ypp ads policy",
@@ -257,6 +279,9 @@ ARTICLES = [
     },
     {
         "slug": "titles-and-thumbnails",
+        "seo_title": "Titles and thumbnails for YouTube lives | AFK Live",
+        "group": "Growing your channel",
+        "for": ["mobile-gaming"],
         "title": "Titles and thumbnails that get found",
         "summary": "Start the title with what people search for, don't say LIVE over a replay, and make the thumbnail readable at phone size.",
         "keywords": "title thumbnail seo search keywords live now replay misleading 1280x720 16:9 phone small text contrast clickbait",
@@ -293,6 +318,9 @@ ARTICLES = [
     },
     {
         "slug": "music-on-your-live",
+        "seo_title": "Music on a 24/7 YouTube live: copyright claims | AFK Live",
+        "group": "Growing your channel",
+        "for": ["lofi", "devotional"],
         "title": "Music on your live",
         "summary": "Why no tool can tell you whether a song will be claimed, what a claim can do to a live, and where to get music you can use.",
         "keywords": "music copyright content id claim muted blocked royalty free audio library license bhajan song cover strike",
@@ -323,6 +351,28 @@ ARTICLES = [
 ]
 
 BY_SLUG = {a["slug"]: a for a in ARTICLES}
+GROUPS = ["YouTube setup", "Phone streaming and picture", "Growing your channel"]
+
+
+def use_cases():
+    """site/use-cases.py's pages by slug (loaded only when writing, so the two scripts don't import each other at load)."""
+    spec = importlib.util.spec_from_file_location("site_use_cases", HERE / "use-cases.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {p["slug"]: p for p in module.PAGES}
+
+
+def ld(data):
+    """JSON-LD for a <script> block; "<" escaped so no text can end the script early."""
+    return json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+
+
+def crumbs(*items):
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [{"@type": "ListItem", "position": i, "name": n, "item": u} for i, (n, u) in enumerate(items, 1)],
+    }
 
 
 def esc(s):
@@ -340,22 +390,24 @@ def block(kind, content):
     return f"    <{kind}>\n{items}\n    </{kind}>"
 
 
-def head(title, desc, path):
+def head(title, og_title, desc, path, structured):
     url = f"https://afklive.in{path}"
+    scripts = "\n".join(f'  <script type="application/ld+json">{ld(d)}</script>' for d in structured)
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{esc(title)}: AFK Live help</title>
+  <title>{esc(title)}</title>
   <meta name="description" content="{esc(desc)}" />
   <link rel="canonical" href="{url}" />
-  <meta property="og:title" content="{esc(title)}" />
+  <meta property="og:title" content="{esc(og_title)}" />
   <meta property="og:description" content="{esc(desc)}" />
   <meta property="og:type" content="article" />
   <meta property="og:url" content="{url}" />
 <!-- include:head -->
   <script type="module" src="./src/main.ts"></script>
+{scripts}
 </head>
 <body>
 <!-- generated by site/help.py: edit the text there -->
@@ -376,10 +428,31 @@ def article(a):
         body.extend(block(k, c) for k, c in blocks)
     related = "\n".join(
         f'      <li><a href="/help/{r}" class="link">{esc(BY_SLUG[r]["title"])}</a></li>' for r in a["related"])
+    pages = use_cases()
+    made_for = "\n".join(
+        f'      <li><a href="/for/{f}" class="link">{esc(pages[f]["title"])}</a></li>' for f in a["for"])
     content = "\n".join(body)
-    return f"""{head(a["title"], a["summary"], "/help/" + a["slug"])}
+    url = f'https://afklive.in/help/{a["slug"]}'
+    structured = [
+        crumbs(("Home", "https://afklive.in/"), ("Help", "https://afklive.in/help"), (a["title"], url)),
+        {
+            "@context": "https://schema.org",
+            "@type": "TechArticle",
+            "headline": a["title"],
+            "description": a["summary"],
+            "url": url,
+            "mainEntityOfPage": url,
+            "inLanguage": "en",
+            "dateModified": UPDATED_ISO,
+            "author": {"@type": "Organization", "name": "AFK Live", "url": "https://afklive.in/"},
+            "publisher": {"@type": "Organization", "name": "AFK Live", "url": "https://afklive.in/",
+                          "logo": {"@type": "ImageObject", "url": "https://afklive.in/site/brand/apple-touch-icon.png"}},
+            "image": "https://afklive.in/site/brand/og.png",
+        },
+    ]
+    return f"""{head(a["seo_title"], a["title"], a["summary"], "/help/" + a["slug"], structured)}
 <main class="mx-auto max-w-3xl px-4 pb-24 pt-10 sm:px-6">
-  <nav aria-label="Breadcrumb" class="text-sm"><a href="/help" class="link">Help</a></nav>
+  <nav aria-label="Breadcrumb" class="text-sm"><a href="/" class="link">Home</a> <span aria-hidden="true" class="text-muted">/</span> <a href="/help" class="link">Help</a> <span aria-hidden="true" class="text-muted">/</span> <span class="text-muted" aria-current="page">{esc(a["title"])}</span></nav>
   <h1 class="mt-4 text-[34px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[48px]">{esc(a["title"])}</h1>
   <p class="mt-4 text-lg text-muted">{esc(a["summary"])}</p>
   <article class="help-article mt-8">
@@ -390,34 +463,46 @@ def article(a):
     <ul class="mt-3 space-y-2">
 {related}
     </ul>
+    <h2 class="mt-8 text-lg font-semibold">Made for</h2>
+    <ul class="mt-3 space-y-2">
+{made_for}
+    </ul>
     <p class="mt-8 text-sm text-muted">Still stuck? Email <a href="mailto:support@afklive.in" class="link">support@afklive.in</a>; we reply within a day. Updated {UPDATED}.</p>
   </aside>
 </main>
 {FOOT}"""
 
 
+def item(a):
+    return (f'      <li data-help-item data-search="{esc((a["title"] + " " + a["summary"] + " " + a["keywords"]).lower())}">\n'
+            f'        <a href="/help/{a["slug"]}" class="block rounded-2xl border border-line bg-panel p-5 hover:border-muted/60">\n'
+            f'          <span class="block text-lg font-semibold">{esc(a["title"])}</span>\n'
+            f'          <span class="mt-1 block text-muted">{esc(a["summary"])}</span>\n'
+            f'        </a>\n'
+            f'      </li>')
+
+
 def index():
-    items = "\n".join(
-        f'      <li data-help-item data-search="{esc((a["title"] + " " + a["summary"] + " " + a["keywords"]).lower())}">\n'
-        f'        <a href="/help/{a["slug"]}" class="block rounded-2xl border border-line bg-panel p-5 hover:border-muted/60">\n'
-        f'          <span class="block text-lg font-semibold">{esc(a["title"])}</span>\n'
-        f'          <span class="mt-1 block text-muted">{esc(a["summary"])}</span>\n'
-        f'        </a>\n'
-        f'      </li>'
-        for a in ARTICLES)
-    desc = "Answers from AFK Live: your YouTube stream key, Preparing and Auto-start, vertical or landscape, and going live from your phone."
-    return f"""{head("Help", desc, "/help")}
+    groups = []
+    for g in GROUPS:
+        items = "\n".join(item(a) for a in ARTICLES if a["group"] == g)
+        groups.append(f'  <section data-help-group class="mt-10">\n    <h2 class="text-xl font-bold tracking-tight">{esc(g)}</h2>\n'
+                      f'    <ul class="mt-4 space-y-3">\n{items}\n    </ul>\n  </section>')
+    sections = "\n".join(groups)
+    desc = "How to find your YouTube stream key, fix a live stuck on Preparing, stream from your phone, and keep a 24/7 live within YouTube's rules."
+    structured = [crumbs(("Home", "https://afklive.in/"), ("Help", "https://afklive.in/help"))]
+    return f"""{head("Help with 24/7 YouTube live streams | AFK Live", "AFK Live help", desc, "/help", structured)}
 <main class="mx-auto max-w-3xl px-4 pb-24 pt-14 sm:px-6" data-help>
-  <h1 class="text-[44px] font-extrabold leading-none tracking-[-0.035em] sm:text-[56px]">Help</h1>
-  <p class="mt-4 text-lg text-muted">Short answers to what creators ask us most.</p>
+  <h1 class="text-[40px] font-extrabold leading-none tracking-[-0.035em] sm:text-[56px]">Help with your YouTube live</h1>
+  <p class="mt-4 text-lg text-muted">Short answers to what creators ask us most: setting up YouTube, streaming from your phone, and keeping a 24/7 live within YouTube's rules.</p>
   <form role="search" class="mt-8" action="/help" method="get" data-help-form>
     <label for="help-q" class="label">Search help</label>
     <input id="help-q" name="q" type="search" class="field" placeholder="Try &ldquo;stream key&rdquo; or &ldquo;Preparing&rdquo;" autocomplete="off" data-help-search />
   </form>
   <p class="mt-3 text-sm text-muted" aria-live="polite" data-help-count></p>
-  <ul class="mt-4 space-y-3" data-help-list>
-{items}
-  </ul>
+  <div data-help-list>
+{sections}
+  </div>
   <p class="mt-6 hidden text-muted" data-help-empty>Nothing matches that. Email <a href="mailto:support@afklive.in" class="link">support@afklive.in</a> and we'll help.</p>
   <p class="mt-14 text-sm text-muted">Is something down for everyone? See the <a href="/status" class="link">status page</a>.</p>
 </main>

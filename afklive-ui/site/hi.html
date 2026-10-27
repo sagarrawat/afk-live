@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Hindi homepage (MK-1). Every string here needs a native speaker's review: docs/translations.md. -->
-  <title>AFK Live: आप सोते रहें, आपका YouTube चैनल 24/7 live रहे</title>
-  <meta name="description" content="आप सो रहे हों तब भी आपका चैनल live रहता है, स्क्रीन पर अभी क्या चल रहा है, घड़ी और आगे क्या आएगा, सब दिखता है। वीडियो एक बार upload करें या फ़ोन से stream करें। PC चालू नहीं रखना पड़ता। 10 घंटे फ़्री, कोई कार्ड नहीं, UPI से पेमेंट।" />
+  <title>YouTube पर 24 घंटे live, बिना PC | AFK Live</title>
+  <meta name="description" content="PC बंद रखकर भी YouTube पर 24 घंटे live रहें। वीडियो एक बार upload करें या फ़ोन से stream करें। 10 घंटे फ़्री, UPI से पेमेंट।" />
   <link rel="canonical" href="https://afklive.in/hi" />
   <link rel="alternate" hreflang="en" href="https://afklive.in/" />
   <link rel="alternate" hreflang="hi" href="https://afklive.in/hi" />
@@ -18,7 +18,11 @@
   <meta property="og:locale:alternate" content="en_IN" />
   <link rel="preload" as="image" href="/site/img/frame-devotional.webp" imagesrcset="/site/img/frame-devotional-640.webp 640w, /site/img/frame-devotional.webp 1280w" imagesizes="(min-width: 1024px) 680px, 100vw" />
 <!-- include:head -->
+  <!-- Devanagari only here: English pages don't download it. -->
+  <link rel="stylesheet" href="./src/devanagari.css" />
   <script type="module" src="./src/main.ts"></script>
+  <!-- jsonld:org -->
+  <!-- jsonld:faq -->
 </head>
 <body>
 <!-- include:header-hi -->
@@ -27,7 +31,7 @@
   <section class="night overflow-hidden">
     <div class="hero mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 md:pt-12 lg:pb-24 lg:pt-16">
       <div class="hero-copy">
-        <h1 class="hero-head text-[32px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-[44px] lg:text-[46px]">आप सो जाइए, आपका चैनल live रहेगा। स्क्रीन पर क्या दिखे, ये आप चुनिए।</h1>
+        <h1 class="hero-head text-[32px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-[44px] lg:text-[46px]">आप सो जाइए, आपका YouTube चैनल 24 घंटे live रहेगा। स्क्रीन पर क्या दिखे, ये आप चुनिए।</h1>
         <div class="hero-cta mt-6 lg:mt-8">
           <a href="/register" hreflang="en" data-funnel="start" class="btn-primary h-12 w-full px-8 text-[17px] sm:w-auto">फ़्री में शुरू करें</a>
           <p class="mt-3 text-[15px] text-muted">10 घंटे फ़्री · कोई कार्ड नहीं · UPI से पेमेंट</p>
@@ -264,7 +268,7 @@
   <section id="faq" aria-labelledby="faq-title" class="border-t border-line bg-panel">
     <div class="mx-auto grid max-w-6xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[0.8fr_1.2fr]">
       <h2 id="faq-title" class="h-section">लोग सबसे पहले ये पूछते हैं</h2>
-      <div class="faq">
+      <div class="faq" data-faq>
         <details>
           <summary>क्या YouTube पर 24/7 live चलाने की इजाज़त है?</summary>
           <p>हाँ। YouTube का कोई नियम loop या पहले से record किए live पर रोक नहीं लगाता। पर YouTube ये ज़रूर चाहता है कि content बार-बार एक जैसा या थोक में बना हुआ न हो, इसलिए stream में variety रखें: कई वीडियो shuffle में, और स्क्रीन पर अभी क्या चल रहा है। <a href="/help/loops-and-youtube-rules" hreflang="en" class="link">Loop और YouTube के नियम (अंग्रेज़ी में)</a></p>

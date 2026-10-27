@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 import { HELP } from '@/lib/help';
-import sitemap from '../../../afklive-web/src/main/resources/static/sitemap.xml?raw';
-import homeController from '../../../afklive-web/src/main/java/com/afklive/streamer/endpoint/HomeController.java?raw';
+import publicPages from '../../../afklive-web/src/main/java/com/afklive/streamer/endpoint/PublicPages.java?raw';
 import siteConfig from '../../vite.site.config.ts?raw';
 
 // MK-4: the help centre is plain HTML written by site/help.py. These checks stand in for a link
@@ -27,14 +26,12 @@ describe('help centre pages', () => {
     expect(page('help.html')).toBeDefined();
   });
 
-  it('builds them, serves them and lists them in the sitemap', () => {
+  it('builds them, and serves and lists them in the sitemap (PublicPages)', () => {
     expect(siteConfig).toMatch(/\(for\|help\)-/);
     expect(siteConfig).toContain("f === 'help.html'");
-    expect(sitemap).toContain('<loc>https://afklive.in/help</loc>');
-    for (const slug of slugs) {
-      expect(sitemap, slug).toContain(`<loc>https://afklive.in/help/${slug}</loc>`);
-      expect(homeController, slug).toContain(`"${slug}"`);
-    }
+    expect(publicPages).toContain('pages.put("/help", "help.html")');
+    const listed = publicPages.match(/HELP_ARTICLES = List\.of\(([^;]+)\);/)?.[1] ?? '';
+    for (const slug of slugs) expect(listed, slug).toContain(`"${slug}"`);
   });
 
   it('links every article from the searchable index', () => {

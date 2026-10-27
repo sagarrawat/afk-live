@@ -21,7 +21,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import com.afklive.streamer.security.OAuth2LoginSuccessHandler;
 import com.afklive.streamer.security.CustomAuthenticationSuccessHandler;
-import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import com.afklive.streamer.service.CustomUserDetailsService;
@@ -94,8 +93,11 @@ public class SecurityConfig {
                                            OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler,
                                            CustomAuthenticationSuccessHandler customAuthenticationSuccessHandler,
                                            com.afklive.streamer.security.SessionRememberMeServices rememberMeServices,
-                                           com.afklive.streamer.security.AccountGate accountGate) throws Exception {
+                                           com.afklive.streamer.security.AccountGate accountGate,
+                                           org.springframework.context.ApplicationContext applicationContext) throws Exception {
         http
+                // SEO: clean public addresses (no trailing slash, no /site/*.html copies), before anything else.
+                .addFilterBefore(new com.afklive.streamer.filter.SiteUrlFilter(), org.springframework.security.web.session.DisableEncodeUrlFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
@@ -153,7 +155,8 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .exceptionHandling(e -> e
-                        .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login"))
+                        // Sign-in for anything that exists; a real 404 for addresses that don't (SEO).
+                        .authenticationEntryPoint(new com.afklive.streamer.security.PublicNotFoundEntryPoint(applicationContext))
                         // OPS-2: an expired form says so instead of showing a server error.
                         .accessDeniedHandler(new com.afklive.streamer.security.FriendlyAccessDeniedHandler())
                 );
