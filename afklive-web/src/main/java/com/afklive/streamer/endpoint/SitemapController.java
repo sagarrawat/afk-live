@@ -17,8 +17,9 @@ import java.util.regex.Pattern;
 
 /**
  * /sitemap.xml, written from {@link PublicPages} so a new page can't be left out and pages that aren't
- * indexed (sign-in, register, status) can't creep in. lastmod is each page's last change: the site build
- * (vite.site.config.ts) writes static/site/lastmod.json from git, or from the file's modified time.
+ * indexed (sign-in, register, status) can't creep in. lastmod is the date of the last commit that changed
+ * the page: the site build (vite.site.config.ts) writes static/site/lastmod.json from git history. A page
+ * without a known date gets no lastmod rather than a wrong one.
  */
 @RestController
 @Slf4j

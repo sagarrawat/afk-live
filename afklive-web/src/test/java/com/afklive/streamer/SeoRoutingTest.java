@@ -149,6 +149,14 @@ class SeoRoutingTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void caddySendsWwwAndHttpToOneHttpsAddress() throws Exception {
+        String caddy = Files.readString(Path.of("..", "afklive-scripts", "caddy", "Caddyfile"));
+        assertThat(caddy).doesNotContain("afk.live")
+                .contains("http://afklive.in, http://www.afklive.in {\n\tredir https://afklive.in{uri} permanent\n}")
+                .contains("afklive.in, www.afklive.in {\n\t@www host www.afklive.in\n\tredir @www https://afklive.in{uri} permanent");
+    }
+
+    @Test
     void sitemapDatesComeFromTheBuild() {
         String xml = com.afklive.streamer.endpoint.SitemapController.render(
                 java.util.Map.of("/", "index.html", "/hi", "hi.html"),

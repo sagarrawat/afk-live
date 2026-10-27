@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import Beasties from 'beasties';
 import { STATIC_PLANS } from './site/src/static-plans';
@@ -47,22 +47,28 @@ function preloadFonts(): Plugin {
   };
 }
 
-/** When each page last changed (git, else the file's time), for <lastmod> in /sitemap.xml (SitemapController). */
+/**
+ * When each page's file last changed in git, for <lastmod> in /sitemap.xml (SitemapController). Only
+ * from full history: in a shallow clone every file would get the newest commit's date, and a checkout's
+ * file times are just as wrong, so then pages get no date (Google ignores lastmod it can't trust).
+ * The production build (web-build.yml) checks out full history.
+ */
 function lastModified(pages: string[]): Plugin {
-  const when = (file: string) => {
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: resolve(__dirname, 'site'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const when = (file: string): string | null => {
     try {
-      const date = execFileSync('git', ['log', '-1', '--format=%cI', '--', file], { cwd: resolve(__dirname, 'site'), encoding: 'utf8' }).trim();
-      if (date) return date;
+      if (git('rev-parse', '--is-shallow-repository') !== 'false') return null;
+      if (git('status', '--porcelain', '--', file)) return null; // edited and not committed yet: no honest date
+      return git('log', '-1', '--format=%cI', '--', file) || null;
     } catch {
-      /* no git in this build: fall back to the file's time */
+      return null; // no git here
     }
-    return statSync(resolve(__dirname, 'site', file)).mtime.toISOString();
   };
   return {
     name: 'site-lastmod',
     apply: 'build',
     generateBundle() {
-      const dates = Object.fromEntries(pages.map((f) => [f, when(f)]));
+      const dates = Object.fromEntries(pages.map((f) => [f, when(f)]).filter(([, d]) => d));
       this.emitFile({ type: 'asset', fileName: 'lastmod.json', source: JSON.stringify(dates, null, 1) });
     },
   };

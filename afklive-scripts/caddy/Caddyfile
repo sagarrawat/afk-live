@@ -1,5 +1,6 @@
 # Caddy in front of the web app's two deploy slots (OPS-4, zero-downtime deploys). Install as /etc/caddy/Caddyfile
-# after replacing afk.live with your domain, then: sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# (the domain is afklive.in; change it if yours differs), then:
+#   sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
 # Setup and how a deploy uses this: docs/operations.md ("Web deploys without downtime").
 
 # Both slots; normally only one runs. Caddy asks each for its readiness every second and sends requests only to a
@@ -20,9 +21,16 @@
 	}
 }
 
-afk.live, www.afk.live {
-	@www host www.afk.live
-	redir @www https://afk.live{uri} permanent
+# SEO: one address for the site. http:// and www. answer with a single 301 to https://afklive.in, path and
+# query kept (Caddy's own http->https redirect is a 308 and would leave www as a second hop). Certificates
+# are still issued for both names: ACME challenges are answered before these redirects.
+http://afklive.in, http://www.afklive.in {
+	redir https://afklive.in{uri} permanent
+}
+
+afklive.in, www.afklive.in {
+	@www host www.afklive.in
+	redir @www https://afklive.in{uri} permanent
 
 	# The probes are for this machine only (the app refuses them to proxied requests too).
 	@actuator path /actuator /actuator/*
