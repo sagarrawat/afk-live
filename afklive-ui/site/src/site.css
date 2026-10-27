@@ -499,7 +499,7 @@ html[lang='hi'] .niche-panel h3 {
 
 /* Legal pages (site/legal.py): readable long text. */
 .legal h2 {
-  @apply mt-10 text-xl font-bold tracking-tight;
+  @apply mt-10 scroll-mt-24 text-xl font-bold tracking-tight;
 }
 .legal p {
   @apply mt-3 text-[16px] leading-7 text-ink/85;

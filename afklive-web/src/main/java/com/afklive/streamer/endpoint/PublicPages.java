@@ -41,7 +41,9 @@ public final class PublicPages {
         for (String slug : HELP_ARTICLES) {
             pages.put("/help/" + slug, "help-" + slug + ".html");
         }
+        pages.put("/contact", "contact.html");
         pages.put("/privacy", "privacy.html");
+        pages.put("/refund-policy", "refund-policy.html");
         pages.put("/terms", "terms.html");
         INDEXABLE = java.util.Collections.unmodifiableMap(pages);
     }

@@ -72,4 +72,10 @@ public class HomeController {
     public String privacy() {
         return "forward:/site/privacy.html";
     }
+
+    /** The cancellation and refund policy (afklive-ui/site/legal.py). /contact is {@link ContactPage}. */
+    @GetMapping("/refund-policy")
+    public String refundPolicy() {
+        return "forward:/site/refund-policy.html";
+    }
 }

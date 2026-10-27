@@ -176,6 +176,11 @@ app:
     seller-gstin: ${APP_BILLING_SELLER_GSTIN:}
     seller-state: ${APP_BILLING_SELLER_STATE:}
     sac: ${APP_BILLING_SAC:998439}
+  grievance:
+    # Shown on /contact (Consumer Protection (E-Commerce) Rules 2020, IT Rules 2021). Empty: the page says to
+    # write to support@afklive.in instead, and a warning is logged at startup.
+    officer-name: ${APP_GRIEVANCE_OFFICER_NAME:}
+    officer-email: ${APP_GRIEVANCE_OFFICER_EMAIL:}
   ingest:
     # What creators type into their phone app, e.g. ingest.afklive.com
     public-host: ${INGEST_PUBLIC_HOST:}

@@ -147,7 +147,7 @@ describe('titles, descriptions and headings', () => {
 
   it('keeps /status out of search and gives legal pages link previews', () => {
     expect(page('status.html')).toContain('<meta name="robots" content="noindex" />');
-    for (const f of ['privacy.html', 'terms.html']) {
+    for (const f of ['privacy.html', 'terms.html', 'refund-policy.html', 'contact.html']) {
       for (const p of ['og:title', 'og:description', 'og:url']) expect(page(f), `${f} ${p}`).toContain(`property="${p}"`);
     }
     expect(partials['../partials/head.html']).toContain('<meta property="og:site_name" content="AFK Live" />');

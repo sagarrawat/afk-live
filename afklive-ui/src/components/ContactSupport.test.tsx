@@ -65,6 +65,24 @@ describe('Contact support files a ticket in the app (UX audit #23)', () => {
     expect(screen.getByRole('dialog', { name: 'Contact support' })).toBeInTheDocument();
   });
 
+  it('opens straight away from /studio/help?contact, where the public contact page sends people', async () => {
+    window.history.pushState({}, '', '/studio/help?contact');
+    render(<App client={makeQueryClient()} />);
+    expect(await screen.findByRole('dialog', { name: 'Contact support' })).toBeInTheDocument();
+  });
+
+  it('links the policies from Help, without opening the form', async () => {
+    render(<App client={makeQueryClient()} />);
+    const nav = await screen.findByRole('navigation', { name: 'Policies' });
+    expect(within(nav).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Terms', '/terms'],
+      ['Privacy', '/privacy'],
+      ['Refund policy', '/refund-policy'],
+      ['Contact', '/contact'],
+    ]);
+    expect(screen.queryByRole('dialog', { name: 'Contact support' })).not.toBeInTheDocument();
+  });
+
   it('refuses files the server would refuse, before uploading', () => {
     expect(attachmentProblem(new File(['x'], 'run.sh'))).toMatch(/PNG or JPG/);
     expect(attachmentProblem(new File(['x'], 'shot.JPG'))).toBeNull();

@@ -130,7 +130,9 @@ export default defineConfig({
         // MK-1: the homepage in Hindi (served at /hi).
         hi: resolve(__dirname, 'site/hi.html'),
         pricing: resolve(__dirname, 'site/pricing.html'),
+        contact: resolve(__dirname, 'site/contact.html'),
         privacy: resolve(__dirname, 'site/privacy.html'),
+        'refund-policy': resolve(__dirname, 'site/refund-policy.html'),
         terms: resolve(__dirname, 'site/terms.html'),
         // RE-7: the public status page (served at /status).
         status: resolve(__dirname, 'site/status.html'),
