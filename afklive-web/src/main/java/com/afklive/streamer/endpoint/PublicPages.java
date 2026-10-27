@@ -23,6 +23,10 @@ public final class PublicPages {
     public static final List<String> HELP_ARTICLES = List.of("youtube-stream-key", "youtube-preparing", "vertical-or-landscape",
             "live-here-not-on-youtube", "phone-streaming", "loops-and-youtube-rules", "titles-and-thumbnails", "music-on-your-live");
 
+    /** MK-1, MK-4: the help articles in Hindi, under /hi/help (site/help.py HI_ARTICLES writes site/hi-help-&lt;slug&gt;.html). */
+    public static final List<String> HINDI_HELP_ARTICLES = List.of("24-ghante-live", "mobile-se-live", "recorded-video-live",
+            "youtube-stream-key");
+
     /** Public address → built file under static/site/, for every page search engines should index, in sitemap order. */
     public static final Map<String, String> INDEXABLE;
 
@@ -40,6 +44,10 @@ public final class PublicPages {
         pages.put("/help", "help.html");
         for (String slug : HELP_ARTICLES) {
             pages.put("/help/" + slug, "help-" + slug + ".html");
+        }
+        pages.put("/hi/help", "hi-help.html");
+        for (String slug : HINDI_HELP_ARTICLES) {
+            pages.put("/hi/help/" + slug, "hi-help-" + slug + ".html");
         }
         pages.put("/privacy", "privacy.html");
         pages.put("/terms", "terms.html");

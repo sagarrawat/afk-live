@@ -447,6 +447,37 @@ section[id] {
 .help-article code {
   @apply break-all rounded bg-raised px-1.5 py-0.5 text-[0.9em];
 }
+/*
+ * The ways to stay live, side by side by what they cost a month (Hindi pillar, site/help.py "ways"). The
+ * price leads each row in the display face: it's the number people came to compare. One column on phones.
+ */
+.help-article .help-ways {
+  @apply mt-6 list-none space-y-0 border-t border-line pl-0;
+}
+.help-way {
+  @apply grid gap-2 border-b border-line py-6 sm:grid-cols-[10.5rem_1fr] sm:gap-6;
+}
+.help-article .help-way p {
+  @apply mt-1;
+}
+.help-article .help-way .help-way-cost {
+  @apply mt-0 flex flex-wrap items-baseline gap-x-2 sm:block;
+}
+.help-way-price {
+  @apply block text-[30px] font-extrabold leading-none text-ink;
+  font-family: 'Schibsted Grotesk Variable', 'Inter Variable', 'Noto Sans Devanagari Variable', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.help-way-unit {
+  @apply text-sm text-muted sm:mt-2 sm:block;
+}
+.help-way h3 {
+  @apply text-lg font-bold;
+}
+/* Start free, at the end of a Hindi help article: a piece of night, like the channel it starts. */
+.help-cta {
+  @apply rounded-2xl p-6 sm:p-8;
+}
 
 /* Language switch (English / हिन्दी) in the header. The current language is marked. */
 .lang-switch {
@@ -492,6 +523,8 @@ html[lang='hi'] .hero-head {
 html[lang='hi'] .h-section {
   line-height: 1.3;
 }
+html[lang='hi'] .help-article h2,
+html[lang='hi'] .help-way h3,
 html[lang='hi'] .night-line h3,
 html[lang='hi'] .niche-panel h3 {
   line-height: 1.45;
