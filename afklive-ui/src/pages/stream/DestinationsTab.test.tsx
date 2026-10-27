@@ -91,6 +91,36 @@ describe('DestinationsTab: a new destination is tested (MS-6)', () => {
   });
 });
 
+describe('DestinationsTab: the first destination ever (found by the e2e journey)', () => {
+  let puts: unknown[] = [];
+  beforeEach(() => {
+    puts = [];
+    let saved: typeof dests = [];
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true; };
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.open = false; };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (init?.method === 'PUT') puts.push(JSON.parse(String(init.body)));
+      if (path === '/api/destinations' && init?.method === 'POST') saved = [dests[1]];
+      const body = path === '/api/me' ? me
+        : path === '/api/destinations' ? (init?.method === 'POST' ? dests[1] : saved)
+        : path.endsWith('/test') ? { testId: 3, status: 'PENDING' } : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('turns the new destination on for this stream', async () => {
+    const s = { ...stream([]), live: { state: 'DRAFT', uptimeSeconds: 0 } } as StreamView;
+    render(<QueryClientProvider client={makeQueryClient()}><MemoryRouter><DestinationsTab stream={s} /></MemoryRouter></QueryClientProvider>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add destination' }));
+    await userEvent.click(screen.getByRole('radio', { name: /Facebook/ }));
+    await userEvent.type(screen.getByLabelText('Stream key'), 'FB-123-0-Ab');
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add destination' }));
+    await vi.waitFor(() => expect(puts).toEqual([[{ destinationId: 2, enabled: true }]]));
+  });
+});
+
 describe('DestinationsTab in plain words (UX audit #13, #22)', () => {
   const free = { ...me, plan: { ...me.plan, name: 'Free', destinations: 1 } };
   beforeEach(() => {
