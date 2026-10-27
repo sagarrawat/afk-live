@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { SkipForward, Smartphone, WifiOff } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HealthDot, isOnAir } from '@/components/status';
 import { Badge, Button, Panel, Toggle, useAction } from '@/components/ui';
@@ -390,7 +390,16 @@ export function TimelinePanel({ stream: s }: { stream: StreamView }) {
 }
 
 function RecentRuns({ stream: s }: { stream: StreamView }) {
-  const { data } = useRuns(s.id);
+  const { data, refetch } = useRuns(s.id);
+  // A run starts and ends with the stream's state (polled with the stream): read the runs again when it
+  // changes, or a stopped stream's last run keeps saying "On air" until a reload.
+  const state = s.live.state;
+  const seen = useRef(state);
+  useEffect(() => {
+    if (seen.current === state) return;
+    seen.current = state;
+    void refetch();
+  }, [state, refetch]);
   if (!data || data.length === 0) return null;
   return (
     <Panel title="Recent runs" pad={false}>

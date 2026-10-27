@@ -63,7 +63,7 @@ import static org.mockito.Mockito.when;
  */
 @Tag("e2e")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class CreatorJourneyE2ETest extends PostgresIntegrationTest {
+class CreatorJourneyE2ETest {
 
     private static final String PASSWORD = "E2e-Passw0rd!";
     private static final String STREAM = "My 24/7 stream";
@@ -82,9 +82,18 @@ class CreatorJourneyE2ETest extends PostgresIntegrationTest {
     static Browser browser;
     static RtmpSink sink;
 
-    /** The real app as in production on one server: the worker loop and media checks run by themselves. */
+    /**
+     * The real app as in production on one server: the worker loop and media checks run by themselves. The
+     * database is {@link PostgresIntegrationTest}'s embedded PostgreSQL; its other settings (worker driven by
+     * hand, no media processing) are what this test must not have, so they aren't inherited.
+     */
     @DynamicPropertySource
     static void realApp(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", PostgresIntegrationTest::jdbcUrl);
+        registry.add("spring.datasource.username", () -> "postgres");
+        registry.add("spring.datasource.password", () -> "postgres");
+        registry.add("app.encryption-key", () -> "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdCE=");
+        registry.add("app.streaming.worker.max-cpu-to-claim", () -> "1.01"); // a busy test machine still streams
         registry.add("app.streaming.role", () -> "all");
         registry.add("app.streaming.worker.auto-start", () -> "true");
         registry.add("app.media.auto-process", () -> "true");

@@ -30,6 +30,14 @@ public abstract class PostgresIntegrationTest {
         }));
     }
 
+    /**
+     * The shared embedded database, for a test that needs it with different app settings (the browser e2e test
+     * runs the worker loop and media checks by themselves; a subclass can't undo the settings below).
+     */
+    public static String jdbcUrl() {
+        return POSTGRES.getJdbcUrl("postgres", "postgres");
+    }
+
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", () -> POSTGRES.getJdbcUrl("postgres", "postgres"));

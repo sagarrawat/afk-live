@@ -80,3 +80,34 @@ describe('a failed upload in setup (UX audit #17)', () => {
     expect(retry).toHaveBeenCalled();
   });
 });
+
+describe('Recent runs (RE-9, found by the e2e journey)', () => {
+  it('shows the run as ended once the stream stops, without a reload', async () => {
+    let ended = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input).split('?')[0];
+        const run = { jobId: 3, startedAt: '2026-10-27T07:00:00Z', endedAt: ended ? '2026-10-27T07:00:30Z' : null, endReason: ended ? 'Stopped by you' : null };
+        const body = path === '/api/me' ? me : path === '/api/destinations' ? [] : path === '/api/streams/7/runs' ? [run] : undefined;
+        return new Response(JSON.stringify(body ?? {}), { status: body === undefined ? 404 : 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    const view = (s: StreamView) => (
+      <QueryClientProvider client={client}>
+        <ToastProvider>
+          <MemoryRouter>
+            <OverviewTab stream={s} />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(stream));
+    expect(await screen.findByText('On air')).toBeInTheDocument();
+    ended = true;
+    rerender(view({ ...stream, live: { state: 'ENDED', uptimeSeconds: 0 } } as StreamView));
+    expect(await screen.findByText('Stopped by you')).toBeInTheDocument();
+    expect(screen.queryByText('On air')).not.toBeInTheDocument();
+  });
+});
