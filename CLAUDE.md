@@ -38,6 +38,11 @@ cd afklive-ui && npm test                      # UI tests (Vitest); npm run type
 cd afklive-ui && npm run dev                   # the app on :5173 with hot reload, API proxied to the Spring app on :8080
 ```
 
+Browser end-to-end test of the creator journey (sign up, upload, go live to a local sink, stop, phone-width
+screens, checkout up to PhonePe): `afklive-scripts/e2e.sh` (about 2 minutes after the build; needs FFmpeg and
+Chromium for Playwright 1.56). Not part of `mvn -B verify` (Maven profile `e2e`, tag `e2e`); run it after changing
+a main screen or the go-live path. Details and failure traces: `docs/operations.md`, "End-to-end test".
+
 Tests that need the database extend `PostgresIntegrationTest`, which starts an embedded PostgreSQL
 (no Docker needed). `StreamerApplicationTests` boots the whole app; keep it green.
 
