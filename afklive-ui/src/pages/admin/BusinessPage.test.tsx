@@ -32,7 +32,7 @@ function mockApi(routes: Record<string, unknown>) {
 const weeks = (n: number, last: Partial<BusinessReport['weeks'][number]> = {}) =>
   Array.from({ length: n }, (_, i) => {
     const d = new Date(Date.UTC(2031, 2, 17 - 7 * (n - 1 - i)));
-    const w = { start: d.toISOString().slice(0, 10), partial: i === n - 1, signUps: 0, signUpsWentLive: 0, activeCreators: 0, streamHours: 0 };
+    const w = { start: d.toISOString().slice(0, 10), partial: i === n - 1, signUps: 0, signUpsWentLive: 0, signUpsLiveIn24h: 0, activeCreators: 0, streamHours: 0 };
     return i === n - 1 ? { ...w, ...last } : w;
   });
 
@@ -40,7 +40,7 @@ const report: BusinessReport = {
   generatedAt: '2031-03-19T12:00:00Z',
   weekStarts: 'Monday 00:00 UTC',
   accounts: { total: 120, undated: 4, wentLive: 48, wentLivePercent: 40 },
-  weeks: weeks(12, { signUps: 9, signUpsWentLive: 3, activeCreators: 31, streamHours: 812.5 }),
+  weeks: weeks(12, { signUps: 9, signUpsWentLive: 3, signUpsLiveIn24h: 2, activeCreators: 31, streamHours: 812.5 }),
   conversion: { everPaid: 15, everPaidPercent: 12.5, payingNow: 11, payingNowPercent: 9.2, inGrace: 1, endingAtPeriodEnd: 2, givenByAdmin: 1 },
   plans: [
     { plan: 'ESSENTIALS', name: 'Creator', cycle: 'MONTHLY', currency: 'INR', accounts: 8, inGrace: 1, monthlyEach: 422.88, mrr: 2960.17 },
@@ -107,6 +107,7 @@ describe('Admin > Business', () => {
     expect(weekRows).toHaveLength(12);
     expect(weekRows[0]).toHaveTextContent(`${weekLabel('2031-03-17')} (so far)`);
     expect(weekRows[0]).toHaveTextContent('813 h');
+    expect(weekRows[0]).toHaveTextContent('2 (22.2%)');
 
     const cohorts = screen.getByRole('table', { name: /sign-up week/ });
     const header = within(cohorts).getAllByRole('columnheader').map((h) => h.textContent);

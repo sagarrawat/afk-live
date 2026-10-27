@@ -1028,6 +1028,24 @@ so it's the one check to require in branch protection (Settings → Rules → th
 Require status checks to pass → "PR checks passed"); requiring the individual jobs would block
 docs-only PRs, whose jobs are skipped. Deploy workflows are unchanged.
 
+## Dependency updates (Dependabot)
+
+`.github/dependabot.yml` checks every Monday morning (IST) for updates to Maven (the parent pom,
+`afklive-web`, `afklive-optimizer`), npm (`afklive-ui`) and GitHub Actions. Minor and patch updates
+come grouped, one PR per ecosystem; majors come one PR each, at most 3 open per ecosystem (2 for
+Actions), so the queue stays small. Spring Boot and React (with `react-dom` and their types) major
+versions are ignored: those are planned migrations on a branch with the full test run, not bot PRs.
+To take one, remove its `ignore` entry or update by hand.
+
+Every Dependabot PR runs the normal PR checks. Review the changelog of anything that touches
+streaming, billing or security before merging; merging deploys to production like any merge to
+`main`, so never turn on auto-merge for these.
+
+**Owner, once**: Settings → Code security → turn on **Dependency graph**, **Dependabot alerts** and
+**Dependabot security updates** (alerts for known vulnerabilities in what we ship, and a PR with the
+fix as soon as one exists, outside the weekly schedule). The version updates above need nothing more
+than this file being on `main`.
+
 ## Media library and uploads
 
 Uploads are resumable (ML-1): the browser asks `/api/media/uploads` for an upload, then sends 16 MB
@@ -1157,6 +1175,47 @@ instance). It only ever says operational / degraded / down per part, never names
 
 Linked from the site footer, the app's account menu and Help page, and every email's footer.
 
+## Uptime monitoring from outside (`/healthz`)
+
+`/status` and the in-app alerts run on our own servers, so they can't tell anyone when those servers
+are gone. An outside monitor calls a public health check instead:
+
+| Address | 200 `ok` when | 503 `unavailable` when |
+| --- | --- | --- |
+| `GET /healthz` | the web app answers and the database answers `SELECT 1` within 2 s | the database query fails or takes longer than 3 s |
+| `GET /healthz?workers=1` | the above, and at least one stream server (`stream_workers`) reported in the last 2 minutes | either part fails |
+
+It never says why (no error text, versions or counts), sends `Cache-Control: no-store` and
+`X-Robots-Tag: noindex`, is not in the sitemap, needs no sign-in, creates no session and is outside
+the API rate limiter (`HealthController`, `HealthzProbe`, `HealthzSecurityConfig`). Each web instance
+reuses its answer for 5 s, so frequent checks cost the database almost nothing; HEAD works too. If both
+deploy slots are down, Caddy answers 502, which a monitor also reads as down. The localhost-only
+actuator probes (`/actuator/health/readiness`, used by Caddy and the deploy script) are separate and
+unchanged.
+
+### Set up the monitors (owner, once, about 10 minutes)
+
+Free tiers as of October 2026 (check before relying on them): **Better Stack** Free has 10 monitors,
+checks every 3 minutes, alerts by email and Slack (phone/SMS are paid); **UptimeRobot** Free has 50
+monitors, checks every 5 minutes, alerts by email (and a few integrations), and is described as for
+hobby and non-profit use, so for a paying business prefer Better Stack, or UptimeRobot Solo
+(about $12/month, 60-second checks) if 1-minute checks matter. Neither free tier checks every minute,
+and neither sends WhatsApp alerts; Telegram is an UptimeRobot integration on plans that include it.
+
+Create three HTTP monitors (keyword or status-code checks; expect status 200; request timeout 10 s;
+alert after 2 failed checks in a row so a deploy's handover never pages anyone):
+
+1. **Website and database**: `https://afklive.in/healthz`. Alert: email, plus the phone app's push or
+   Telegram where the plan has it.
+2. **Stream servers**: `https://afklive.in/healthz?workers=1`. Same alerts. When this one is down and
+   the first is up, the web app is fine but no worker is reporting: live streams are at risk; see
+   "Worker deploys without interruption" and Admin > Servers.
+3. **Homepage**: `https://afklive.in/` (expects 200). Catches DNS, certificate and Caddy problems that
+   don't reach the app.
+
+Optionally publish the monitor's status page as a second, independent status page. Nothing to deploy
+or pay for with the free tiers; the monitors only call the public site.
+
 ## Admin: workers, cost and YouTube quota (AD-2, YT-4)
 
 | Variable | Default | Meaning |
@@ -1216,6 +1275,27 @@ storage by kind, and how many are due for deletion.
 
 Worker CPU and memory are the machine's (or container's), since FFmpeg runs as child processes;
 memory "used" leaves out reclaimable page cache (`MemAvailable`).
+
+### Business numbers (Admin > Business)
+
+`/studio/admin/business` (`BusinessMetrics`, `GET /api/admin/business`, ADMIN only) shows, from
+data we already keep (no new tables): accounts and sign-ups per week; active creators per week
+(accounts with a stream on air for any part of the week); stream-hours per week (counted like the
+Costs panel); first go-live (`users.first_live_at`) overall and for each week's sign-ups (ever, and within 24 hours: the spec's activation measure); Free → paid
+(accounts with a completed payment) and paying now by plan; MRR; churn; and retention by sign-up week
+for the last 8 weeks. Weeks start Monday 00:00 UTC, months are UTC calendar months, and admin accounts
+are left out. Seven queries per load, refreshed every 5 minutes while open.
+
+- **Paying**: a subscription that is `ACTIVE` or `PAST_DUE` (grace days) on an account with at least one
+  completed payment. Plans an admin gave without a payment are listed apart and left out of MRR.
+- **MRR (estimate)**: for each `ACTIVE` paying subscription, today's list price for its cycle (yearly
+  ÷ 12), ÷ 1.18 to take out GST for INR. USD plans (zero-rated exports) are shown separately; no
+  exchange rate is applied. Discounts, upgrade credit and older prices aren't in it. A plan set to end
+  at the period end still counts until it ends; one in its grace days doesn't.
+- **Churn (estimate)**: paid subscriptions that moved to Free in the month (`status = CANCELED`, by
+  `updated_at`); rate = moved this month ÷ (paying now + moved this month). The subscription row is
+  reused when someone pays again, so a leave-and-return within one month isn't counted.
+- Accounts made before `users.created_at` existed count in the totals but in no week.
 
 ## Deleted library files (ML-6)
 

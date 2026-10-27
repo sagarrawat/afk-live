@@ -7,7 +7,7 @@ export interface BusinessReport {
   generatedAt: string;
   weekStarts: string;
   accounts: { total: number; undated: number; wentLive: number; wentLivePercent?: number | null };
-  weeks: { start: string; partial: boolean; signUps: number; signUpsWentLive: number; activeCreators: number; streamHours: number }[];
+  weeks: { start: string; partial: boolean; signUps: number; signUpsWentLive: number; signUpsLiveIn24h: number; activeCreators: number; streamHours: number }[];
   conversion: {
     everPaid: number;
     everPaidPercent?: number | null;
@@ -211,13 +211,14 @@ export function BusinessPage() {
 
       <Panel title="Week by week">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-sm">
+          <table className="w-full min-w-[600px] text-sm">
             <caption className="sr-only">Sign-ups, first go-lives, active creators and stream-hours per week</caption>
             <thead className="text-left text-xs text-muted">
               <tr>
                 <th className="py-1.5 pr-3 font-medium">Week of</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Sign-ups</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Of them went live</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Within 24 h</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Active creators</th>
                 <th className="py-1.5 text-right font-medium">Stream-hours</th>
               </tr>
@@ -231,6 +232,10 @@ export function BusinessPage() {
                   </td>
                   <td className="py-1.5 pr-3 text-right">{num(w.signUps)}</td>
                   <td className="py-1.5 pr-3 text-right">{num(w.signUpsWentLive)}</td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {num(w.signUpsLiveIn24h)}
+                    {w.signUps > 0 && <span className="text-xs text-muted"> ({pct(Math.round((w.signUpsLiveIn24h * 1000) / w.signUps) / 10)})</span>}
+                  </td>
                   <td className="py-1.5 pr-3 text-right">{num(w.activeCreators)}</td>
                   <td className="py-1.5 text-right">{hours(w.streamHours)}</td>
                 </tr>
@@ -238,7 +243,8 @@ export function BusinessPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-muted">Active creators: accounts with a stream on air for any part of the week. Stream-hours are counted like the Costs panel.</p>
+        <p className="mt-2 text-xs text-muted">Within 24 h: sign-ups whose first stream reached a platform within a day (the activation target in the product spec is 40%). Active creators: accounts with a
+          stream on air for any part of the week. Stream-hours are counted like the Costs panel.</p>
       </Panel>
 
       <Panel title="Retention by sign-up week">

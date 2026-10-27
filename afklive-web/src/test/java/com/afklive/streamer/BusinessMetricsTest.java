@@ -141,6 +141,8 @@ class BusinessMetricsTest extends PostgresIntegrationTest {
         wentLive(a1, "2031-03-18T10:05:00Z");
         run(a1, "2031-03-18T10:00:00Z", "2031-03-18T12:00:00Z", null);                 // 2 h
         run(a1, "2031-03-19T09:00:00Z", null, "2031-03-19T10:00:00Z");                 // 1 h, ended by its last heartbeat
+        User slow = account("slow", "2031-03-17T08:00:00Z", null);                    // went live, but after 24 hours
+        wentLive(slow, "2031-03-19T10:00:00Z");
         User a2 = account("quiet", "2031-03-10T09:00:00Z", null);
         User a3 = account("regular", "2031-03-03T09:00:00Z", null);
         run(a3, "2031-03-04T10:00:00Z", "2031-03-04T11:00:00Z", null);                 // 1 h in week of 03-03
@@ -152,20 +154,22 @@ class BusinessMetricsTest extends PostgresIntegrationTest {
         run(admin, "2031-03-18T10:00:00Z", "2031-03-18T20:00:00Z", null);
 
         BusinessMetrics.Report r = metrics.report(NOW, scope());
-        assertThat(r.accounts().total()).isEqualTo(4);
+        assertThat(r.accounts().total()).isEqualTo(5);
         assertThat(r.accounts().undated()).isEqualTo(1);
-        assertThat(r.accounts().wentLive()).isEqualTo(1);
-        assertThat(r.accounts().wentLivePercent()).isEqualTo(25.0);
+        assertThat(r.accounts().wentLive()).isEqualTo(2);
+        assertThat(r.accounts().wentLivePercent()).isEqualTo(40.0);
 
         BusinessMetrics.Week thisWeek = r.weeks().get(11);
-        assertThat(thisWeek.signUps()).isEqualTo(1);
-        assertThat(thisWeek.signUpsWentLive()).isEqualTo(1);
+        assertThat(thisWeek.signUps()).isEqualTo(2);
+        assertThat(thisWeek.signUpsWentLive()).isEqualTo(2);
+        assertThat(thisWeek.signUpsLiveIn24h()).isEqualTo(1);
         assertThat(thisWeek.activeCreators()).isEqualTo(2);
         assertThat(thisWeek.streamHours()).isCloseTo(4.5, within(0.001));
         BusinessMetrics.Week lastWeek = r.weeks().get(10);
         assertThat(lastWeek.start()).isEqualTo(LocalDate.of(2031, 3, 10));
         assertThat(lastWeek.signUps()).isEqualTo(1);
         assertThat(lastWeek.signUpsWentLive()).isZero();
+        assertThat(lastWeek.signUpsLiveIn24h()).isZero();
         assertThat(lastWeek.activeCreators()).isEqualTo(1);
         assertThat(lastWeek.streamHours()).isCloseTo(1.0, within(0.001));
         BusinessMetrics.Week twoAgo = r.weeks().get(9);
@@ -174,8 +178,8 @@ class BusinessMetricsTest extends PostgresIntegrationTest {
 
         // Newest cohort first; null = that week hasn't started yet.
         assertThat(r.cohorts().get(0).start()).isEqualTo(LocalDate.of(2031, 3, 17));
-        assertThat(r.cohorts().get(0).accounts()).isEqualTo(1);
-        assertThat(r.cohorts().get(0).activePercent()).containsExactly(100.0, null, null, null, null, null, null, null);
+        assertThat(r.cohorts().get(0).accounts()).isEqualTo(2);
+        assertThat(r.cohorts().get(0).activePercent()).containsExactly(50.0, null, null, null, null, null, null, null);
         assertThat(r.cohorts().get(1).activePercent()).containsExactly(0.0, 0.0, null, null, null, null, null, null);
         assertThat(r.cohorts().get(2).start()).isEqualTo(LocalDate.of(2031, 3, 3));
         assertThat(r.cohorts().get(2).activePercent()).containsExactly(100.0, 100.0, 100.0, null, null, null, null, null);

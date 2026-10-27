@@ -59,8 +59,12 @@ public class BusinessMetrics {
         this.plans = plans;
     }
 
-    /** One week. {@code partial} is the current week (not over yet). */
-    public record Week(LocalDate start, boolean partial, long signUps, long signUpsWentLive, long activeCreators, double streamHours) {
+    /**
+     * One week. {@code partial} is the current week (not over yet). {@code signUpsLiveIn24h} is the spec's
+     * activation measure: that week's sign-ups whose first go-live came within 24 hours of signing up.
+     */
+    public record Week(LocalDate start, boolean partial, long signUps, long signUpsWentLive, long signUpsLiveIn24h, long activeCreators,
+                       double streamHours) {
     }
 
     /** Accounts made in one week, and the % of them on air in each week after (0 = the sign-up week; null = not reached yet). */
@@ -155,18 +159,21 @@ public class BusinessMetrics {
                         + "SELECT (wk.ws AT TIME ZONE 'UTC')::date AS d, "
                         + "(SELECT count(*) FROM accts a WHERE a.created_at >= wk.ws AND a.created_at < wk.we) AS signups, "
                         + "(SELECT count(*) FROM accts a WHERE a.created_at >= wk.ws AND a.created_at < wk.we AND a.first_live_at IS NOT NULL) AS went_live, "
+                        + "(SELECT count(*) FROM accts a WHERE a.created_at >= wk.ws AND a.created_at < wk.we "
+                        + "AND a.first_live_at < a.created_at + interval '24 hours') AS live_24h, "
                         + "(SELECT count(DISTINCT r.user_id) FROM runs r WHERE r.s < wk.we AND r.e > wk.ws) AS active, "
                         + "(SELECT COALESCE(SUM(EXTRACT(EPOCH FROM LEAST(r.e, wk.we) - GREATEST(r.s, wk.ws))), 0) FROM runs r "
                         + "WHERE r.s < wk.we AND r.e > wk.ws) AS secs "
                         + "FROM wk", p,
                 rs -> {
                     LocalDate d = rs.getObject("d", LocalDate.class);
-                    byStart.put(d, new Week(d, d.equals(thisWeek), rs.getLong("signups"), rs.getLong("went_live"), rs.getLong("active"),
+                    byStart.put(d, new Week(d, d.equals(thisWeek), rs.getLong("signups"), rs.getLong("went_live"), rs.getLong("live_24h"),
+                            rs.getLong("active"),
                             round2(rs.getDouble("secs") / 3600)));
                 });
         List<Week> out = new ArrayList<>();
         for (LocalDate d = firstWeek; !d.isAfter(thisWeek); d = d.plusWeeks(1)) {
-            out.add(byStart.getOrDefault(d, new Week(d, d.equals(thisWeek), 0, 0, 0, 0)));
+            out.add(byStart.getOrDefault(d, new Week(d, d.equals(thisWeek), 0, 0, 0, 0, 0)));
         }
         return out;
     }
