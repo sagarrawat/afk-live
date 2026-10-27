@@ -50,6 +50,12 @@ class SeoHttpTest extends PostgresIntegrationTest {
         assertThat(slash.statusCode()).isEqualTo(301);
         assertThat(slash.headers().firstValue("Location")).hasValue("/pricing");
         assertThat(get("/studio").statusCode()).isEqualTo(302);
+        // The uptime check keeps its own answer and headers.
+        HttpResponse<String> health = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/healthz")).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(health.statusCode()).isIn(200, 503);
+        assertThat(health.headers().firstValue("X-Robots-Tag")).hasValue("noindex");
+        assertThat(health.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
     }
 
     @Test

@@ -149,6 +149,21 @@ class SeoRoutingTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void theHealthCheckIsLeftAlone() throws Exception {
+        // /healthz (its own security chain) is untouched by the clean-URL filter, the 404 rule and the caching.
+        for (var request : new org.springframework.test.web.servlet.RequestBuilder[]{get("/healthz"), head("/healthz")}) {
+            var r = mvc.perform(request)
+                    .andExpect(header().string("X-Robots-Tag", "noindex"))
+                    .andExpect(header().string("Cache-Control", containsString("no-store")))
+                    .andExpect(header().doesNotExist("Location"))
+                    .andReturn().getResponse();
+            assertThat(r.getStatus()).isIn(200, 503);
+        }
+        mvc.perform(get("/healthz/")).andExpect(header().doesNotExist("Location"));
+        mvc.perform(get("/sitemap.xml")).andExpect(content().string(not(containsString("healthz"))));
+    }
+
+    @Test
     void caddySendsWwwAndHttpToOneHttpsAddress() throws Exception {
         String caddy = Files.readString(Path.of("..", "afklive-scripts", "caddy", "Caddyfile"));
         assertThat(caddy).doesNotContain("afk.live")
