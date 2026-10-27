@@ -466,7 +466,6 @@ section[id] {
 .help-way-price {
   @apply block text-[30px] font-extrabold leading-none text-ink;
   font-family: 'Schibsted Grotesk Variable', 'Inter Variable', 'Noto Sans Devanagari Variable', system-ui, sans-serif;
-  font-variant-numeric: tabular-nums;
 }
 .help-way-unit {
   @apply text-sm text-muted sm:mt-2 sm:block;

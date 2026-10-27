@@ -20,6 +20,7 @@ import html
 import importlib.util
 import json
 import pathlib
+import re
 
 HERE = pathlib.Path(__file__).resolve().parent
 UPDATED = "27 October 2026"
@@ -893,7 +894,9 @@ def hi_breadcrumb(*items):
 
 def hi_faq(entries):
     """Visible questions (<details>), marked data-faq: the build writes FAQPage markup from exactly these."""
-    rows = "\n".join(f"      <details>\n        <summary>{esc(q)}</summary>\n        <p>{a}</p>\n      </details>" for q, a in entries)
+    def styled(answer):  # outside .help-article, so links say they're links themselves
+        return re.sub(r'<a ([^>]*?)>', lambda m: m.group(0) if 'class=' in m.group(1) else f'<a {m.group(1)} class="link">', answer)
+    rows = "\n".join(f"      <details>\n        <summary>{esc(q)}</summary>\n        <p>{styled(a)}</p>\n      </details>" for q, a in entries)
     return (f'  <section class="mt-14" aria-labelledby="faq-title">\n'
             f'    <h2 id="faq-title" class="text-2xl font-bold tracking-tight">अक्सर पूछे जाने वाले सवाल</h2>\n'
             f'    <div class="faq mt-4" data-faq>\n{rows}\n    </div>\n  </section>')

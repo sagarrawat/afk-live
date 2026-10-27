@@ -61,7 +61,7 @@ class SeoHttpTest extends PostgresIntegrationTest {
     @Test
     void pagesAreRecheckedRatherThanNeverStored() throws Exception {
         assumeTrue(new ClassPathResource("static/site/index.html").exists(), "needs the site build (not -DskipUi)");
-        for (String path : new String[]{"/", "/pricing", "/for/lofi", "/help/youtube-stream-key"}) {
+        for (String path : new String[]{"/", "/pricing", "/for/lofi", "/help/youtube-stream-key", "/hi/help/24-ghante-live"}) {
             HttpResponse<String> r = get(path);
             assertThat(r.statusCode()).as(path).isEqualTo(200);
             assertThat(r.headers().firstValue("Cache-Control")).as(path).hasValue("no-cache, public");
