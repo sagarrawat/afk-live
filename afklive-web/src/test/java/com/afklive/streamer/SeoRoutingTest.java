@@ -72,7 +72,7 @@ class SeoRoutingTest extends PostgresIntegrationTest {
     @Test
     void trailingSlashesRedirectForGoodToTheCleanAddress() throws Exception {
         String[][] cases = {
-                {"/pricing/", "/pricing"}, {"/hi/", "/hi"}, {"/help/", "/help"}, {"/privacy/", "/privacy"}, {"/terms/", "/terms"},
+                {"/pricing/", "/pricing"}, {"/hi/", "/hi"}, {"/help/", "/help"}, {"/privacy/", "/privacy"}, {"/terms/", "/terms"}, {"/contact/", "/contact"}, {"/refund-policy/", "/refund-policy"},
                 {"/status/", "/status"}, {"/for/lofi/", "/for/lofi"}, {"/help/youtube-stream-key/", "/help/youtube-stream-key"},
                 {"/hi/help/", "/hi/help"}, {"/hi/help/24-ghante-live/", "/hi/help/24-ghante-live"},
                 {"/login/", "/login"}, {"/register/", "/register"}, {"/pricing//", "/pricing"}, {"/for/lofi/?utm_source=x", "/for/lofi?utm_source=x"},
@@ -93,7 +93,7 @@ class SeoRoutingTest extends PostgresIntegrationTest {
         String[][] cases = {
                 {"/site/index.html", "/"}, {"/site/hi.html", "/hi"}, {"/site/pricing.html", "/pricing"}, {"/site/help.html", "/help"},
                 {"/site/for-lofi.html", "/for/lofi"}, {"/site/help-youtube-preparing.html", "/help/youtube-preparing"},
-                {"/site/privacy.html", "/privacy"}, {"/site/terms.html", "/terms"}, {"/site/status.html", "/status"},
+                {"/site/privacy.html", "/privacy"}, {"/site/terms.html", "/terms"}, {"/site/contact.html", "/contact"}, {"/site/refund-policy.html", "/refund-policy"}, {"/site/status.html", "/status"},
                 {"/site/hi-help.html", "/hi/help"}, {"/site/hi-help-mobile-se-live.html", "/hi/help/mobile-se-live"},
         };
         for (String[] c : cases) {
@@ -150,7 +150,14 @@ class SeoRoutingTest extends PostgresIntegrationTest {
         assertThat(listed).containsExactlyElementsOf(PublicPages.INDEXABLE.keySet());
         // Every listed address answers 200 to a signed-out visitor, with its own page.
         for (String path : listed) {
-            mvc.perform(get(path)).andExpect(status().isOk()).andExpect(forwardedUrl("/site/" + PublicPages.INDEXABLE.get(path)));
+            var page = mvc.perform(get(path)).andExpect(status().isOk());
+            if (path.equals("/contact")) {
+                // Served by ContactPage, which fills the business details in (a fixture page in tests).
+                page.andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                        .andExpect(header().string("Cache-Control", "no-cache, public"));
+            } else {
+                page.andExpect(forwardedUrl("/site/" + PublicPages.INDEXABLE.get(path)));
+            }
         }
         // Every page the site build makes has its public address, and all but /status are in the sitemap.
         Path site = Path.of("..", "afklive-ui", "site");

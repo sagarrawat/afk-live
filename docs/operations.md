@@ -905,6 +905,15 @@ Set these before taking payments:
 | `APP_BILLING_SELLER_GSTIN` | Your GSTIN (leave empty until registered; invoices then omit it) |
 | `APP_BILLING_SELLER_STATE` | Two-digit GST state code, e.g. `29` for Karnataka |
 | `APP_BILLING_SAC` | Service code, default `998439` |
+| `APP_GRIEVANCE_OFFICER_NAME` | Grievance officer's name, shown on `/contact` |
+| `APP_GRIEVANCE_OFFICER_EMAIL` | Grievance officer's email, shown on `/contact` |
+
+The public `/contact` page shows the seller name, address and GSTIN above and the grievance officer,
+filled in by the web app when the page is served (`ContactPage`), so no site rebuild is needed after
+changing them (a restart is). Anything empty, malformed or still a placeholder (`XXXX`, `TODO`,
+`example.com`) is left off the page; without an officer, grievances go to support@afklive.in, and the
+web app logs a warning at startup naming what's missing. The cancellation and refund policy
+(`/refund-policy`) describes the rules above; change both together.
 
 ## Object storage
 

@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { Check, Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { PolicyLinks } from '@/components/PolicyLinks';
 import { Badge, Button, Dialog, ErrorNote, Field, Input, Panel, Segmented, Spinner, useAction, useToast } from '@/components/ui';
 import { get, post, put } from '@/lib/api';
 import { bytes, date, money } from '@/lib/format';
@@ -134,6 +135,12 @@ function CurrentPlan({ billing: b }: { billing: BillingOverview }) {
         }
       >
         <p>You keep {b.planName} until {date(b.periodEnd)}, then move to Free: 720p, 10 hours a month, one stream. Nothing is deleted, but uploads stop if you're over 2 GB.</p>
+        <p className="mt-2 text-sm text-muted">
+          The time you've already paid for isn't refunded.{' '}
+          <a href="/refund-policy" target="_blank" rel="noreferrer" className="text-accent hover:underline">
+            Refund policy
+          </a>
+        </p>
       </Dialog>
     </Panel>
   );
@@ -217,6 +224,7 @@ function Plans({ billing: b, currency: initial }: { billing: BillingOverview; cu
       </ul>
       {currency === 'USD' && <p className="mt-4 text-sm text-muted">Card payments in US dollars are coming soon. For now, checkout charges the rupee price.</p>}
       <p className="mt-2 text-sm text-muted">Prices include GST. Every payment comes with a GST invoice.</p>
+      <PolicyLinks className="mt-2" />
 
       <Dialog
         open={!!quote}

@@ -1,8 +1,10 @@
 import { Activity, ChevronRight, LifeBuoy } from 'lucide-react';
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ContactSupportDialog } from '@/components/ContactSupport';
 import { Button, PageHeader, Panel } from '@/components/ui';
 import { HELP, type HelpArticle } from '@/lib/help';
+import { PolicyLinks } from '@/components/PolicyLinks';
 
 /** MK-4: the help centre's articles (public, at /help), first, because they answer the most tickets. */
 const ARTICLES: [HelpArticle, string, string][] = [
@@ -21,7 +23,9 @@ const FAQ: [string, string][] = [
 ];
 
 export function Help() {
-  const [support, setSupport] = useState(false);
+  // /studio/help?contact opens the form straight away (the public /contact page links here).
+  const { search } = useLocation();
+  const [support, setSupport] = useState(() => new URLSearchParams(search).has('contact'));
   return (
     <>
       <PageHeader
@@ -72,6 +76,7 @@ export function Help() {
           ))}
         </dl>
       </Panel>
+      <PolicyLinks className="mt-6" />
     </>
   );
 }
