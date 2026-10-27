@@ -74,6 +74,7 @@ class SeoRoutingTest extends PostgresIntegrationTest {
         String[][] cases = {
                 {"/pricing/", "/pricing"}, {"/hi/", "/hi"}, {"/help/", "/help"}, {"/privacy/", "/privacy"}, {"/terms/", "/terms"},
                 {"/status/", "/status"}, {"/for/lofi/", "/for/lofi"}, {"/help/youtube-stream-key/", "/help/youtube-stream-key"},
+                {"/hi/help/", "/hi/help"}, {"/hi/help/24-ghante-live/", "/hi/help/24-ghante-live"},
                 {"/login/", "/login"}, {"/register/", "/register"}, {"/pricing//", "/pricing"}, {"/for/lofi/?utm_source=x", "/for/lofi?utm_source=x"},
         };
         for (String[] c : cases) {
@@ -93,6 +94,7 @@ class SeoRoutingTest extends PostgresIntegrationTest {
                 {"/site/index.html", "/"}, {"/site/hi.html", "/hi"}, {"/site/pricing.html", "/pricing"}, {"/site/help.html", "/help"},
                 {"/site/for-lofi.html", "/for/lofi"}, {"/site/help-youtube-preparing.html", "/help/youtube-preparing"},
                 {"/site/privacy.html", "/privacy"}, {"/site/terms.html", "/terms"}, {"/site/status.html", "/status"},
+                {"/site/hi-help.html", "/hi/help"}, {"/site/hi-help-mobile-se-live.html", "/hi/help/mobile-se-live"},
         };
         for (String[] c : cases) {
             mvc.perform(get(c[0])).andExpect(status().isMovedPermanently()).andExpect(header().string("Location", c[1]));
@@ -105,6 +107,21 @@ class SeoRoutingTest extends PostgresIntegrationTest {
         // Spring's own forwards to the built files still work.
         mvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/index.html"));
         mvc.perform(get("/for/lofi")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/for-lofi.html"));
+    }
+
+    @Test
+    void hindiHelpIsServedSignedOutAndUnknownArticlesAreA404() throws Exception {
+        mvc.perform(get("/hi/help")).andExpect(status().isOk()).andExpect(forwardedUrl("/site/hi-help.html"));
+        for (String slug : PublicPages.HINDI_HELP_ARTICLES) {
+            mvc.perform(get("/hi/help/" + slug)).andExpect(status().isOk()).andExpect(forwardedUrl("/site/hi-help-" + slug + ".html"));
+        }
+        // The Hindi pages are listed in the sitemap after the English help.
+        assertThat(PublicPages.INDEXABLE).containsEntry("/hi/help/youtube-stream-key", "hi-help-youtube-stream-key.html");
+        // Only articles that exist in Hindi: the rest of the English help has no /hi/help address.
+        for (String path : new String[]{"/hi/help/youtube-preparing", "/hi/help/nope", "/hi/pricing"}) {
+            mvc.perform(get(path).accept(MediaType.TEXT_HTML)).andExpect(status().isNotFound());
+        }
+        mvc.perform(get("/site/hi-help-nope.html")).andExpect(status().isNotFound());
     }
 
     @Test

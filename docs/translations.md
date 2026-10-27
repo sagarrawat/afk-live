@@ -1,6 +1,7 @@
 # Translations
 
-The public site has one translated page so far: the homepage in Hindi at `/hi` (MK-1). The app,
+The public site in Hindi: the homepage at `/hi` (MK-1) and four help articles under `/hi/help`
+(MK-4), written for the Hindi and Hinglish searches in `docs/growth-plan.md`. The app, the rest of
 the help centre, the use-case pages, pricing, legal pages and emails are English only.
 
 ## Where the words live
@@ -10,6 +11,7 @@ the help centre, the use-case pages, pricing, legal pages and emails are English
 | Hindi homepage copy | `afklive-ui/site/hi.html` | Same sections, ids and script hooks as `index.html` (a test compares them) |
 | Hindi header, footer | `afklive-ui/site/partials/header-hi.html`, `footer-hi.html` | |
 | Hindi static plan cards | `afklive-ui/site/partials/pricing-hi.html` | Generated: must equal `planCards(STATIC_PLANS, 'MONTHLY', 'hi')` (tested). Regenerate if you change the dictionary's plan strings |
+| Hindi help articles and their index | `afklive-ui/site/help.py` (`HI_ARTICLES`, `hi_index`, `CTA_HI`) | Run `python3 site/help.py` after editing; it writes `site/hi-help*.html`. A question in an article's `faq` is shown on the page and becomes FAQPage markup at build time, so keep each question unique across the site |
 | Words scripts write into the page | `afklive-ui/site/src/i18n.ts` (`DICT.en`, `DICT.hi`) | Plan cards, calculator formula and verdict, proof line, incident note, example-stream titles and image descriptions |
 
 Scripts pick the language from `<html lang>`. The English strings in `DICT.en` must not change by
@@ -52,10 +54,42 @@ These are the strings I'm least sure of:
 | Incidents note | …हर एक का पूरा ब्योरा status पेज पर है। | |
 | Image descriptions (alt) | `DICT.hi.niches.*.alt`, the BRB image alt | Read by screen readers; check they make sense spoken |
 | Meta description and Open Graph | `hi.html` `<head>` | What shows in Google and in WhatsApp link previews |
+| `/hi` help links | `hi.html` (under the FAQ heading), header and footer "मदद" | "मदद, हिन्दी में", "सारी मदद" |
+
+### Hindi help (`/hi/help`, `site/help.py` `HI_ARTICLES`)
+
+Read these on a phone too: they are long, and a reader will follow the steps with YouTube Studio open
+in another tab. The facts must stay as they are (prices, YouTube's rules, what AFK Live does and
+doesn't do); only the wording is for the reviewer. Strings I'm least sure of:
+
+| Where | String | Doubt |
+| --- | --- | --- |
+| Every page, title and description | e.g. "YouTube पर 24 घंटे Live कैसे करें (बिना PC) \| AFK Live" | Titles mix Hindi with the English words people search; descriptions start with the Hinglish query in Latin script ("24 ghante live kaise kare: ..."). Natural, or spammy? |
+| Stream key page title | YouTube stream key कहाँ मिलेगी | "key" treated as feminine (मिलेगी). Searchers type "kahan milega"; which does a creator say? |
+| Pillar, rules | YouTube से कमाई के नियम ... उस content को बाहर रखते हैं जो थोक में बना, बार-बार एक जैसा या कम मेहनत वाला हो। | YouTube's "mass-produced, repetitive or low-effort": must stay accurate |
+| Pillar, rules | पहले से बने वीडियो पर “🔴 LIVE” लिखना गुमराह करने वाला माना जा सकता है | "गुमराह करने वाला" for misleading |
+| Pillar, ways | अपना VPS (किराए का server); server और traffic, टैक्स अलग | Is "VPS" understood, or should it be "cloud server"? |
+| Pillar, ways | ... और कुछ टूटे तो ठीक करना आपके ज़िम्मे है। | |
+| Pillar, ways | PC बंद रख सकते हैं, Linux नहीं सीखनी। | Colloquial "नहीं सीखनी" |
+| Pillar, steps | App अभी अंग्रेज़ी में है, इसलिए बटनों के नाम यहाँ अंग्रेज़ी में लिखे हैं। | |
+| Pillar, FAQ | क्या 24 घंटे live से views और subscribers बढ़ेंगे? / इसकी कोई गारंटी नहीं। | Must not read as a promise either way |
+| CTA (every article) | अपना चैनल आज रात से live रखें | "Keep your channel live from tonight": natural? |
+| Recorded video | पहले से record किया वीडियो YouTube पर दो तरह से दर्शकों के साथ चलाया जा सकता है | Word order |
+| Recorded video | Premiere ... फिर वो आम वीडियो बन जाता है। | "आम वीडियो" for a regular upload |
+| Stream key | Browser के menu (⋮) में Desktop site चालू करें। | Chrome on Android says "Desktop site"; other browsers may say it differently |
+| Stream key | Key किसी को न दें / इसे WhatsApp group या screenshot में भी share न करें। | |
+| Mobile | 50 से 999 subscribers वाले चैनलों के mobile live पर YouTube दर्शकों की गिनती सीमित कर सकता है, और live की recording default रूप से private रहती है। | Must match YouTube's help page (answer 9228390) exactly in meaning |
+| Mobile | ये रास्ता AFK Live के बिना भी काम करता है | Honest on purpose; keep the meaning |
+| Mobile | AFK Live YouTube के नियम नहीं बदलता | |
+| Breadcrumbs | होम / मदद | "होम" vs "मुख्य पेज" |
+| Related box | ये भी पढ़ें / किसके लिए | "किसके लिए" heads links to the English use-case pages |
+| Index | YouTube live की मदद, हिन्दी में | |
+| English pages | हिन्दी में पढ़ें / हिन्दी में: {Hindi title} | On the English stream-key, loops and phone articles |
 
 ## Reviewer checklist
 
-Open https://afklive.in/hi on a phone (and a laptop), and the English page next to it.
+Open https://afklive.in/hi and https://afklive.in/hi/help (each article) on a phone (and a laptop),
+and the English pages next to them.
 
 - [ ] Every sentence sounds like something a Hindi-speaking creator would say out loud. Mark any
       that sound translated, bookish or Sanskritised.
