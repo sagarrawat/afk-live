@@ -1,0 +1,64 @@
+# Dependency updates (docs/operations.md, "Dependency updates"). Weekly, a few PRs at a time: minor and patch
+# updates arrive grouped (one PR per ecosystem), majors one by one. Spring Boot and React majors are ignored
+# by default: they need a planned migration (a branch, the full test run, a careful deploy), not a bot PR.
+# Security updates (from Dependabot alerts, turned on in the repository settings) open as soon as an alert is raised,
+# with their own PR limit; the ignores below cover majors only, so a fix in a minor or patch still arrives.
+# Every Dependabot PR runs the normal PR checks. Merging one deploys to production like any merge to main.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directories:
+      - "/"                    # the parent pom: Spring Boot parent and shared versions
+      - "/afklive-web"
+      - "/afklive-optimizer"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:30"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(maven)"
+    groups:
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "org.springframework.boot:*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: "/afklive-ui"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:30"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(ui)"
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:30"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps(actions)"
+    groups:
+      actions:
+        patterns: ["*"]
