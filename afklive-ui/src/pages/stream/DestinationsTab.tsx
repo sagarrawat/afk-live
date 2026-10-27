@@ -8,7 +8,7 @@ import { isOnAir } from '@/components/status';
 import { Button, Empty, Panel, Spinner, Toggle } from '@/components/ui';
 import { put } from '@/lib/api';
 import { useDestinations, useMe } from '@/lib/queries';
-import type { StreamView } from '@/lib/types';
+import type { Destination, StreamView } from '@/lib/types';
 import { useStreamUpdate } from './useStreamUpdate';
 
 /** DS-3 / BI-8: which saved destinations this stream sends to. */
@@ -22,13 +22,16 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
   const limit = me?.plan.destinations ?? 1;
   const onAir = isOnAir(s.live.state);
 
-  const setEnabled = (id: number, on: boolean) => {
+  /** added: a destination just saved, which the list this render saw doesn't have yet (the first one ever). */
+  const setEnabled = (id: number, on: boolean, added?: Destination) => {
     const next = new Set(enabled);
     if (on) next.add(id);
     else next.delete(id);
-    const body = (all ?? []).filter((d) => next.has(d.id) || s.destinations.some((t) => t.destinationId === d.id)).map((d) => ({ destinationId: d.id, enabled: next.has(d.id) }));
+    const known = all ?? [];
+    const list = added && !known.some((d) => d.id === added.id) ? [...known, added] : known;
+    const body = list.filter((d) => next.has(d.id) || s.destinations.some((t) => t.destinationId === d.id)).map((d) => ({ destinationId: d.id, enabled: next.has(d.id) }));
     // DS-5: while live the change is on air within seconds, and the other destinations stay connected.
-    const name = all?.find((d) => d.id === id)?.name ?? 'it';
+    const name = list.find((d) => d.id === id)?.name ?? 'it';
     update(() => put(`/api/streams/${s.id}/destinations`, body), onAir ? (on ? `Sending to ${name} now.` : `Stopped sending to ${name}.`) : undefined);
   };
 
@@ -100,7 +103,7 @@ export function DestinationsTab({ stream: s }: { stream: StreamView }) {
       )}
       <AddDestinationDialog open={adding} onClose={() => setAdding(false)} onAdded={(d) => {
           const sendNow = enabled.size < limit;
-          if (sendNow) setEnabled(d.id, true);
+          if (sendNow) setEnabled(d.id, true, d);
           // MS-6: check the new key straight away; unless the live stream is already sending to it
           // (a test on the same key would fight the stream, and its health shows the result anyway).
           if (!(onAir && sendNow)) void test(d);
