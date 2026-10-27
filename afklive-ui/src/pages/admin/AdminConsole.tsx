@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { ArrowLeft, Banknote, Gauge, LifeBuoy, Moon, Radio, ScrollText, Search, Server, Shield, Sun, TrendingUp, Users, X } from 'lucide-react';
+import { ArrowLeft, Banknote, BarChart3, Gauge, LifeBuoy, Moon, Radio, ScrollText, Search, Server, Shield, Sun, TrendingUp, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui';
 import { useMe } from '@/lib/queries';
 import { Audit, FunnelPanel, Plans, RevenuePanel, TicketPage, Tickets, UserPage } from '../Admin';
 import { AdminSearch } from './AdminSearch';
+import { BusinessPage } from './BusinessPage';
 import { CostPanel } from './CostPanel';
 import { LivePage } from './LivePage';
 import { OverviewPage, useAttention } from './OverviewPage';
@@ -21,6 +22,7 @@ export const ADMIN_NAV = [
   { to: 'users', label: 'Users', icon: Users },
   { to: 'support', label: 'Support', icon: LifeBuoy },
   { to: 'billing', label: 'Billing', icon: Banknote },
+  { to: 'business', label: 'Business', icon: BarChart3 },
   { to: 'servers', label: 'Servers', icon: Server },
   { to: 'growth', label: 'Growth', icon: TrendingUp },
   { to: 'audit', label: 'Audit', icon: ScrollText },
@@ -99,6 +101,8 @@ function Section() {
           <Plans />
         </div>
       );
+    case 'business':
+      return <BusinessPage />;
     case 'servers':
       return <ServersPage />;
     case 'growth':

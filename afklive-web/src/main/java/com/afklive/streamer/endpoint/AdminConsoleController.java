@@ -1,6 +1,7 @@
 package com.afklive.streamer.endpoint;
 
 import com.afklive.streamer.service.AdminConsoleService;
+import com.afklive.streamer.service.BusinessMetrics;
 import com.afklive.streamer.service.CostMeter;
 import com.afklive.streamer.service.PlayoutCopies;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,7 +15,7 @@ import java.util.List;
 
 /**
  * The admin console's overview, global search, server history (AD-1, AD-2, AD-3), costs (FO-3) and
- * prepared copies (FO-6). Read-only.
+ * prepared copies (FO-6) and business numbers (sign-ups, active creators, conversion, MRR, churn, cohorts). Read-only.
  * {@code /api/admin/**} is ADMIN-only in SecurityConfig.
  */
 @RestController
@@ -25,10 +26,12 @@ public class AdminConsoleController {
     private final CostMeter costs;
     private final PlayoutCopies copies;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private final BusinessMetrics business;
 
     public AdminConsoleController(AdminConsoleService console, CostMeter costs, PlayoutCopies copies,
-                                  org.springframework.jdbc.core.JdbcTemplate jdbc) {
+                                  org.springframework.jdbc.core.JdbcTemplate jdbc, BusinessMetrics business) {
         this.jdbc = jdbc;
+        this.business = business;
         this.console = console;
         this.costs = costs;
         this.copies = copies;
@@ -77,5 +80,11 @@ public class AdminConsoleController {
     @GetMapping("/copies")
     public PlayoutCopies.Stats copies() {
         return copies.stats();
+    }
+
+    /** Sign-ups, active creators, first go-live and paid conversion, MRR, churn, cohorts and stream-hours (BusinessMetrics). */
+    @GetMapping("/business")
+    public BusinessMetrics.Report business() {
+        return business.report(ZonedDateTime.now(ZoneOffset.UTC));
     }
 }
