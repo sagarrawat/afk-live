@@ -116,7 +116,7 @@ public class FairUse {
     private record Cached(Status status, ZonedDateTime at) {
     }
 
-    static Status statusOf(PlanConfig plan, String month, double usedGb, int grantedGb, ZonedDateTime now) {
+    public static Status statusOf(PlanConfig plan, String month, double usedGb, int grantedGb, ZonedDateTime now) {
         Integer planGb = plan.getMonthlyTrafficGb();
         Double allowance = planGb == null ? null : (double) planGb + Math.max(0, grantedGb);
         Double pct = allowance == null ? null : FairUseModel.percent(usedGb, allowance);

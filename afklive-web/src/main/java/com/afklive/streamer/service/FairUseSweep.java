@@ -202,7 +202,7 @@ public class FairUseSweep {
      * Claims every step the account has reached this month and tells the creator about the highest one this call
      * claimed. True when it sent one.
      */
-    boolean notify(User u, FairUse.Status s) {
+    public boolean notify(User u, FairUse.Status s) {
         Integer claimed = null;
         for (int step : FairUseModel.reached(s.usedGb(), s.allowanceGb())) {
             if (claim(u.getId(), s.month(), step, s.usedGb(), s.allowanceGb())) {
@@ -239,7 +239,7 @@ public class FairUseSweep {
     }
 
     /** The creator's alert for a step, in plain words with what happens next. */
-    static Message message(int step, FairUse.Status s, boolean multiDestination) {
+    public static Message message(int step, FairUse.Status s, boolean multiDestination) {
         String used = gb(s.usedGb()) + " of " + gb(s.allowanceGb() == null ? 0 : s.allowanceGb()) + " GB";
         String until = s.resetsAt().format(DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH));
         String more = " Upgrade your plan for more, or contact support if you need a little extra this month.";
