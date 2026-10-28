@@ -3,8 +3,9 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.model.AdminAction;
 import com.afklive.streamer.service.AdminConsoleService;
 import com.afklive.streamer.service.AdminService;
+import com.afklive.streamer.service.OfferResults;
 import com.afklive.streamer.service.OfferService;
-
+import com.afklive.streamer.service.PlanTermsAdmin;
 import com.afklive.streamer.service.StatusService;
 import com.afklive.streamer.util.SecurityUtils;
 import org.springframework.core.io.Resource;
@@ -36,12 +37,17 @@ public class AdminApiController {
     private final StatusService status;
     private final AdminConsoleService console;
     private final OfferService offers;
+    private final OfferResults offerResults;
+    private final PlanTermsAdmin terms;
 
-    public AdminApiController(AdminService admin, StatusService status, AdminConsoleService console, OfferService offers) {
+    public AdminApiController(AdminService admin, StatusService status, AdminConsoleService console, OfferService offers,
+                              OfferResults offerResults, PlanTermsAdmin terms) {
         this.admin = admin;
         this.status = status;
         this.console = console;
         this.offers = offers;
+        this.offerResults = offerResults;
+        this.terms = terms;
     }
 
     public record Reason(String reason) {
@@ -244,6 +250,55 @@ public class AdminApiController {
     @PostMapping("/offers/{id}/end")
     public OfferService.OfferRow endOffer(@PathVariable Long id, @RequestBody Reason body, Principal p) {
         return offers.end(SecurityUtils.getEmail(p), id, body.reason(), ZonedDateTime.now(java.time.ZoneOffset.UTC));
+    }
+
+    /** Changes an offer that hasn't ended; null fields stay as they are (see {@link OfferService#edit}). */
+    @PostMapping("/offers/{id}")
+    public OfferService.OfferRow editOffer(@PathVariable Long id, @RequestBody NewOffer body, Principal p) {
+        return offers.edit(SecurityUtils.getEmail(p), id, body.offer(), body.reason(), ZonedDateTime.now(java.time.ZoneOffset.UTC));
+    }
+
+    @GetMapping("/offers/{id}/results")
+    public OfferResults.Results offerResults(@PathVariable Long id) {
+        return offerResults.results(id, ZonedDateTime.now(java.time.ZoneOffset.UTC));
+    }
+
+    // ------------------------------------------------------------------ BI-10: a subscriber's recorded plan terms
+
+    @GetMapping("/users/{id}/terms")
+    public PlanTermsAdmin.TermsView userTerms(@PathVariable Long id) {
+        return terms.view(id);
+    }
+
+    public record RaiseTerms(PlanTermsAdmin.Raise limits, String reason) {
+    }
+
+    @PostMapping("/users/{id}/terms/raise")
+    public PlanTermsAdmin.TermsView raiseTerms(@PathVariable Long id, @RequestBody RaiseTerms body, Principal p) {
+        return terms.raise(SecurityUtils.getEmail(p), id, body.limits(), body.reason());
+    }
+
+    public record Confirmed(String reason, Boolean confirm) {
+    }
+
+    @PostMapping("/users/{id}/terms/reset")
+    public PlanTermsAdmin.TermsView resetTerms(@PathVariable Long id, @RequestBody Confirmed body, Principal p) {
+        return terms.reset(SecurityUtils.getEmail(p), id, body.reason(), Boolean.TRUE.equals(body.confirm()));
+    }
+
+    /** {@code gb} null clears the subscriber's own data allowance. */
+    public record DataAllowance(Integer gb, String reason, Boolean confirm) {
+    }
+
+    @PostMapping("/users/{id}/terms/data-allowance")
+    public PlanTermsAdmin.TermsView dataAllowance(@PathVariable Long id, @RequestBody DataAllowance body, Principal p) {
+        return terms.dataAllowance(SecurityUtils.getEmail(p), id, body.gb(), body.reason(), Boolean.TRUE.equals(body.confirm()));
+    }
+
+    /** Subscribers whose recorded terms give more than their plan does today. */
+    @GetMapping("/grandfathered")
+    public PlanTermsAdmin.Grandfathered grandfathered(@RequestParam(required = false) String plan) {
+        return terms.grandfathered(plan);
     }
 
     // ------------------------------------------------------------------ RE-7: status page incidents

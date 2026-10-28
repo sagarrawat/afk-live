@@ -14,7 +14,8 @@ import java.util.stream.Collectors;
  * BI-9: a launch offer. A real percentage off the real list price, for people who have never paid for a plan, on
  * the first {@link #monthlyPeriods} monthly payments (or once on the first year when {@link #includeYearly}),
  * between a real start and end date. Automatic offers apply by themselves and are shown on the pricing page; an
- * offer with only a code applies when the code is entered. Created and ended by an admin, never edited after.
+ * offer with only a code applies when the code is entered. Created, edited and ended by an admin; once anyone has paid
+ * with it, its discount, plans and months are fixed ({@code OfferService#edit}).
  */
 @Entity
 @Table(name = "launch_offers")

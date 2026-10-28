@@ -117,6 +117,24 @@ describe('Admin > Business', () => {
     expect(within(cohortRows[1]).getAllByText('–')).toHaveLength(8);
   });
 
+  it('shows MRR from amounts actually paid, with the list-price figure and what offers take off (BI-9)', async () => {
+    window.history.pushState({}, '', '/studio/admin/business');
+    const paid: BusinessReport = {
+      ...report,
+      plans: [{ ...report.plans[0], monthlyEach: 380.59, listEach: 422.88 }, report.plans[1], report.plans[2]],
+      mrr: { ...report.mrr, listInr: 5400.4, listUsd: 9, atListPrice: 2, note: 'From amounts actually paid, so launch offer discounts are taken off.' },
+    };
+    mockApi({ ...base, '/api/admin/business': paid });
+    render(<App client={makeQueryClient()} />);
+    const line = await screen.findByTestId('biz-mrr-list');
+    expect(line).toHaveTextContent(`At list prices it would be ${cashMajor(5400.4, 'INR')}`);
+    expect(line).toHaveTextContent(`launch offers take ${cashMajor(323, 'INR')} off for now`);
+    const rows = within(screen.getByRole('table', { name: 'Paying accounts by plan' })).getAllByRole('row').slice(1);
+    expect(rows[0]).toHaveTextContent(`list ${cashMajor(422.88, 'INR')}`);
+    expect(rows[1]).not.toHaveTextContent('list');
+    expect(screen.getByText(/From amounts actually paid/)).toBeInTheDocument();
+  });
+
   it('says so when there are no accounts yet', async () => {
     window.history.pushState({}, '', '/studio/admin/business');
     const empty: BusinessReport = {

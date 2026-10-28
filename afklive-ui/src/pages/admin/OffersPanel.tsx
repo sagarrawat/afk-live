@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Badge, Button, ErrorNote, Field, Input, Panel, Spinner, Toggle } from '@/components/ui';
 import { get, post } from '@/lib/api';
-import { date } from '@/lib/format';
+import { date, money } from '@/lib/format';
 import { ReasonDialog } from './ReasonDialog';
 
 /** BI-9: a launch offer as the admin sees it. */
@@ -24,6 +24,30 @@ export interface OfferRow {
   createdReason: string | null;
   endedBy: string | null;
   endedReason: string | null;
+  /** Why the discount, plans and months can't change any more (someone paid with it); null while they still can. */
+  termsLocked?: string | null;
+}
+
+/** GET /api/admin/offers/{id}/results (OfferResults.Results). Money in paise / cents. */
+export interface OfferResults {
+  offerId: number;
+  name: string;
+  status: string;
+  from: string;
+  to: string;
+  redemptions: number;
+  byPlan: { plan: string; cycle: string; accounts: number }[];
+  discount: { currency: string; payments: number; discountWithGst: number; discountWithoutGst: number; paid: number }[];
+  inDiscountedPeriod: number;
+  discountedPaymentsToCome: number;
+  finishedOffer: number;
+  renewedAtFullPrice: number;
+  upgradedAfter: number;
+  signUps: number;
+  signUpsTookOffer: number;
+  conversionPercent: number | null;
+  signUpsPaidAnyPlan: number;
+  codeOnly: boolean;
 }
 
 const PLAN_NAMES: Record<string, string> = { ESSENTIALS: 'Creator', PRO: 'Pro', AGENCY: 'Agency' };
@@ -77,11 +101,55 @@ export function offerBody(f: OfferForm, now = new Date()) {
   };
 }
 
-/** BI-9: create and end launch offers. Every change needs a reason and lands in the audit log. */
+/** The India-time calendar day of an instant, as the date inputs show it. */
+export function istDay(iso: string): string {
+  return new Date(Date.parse(iso) + 330 * 60_000).toISOString().slice(0, 10);
+}
+
+/** The edit form for an offer as it is now. */
+export function formOf(o: OfferRow): OfferForm {
+  return {
+    name: o.name,
+    code: o.code ?? '',
+    automatic: o.automatic,
+    percentOff: String(o.percentOff),
+    monthlyPeriods: String(o.monthlyPeriods),
+    includeYearly: o.includeYearly,
+    plans: [...o.plans],
+    startsAt: istDay(o.startsAt),
+    endsAt: istDay(o.endsAt),
+  };
+}
+
+/**
+ * Only what changed, for POST /api/admin/offers/{id} (the server leaves out fields that are missing). A blank code
+ * is sent as "" to remove it. Dates are whole India-time days, like when creating.
+ */
+export function offerChanges(o: OfferRow, f: OfferForm, now = new Date()): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (f.name.trim() !== o.name) out.name = f.name.trim();
+  const code = f.code.trim().toUpperCase();
+  if (code !== (o.code ?? '')) out.code = code;
+  if (Number(f.percentOff) !== o.percentOff) out.percentOff = Number(f.percentOff);
+  if (Number(f.monthlyPeriods) !== o.monthlyPeriods) out.monthlyPeriods = Number(f.monthlyPeriods);
+  if (f.includeYearly !== o.includeYearly) out.includeYearly = f.includeYearly;
+  if (f.automatic !== o.automatic) out.automatic = f.automatic;
+  if ([...f.plans].sort().join(',') !== [...o.plans].sort().join(',')) out.plans = f.plans;
+  // A half-typed or cleared date is left out (the form reports it), never sent as an invalid time.
+  const start = new Date(`${f.startsAt}T00:00:00+05:30`);
+  if (f.startsAt !== istDay(o.startsAt) && !Number.isNaN(start.getTime())) out.startsAt = (start < now ? now : start).toISOString();
+  const end = new Date(`${f.endsAt}T23:59:59+05:30`);
+  if (f.endsAt !== istDay(o.endsAt) && !Number.isNaN(end.getTime())) out.endsAt = end.toISOString();
+  return out;
+}
+
+/** BI-9: create, edit and end launch offers, and see how each did. Every change needs a reason and lands in the audit log. */
 export function Offers() {
   const offers = useQuery({ queryKey: ['admin', 'offers'], queryFn: () => get<OfferRow[]>('/api/admin/offers') });
   const [creating, setCreating] = useState(false);
   const [ending, setEnding] = useState<OfferRow | null>(null);
+  const [editing, setEditing] = useState<OfferRow | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
   return (
     <Panel
       title="Launch offers"
@@ -115,16 +183,28 @@ export function Offers() {
                   {o.automatic ? ', applied by itself' : ', with the code only'}. {date(o.startsAt)} to {date(o.endedAt ?? o.endsAt)}. Taken by {o.redemptions}.
                 </p>
               </div>
-              {o.status !== 'ENDED' && (
-                <Button size="sm" variant="ghost" onClick={() => setEnding(o)}>
-                  End now
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" variant="ghost" aria-expanded={open === o.id} onClick={() => setOpen(open === o.id ? null : o.id)}>
+                  {open === o.id ? 'Hide results' : 'Results'}
                 </Button>
-              )}
+                {o.status !== 'ENDED' && (
+                  <>
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(o)}>
+                      Edit
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEnding(o)}>
+                      End now
+                    </Button>
+                  </>
+                )}
+              </div>
+              {open === o.id && <OfferResultsView id={o.id} />}
             </li>
           ))}
         </ul>
       )}
       {creating && <OfferDialog onClose={() => setCreating(false)} onSaved={() => offers.refetch()} />}
+      {editing && <EditOfferDialog offer={editing} onClose={() => setEditing(null)} onSaved={() => offers.refetch()} />}
       {ending && (
         <ReasonDialog title={`End ${ending.name}?`} action="End offer" danger onClose={() => setEnding(null)} onSubmit={(reason) => post(`/api/admin/offers/${ending.id}/end`, { reason }).then(() => offers.refetch())}>
           <p className="text-sm">New subscribers pay the list price from now on. The {ending.redemptions} account(s) that took it keep the discounted renewals they were promised.</p>
@@ -186,6 +266,139 @@ function OfferDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         </p>
       )}
     </ReasonDialog>
+  );
+}
+
+/**
+ * Edit an offer that hasn't ended. Name, code and end date always; the start date only before it starts; the
+ * discount, months, plans, yearly and automatic settings only until someone pays with it (the server says why not).
+ */
+function EditOfferDialog({ offer, onClose, onSaved }: { offer: OfferRow; onClose: () => void; onSaved: () => void }) {
+  const [f, setF] = useState<OfferForm>(() => formOf(offer));
+  const locked = offer.termsLocked ?? null;
+  const started = offer.status !== 'SCHEDULED';
+  const changes = offerChanges(offer, f);
+  const today = istDay(new Date().toISOString());
+  const problem = offerProblem(f) ?? (Object.keys(changes).length === 0 ? 'Nothing changed yet.' : f.endsAt < today ? 'The last day can’t be in the past. To stop it now, use End now.' : null);
+  const set = (k: keyof OfferForm) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const togglePlan = (p: string) => setF({ ...f, plans: f.plans.includes(p) ? f.plans.filter((x) => x !== p) : [...f.plans, p] });
+  return (
+    <ReasonDialog wide title={`Edit ${offer.name}`} action="Save changes" blocked={problem != null} onClose={onClose} onSubmit={(reason) => post(`/api/admin/offers/${offer.id}`, { offer: changes, reason }).then(onSaved)}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Name customers see" htmlFor="eon">
+          <Input id="eon" value={f.name} maxLength={80} onChange={set('name')} />
+        </Field>
+        <Field label="Code" htmlFor="eoc" hint="Leave empty to remove it (automatic offers only).">
+          <Input id="eoc" value={f.code} maxLength={32} onChange={set('code')} />
+        </Field>
+        <Field label="Starts (India time)" htmlFor="eos" hint={started ? 'It has started, so the start stays.' : undefined}>
+          <Input id="eos" type="date" value={f.startsAt} min={today} disabled={started} onChange={set('startsAt')} />
+        </Field>
+        <Field label="Last day (India time)" htmlFor="eoe" hint="Extend or shorten; at most 92 days after the start.">
+          <Input id="eoe" type="date" value={f.endsAt} min={today} onChange={set('endsAt')} />
+        </Field>
+      </div>
+      <fieldset disabled={locked != null} className="space-y-4 rounded border border-line p-3">
+        <legend className="px-1 text-sm font-medium">What the offer gives</legend>
+        {locked && (
+          <p className="text-sm text-muted" data-testid="offer-locked">
+            {locked}
+          </p>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Discount (%)" htmlFor="eop">
+            <Input id="eop" type="number" min={1} max={50} value={f.percentOff} onChange={set('percentOff')} />
+          </Field>
+          <Field label="Monthly plans: discounted months" htmlFor="eom">
+            <Input id="eom" type="number" min={1} max={12} value={f.monthlyPeriods} onChange={set('monthlyPeriods')} />
+          </Field>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">Apply by itself</span>
+            <Toggle label="Automatic" checked={f.automatic} disabled={locked != null} onChange={(v) => setF({ ...f, automatic: v })} />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">Also the first year of yearly plans</span>
+            <Toggle label="Yearly" checked={f.includeYearly} disabled={locked != null} onChange={(v) => setF({ ...f, includeYearly: v })} />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-4">
+          {Object.entries(PLAN_NAMES).map(([id, name]) => (
+            <label key={id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={f.plans.includes(id)} onChange={() => togglePlan(id)} />
+              {name}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {problem && Object.keys(changes).length > 0 && (
+        <p role="alert" className="text-sm text-bad">
+          {problem}
+        </p>
+      )}
+    </ReasonDialog>
+  );
+}
+
+const pctText = (p: number | null | undefined) => (p == null ? '–' : `${p.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`);
+
+/** BI-9: how one offer did (GET /api/admin/offers/{id}/results). */
+export function OfferResultsView({ id }: { id: number }) {
+  const r = useQuery({ queryKey: ['admin', 'offers', id, 'results'], queryFn: () => get<OfferResults>(`/api/admin/offers/${id}/results`) });
+  if (r.isLoading) return <Spinner />;
+  if (!r.data) return <ErrorNote error={r.error} />;
+  const d = r.data;
+  return (
+    <div className="basis-full rounded border border-line bg-bg p-3 text-sm" data-testid={`offer-results-${id}`}>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+        <div>
+          <dt className="text-muted">Taken by</dt>
+          <dd className="tnum font-medium">
+            {d.redemptions} account{d.redemptions === 1 ? '' : 's'}
+            {d.byPlan.length > 0 && (
+              <span className="block font-normal text-muted">
+                {d.byPlan.map((p) => `${PLAN_NAMES[p.plan] ?? p.plan} ${p.cycle === 'YEARLY' ? 'yearly' : 'monthly'}: ${p.accounts}`).join(' · ')}
+              </span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted">Discount given</dt>
+          <dd className="tnum">
+            {d.discount.length === 0
+              ? 'Nothing yet'
+              : d.discount.map((m) => (
+                  <span key={m.currency} className="block">
+                    <span className="font-medium">{money(m.discountWithGst, m.currency)}</span>
+                    {m.currency === 'INR' ? ` with GST, ${money(m.discountWithoutGst, m.currency)} without` : ''} over {m.payments} payment{m.payments === 1 ? '' : 's'} (paid {money(m.paid, m.currency)})
+                  </span>
+                ))}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted">Still discounted</dt>
+          <dd className="tnum">
+            {d.inDiscountedPeriod} in a discounted period now; {d.discountedPaymentsToCome} with discounted renewals still to come
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted">After the offer</dt>
+          <dd className="tnum">
+            {d.renewedAtFullPrice} of {d.finishedOffer} who used it up renewed at full price{d.finishedOffer > 0 ? ` (${pctText((d.renewedAtFullPrice * 100) / d.finishedOffer)})` : ''}
+            {d.upgradedAfter > 0 ? `; ${d.upgradedAfter} upgraded` : ''}
+          </dd>
+        </div>
+        <div className="sm:col-span-2">
+          <dt className="text-muted">Sign-ups while it ran</dt>
+          <dd className="tnum">
+            <span className="font-medium">{pctText(d.conversionPercent)}</span> took it: {d.signUpsTookOffer} of {d.signUps} new accounts; {d.signUpsPaidAnyPlan} paid for a plan.
+            {d.codeOnly && <span className="block text-muted">Code-only offer: the sign-ups include people who never saw the code.</span>}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs text-muted">
+        {date(d.from)} to {date(d.to)}. Refunded payments are left out. Without GST is the taxable value, as on the invoices.
+      </p>
+    </div>
   );
 }
 

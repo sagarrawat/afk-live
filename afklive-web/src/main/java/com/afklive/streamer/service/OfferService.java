@@ -228,16 +228,37 @@ public class OfferService {
     public record OfferRow(Long id, String name, String code, boolean automatic, int percentOff, int monthlyPeriods,
                            boolean includeYearly, List<String> plans, ZonedDateTime startsAt, ZonedDateTime endsAt,
                            ZonedDateTime endedAt, String status, long redemptions, String createdBy, String createdReason,
-                           String endedBy, String endedReason) {
+                           String endedBy, String endedReason, String termsLocked) {
+    }
+
+    static String status(LaunchOffer o, ZonedDateTime now) {
+        return o.getEndedAt() != null && !o.getEndedAt().isAfter(now) ? "ENDED"
+                : now.isBefore(o.getStartsAt()) ? "SCHEDULED" : o.isActive(now) ? "ACTIVE" : "ENDED";
     }
 
     OfferRow row(LaunchOffer o, ZonedDateTime now) {
-        String status = o.getEndedAt() != null && !o.getEndedAt().isAfter(now) ? "ENDED"
-                : now.isBefore(o.getStartsAt()) ? "SCHEDULED" : o.isActive(now) ? "ACTIVE" : "ENDED";
+        long taken = redemptions.countByOfferId(o.getId());
         return new OfferRow(o.getId(), o.getName(), o.getCode(), o.isAutomatic(), o.getPercentOff(), o.getMonthlyPeriods(),
                 o.isIncludeYearly(), o.planSet().stream().sorted().map(Enum::name).toList(), o.getStartsAt(), o.getEndsAt(),
-                o.getEndedAt(), status, redemptions.countByOfferId(o.getId()), o.getCreatedBy(), o.getCreatedReason(),
-                o.getEndedBy(), o.getEndedReason());
+                o.getEndedAt(), status(o, now), taken, o.getCreatedBy(), o.getCreatedReason(),
+                o.getEndedBy(), o.getEndedReason(), lockReason(o.getId(), taken));
+    }
+
+    /**
+     * Why the discount, plans, months and automatic setting can't change any more (null: they still can). Once anyone
+     * has paid with the offer, or started a checkout with it, those are what they were promised: changing them would
+     * make one offer mean two different things.
+     */
+    String lockReason(Long offerId, long taken) {
+        if (taken > 0) {
+            return taken + (taken == 1 ? " account has" : " accounts have") + " paid with this offer, so the discount, plans and months"
+                    + " they were promised are fixed. End it and create a new offer to change them.";
+        }
+        if (payments.countByOfferId(offerId) > 0) {
+            return "A checkout with this offer has been started, so the discount, plans and months are fixed."
+                    + " End it and create a new offer to change them.";
+        }
+        return null;
     }
 
     public List<OfferRow> list(ZonedDateTime now) {
@@ -273,19 +294,7 @@ public class OfferService {
         if (code != null && offers.findByCodeIgnoreCase(code).isPresent()) {
             throw new ConflictException("That code was used for another offer. Codes are never reused.");
         }
-        List<String> planIds = in.plans() == null || in.plans().isEmpty() ? List.of("ESSENTIALS", "PRO", "AGENCY") : in.plans();
-        Set<PlanType> planSet = new TreeSet<>();
-        for (String id : planIds) {
-            try {
-                PlanType p = PlanType.valueOf(id.trim().toUpperCase(Locale.ROOT));
-                if (p == PlanType.FREE) {
-                    throw new IllegalArgumentException("The Free plan has nothing to discount.");
-                }
-                planSet.add(p);
-            } catch (IllegalArgumentException e) {
-                throw e.getMessage() != null && e.getMessage().startsWith("The Free") ? e : new IllegalArgumentException("Unknown plan: " + id);
-            }
-        }
+        Set<PlanType> planSet = planSet(in.plans() == null || in.plans().isEmpty() ? List.of("ESSENTIALS", "PRO", "AGENCY") : in.plans());
         ZonedDateTime start = in.startsAt() == null ? now : in.startsAt().withZoneSameInstant(ZoneId.of("UTC"));
         if (start.isBefore(now.minusMinutes(5))) {
             throw new IllegalArgumentException("An offer can't start in the past.");
@@ -323,6 +332,133 @@ public class OfferService {
         return row(o, now);
     }
 
+    /**
+     * BI-9: changes an offer that hasn't ended. The name and code can always change. The discount, plans, months, yearly
+     * and automatic settings only while nobody has paid with it ({@link #lockReason}). The start date only before it
+     * starts; the end date can move either way but never into the past (to stop it now, use {@link #end}), and the
+     * offer still runs at most {@link #MAX_LENGTH}. Null fields stay as they are; a blank code removes it.
+     */
+    @Transactional
+    public OfferRow edit(String admin, Long id, OfferInput in, String reason, ZonedDateTime now) {
+        String why = requireReason(reason);
+        if (in == null) {
+            throw new IllegalArgumentException("Send the changes.");
+        }
+        LaunchOffer o = offers.lockById(id).orElseThrow(() -> new NotFoundException("Offer not found."));
+        if ("ENDED".equals(status(o, now))) {
+            throw new ConflictException("This offer has ended. Ended offers stay ended: create a new one.");
+        }
+        boolean started = !now.isBefore(o.getStartsAt());
+        List<String> changes = new ArrayList<>();
+
+        if (in.name() != null) {
+            String name = in.name().trim();
+            if (name.isEmpty() || name.length() > 80) {
+                throw new IllegalArgumentException("Give the offer a name of up to 80 characters, e.g. Launch offer.");
+            }
+            if (!name.equals(o.getName())) {
+                changes.add("name " + o.getName() + " → " + name);
+                o.setName(name);
+            }
+        }
+        if (in.code() != null) {
+            String code = in.code().isBlank() ? null : in.code().trim().toUpperCase(Locale.ROOT);
+            if (code != null && !CODE.matcher(code).matches()) {
+                throw new IllegalArgumentException("A code is 3 to 32 letters or digits, e.g. LAUNCH10.");
+            }
+            if (!Objects.equals(code, o.getCode())) {
+                if (code != null && offers.findByCodeIgnoreCase(code).filter(x -> !x.getId().equals(o.getId())).isPresent()) {
+                    throw new ConflictException("That code was used for another offer. Codes are never reused.");
+                }
+                changes.add("code " + (o.getCode() == null ? "none" : o.getCode()) + " → " + (code == null ? "none" : code));
+                o.setCode(code);
+            }
+        }
+
+        List<String> locked = new ArrayList<>();
+        if (in.percentOff() != null && in.percentOff() != o.getPercentOff()) {
+            if (in.percentOff() < 1 || in.percentOff() > MAX_PERCENT) {
+                throw new IllegalArgumentException("The discount is between 1% and " + MAX_PERCENT + "%.");
+            }
+            locked.add("discount " + o.getPercentOff() + "% → " + in.percentOff() + "%");
+            o.setPercentOff(in.percentOff());
+        }
+        if (in.monthlyPeriods() != null && in.monthlyPeriods() != o.getMonthlyPeriods()) {
+            if (in.monthlyPeriods() < 1 || in.monthlyPeriods() > 12) {
+                throw new IllegalArgumentException("A monthly plan gets the discount for 1 to 12 months.");
+            }
+            locked.add("months " + o.getMonthlyPeriods() + " → " + in.monthlyPeriods());
+            o.setMonthlyPeriods(in.monthlyPeriods());
+        }
+        if (in.includeYearly() != null && in.includeYearly() != o.isIncludeYearly()) {
+            locked.add("first year " + (o.isIncludeYearly() ? "included" : "not included") + " → " + (in.includeYearly() ? "included" : "not included"));
+            o.setIncludeYearly(in.includeYearly());
+        }
+        if (in.automatic() != null && in.automatic() != o.isAutomatic()) {
+            locked.add(in.automatic() ? "now applies by itself" : "now with the code only");
+            o.setAutomatic(in.automatic());
+        }
+        if (in.plans() != null) {
+            String before = String.join(",", new TreeSet<>(o.planSet()).stream().map(Enum::name).toList());
+            String after = String.join(",", planSet(in.plans()).stream().map(Enum::name).toList());
+            if (!after.equals(before)) {
+                locked.add("plans " + before + " → " + after);
+                o.setPlans(after);
+            }
+        }
+        if (!locked.isEmpty()) {
+            String lock = lockReason(o.getId(), redemptions.countByOfferId(o.getId()));
+            if (lock != null) {
+                throw new ConflictException(lock);
+            }
+            changes.addAll(locked);
+        }
+        if (!o.isAutomatic() && o.getCode() == null) {
+            throw new IllegalArgumentException("An offer that isn't automatic needs a code.");
+        }
+
+        if (in.startsAt() != null) {
+            ZonedDateTime start = in.startsAt().withZoneSameInstant(ZoneId.of("UTC"));
+            if (!start.isEqual(o.getStartsAt())) {
+                if (started) {
+                    throw new ConflictException("This offer has started: its start date can't change.");
+                }
+                if (start.isBefore(now.minusMinutes(5))) {
+                    throw new IllegalArgumentException("An offer can't start in the past.");
+                }
+                changes.add("starts " + o.getStartsAt() + " → " + start);
+                o.setStartsAt(start);
+            }
+        }
+        if (in.endsAt() != null) {
+            ZonedDateTime end = in.endsAt().withZoneSameInstant(ZoneId.of("UTC"));
+            if (!end.isEqual(o.getEndsAt())) {
+                if (!end.isAfter(now)) {
+                    throw new IllegalArgumentException("The end date can't be in the past. To stop the offer now, use End now.");
+                }
+                changes.add("ends " + o.getEndsAt() + " → " + end);
+                o.setEndsAt(end);
+            }
+        }
+        if (!o.getEndsAt().isAfter(o.getStartsAt())) {
+            throw new IllegalArgumentException("The end date must be after the start.");
+        }
+        if (Duration.between(o.getStartsAt(), o.getEndsAt()).compareTo(MAX_LENGTH) > 0) {
+            throw new IllegalArgumentException("An offer runs at most " + MAX_LENGTH.toDays()
+                    + " days from its start. A discount that never ends is a new price: change the plan's price instead.");
+        }
+        if (o.isAutomatic() && offers.findAutomaticOverlapping(o.getStartsAt(), o.getEndsAt()).stream()
+                .anyMatch(x -> !x.getId().equals(o.getId()))) {
+            throw new ConflictException("Another automatic offer runs in those dates. End it first.");
+        }
+        if (changes.isEmpty()) {
+            throw new IllegalArgumentException("Nothing changed.");
+        }
+        offers.save(o);
+        record(admin, "OFFER_EDIT", id, o.getName() + ": " + String.join("; ", changes) + ": " + why, now);
+        return row(o, now);
+    }
+
     @Transactional
     public OfferRow end(String admin, Long id, String reason, ZonedDateTime now) {
         String why = requireReason(reason);
@@ -336,6 +472,27 @@ public class OfferService {
         offers.save(o);
         record(admin, "OFFER_END", id, o.getName() + " ended early (accounts that already have it keep their discounted renewals): " + why, now);
         return row(o, now);
+    }
+
+    /** Paid plan ids as a sorted set of at least one. */
+    static Set<PlanType> planSet(List<String> ids) {
+        Set<PlanType> out = new TreeSet<>();
+        for (String id : ids) {
+            PlanType p;
+            try {
+                p = PlanType.valueOf(id.trim().toUpperCase(Locale.ROOT));
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("Unknown plan: " + id);
+            }
+            if (p == PlanType.FREE) {
+                throw new IllegalArgumentException("The Free plan has nothing to discount.");
+            }
+            out.add(p);
+        }
+        if (out.isEmpty()) {
+            throw new IllegalArgumentException("Pick at least one plan.");
+        }
+        return out;
     }
 
     private void record(String admin, String action, Object id, String detail, ZonedDateTime now) {

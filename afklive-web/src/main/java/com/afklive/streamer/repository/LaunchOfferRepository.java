@@ -21,6 +21,11 @@ public interface LaunchOfferRepository extends JpaRepository<LaunchOffer, Long> 
             + " AND (o.endedAt IS NULL OR o.endedAt > :from)")
     List<LaunchOffer> findAutomaticOverlapping(@Param("from") ZonedDateTime from, @Param("to") ZonedDateTime to);
 
+    /** The offer, locked for this transaction, so two admins editing it at once go one after the other. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM LaunchOffer o WHERE o.id = :id")
+    Optional<LaunchOffer> lockById(@Param("id") Long id);
+
     Optional<LaunchOffer> findByCodeIgnoreCase(String code);
 
     List<LaunchOffer> findTop50ByOrderByCreatedAtDesc();

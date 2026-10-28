@@ -32,10 +32,12 @@ import java.util.Map;
  *   <li>Paying: a subscription that is ACTIVE (paid through its period end) or PAST_DUE (a few days'
  *       grace) on an account with at least one completed payment. Plans an admin gave without a payment
  *       are shown apart and left out of MRR.</li>
- *   <li>MRR: for each ACTIVE paying subscription, the plan's current list price for its cycle, a yearly
- *       price divided by 12, without the 18 % GST that INR prices include (USD sales are zero-rated, so
- *       USD is shown separately with nothing taken off). It's an estimate: discounts, upgrade credit and
- *       old prices are not in it.</li>
+ *   <li>MRR: for each ACTIVE paying subscription, what its current period actually cost
+ *       ({@code subscriptions.period_price}: after any launch offer discount, before upgrade credit, so an upgrade
+ *       counts at the new plan's full price), a yearly price divided by 12, without the 18 % GST that INR prices
+ *       include (USD sales are zero-rated, so USD is shown separately with nothing taken off). Periods paid before
+ *       that was recorded count at the plan's current list price ({@code atListPrice} says how many). The list-price
+ *       MRR is shown beside it, so the difference is what discounts and old prices take off.</li>
  *   <li>Churn: subscriptions that moved to Free in the month (cancelled at period end, not renewed after
  *       the grace days, or ended by an admin). The subscription row is reused when the account pays again,
  *       so someone who left and came back in the same month is not counted.</li>
@@ -79,13 +81,20 @@ public class BusinessMetrics {
                              long endingAtPeriodEnd, long givenByAdmin) {
     }
 
-    /** Paying accounts on one plan, cycle and currency; {@code monthlyEach} is the net monthly price of one. */
+    /**
+     * Paying accounts on one plan, cycle and currency. {@code monthlyEach}: the average net monthly amount one of them
+     * actually pays (after launch offers); {@code listEach}: the plan's net monthly list price.
+     */
     public record PlanRow(String plan, String name, String cycle, String currency, long accounts, long inGrace, double monthlyEach,
-                          double mrr) {
+                          double mrr, double listEach) {
     }
 
-    /** Monthly recurring revenue without GST: INR in rupees, USD in dollars (kept apart, no exchange rate). */
-    public record Mrr(double inr, double usd, String formula) {
+    /**
+     * Monthly recurring revenue without GST from what subscribers actually pay: INR in rupees, USD in dollars (kept
+     * apart, no exchange rate). {@code listInr}/{@code listUsd}: the same at list prices. {@code atListPrice}:
+     * subscriptions whose period was paid before the price paid was recorded, counted at the list price.
+     */
+    public record Mrr(double inr, double usd, String formula, double listInr, double listUsd, long atListPrice, String note) {
     }
 
     /** Subscriptions that moved to Free in this month so far and last month; rate = this month / (paying now + this month). */
@@ -122,8 +131,13 @@ public class BusinessMetrics {
                 percent(money.payingNow, accounts.total()), money.inGrace, money.endingAtPeriodEnd, money.givenByAdmin);
         return new Report(OffsetDateTime.now(ZoneOffset.UTC), "Monday 00:00 UTC", accounts, weeks, conversion, money.rows,
                 new Mrr(round2(money.mrrInr), round2(money.mrrUsd),
-                        "Sum over paid plans of: list price for the cycle (yearly ÷ 12), ÷ 1.18 to take out GST for INR. "
-                                + "Only plans paid through today; accounts in their grace days and plans given by an admin are left out."),
+                        "Sum over paid plans of: what the current period actually cost (after any launch offer; an upgrade at the "
+                                + "new plan's full price) for the cycle (yearly ÷ 12), ÷ 1.18 to take out GST for INR. "
+                                + "Only plans paid through today; accounts in their grace days and plans given by an admin are left out.",
+                        round2(money.listInr), round2(money.listUsd), money.atList,
+                        "From amounts actually paid, so launch offer discounts are taken off. Discounted subscribers renew at the "
+                                + "list price once their discounted months are used, so MRR rises by itself as offers run out."
+                                + (money.atList > 0 ? " " + money.atList + " subscription(s) paid before amounts were recorded are counted at today's list price." : "")),
                 churn, cohorts);
     }
 
@@ -216,8 +230,13 @@ public class BusinessMetrics {
     }
 
     private record Money(long everPaid, long payingNow, long inGrace, long endingAtPeriodEnd, long givenByAdmin, List<PlanRow> rows,
-                         double mrrInr, double mrrUsd) {
+                         double mrrInr, double mrrUsd, double listInr, double listUsd, long atList) {
     }
+
+    /** The list price (GST-inclusive, minor units) of the subscription's plan, cycle and currency, from plan_configs. */
+    private static final String LIST_PRICE = "CASE WHEN COALESCE(s.currency, 'INR') = 'USD' "
+            + "THEN (CASE WHEN s.billing_cycle = 'YEARLY' THEN c.price_usd_year ELSE c.price_usd_month END) "
+            + "ELSE (CASE WHEN s.billing_cycle = 'YEARLY' THEN c.price_inr_year ELSE c.price_inr_month END) END";
 
     private Money money(MapSqlParameterSource p) {
         long everPaid = jdbc.query("WITH " + ACCOUNTS + " SELECT count(*) AS n FROM accts a WHERE EXISTS (SELECT 1 FROM payment_audits p "
@@ -225,22 +244,26 @@ public class BusinessMetrics {
                     rs.next();
                     return rs.getLong("n");
                 });
-        record Group(String plan, String cycle, String currency, boolean paid, long active, long grace, long ending) {
+        record Group(String plan, String cycle, String currency, boolean paid, long active, long grace, long ending, long periodSum,
+                     long atList) {
         }
+        // periodSum: what the ACTIVE ones' current periods cost (minor units, GST-inclusive); the list price when not recorded.
         List<Group> groups = jdbc.query("WITH " + ACCOUNTS + " SELECT s.plan_type, s.billing_cycle, COALESCE(s.currency, 'INR') AS currency, "
                         + PAID + " AS paid, "
                         + "count(*) FILTER (WHERE s.status = 'ACTIVE') AS active, count(*) FILTER (WHERE s.status = 'PAST_DUE') AS grace, "
-                        + "count(*) FILTER (WHERE s.status = 'ACTIVE' AND s.cancel_at_period_end) AS ending "
-                        + "FROM subscriptions s JOIN accts a ON a.id = s.user_id "
+                        + "count(*) FILTER (WHERE s.status = 'ACTIVE' AND s.cancel_at_period_end) AS ending, "
+                        + "COALESCE(SUM(COALESCE(s.period_price, " + LIST_PRICE + ", 0)) FILTER (WHERE s.status = 'ACTIVE'), 0) AS period_sum, "
+                        + "count(*) FILTER (WHERE s.status = 'ACTIVE' AND s.period_price IS NULL) AS at_list "
+                        + "FROM subscriptions s JOIN accts a ON a.id = s.user_id LEFT JOIN plan_configs c ON c.plan_type = s.plan_type "
                         + "WHERE s.status IN ('ACTIVE', 'PAST_DUE') AND s.plan_type <> 'FREE' GROUP BY 1, 2, 3, 4", p,
                 (rs, i) -> new Group(rs.getString("plan_type"), rs.getString("billing_cycle"), rs.getString("currency"), rs.getBoolean("paid"),
-                        rs.getLong("active"), rs.getLong("grace"), rs.getLong("ending")));
+                        rs.getLong("active"), rs.getLong("grace"), rs.getLong("ending"), rs.getLong("period_sum"), rs.getLong("at_list")));
         Map<PlanType, PlanConfig> configs = new HashMap<>();
         for (PlanConfig c : plans.getAllPlans()) {
             configs.put(c.getPlanType(), c);
         }
-        long paying = 0, grace = 0, ending = 0, admin = 0;
-        double inr = 0, usd = 0;
+        long paying = 0, grace = 0, ending = 0, admin = 0, atList = 0;
+        double inr = 0, usd = 0, listInr = 0, listUsd = 0;
         Map<String, PlanRow> rows = new LinkedHashMap<>();
         for (Group g : groups) {
             if (!g.paid()) {
@@ -252,20 +275,24 @@ public class BusinessMetrics {
             ending += g.ending();
             PlanType type = planType(g.plan());
             PlanConfig c = type == null ? null : configs.get(type);
-            double each = c == null ? 0 : monthlyNet(c, g.cycle(), g.currency());
-            double mrr = each * g.active();
+            double listEach = c == null ? 0 : monthlyNet(c, g.cycle(), g.currency());
+            double mrr = monthlyNet(g.periodSum(), g.cycle(), g.currency());
+            double each = g.active() == 0 ? listEach : mrr / g.active();
+            atList += g.atList();
             if ("USD".equals(g.currency())) {
                 usd += mrr;
+                listUsd += listEach * g.active();
             } else {
                 inr += mrr;
+                listInr += listEach * g.active();
             }
             String key = g.plan() + "|" + g.cycle() + "|" + g.currency();
             rows.put(key, new PlanRow(g.plan(), c == null ? g.plan() : c.getDisplayName(), g.cycle(), g.currency(), g.active() + g.grace(),
-                    g.grace(), round2(each), round2(mrr)));
+                    g.grace(), round2(each), round2(mrr), round2(listEach)));
         }
         List<PlanRow> sorted = new ArrayList<>(rows.values());
         sorted.sort(Comparator.comparing((PlanRow r) -> planOrder(r.plan())).thenComparing(PlanRow::currency).thenComparing(PlanRow::cycle));
-        return new Money(everPaid, paying, grace, ending, admin, sorted, inr, usd);
+        return new Money(everPaid, paying, grace, ending, admin, sorted, inr, usd, listInr, listUsd, atList);
     }
 
     /** One subscription's monthly value without GST, in rupees or dollars: list price for the cycle, yearly ÷ 12. */
@@ -273,8 +300,14 @@ public class BusinessMetrics {
         boolean yearly = "YEARLY".equals(cycle);
         boolean usd = "USD".equals(currency);
         long minor = usd ? (yearly ? c.getPriceUsdYear() : c.getPriceUsdMonth()) : (yearly ? c.getPriceInrYear() : c.getPriceInrMonth());
+        return monthlyNet(minor, cycle, currency);
+    }
+
+    /** An amount paid for one period (minor units, GST-inclusive for INR) as a monthly amount without GST. */
+    static double monthlyNet(long minor, String cycle, String currency) {
+        boolean yearly = "YEARLY".equals(cycle);
         double perMonth = minor / 100.0 / (yearly ? 12 : 1);
-        return usd ? perMonth : perMonth / (1 + GST);
+        return "USD".equals(currency) ? perMonth : perMonth / (1 + GST);
     }
 
     private Churn churn(MapSqlParameterSource p, ZonedDateTime now, long payingNow) {
