@@ -876,9 +876,69 @@ Plans are priced per concurrent stream (Free, Creator, Pro, Agency). Defaults li
 live values, prices included, are rows in `plan_configs` that an admin edits in Admin > Plans
 (`/studio/admin/plans`) without a deploy. An edit needs a reason, is validated (prices never negative,
 Free stays free, a yearly price at most 12 monthly ones, sensible limits), lands in `admin_actions`
-and applies at once: limits for everyone on the plan, prices for every checkout and renewal from then
-on. When a release changes the defaults, bump `PlanConfig.CURRENT_DEFAULTS` and the rows are
-refreshed at startup (this overwrites admin edits).
+and applies at once: prices for every checkout and renewal from then on, limits for new sign-ups and
+for anyone without larger recorded terms (see grandfathering below). When a release changes the
+defaults, bump `PlanConfig.CURRENT_DEFAULTS` and the rows are refreshed at startup (this overwrites
+admin edits).
+
+### Grandfathering: paying subscribers keep what they bought (BI-10)
+
+- When a plan is paid for, the limits in effect (streams, destinations, top quality and frame rate,
+  storage, monthly hours, streaming data allowance, watermark) are recorded on the subscription
+  (`subscriptions.terms_*`). Every limit check (`PlanService.limitsFor`: go-live, destinations,
+  quality, storage, hours, fair use, Billing and `/api/me`) uses, field by field, the more generous of
+  these and the plan's current `plan_configs` row. So lowering a plan's limits never reduces a paying
+  subscriber's, and raising them reaches everyone.
+- Renewing (or switching cycle on) the same plan keeps the recorded terms. An upgrade records the new
+  plan's limits but keeps anything the old terms gave that is more. A downgrade at the period end, or a
+  new purchase after the plan lapsed to Free, records the plan as sold then. An admin putting someone
+  on a different plan records that plan's current limits.
+- Changeset 179 recorded today's limits on every subscription that wasn't canceled. Accounts on a paid
+  plan with no subscription record (none expected) and Free accounts are not grandfathered.
+- **Limits for new sign-ups** are one explicit step: Admin > Plans > "Limits for new sign-ups" shows,
+  per plan, the current and recommended limits, how many paying subscribers keep theirs and who would
+  be affected; "Apply recommended limits" (reason required, audited as `PLAN_LIMITS_NEW_SIGNUPS` plus a
+  `PLAN_CONFIG` row per plan) first records terms on any live subscription that has none, then updates
+  `plan_configs`. Recommended (owner decision 2026-10-28): Creator 1 stream, 1 destination, 1080p30,
+  2,000 GB a month; Pro 3 streams, 2 destinations each, 1080p60, 6,000 GB; Agency 10 streams,
+  2 destinations each, 1080p60 (no 4K), 15,000 GB; Free unchanged with 50 GB. Storage, hours and
+  prices stay. Nothing is applied by a deploy. After applying, update `site/src/static-plans.ts` (the
+  no-JavaScript pricing cards) in the next release.
+- A fair use allowance set on a plan reaches grandfathered subscribers only if it was set before their
+  terms were recorded (their recorded "no allowance" is more generous).
+
+### Launch offers (BI-9)
+
+- Admin > Plans > "Launch offers": name, percent off (1 to 50, default 10), discounted monthly payments
+  (default 3; a yearly purchase gets it once, on the first year), plans, a real start and last day (at
+  most 92 days), automatic and/or a code (letters and digits, never reused). One automatic offer at a
+  time. Creating and ending are audited (`OFFER_CREATE`, `OFFER_END`, reason required). Offers are
+  never edited: end one and create another.
+- Who: accounts that never had a plan (no subscription row, no plan payment, no earlier offer), once
+  per account (`offer_redemptions`, keyed by user: two payments racing both count against the same
+  offer). Discounted renewals need the same plan and cycle; an upgrade is at the list price and ends
+  the remaining discounted renewals. Renewals already earned are honoured after the offer closes or is
+  ended early.
+- Math (paise): offer price = list price × (100 − percent) / 100, rounded down to the whole rupee (USD
+  keeps cents), so the discount is never less than advertised. The payment order is for the offer
+  price; GST is on the price paid. The invoice shows the list price's value before GST, "Less: <offer>
+  (10% off)", the taxable value after the discount, then CGST/SGST or IGST (CGST Act s. 15(3)(a)).
+  Payments record `offer_id`, `list_amount`, `discount_amount`; the subscription records
+  `period_price` so an upgrade credits what was actually paid.
+- Display: `/api/billing/offer?currency=INR` (public; 204 when none; `eligible` for a signed-in
+  account) feeds the pricing page (site, built at build time: the static cards show the plain list
+  prices and the script adds the offer when one runs) and the app's Billing. Structured data keeps the
+  list price (the offer isn't available to everyone).
+- Compliance (CCPA Guidelines for Prevention and Regulation of Dark Patterns, 2023): the struck price is
+  the real current list price; the offer has a real end date shown as a date (no countdown, no "only
+  today"); every rupee price says "incl. GST" and the quote shows the full amount, the discount, the
+  GST and the renewal price before payment (no drip pricing).
+
+| | Monthly list | Offer (first 3 months) | GST in offer price | Yearly list | Offer (first year) |
+|---|---|---|---|---|---|
+| Creator | ₹499 | ₹449 | ₹68.49 (taxable ₹380.51) | ₹4,990 | ₹4,491 |
+| Pro | ₹1,499 | ₹1,349 | ₹205.78 (taxable ₹1,143.22) | ₹14,990 | ₹13,491 |
+| Agency | ₹3,999 | ₹3,599 | ₹549.00 (taxable ₹3,050.00) | ₹39,990 | ₹35,991 |
 
 Admin > Platform also holds the free plan capacity (`app_settings.global_max_streams`): free accounts
 can't go live while that many streams, all plans together, are live. Support tickets are handled in
