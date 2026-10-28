@@ -63,7 +63,7 @@ public class InvoiceService {
     public record Tax(long taxable, long cgst, long sgst, long igst) {
     }
 
-    static Tax split(long total, String currency, String customerState, String sellerState) {
+    public static Tax split(long total, String currency, String customerState, String sellerState) {
         if (!"INR".equalsIgnoreCase(currency)) {
             return new Tax(total, 0, 0, 0); // export of services: zero-rated
         }

@@ -545,7 +545,7 @@ public class BillingService {
      * The renewal reminder (BI-7, BI-9): what the next period costs, GST included, and when a launch offer's last
      * discounted period is next, what it renews at after that.
      */
-    String renewalMessage(Subscription s, PlanType nextPlan, Subscription.Cycle nextCycle) {
+    public String renewalMessage(Subscription s, PlanType nextPlan, Subscription.Cycle nextCycle) {
         OfferService.Pricing p = renewalPricing(s, nextPlan, nextCycle);
         String name = plans.getPlanConfig(nextPlan).getDisplayName();
         String per = nextCycle == Subscription.Cycle.YEARLY ? "year" : "month";
