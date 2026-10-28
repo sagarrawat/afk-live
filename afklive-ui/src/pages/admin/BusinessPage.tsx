@@ -17,8 +17,10 @@ export interface BusinessReport {
     endingAtPeriodEnd: number;
     givenByAdmin: number;
   };
-  plans: { plan: string; name: string; cycle: string; currency: string; accounts: number; inGrace: number; monthlyEach: number; mrr: number }[];
-  mrr: { inr: number; usd: number; formula: string };
+  /** monthlyEach: average actually paid (after launch offers); listEach: the plan's list price. */
+  plans: { plan: string; name: string; cycle: string; currency: string; accounts: number; inGrace: number; monthlyEach: number; mrr: number; listEach?: number }[];
+  /** From amounts actually paid (BI-9); listInr/listUsd: the same at list prices; atListPrice: periods paid before amounts were recorded. */
+  mrr: { inr: number; usd: number; formula: string; listInr?: number; listUsd?: number; atListPrice?: number; note?: string };
   churn: { month: string; thisMonth: number; previousMonth: string; lastMonth: number; ratePercent?: number | null; formula: string };
   cohorts: { start: string; accounts: number; activePercent: (number | null)[] }[];
 }
@@ -153,6 +155,13 @@ export function BusinessPage() {
           <Figure label="INR, without GST" value={cashMajor(r.mrr.inr, 'INR')} />
           <Figure label="USD (no GST on exports)" value={cashMajor(r.mrr.usd, 'USD')} note="Kept apart: no exchange rate applied" />
         </div>
+        {r.mrr.listInr != null && (
+          <p className="mt-3 text-sm text-muted" data-testid="biz-mrr-list">
+            From what subscribers actually pay. At list prices it would be {cashMajor(r.mrr.listInr, 'INR')}
+            {(r.mrr.listUsd ?? 0) > 0 ? ` + ${cashMajor(r.mrr.listUsd ?? 0, 'USD')}` : ''}
+            {r.mrr.listInr - r.mrr.inr >= 1 ? `: launch offers take ${cashMajor(r.mrr.listInr - r.mrr.inr, 'INR')} off for now.` : '.'}
+          </p>
+        )}
         {r.plans.length === 0 ? (
           <p className="mt-4 text-sm text-muted">No paying accounts yet.</p>
         ) : (
@@ -177,7 +186,10 @@ export function BusinessPage() {
                       {num(p.accounts)}
                       {p.inGrace > 0 && <span className="text-xs text-warn"> ({num(p.inGrace)} in grace)</span>}
                     </td>
-                    <td className="py-1.5 pr-3 text-right">{cashMajor(p.monthlyEach, p.currency)}</td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {cashMajor(p.monthlyEach, p.currency)}
+                      {p.listEach != null && Math.abs(p.listEach - p.monthlyEach) >= 0.01 && <span className="block text-xs text-muted">list {cashMajor(p.listEach, p.currency)}</span>}
+                    </td>
                     <td className="py-1.5 text-right font-medium">{cashMajor(p.mrr, p.currency)}</td>
                   </tr>
                 ))}
@@ -188,7 +200,7 @@ export function BusinessPage() {
         <details className="mt-3 text-xs text-muted">
           <summary className="cursor-pointer">How this is worked out</summary>
           <p className="mt-1">{r.mrr.formula}</p>
-          <p className="mt-1">It uses today's list prices, so discounts, upgrade credit and older prices aren't in it.</p>
+          <p className="mt-1">{r.mrr.note ?? "It uses today's list prices, so discounts, upgrade credit and older prices aren't in it."}</p>
         </details>
       </Panel>
 

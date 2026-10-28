@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { Badge, Button, Dialog, ErrorNote, Field, Input, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
 import { ReasonDialog } from './admin/ReasonDialog';
 import { NewSignupLimits, Offers } from './admin/OffersPanel';
+import { GrandfatheredPanel, PlanTermsPanel } from './admin/PlanTermsPanel';
 
 import { UserSupport } from './admin/Support';
 import { get, post } from '@/lib/api';
@@ -728,6 +729,7 @@ export function Plans() {
       </p>
       <NewSignupLimits onApplied={() => plans.refetch()} />
       <Offers />
+      <GrandfatheredPanel />
       <ul className="grid gap-4 sm:grid-cols-2">
         {plans.data.map((p) => (
           <li key={p.plan}>
@@ -900,6 +902,7 @@ export function UserPage({ id }: { id: number }) {
           </Button>
         </div>
       </Panel>
+      <PlanTermsPanel id={d.id} onChanged={done} />
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Streams" pad={false}>
           <ul className="divide-y divide-line">
