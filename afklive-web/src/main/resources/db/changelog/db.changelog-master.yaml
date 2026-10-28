@@ -93,3 +93,5 @@ databaseChangeLog:
       file: db/changelog/changes/170-plan-fair-use.sql
   - include:
       file: db/changelog/changes/175-launch-offer-plan-terms.sql
+  - include:
+      file: db/changelog/changes/180-offer-results-index.sql
