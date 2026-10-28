@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Button, Dialog, ErrorNote, Field, Input, Panel, Segmented, Select, Spinner, Textarea, Toggle, useAction } from '@/components/ui';
 import { ReasonDialog } from './admin/ReasonDialog';
+import { NewSignupLimits, Offers } from './admin/OffersPanel';
+
 import { UserSupport } from './admin/Support';
 import { get, post } from '@/lib/api';
 import { bytes, date, dateTime, duration, money } from '@/lib/format';
@@ -721,7 +723,11 @@ export function Plans() {
   const price = (month: number, year: number, cur: string) => (month === 0 && year === 0 ? 'Free' : `${money(month, cur)} a month, ${money(year, cur)} a year`);
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">Changes apply right away: limits to everyone on the plan, prices to every checkout and renewal from then on. Prices include GST.</p>
+      <p className="text-sm text-muted">
+        Changes apply right away: prices to every checkout and renewal from then on, limits to new sign-ups and to anyone whose own recorded limits are smaller. Paying subscribers never get less than the limits they bought (raising a limit reaches them too). Prices include GST.
+      </p>
+      <NewSignupLimits onApplied={() => plans.refetch()} />
+      <Offers />
       <ul className="grid gap-4 sm:grid-cols-2">
         {plans.data.map((p) => (
           <li key={p.plan}>
@@ -780,7 +786,9 @@ function PlanDialog({ plan, onClose, onSaved }: { plan: PlanSettings; onClose: (
       onClose={onClose}
       onSubmit={(reason) => post(`/api/admin/plans/${plan.plan}`, { plan: planBody(f), reason }).then(onSaved)}
     >
-      <p className="text-sm text-muted">Saving applies at once: limits for everyone on {plan.displayName} (streams already live keep running), prices for every new purchase and renewal.</p>
+      <p className="text-sm text-muted">
+        Saving applies at once: prices for every new purchase and renewal; limits for new sign-ups on {plan.displayName}. Paying subscribers keep the limits they bought if those are larger (streams already live keep running).
+      </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name" htmlFor="pn">
           <Input id="pn" value={f.displayName} maxLength={40} onChange={set('displayName')} />

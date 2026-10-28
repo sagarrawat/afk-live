@@ -9,7 +9,8 @@ import { Badge, Button, Dialog, ErrorNote, Field, Input, Panel, Segmented, Spinn
 import { get, post, put } from '@/lib/api';
 import { HELP } from '@/lib/help';
 import { bytes, date, money } from '@/lib/format';
-import { keys, useBilling, useBillingProfile, useInvalidate, useMe, usePlans } from '@/lib/queries';
+import { offerFor, offerLine, offerWho, quoteOfferNote } from '@/lib/offer';
+import { keys, useBilling, useBillingProfile, useInvalidate, useMe, useOffer, usePlans } from '@/lib/queries';
 import type { BillingOverview, PlanView, Quote, Traffic } from '@/lib/types';
 
 /** BI-1..BI-6: plan, usage against it, next charge, invoices, and changing plan. */
@@ -109,6 +110,11 @@ function CurrentPlan({ billing: b, traffic }: { billing: BillingOverview; traffi
               <span className="text-muted">We'll remind you 3 days before; renewal is a one-tap UPI or card payment.</span>
             </p>
           )}
+          {b.offer && b.offer.left > 0 && (
+            <p className="mt-2 text-sm text-muted">
+              {b.offer.name}: {b.offer.percentOff}% off {b.offer.left === 1 ? 'one more payment' : `${b.offer.left} more payments`}, then the plan's list price.
+            </p>
+          )}
           {b.unpaidBalance > 0 && <p className="mt-3 text-warn">Unpaid balance from earlier usage: ₹{b.unpaidBalance.toFixed(2)}.</p>}
           {paid && (
             <div className="mt-4 flex gap-2">
@@ -171,24 +177,28 @@ function Plans({ billing: b, currency: initial }: { billing: BillingOverview; cu
   const [cycle, setCycle] = useState<'MONTHLY' | 'YEARLY'>(b.cycle ?? 'MONTHLY');
   const [currency, setCurrency] = useState<'INR' | 'USD'>(initial);
   const { data: plans } = usePlans(currency);
-  const [quote, setQuote] = useState<{ plan: PlanView; quote?: Quote; downgrade?: boolean } | null>(null);
+  const { data: offer } = useOffer(currency);
+  const [quote, setQuote] = useState<{ plan: PlanView; quote?: Quote; downgrade?: boolean; code?: string } | null>(null);
+  const [codeInput, setCodeInput] = useState('');
   const { busy, run } = useAction();
   const toast = useToast();
   const invalidate = useInvalidate();
   const rank = (id: string) => ['FREE', 'ESSENTIALS', 'PRO', 'AGENCY'].indexOf(id);
 
-  const choose = async (p: PlanView) => {
+  const choose = async (p: PlanView, code?: string) => {
     if (rank(p.id) < rank(b.plan) || (p.id === b.plan && cycle === 'MONTHLY' && b.cycle === 'YEARLY')) {
       setQuote({ plan: p, downgrade: true });
       return;
     }
     try {
-      const q = await get<Quote>(`/api/billing/quote?plan=${p.id}&cycle=${cycle}`);
-      setQuote({ plan: p, quote: q });
+      const q = await get<Quote>(`/api/billing/quote?plan=${p.id}&cycle=${cycle}${code ? `&code=${encodeURIComponent(code)}` : ''}`);
+      setQuote({ plan: p, quote: q, code });
+      if (!code) setCodeInput('');
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'bad');
     }
   };
+  const gst = currency === 'INR' ? ' incl. GST' : '';
 
   return (
     <Panel
@@ -196,14 +206,15 @@ function Plans({ billing: b, currency: initial }: { billing: BillingOverview; cu
       action={
         <div className="flex flex-wrap gap-2">
           <Segmented label="Currency" value={currency} onChange={setCurrency} options={[{ value: 'INR', label: '₹' }, { value: 'USD', label: '$' }]} />
-          <Segmented label="Billing cycle" value={cycle} onChange={setCycle} options={[{ value: 'MONTHLY', label: 'Monthly' }, { value: 'YEARLY', label: 'Yearly, 2 months free' }]} />
+          <Segmented label="Billing cycle" value={cycle} onChange={setCycle} options={[{ value: 'MONTHLY', label: 'Monthly' }, { value: 'YEARLY', label: 'Yearly, 2 months free (save 17%)' }]} />
         </div>
       }
     >
       <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {(plans ?? []).map((p) => {
           const current = p.id === b.plan;
-          const price = cycle === 'YEARLY' ? p.yearlyLabel : p.monthlyLabel;
+          const deal = p.monthly > 0 && !current ? offerFor(offer, p.id, cycle, currency) : null;
+          const price = deal ? deal.price : cycle === 'YEARLY' ? p.yearlyLabel : p.monthlyLabel;
           return (
             <li key={p.id} className={clsx('flex flex-col rounded-md border p-4', current ? 'border-accent' : 'border-line')}>
               <p className="flex items-center justify-between font-semibold">
@@ -211,9 +222,26 @@ function Plans({ billing: b, currency: initial }: { billing: BillingOverview; cu
                 {current && <Badge tone="accent">Current</Badge>}
               </p>
               <p className="mt-2">
+                {deal && (
+                  <s className="tnum mr-2 text-muted">
+                    <span className="sr-only">List price </span>
+                    {deal.list}
+                  </s>
+                )}
                 <span className="tnum text-2xl font-semibold">{price}</span>
-                {p.monthly > 0 && <span className="text-muted"> / {cycle === 'YEARLY' ? 'year' : 'month'}</span>}
+                {p.monthly > 0 && (
+                  <span className="text-muted">
+                    {' '}
+                    / {cycle === 'YEARLY' ? 'year' : 'month'}
+                    {gst}
+                  </span>
+                )}
               </p>
+              {deal && offer && (
+                <p className="mt-1 text-sm">
+                  <span className="font-medium text-accent">{offerLine(offer, cycle, deal)}</span> <span className="text-muted">{offerWho(offer)}</span>
+                </p>
+              )}
               <ul className="mt-4 flex-1 space-y-1.5 text-sm">
                 {[
                   `${p.concurrentStreams} stream${p.concurrentStreams === 1 ? '' : 's'} at once`,
@@ -276,7 +304,7 @@ function Plans({ billing: b, currency: initial }: { billing: BillingOverview; cu
                   busy={busy}
                   onClick={() =>
                     run(async () => {
-                      const c = await post<{ checkoutUrl: string }>('/api/billing/checkout', { plan: quote.plan.id, cycle });
+                      const c = await post<{ checkoutUrl: string }>('/api/billing/checkout', { plan: quote.plan.id, cycle, ...(quote.code ? { code: quote.code } : {}) });
                       window.location.href = c.checkoutUrl;
                     })
                   }
@@ -291,13 +319,40 @@ function Plans({ billing: b, currency: initial }: { billing: BillingOverview; cu
         {quote?.downgrade && <p>You keep {b.planName} until {date(b.periodEnd)}, then move to {quote.plan.name}. Nothing is charged now.</p>}
         {quote?.quote && (
           <dl className="space-y-2">
-            <Row label={`${quote.plan.name}, ${cycle === 'YEARLY' ? 'one year' : 'one month'}`} value={money(quote.quote.price, quote.quote.currency)} />
+            <Row label={`${quote.plan.name}, ${cycle === 'YEARLY' ? 'one year' : 'one month'}`} value={money(quote.quote.listPrice ?? quote.quote.price, quote.quote.currency)} />
+            {quote.quote.discount > 0 && quote.quote.offer && (
+              <Row label={`${quote.quote.offer.name}, ${quote.quote.offer.percentOff}% off`} value={`− ${money(quote.quote.discount, quote.quote.currency)}`} />
+            )}
             {quote.quote.credit > 0 && <Row label="Credit for unused time on your current plan" value={`− ${money(quote.quote.credit, quote.quote.currency)}`} />}
-            <Row label="Pay now" value={money(quote.quote.amount, quote.quote.currency)} strong />
+            <Row label={`Pay now${quote.quote.currency === 'INR' ? ' (incl. GST)' : ''}`} value={money(quote.quote.amount, quote.quote.currency)} strong />
+            {quote.quote.currency === 'INR' && quote.quote.gst > 0 && (
+              <p className="text-right text-xs text-muted">Includes {money(quote.quote.gst, 'INR')} GST. GST invoice after payment.</p>
+            )}
+            {quoteOfferNote(quote.quote) && <p className="pt-1 text-sm">{quoteOfferNote(quote.quote)}</p>}
             <p className="pt-2 text-sm text-muted">
               {quote.quote.kind === 'RENEW' ? 'Your next period' : 'Your new plan starts now and'} runs until {date(quote.quote.periodEnd)}. Pay by UPI or card on the next page.
             </p>
           </dl>
+        )}
+        {quote?.quote && (
+          <>
+            {quote.quote.kind === 'NEW' && !quote.quote.offer && (
+              <form
+                className="flex flex-wrap items-end gap-2 pt-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (codeInput.trim()) choose(quote.plan, codeInput.trim());
+                }}
+              >
+                <Field label="Offer code (optional)" htmlFor="offer-code">
+                  <Input id="offer-code" value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="LAUNCH10" autoCapitalize="characters" />
+                </Field>
+                <Button type="submit" size="sm" disabled={!codeInput.trim()}>
+                  Apply
+                </Button>
+              </form>
+            )}
+          </>
         )}
       </Dialog>
     </Panel>
