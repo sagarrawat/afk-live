@@ -49,6 +49,15 @@ public class PaymentAudit {
     /** Proration credit (minor units) taken off this payment for an upgrade. */
     @Column(nullable = false)
     private long credit;
+    /** BI-9: the launch offer this payment used, if any. */
+    @Column(name = "offer_id")
+    private Long offerId;
+    /** BI-9: the plan's list price for the period (GST-inclusive, minor units), before any discount or credit. */
+    @Column(name = "list_amount")
+    private Long listAmount;
+    /** BI-9: launch offer discount taken off the list price (GST-inclusive, minor units). */
+    @Column(name = "discount_amount", nullable = false)
+    private long discountAmount;
 
     private LocalDateTime createdAt;
 

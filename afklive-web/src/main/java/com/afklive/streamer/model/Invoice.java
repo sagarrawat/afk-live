@@ -45,6 +45,14 @@ public class Invoice {
     private long igst;
     @Column(nullable = false)
     private long total;
+    /** BI-9: list price (GST-inclusive) before a discount; null when there was none. */
+    @Column(name = "list_amount")
+    private Long listAmount;
+    /** BI-9: discount (GST-inclusive) taken off the list price; the taxable value is worked out after it. */
+    @Column(name = "discount_amount", nullable = false)
+    private long discountAmount;
+    @Column(name = "discount_label", length = 120)
+    private String discountLabel;
 
     private String customerName;
     @Column(columnDefinition = "TEXT")

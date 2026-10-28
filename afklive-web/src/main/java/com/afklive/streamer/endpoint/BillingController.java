@@ -21,6 +21,8 @@ import java.util.Map;
 public class BillingController {
 
     private final BillingService billing;
+    private final com.afklive.streamer.service.OfferService offers;
+    private final com.afklive.streamer.repository.UserRepository users;
 
     private static String email(Principal principal) {
         if (principal == null) {
@@ -40,19 +42,35 @@ public class BillingController {
         return billing.overview(email(principal));
     }
 
-    /** What a plan change would cost now (with the upgrade credit), before paying. */
+    /**
+     * Public (BI-9): the launch offer open now with each plan's real list and offer price, for the pricing page and
+     * the app; 204 when there is none, and the page then shows only the list prices. {@code eligible} says whether
+     * the signed-in account can still take it (null when signed out).
+     */
+    @GetMapping("/offer")
+    public ResponseEntity<com.afklive.streamer.service.OfferService.PublicOffer> offer(@RequestParam(defaultValue = "INR") String currency,
+                                                                                    Principal principal) {
+        com.afklive.streamer.model.User viewer = principal == null ? null : users.findByEmail(SecurityUtils.getEmail(principal)).orElse(null);
+        return offers.publicOffer(currency, viewer, java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC))
+                .map(o -> ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(o))
+                .orElseGet(() -> ResponseEntity.noContent().cacheControl(org.springframework.http.CacheControl.noStore()).build());
+    }
+
+    /** What a plan change would cost now (launch offer, upgrade credit), before paying. */
     @GetMapping("/quote")
     public BillingService.Quote quote(@RequestParam String plan, @RequestParam(defaultValue = "MONTHLY") String cycle,
-                                      Principal principal) {
-        return billing.quote(email(principal), plan, cycle);
+                                      @RequestParam(required = false) String code, Principal principal) {
+        return billing.quote(email(principal), plan, cycle, code);
     }
 
     @PostMapping("/checkout")
     public Map<String, Object> checkout(@RequestBody Map<String, String> body, Principal principal) {
-        BillingService.Checkout c = billing.checkout(email(principal), body.get("plan"), body.getOrDefault("cycle", "MONTHLY"));
+        BillingService.Checkout c = billing.checkout(email(principal), body.get("plan"), body.getOrDefault("cycle", "MONTHLY"),
+                body.get("code"));
         return Map.of("orderId", c.orderId(), "checkoutUrl", c.checkoutUrl(), "amount", c.quote().amount(),
-                "credit", c.quote().credit(), "currency", c.quote().currency());
+                "credit", c.quote().credit(), "currency", c.quote().currency(), "discount", c.quote().discount());
     }
+
 
     @PostMapping("/downgrade")
     public BillingService.Overview downgrade(@RequestBody Map<String, String> body, Principal principal) {

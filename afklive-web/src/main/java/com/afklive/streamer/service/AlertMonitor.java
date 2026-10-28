@@ -264,6 +264,9 @@ public class AlertMonitor {
             PlanConfig plan;
             try {
                 plan = plans.getPlanConfig(u.getPlanType());
+                if (plan.getMaxStorageBytes() > 0 && u.getUsedStorageBytes() >= plan.getMaxStorageBytes() * 0.8) {
+                    plan = plans.limitsFor(u); // BI-10: only near the plan's limit is the subscriber's own (larger) limit looked up
+                }
             } catch (Exception e) {
                 continue;
             }

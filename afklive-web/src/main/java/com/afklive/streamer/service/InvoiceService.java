@@ -87,6 +87,17 @@ public class InvoiceService {
     @Transactional
     public Invoice issue(Long userId, String orderId, String description, ZonedDateTime periodStart, ZonedDateTime periodEnd,
                          String currency, long total) {
+        return issue(userId, orderId, description, periodStart, periodEnd, currency, total, null, 0, null);
+    }
+
+    /**
+     * BI-9: as above, for a payment with a launch offer discount. {@code listAmount} and {@code discount} are
+     * GST-inclusive; GST is on what was paid ({@code total}), so the taxable value is the value after the discount
+     * (CGST Act s. 15(3)(a): a discount shown on the invoice is not part of the value of supply).
+     */
+    @Transactional
+    public Invoice issue(Long userId, String orderId, String description, ZonedDateTime periodStart, ZonedDateTime periodEnd,
+                         String currency, long total, Long listAmount, long discount, String discountLabel) {
         var existing = invoices.findByPaymentOrderId(orderId);
         if (existing.isPresent()) {
             return existing.get();
@@ -110,6 +121,11 @@ public class InvoiceService {
         inv.setSgst(tax.sgst());
         inv.setIgst(tax.igst());
         inv.setTotal(total);
+        if (discount > 0 && listAmount != null) {
+            inv.setListAmount(listAmount);
+            inv.setDiscountAmount(discount);
+            inv.setDiscountLabel(discountLabel == null ? "Discount" : discountLabel.length() > 120 ? discountLabel.substring(0, 120) : discountLabel);
+        }
         if (p != null) {
             inv.setCustomerName(p.getLegalName());
             inv.setCustomerAddress(String.join(", ", java.util.stream.Stream.of(p.getAddressLine(), p.getCity(), p.getPostalCode())
@@ -161,7 +177,19 @@ public class InvoiceService {
                 + " – " + inv.getPeriodEnd().withZoneSameInstant(ist).format(date);
         lines.addCell(cell(inv.getDescription() + period, normal, false));
         lines.addCell(cell(sacCode, normal, false));
-        lines.addCell(cell(money(inv.getTaxableAmount(), inv.getCurrency()), normal, true));
+        DiscountLines d = discountLines(inv);
+        if (d == null) {
+            lines.addCell(cell(money(inv.getTaxableAmount(), inv.getCurrency()), normal, true));
+        } else {
+            lines.addCell(cell(money(d.gross(), inv.getCurrency()), normal, true));
+            lines.addCell(cell("Less: " + inv.getDiscountLabel() + " on the list price of " + money(inv.getListAmount(), inv.getCurrency())
+                    + ("INR".equals(inv.getCurrency()) ? " incl. GST" : ""), normal, false));
+            lines.addCell(cell("", normal, false));
+            lines.addCell(cell("- " + money(d.discount(), inv.getCurrency()), normal, true));
+            lines.addCell(cell("Taxable value", bold, false));
+            lines.addCell(cell("", normal, false));
+            lines.addCell(cell(money(inv.getTaxableAmount(), inv.getCurrency()), bold, true));
+        }
         if (inv.getCgst() > 0 || inv.getSgst() > 0) {
             lines.addCell(cell("CGST 9%", normal, false));
             lines.addCell(cell("", normal, false));
@@ -187,7 +215,23 @@ public class InvoiceService {
         return out.toByteArray();
     }
 
+    /**
+     * An invoice's discount lines, before GST: the list price's value ({@code gross}) less the discount gives the
+     * taxable value exactly. Null without a discount.
+     */
+    public record DiscountLines(long gross, long discount) {
+    }
+
+    public static DiscountLines discountLines(Invoice inv) {
+        if (inv.getDiscountAmount() <= 0 || inv.getListAmount() == null) {
+            return null;
+        }
+        long gross = split(inv.getListAmount(), inv.getCurrency(), null, null).taxable();
+        return new DiscountLines(gross, gross - inv.getTaxableAmount());
+    }
+
     private static PdfPCell cell(String text, Font font, boolean right) {
+
         PdfPCell c = new PdfPCell(new Phrase(text, font));
         c.setPadding(6);
         c.setBorderWidth(0.5f);

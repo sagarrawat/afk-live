@@ -130,7 +130,7 @@ public class FairUseSweep {
                 continue;
             }
             accounts++;
-            FairUse.Status s = FairUse.statusOf(plans.getPlanConfig(u.getPlanType()), month, used.getOrDefault(id, 0.0),
+            FairUse.Status s = FairUse.statusOf(plans.limitsFor(u), month, used.getOrDefault(id, 0.0),
                     grants.getOrDefault(id, 0), now);
             if (!capped.contains(u.getPlanType())) {
                 s = fairUse.status(u, now); // paused earlier on a plan that has no allowance now: worked out on its own
@@ -212,7 +212,7 @@ public class FairUseSweep {
         if (claimed == null) {
             return false;
         }
-        Message m = message(claimed, s, plans.getPlanConfig(u.getPlanType()).getMaxDestinations() > 1);
+        Message m = message(claimed, s, plans.limitsFor(u).getMaxDestinations() > 1);
         try {
             notifications.notify(u, new NotificationService.Alert(TYPE, claimed >= FairUseModel.CAP ? Notification.Level.WARNING
                     : Notification.Level.INFO, null, m.title(), m.body(), "/studio/settings/billing",

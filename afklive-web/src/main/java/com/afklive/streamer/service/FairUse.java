@@ -97,7 +97,7 @@ public class FairUse {
     public Status status(User u, ZonedDateTime now) {
         String month = BillingService.month(now);
         double used = meter.gbByAccount(now, u.getId()).getOrDefault(u.getId(), 0.0);
-        Status s = statusOf(plans.getPlanConfig(u.getPlanType()), month, used, granted(u.getId(), month), now);
+        Status s = statusOf(plans.limitsFor(u), month, used, granted(u.getId(), month), now);
         cache.put(u.getId(), new Cached(s, now));
         return s;
     }
@@ -105,7 +105,7 @@ public class FairUse {
     /** At most a minute old (pages that ask often); a new month or plan change is never served from the cache. */
     public Status cachedStatus(User u, ZonedDateTime now) {
         Cached c = cache.get(u.getId());
-        Integer planGb = plans.getPlanConfig(u.getPlanType()).getMonthlyTrafficGb();
+        Integer planGb = plans.limitsFor(u).getMonthlyTrafficGb();
         if (c != null && c.status().month().equals(BillingService.month(now)) && java.util.Objects.equals(c.status().planGb(), planGb)
                 && c.at().isAfter(now.minus(CACHE))) {
             return c.status();

@@ -320,8 +320,10 @@ public class AdminService {
     public record StreamRow(Long id, String name, boolean live, Long jobId, String worker) {
     }
 
+    /** {@code terms}: the limits this subscriber bought (BI-10 grandfathering), or null. */
     public record SubscriptionView(String plan, String cycle, String status, String currency, ZonedDateTime periodStart,
-                                   ZonedDateTime periodEnd, boolean cancelAtPeriodEnd, String pendingPlan) {
+                                   ZonedDateTime periodEnd, boolean cancelAtPeriodEnd, String pendingPlan,
+                                   com.afklive.streamer.model.PlanTerms terms) {
     }
 
     public record UserDetail(Long id, String email, String name, String plan, boolean enabled, String role,
@@ -333,10 +335,10 @@ public class AdminService {
 
     public UserDetail user(Long id) {
         User u = users.findById(id).orElseThrow(() -> new NotFoundException("User not found."));
-        var cfg = plans.getPlanConfig(u.getPlanType());
+        var cfg = plans.limitsFor(u);
         SubscriptionView sub = subscriptions.findByUserId(u.getId()).map(s -> new SubscriptionView(s.getPlanType().name(),
                 s.getCycle().name(), s.getStatus().name(), s.getCurrency(), s.getCurrentPeriodStart(), s.getCurrentPeriodEnd(),
-                s.isCancelAtPeriodEnd(), s.getPendingPlan() == null ? null : s.getPendingPlan().name())).orElse(null);
+                s.isCancelAtPeriodEnd(), s.getPendingPlan() == null ? null : s.getPendingPlan().name(), s.getTerms())).orElse(null);
         List<StreamRow> rows = new ArrayList<>();
         for (LiveStream s : streams.findAllByUserEmailOrderByCreatedAtAsc(u.getEmail())) {
             Optional<StreamJob> live = jobs.findAllByStreamIdAndIsLiveTrue(s.getId()).stream().findFirst();
@@ -419,6 +421,10 @@ public class AdminService {
                 fresh.setCurrentPeriodStart(now());
                 return fresh;
             });
+            // BI-10: the same plan keeps the limits it was bought with; another plan gets that plan's limits as sold today.
+            if (s.getTerms() == null || s.getTerms().getPlan() != plan || s.getStatus() == Subscription.Status.CANCELED) {
+                s.setTerms(com.afklive.streamer.model.PlanTerms.of(plans.getPlanConfig(plan), now()));
+            }
             s.setPlanType(plan);
             s.setStatus(Subscription.Status.ACTIVE);
             s.setCurrentPeriodEnd(until);
@@ -794,7 +800,118 @@ public class AdminService {
         return PlanView.of(saved);
     }
 
+    // ------------------------------------------------------------------ BI-10: limits for new sign-ups (grandfathering)
+
+    /** A plan's limits as an admin step sets them; null keeps the current value. */
+    public record Limits(int streams, int destinations, int maxHeight, int maxFps, Integer trafficGb) {
+    }
+
+    /**
+     * The recommended limits for new sign-ups (owner decision 2026-10-28, from the fair use worst case per plan and
+     * the India plan review): Creator 1 stream, 1 destination, 1080p30, 2,000 GB; Pro 3 streams, 2 destinations each,
+     * 1080p60, 6,000 GB; Agency 10 streams, 2 destinations each, 1080p60 (no 4K), 15,000 GB; Free unchanged with
+     * 50 GB. Storage, hours, watermark and prices stay as they are.
+     */
+    public static final Map<PlanType, Limits> RECOMMENDED = Map.of(
+            PlanType.FREE, new Limits(1, 1, 720, 30, 50),
+            PlanType.ESSENTIALS, new Limits(1, 1, 1080, 30, 2_000),
+            PlanType.PRO, new Limits(3, 2, 1080, 60, 6_000),
+            PlanType.AGENCY, new Limits(10, 2, 1080, 60, 15_000));
+
+    /**
+     * One plan in the preview. {@code protectedSubscribers}: paying subscribers who keep their current limits (their
+     * terms are recorded, or will be by this step); {@code affectedAccounts}: accounts that would get the new limits
+     * now (on the plan with no paid subscription: Free accounts, or a paid plan without a subscription record).
+     */
+    public record LimitsPreviewRow(String plan, String name, Limits current, Limits recommended, List<String> changes,
+                                   long protectedSubscribers, long affectedAccounts, String affectedNote) {
+    }
+
+    public record LimitsPreview(List<LimitsPreviewRow> plans, boolean alreadyApplied) {
+    }
+
+    static Limits limitsOf(PlanConfig c) {
+        return new Limits(c.getMaxActiveStreams(), c.getMaxDestinations(), c.getMaxResolution(), c.getMaxFps(), c.getMonthlyTrafficGb());
+    }
+
+    static List<String> limitChanges(Limits a, Limits b) {
+        List<String> out = new ArrayList<>();
+        diff(out, "streams", a.streams(), b.streams());
+        diff(out, "destinations", a.destinations(), b.destinations());
+        diff(out, "quality", a.maxHeight() + "p", b.maxHeight() + "p");
+        diff(out, "fps", a.maxFps(), b.maxFps());
+        diff(out, "trafficGb", a.trafficGb() == null ? "unlimited" : a.trafficGb(), b.trafficGb() == null ? "unlimited" : b.trafficGb());
+        return out;
+    }
+
+    public LimitsPreview recommendedLimitsPreview() {
+        List<LimitsPreviewRow> rows = new ArrayList<>();
+        boolean applied = true;
+        for (PlanType t : PlanType.values()) {
+            PlanConfig c = planConfigs.findById(t).orElse(null);
+            Limits rec = RECOMMENDED.get(t);
+            if (c == null || rec == null) {
+                continue;
+            }
+            Limits cur = limitsOf(c);
+            List<String> changes = limitChanges(cur, rec);
+            applied &= changes.isEmpty();
+            long protectedSubs = t == PlanType.FREE ? 0 : subscriptions.countLiveOnPlan(t);
+            long affected = subscriptions.countUsersOnPlanWithoutSubscription(t);
+            String note = changes.isEmpty() ? "No change."
+                    : t == PlanType.FREE ? "Free accounts aren't grandfathered: they get the new Free limits."
+                    : affected == 0 ? "Nobody who pays today is affected: their limits are recorded and kept."
+                    : affected + " account(s) on this plan have no subscription record (set before billing existed) and would get the new limits.";
+            rows.add(new LimitsPreviewRow(t.name(), c.getDisplayName(), cur, rec, changes, protectedSubs, changes.isEmpty() ? 0 : affected, note));
+        }
+        return new LimitsPreview(rows, applied);
+    }
+
+    /**
+     * BI-10: applies {@link #RECOMMENDED} to plan_configs (what new sign-ups get), after recording today's limits on
+     * every subscription that has none yet (rows from before this release, or a rolling deploy), so no paying
+     * customer loses anything. Audited, never automatic.
+     */
+    @Transactional
+    public LimitsPreview applyRecommendedLimits(String admin, String reason) {
+        String why = requireReason(reason);
+        if (recommendedLimitsPreview().alreadyApplied()) {
+            throw new ConflictException("The recommended limits are already in place.");
+        }
+        ZonedDateTime now = now();
+        int snapshotted = 0;
+        for (Subscription s : subscriptions.findLiveWithoutTerms()) {
+            planConfigs.findById(s.getPlanType()).ifPresent(c -> s.setTerms(com.afklive.streamer.model.PlanTerms.of(c, now)));
+            subscriptions.save(s);
+            snapshotted++;
+        }
+        List<String> summary = new ArrayList<>();
+        for (PlanType t : PlanType.values()) {
+            PlanConfig c = planConfigs.findById(t).orElse(null);
+            Limits rec = RECOMMENDED.get(t);
+            if (c == null || rec == null) {
+                continue;
+            }
+            List<String> changes = limitChanges(limitsOf(c), rec);
+            if (changes.isEmpty()) {
+                continue;
+            }
+            c.setMaxActiveStreams(rec.streams());
+            c.setMaxDestinations(rec.destinations());
+            c.setMaxResolution(rec.maxHeight());
+            c.setMaxFps(rec.maxFps());
+            c.setMonthlyTrafficGb(rec.trafficGb());
+            plans.updatePlan(c);
+            record(admin, "PLAN_CONFIG", "plan", t.name(), String.join(", ", changes) + " (recommended limits for new sign-ups): " + why);
+            summary.add(t.name() + " " + String.join(", ", changes));
+        }
+        record(admin, "PLAN_LIMITS_NEW_SIGNUPS", "setting", "plan_configs", "recorded current limits on " + snapshotted
+                + " subscription(s); " + String.join("; ", summary) + ": " + why);
+        return recommendedLimitsPreview();
+    }
+
     private static <T> T required(T v, String what) {
+
         if (v == null) {
             throw new IllegalArgumentException("Fill in " + what + ".");
         }
