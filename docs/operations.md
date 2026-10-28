@@ -905,15 +905,45 @@ admin edits).
   prices stay. Nothing is applied by a deploy. After applying, update `site/src/static-plans.ts` (the
   no-JavaScript pricing cards) in the next release.
 - A fair use allowance set on a plan reaches grandfathered subscribers only if it was set before their
-  terms were recorded (their recorded "no allowance" is more generous).
+  terms were recorded (their recorded "no allowance" is more generous). To put one on them, use the
+  data allowance or reset actions below.
+- **One subscriber's limits** (Admin > Users > a user > "Plan limits", `/api/admin/users/{id}/terms`):
+  the recorded terms ("Kept from their purchase on …"), the plan's limits today and what is in effect.
+  Every action needs a reason and lands in `admin_actions` with before and after:
+  - *Raise limits* (`TERMS_RAISE`): streams, destinations, top quality (e.g. 4K), frame rate, storage,
+    hours, no watermark. Only upwards; it stays through renewals of the same plan and carries into an
+    upgrade.
+  - *Reset to plan* (`TERMS_RESET`): replaces the record with the plan's current limits. This is the only
+    way to take a grandfathered limit away; when it does, the dialog lists what goes and the API refuses
+    without `confirm: true`. Streams already on air are not stopped.
+  - *Data allowance* (`TERMS_DATA_ALLOWANCE`): sets the subscriber's own monthly GB, or clears it (no
+    limit of their own). They get the larger of it and the plan's, so it can't go below the plan; turning
+    "no limit" into a number needs confirmation. A one-off top-up for this month is still "Grant
+    streaming data".
+  - Free accounts and accounts without a live subscription have no recorded terms (the panel says why).
+- **Who is grandfathered** (Admin > Billing > "Subscribers on older, more generous limits",
+  `/api/admin/grandfathered?plan=PRO`): live subscriptions whose recorded terms give more than their
+  plan does today, with what is more, filterable by plan (first 500 rows, counts per plan).
 
 ### Launch offers (BI-9)
 
 - Admin > Plans > "Launch offers": name, percent off (1 to 50, default 10), discounted monthly payments
   (default 3; a yearly purchase gets it once, on the first year), plans, a real start and last day (at
   most 92 days), automatic and/or a code (letters and digits, never reused). One automatic offer at a
-  time. Creating and ending are audited (`OFFER_CREATE`, `OFFER_END`, reason required). Offers are
-  never edited: end one and create another.
+  time. Creating, editing and ending are audited (`OFFER_CREATE`, `OFFER_EDIT`, `OFFER_END`, reason
+  required).
+- Editing (`POST /api/admin/offers/{id}`, only fields sent change): the name and code at any time; the
+  last day earlier or later but never in the past (to stop now, "End now"), still at most 92 days from
+  the start and not overlapping another automatic offer; the start only before it starts. The discount,
+  months, plans, first-year and automatic settings only while nobody has paid with it and no checkout
+  with it was started: after that they're what customers were promised (the API answers 409 with why,
+  and the dialog shows it). Ended offers stay ended: create a new one.
+- Results (Admin > Billing > an offer > "Results", `/api/admin/offers/{id}/results`, a handful of
+  aggregate queries): accounts that took it by plan and cycle; the discount given with GST and without
+  (the taxable value, as on the invoices; refunded payments left out); who is in a discounted period now
+  and who still has discounted renewals to come; of those who used it up, how many renewed at the full
+  price or upgraded; and of the accounts created while it ran, how many took it (conversion) and how
+  many paid for any plan.
 - Who: accounts that never had a plan (no subscription row, no plan payment, no earlier offer), once
   per account (`offer_redemptions`, keyed by user: two payments racing both count against the same
   offer). Discounted renewals need the same plan and cycle; an upgrade is at the list price and ends
@@ -1448,10 +1478,14 @@ are left out. Seven queries per load, refreshed every 5 minutes while open.
 
 - **Paying**: a subscription that is `ACTIVE` or `PAST_DUE` (grace days) on an account with at least one
   completed payment. Plans an admin gave without a payment are listed apart and left out of MRR.
-- **MRR (estimate)**: for each `ACTIVE` paying subscription, today's list price for its cycle (yearly
-  ÷ 12), ÷ 1.18 to take out GST for INR. USD plans (zero-rated exports) are shown separately; no
-  exchange rate is applied. Discounts, upgrade credit and older prices aren't in it. A plan set to end
-  at the period end still counts until it ends; one in its grace days doesn't.
+- **MRR**: for each `ACTIVE` paying subscription, what its current period actually cost
+  (`subscriptions.period_price`: after any launch offer discount, before upgrade credit, so an upgrade
+  counts at the new plan's full price) for its cycle (yearly ÷ 12), ÷ 1.18 to take out GST for INR.
+  Periods paid before `period_price` was recorded (#214) count at today's list price, and the page says
+  how many. The same total at list prices is shown beside it, so the gap is what offers take off for
+  now (it closes by itself as discounted renewals run out). USD plans (zero-rated exports) are shown
+  separately; no exchange rate is applied. A plan set to end at the period end still counts until it
+  ends; one in its grace days doesn't.
 - **Churn (estimate)**: paid subscriptions that moved to Free in the month (`status = CANCELED`, by
   `updated_at`); rate = moved this month ÷ (paying now + moved this month). The subscription row is
   reused when someone pays again, so a leave-and-return within one month isn't counted.
