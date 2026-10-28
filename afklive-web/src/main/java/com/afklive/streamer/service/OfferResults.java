@@ -60,7 +60,7 @@ public class OfferResults {
     }
 
     /** {@code emailLike} limits sign-ups to matching emails (tests share a database); null: everyone. */
-    Results results(Long offerId, ZonedDateTime now, String emailLike) {
+    public Results results(Long offerId, ZonedDateTime now, String emailLike) {
         LaunchOffer o = offers.findById(offerId).orElseThrow(() -> new NotFoundException("Offer not found."));
         ZonedDateTime utc = now.withZoneSameInstant(ZoneOffset.UTC);
         ZonedDateTime to = o.closesAt().isBefore(utc) ? o.closesAt() : utc;

@@ -239,7 +239,7 @@ public class PlanTermsAdmin {
     }
 
     /** Subscribers whose recorded terms give more than their plan does today; {@code plan} filters (null: all). */
-    Grandfathered grandfathered(String plan, String emailLike) {
+    public Grandfathered grandfathered(String plan, String emailLike) {
         PlanType filter = plan == null || plan.isBlank() ? null : parsePlan(plan);
         MapSqlParameterSource p = new MapSqlParameterSource().addValue("scope", emailLike)
                 .addValue("plan", filter == null ? null : filter.name());
@@ -304,7 +304,7 @@ public class PlanTermsAdmin {
             out.add(hours(t.getMonthlyHours()) + " (plan: " + hours(plan.getMonthlyHours()) + ")");
         }
         if (plan.getMonthlyTrafficGb() != null && (t.getTrafficGb() == null || t.getTrafficGb() > plan.getMonthlyTrafficGb())) {
-            out.add(gbText(t.getTrafficGb()) + " streaming data (plan: " + gbText(plan.getMonthlyTrafficGb()) + ")");
+            out.add((t.getTrafficGb() == null ? "no streaming data limit" : t.getTrafficGb() + " GB streaming data") + " (plan: " + gbText(plan.getMonthlyTrafficGb()) + ")");
         }
         if (plan.isWatermark() && Boolean.FALSE.equals(t.getWatermark())) {
             out.add("no watermark (plan: watermark)");

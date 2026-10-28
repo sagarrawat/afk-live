@@ -243,6 +243,33 @@ class BusinessMetricsTest extends PostgresIntegrationTest {
         assertThat(Arrays.asList(r.weeks().get(11).signUps(), r.weeks().get(11).activeCreators())).containsOnly(0L);
     }
 
+    /** AD-2 with BI-9: MRR counts what each subscriber's current period actually cost, not the list price. */
+    @Test
+    void mrrUsesAmountsActuallyPaidAfterLaunchOffers() {
+        String old = "2030-01-01T00:00:00Z";
+        PlanConfig creator = plans.getPlanConfig(PlanType.ESSENTIALS);
+        User discounted = account("offer", old, null);
+        paid(discounted);
+        subscription(discounted, PlanType.ESSENTIALS, "MONTHLY", "INR", "ACTIVE", false, "2031-03-01T00:00:00Z");
+        long offerPrice = creator.getPriceInrMonth() * 90 / 100;
+        jdbc.update("UPDATE subscriptions SET period_price = ? WHERE user_id = ?", offerPrice, discounted.getId());
+        User unrecorded = account("before", old, null);                              // paid before amounts were recorded
+        paid(unrecorded);
+        subscription(unrecorded, PlanType.ESSENTIALS, "MONTHLY", "INR", "ACTIVE", false, "2031-03-01T00:00:00Z");
+
+        BusinessMetrics.Report r = metrics.report(NOW, scope());
+        double list = creator.getPriceInrMonth() / 100.0 / 1.18;
+        double actual = offerPrice / 100.0 / 1.18 + list;
+        assertThat(r.mrr().inr()).isCloseTo(actual, within(0.01));
+        assertThat(r.mrr().listInr()).isCloseTo(2 * list, within(0.01));
+        assertThat(r.mrr().atListPrice()).isEqualTo(1);
+        assertThat(r.mrr().note()).contains("actually paid").contains("1 subscription(s)");
+        BusinessMetrics.PlanRow row = r.plans().get(0);
+        assertThat(row.mrr()).isCloseTo(actual, within(0.01));
+        assertThat(row.monthlyEach()).isCloseTo(actual / 2, within(0.01));
+        assertThat(row.listEach()).isCloseTo(list, within(0.01));
+    }
+
     @Test
     void onlyAdminsCanReadBusinessNumbers() throws Exception {
         User creator = account("creator", "2031-03-18T09:00:00Z", null);
