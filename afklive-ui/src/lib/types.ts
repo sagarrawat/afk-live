@@ -391,6 +391,8 @@ export interface PlanView {
   yearly: number;
   monthlyLabel: string;
   yearlyLabel: string;
+  /** Monthly streaming data allowance in GB (fair use); null or missing = none. */
+  monthlyTrafficGb?: number | null;
 }
 
 export interface BillingOverview {

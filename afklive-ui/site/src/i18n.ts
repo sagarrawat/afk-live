@@ -21,6 +21,8 @@ export interface Dict {
     unlimitedHours: string;
     destinations(n: number): string;
     storage(gb: string): string;
+    /** The monthly fair-use streaming data allowance, e.g. "2,000". */
+    streamingData(gb: string): string;
     watermark: string;
     noWatermark: string;
     pitch: Record<'FREE' | 'ESSENTIALS' | 'PRO' | 'AGENCY', string>;
@@ -68,6 +70,7 @@ const en: Dict = {
     unlimitedHours: 'Unlimited hours, 24/7',
     destinations: (n) => `${n} destination${n === 1 ? '' : 's'} per stream`,
     storage: (gb) => `${gb} of storage`,
+    streamingData: (gb) => `${gb} GB of streaming data a month`,
     watermark: 'Small AFK Live mark on stream',
     noWatermark: 'No watermark',
     pitch: {
@@ -138,6 +141,7 @@ const hi: Dict = {
     unlimitedHours: 'अनलिमिटेड घंटे, 24/7',
     destinations: (n) => `हर stream ${n} प्लेटफ़ॉर्म पर`,
     storage: (gb) => `${gb} स्टोरेज`,
+    streamingData: (gb) => `हर महीने ${gb} GB streaming data`,
     watermark: 'stream पर AFK Live का छोटा-सा निशान',
     noWatermark: 'कोई watermark नहीं',
     pitch: {

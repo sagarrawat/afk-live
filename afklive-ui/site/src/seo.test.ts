@@ -61,7 +61,7 @@ describe('structured data', () => {
     const askedHi: string[] = [];
     const hindiHelp = files.filter((f) => /^hi-help-.+\.html$/.test(f) && page(f).includes('data-faq'));
     expect(hindiHelp.length).toBeGreaterThanOrEqual(4);
-    for (const [name, count] of [['index.html', 6], ['hi.html', 6], ['pricing.html', 7], ...hindiHelp.map((f) => [f, faqEntries(page(f)).length] as const)] as const) {
+    for (const [name, count] of [['index.html', 6], ['hi.html', 6], ['pricing.html', 8], ...hindiHelp.map((f) => [f, faqEntries(page(f)).length] as const)] as const) {
       const html = built(name);
       const [faq] = ofType(html, 'FAQPage');
       expect(faq.mainEntity, name).toHaveLength(count);

@@ -96,7 +96,9 @@ public class BillingService {
 
     public record PlanView(String id, String name, int concurrentStreams, int maxHeight, int maxFps, long storageBytes,
                            int monthlyHours, boolean watermark, int destinationsPerStream, String currency,
-                           long monthly, long yearly, String monthlyLabel, String yearlyLabel) {
+                           long monthly, long yearly, String monthlyLabel, String yearlyLabel,
+                           /** FO-5: the plan's monthly streaming data allowance in GB; null = none. */
+                           Integer monthlyTrafficGb) {
     }
 
     /** "₹1,499" or "$9": whole amounts without ".00"; "$7.50" keeps its cents. */
@@ -116,7 +118,7 @@ public class BillingService {
             long y = c.price(cur, true);
             out.add(new PlanView(t.name(), c.getDisplayName(), c.getMaxActiveStreams(), c.getMaxResolution(), c.getMaxFps(),
                     c.getMaxStorageBytes(), c.getMonthlyHours(), c.isWatermark(), c.getMaxDestinations(), cur, m, y,
-                    m == 0 ? "Free" : priceLabel(m, cur), y == 0 ? "Free" : priceLabel(y, cur)));
+                    m == 0 ? "Free" : priceLabel(m, cur), y == 0 ? "Free" : priceLabel(y, cur), c.getMonthlyTrafficGb()));
         }
         return out;
     }

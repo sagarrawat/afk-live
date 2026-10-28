@@ -16,6 +16,8 @@ export interface PlanView {
   yearly: number;
   monthlyLabel: string;
   yearlyLabel: string;
+  /** Monthly streaming data allowance in GB (fair use); null or missing = none. */
+  monthlyTrafficGb?: number | null;
 }
 
 /**
@@ -80,6 +82,7 @@ export function features(p: PlanView, lang: Lang = 'en'): string[] {
     p.monthlyHours > 0 ? d.hoursAMonth(p.monthlyHours) : d.unlimitedHours,
     d.destinations(p.destinationsPerStream),
     d.storage(gb(p.storageBytes)),
+    ...(p.monthlyTrafficGb ? [d.streamingData(p.monthlyTrafficGb.toLocaleString(t(lang).locale))] : []),
     p.watermark ? d.watermark : d.noWatermark,
   ];
 }

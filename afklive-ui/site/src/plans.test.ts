@@ -26,6 +26,13 @@ describe('site plan cards', () => {
     expect(gb(1.5 * 1024 ** 3)).toBe('1.5 GB');
   });
 
+  it('state the monthly streaming data allowance when the plan has one (FO-5), and nothing when it has none', () => {
+    expect(features(plan({ monthlyTrafficGb: 2000 }))).toContain('2,000 GB of streaming data a month');
+    expect(features(plan({ monthlyTrafficGb: 15000 }), 'hi')).toContain('हर महीने 15,000 GB streaming data');
+    expect(features(plan({ monthlyTrafficGb: null })).join(' ')).not.toContain('streaming data');
+    expect(features(plan({})).join(' ')).not.toContain('streaming data');
+  });
+
   it('show the yearly price when asked and escape names', () => {
     const html = planCards([plan({ name: '<b>Creator</b>' })], 'YEARLY');
     expect(html).toContain('₹4,990.00');
