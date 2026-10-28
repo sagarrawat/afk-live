@@ -68,7 +68,7 @@ public class ChannelService {
     public SocialChannel addChannel(String username, String channelName, String platform) {
         User user = userService.getOrCreateUser(username);
 
-        int limit = planService.getPlanConfig(user.getPlanType()).getMaxChannels();
+        int limit = planService.limitsFor(user).getMaxChannels();
         if (user.getChannels().size() >= limit) {
             throw new IllegalStateException("Plan limit reached. Upgrade to add more channels.");
         }

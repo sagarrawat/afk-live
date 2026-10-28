@@ -10,6 +10,7 @@ import type { Uptime,
   NotificationFeed,
   Page,
   PlanView,
+  PublicOffer,
   QualityOption,
   RunView,
   ScheduleCalendar,
@@ -106,6 +107,9 @@ export const useNotifications = () =>
 export const useBilling = () => useQuery({ queryKey: keys.billing, queryFn: () => get<BillingOverview>('/api/billing') });
 export const usePlans = (currency: string) =>
   useQuery({ queryKey: keys.plans(currency), queryFn: () => get<PlanView[]>(`/api/billing/plans?currency=${currency}`), staleTime: 300_000 });
+/** BI-9: the launch offer open now (null when there is none); keyed under billing so a payment refreshes it. */
+export const useOffer = (currency: string) =>
+  useQuery({ queryKey: [...keys.billing, 'offer', currency] as const, queryFn: async () => (await get<PublicOffer | undefined>(`/api/billing/offer?currency=${currency}`)) ?? null, staleTime: 60_000 });
 export const useBillingProfile = () => useQuery({ queryKey: keys.profile, queryFn: () => get<BillingProfile>('/api/billing/profile') });
 
 /** SC-3: every scheduled run across streams, refreshed each minute (runs start and end on their own). */

@@ -229,7 +229,7 @@ public class MediaService {
     public StorageView storage(String email) {
         User u = user(email);
         long used = users.usedStorage(u.getId());
-        long limit = plans.getPlanConfig(u.getPlanType()).getMaxStorageBytes();
+        long limit = plans.limitsFor(u).getMaxStorageBytes();
         double pct = limit <= 0 ? 100 : Math.round(used * 1000.0 / limit) / 10.0;
         return new StorageView(used, limit, pct, used >= limit * WARN_AT, used >= limit, u.getPlanType().name());
     }
@@ -248,7 +248,7 @@ public class MediaService {
         if (size <= 0) {
             throw new IllegalArgumentException("This file is empty.");
         }
-        long limit = plans.getPlanConfig(u.getPlanType()).getMaxStorageBytes();
+        long limit = plans.limitsFor(u).getMaxStorageBytes();
         if (users.reserveStorage(u.getId(), size, limit) != 1) {
             long used = users.usedStorage(u.getId());
             throw new ConflictException("Not enough storage: this file needs " + human(size) + " and you have "

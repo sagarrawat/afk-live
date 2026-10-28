@@ -345,7 +345,7 @@ public class LiveStreamService {
             next.add(new StreamTarget(s.getId(), d.getId(), t.enabled()));
         }
         // BI-8: destinations per stream by plan.
-        PlanConfig plan = planService.getPlanConfig(s.getUser().getPlanType());
+        PlanConfig plan = planService.limitsFor(s.getUser());
         long enabled = next.stream().filter(StreamTarget::isEnabled).count();
         if (enabled > plan.getMaxDestinations()) {
             throw new IllegalArgumentException("Your " + plan.getDisplayName() + " plan sends a stream to " + plan.getMaxDestinations()
@@ -631,7 +631,7 @@ public class LiveStreamService {
         }
 
         List<StreamDestination> enabled = enabledDestinations(s);
-        int maxDest = planService.getPlanConfig(user.getPlanType()).getMaxDestinations();
+        int maxDest = planService.limitsFor(user).getMaxDestinations();
         if (enabled.size() > maxDest) {
             checks.add(new Check("destinations-limit", false, "Your plan sends to " + maxDest + " destination"
                     + (maxDest == 1 ? "" : "s") + " at once; turn some off or upgrade.", "destinations"));
@@ -651,10 +651,10 @@ public class LiveStreamService {
         }
 
         int planMax = planMaxHeight(user);
-        String planName = planService.getPlanConfig(user.getPlanType()).getDisplayName();
+        String planName = planService.limitsFor(user).getDisplayName();
         if (s.getQualityHeight() > planMax) {
             checks.add(new Check("quality", false, s.getQualityHeight() + "p is above your " + planName + " plan's " + planMax + "p.", "/pricing"));
-        } else if (s.getFps() > planService.getPlanConfig(user.getPlanType()).getMaxFps()) {
+        } else if (s.getFps() > planService.limitsFor(user).getMaxFps()) {
             checks.add(new Check("quality", false, s.getFps() + " fps isn't included in your " + planName + " plan.", "/pricing"));
         } else {
             checks.add(new Check("quality", true, s.getQualityHeight() + "p" + s.getFps() + " is included in your plan.", "settings"));
@@ -673,7 +673,7 @@ public class LiveStreamService {
         }
 
         int live = (int) jobs.countByUserEmailAndIsLiveTrue(email);
-        int maxStreams = planService.getPlanConfig(user.getPlanType()).getMaxActiveStreams();
+        int maxStreams = planService.limitsFor(user).getMaxActiveStreams();
         List<StreamJob> running = jobs.findAllByStreamIdAndIsLiveTrue(id);
         if (!running.isEmpty()) {
             boolean stopping = running.stream().allMatch(j -> StreamStates.STOP.equals(j.getDesiredState()));
@@ -716,7 +716,7 @@ public class LiveStreamService {
     /** Qualities the creator's plan includes, for GL-7's lighter suggestion. */
     private List<CapacityEstimator.Quality> allowedQualities(User user) {
         int max = planMaxHeight(user);
-        int maxFps = planService.getPlanConfig(user.getPlanType()).getMaxFps();
+        int maxFps = planService.limitsFor(user).getMaxFps();
         List<CapacityEstimator.Quality> out = new ArrayList<>();
         for (int h : new int[]{720, 1080, 1440, 2160}) {
             for (int f : new int[]{30, 60}) {
@@ -1083,14 +1083,14 @@ public class LiveStreamService {
     public List<QualityOption> qualityOptions(String email) {
         User user = userService.getOrCreateUser(email);
         int max = planMaxHeight(user);
-        String planName = planService.getPlanConfig(user.getPlanType()).getDisplayName();
+        String planName = planService.limitsFor(user).getDisplayName();
         List<QualityOption> out = new ArrayList<>();
         for (int h : new int[]{720, 1080, 1440, 2160}) {
             for (int f : new int[]{30, 60}) {
                 String reason = null;
                 if (h > max) {
                     reason = "Your " + planName + " plan streams up to " + max + "p.";
-                } else if (f > planService.getPlanConfig(user.getPlanType()).getMaxFps()) {
+                } else if (f > planService.limitsFor(user).getMaxFps()) {
                     reason = f + " fps isn't included in your " + planName + " plan.";
                 }
                 out.add(new QualityOption(h, f, reason == null, reason));
@@ -1216,7 +1216,7 @@ public class LiveStreamService {
                     o.text(), o.imageMediaId(), key, o.color(), o.background(), o.opacity(),
                     o.timeZone() != null ? o.timeZone() : s.getTimeZone(), o.target(), o.speed(), o.scene()));
         }
-        if (planService.getPlanConfig(s.getUser().getPlanType()).isWatermark()) {
+        if (planService.limitsFor(s.getUser()).isWatermark()) {
             // BI-1: the Free plan's small mark, added here so it can't be removed from the client.
             overlays.add(new StudioSpec.OverlaySetting(com.afklive.streamer.streaming.studio.OverlayCompositor.WATERMARK_ID, "TEXT", true, 0.8, 0.92, 0, 0.03, "AFK Live",
                     null, null, "#ffffff", "#66000000", 0.8, null, null, 0, null));
@@ -1493,7 +1493,7 @@ public class LiveStreamService {
     }
 
     private int planMaxHeight(User user) {
-        int max = planService.getPlanConfig(user.getPlanType()).getMaxResolution();
+        int max = planService.limitsFor(user).getMaxResolution();
         return max <= 0 ? 720 : max;
     }
 
@@ -1505,11 +1505,11 @@ public class LiveStreamService {
             throw new IllegalArgumentException("Frame rate must be 30 or 60.");
         }
         int max = planMaxHeight(user);
-        String planName = planService.getPlanConfig(user.getPlanType()).getDisplayName();
+        String planName = planService.limitsFor(user).getDisplayName();
         if (height > max) {
             throw new IllegalArgumentException("Your " + planName + " plan streams up to " + max + "p. Upgrade for " + height + "p.");
         }
-        if (fps > planService.getPlanConfig(user.getPlanType()).getMaxFps()) {
+        if (fps > planService.limitsFor(user).getMaxFps()) {
             throw new IllegalArgumentException(fps + " fps isn't included in your " + planName + " plan. Upgrade for " + fps + " fps.");
         }
     }

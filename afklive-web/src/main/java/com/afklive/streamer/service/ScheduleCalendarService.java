@@ -63,7 +63,7 @@ public class ScheduleCalendarService {
         LocalDate first = from != null ? from : now.withZoneSameInstant(zone).toLocalDate();
         ZonedDateTime rangeStart = first.atStartOfDay(zone);
         ZonedDateTime rangeEnd = first.plusDays(days).atStartOfDay(zone);
-        PlanConfig plan = plans.getPlanConfig(user.getPlanType());
+        PlanConfig plan = plans.limitsFor(user);
         int limit = Math.max(1, plan.getMaxActiveStreams());
 
         List<LiveStream> mine = streams.findAllByUserEmailOrderByCreatedAtAsc(email);

@@ -21,6 +21,11 @@ public interface PaymentAuditRepository extends JpaRepository<PaymentAudit, Long
 
     java.util.List<PaymentAudit> findTop50ByMerchantUserIdOrderByCreatedAtDesc(String merchantUserId);
 
+    /** BI-9: has this account ever paid for a plan (refunded payments count; paying off a usage balance doesn't)? */
+    @Query("SELECT COUNT(p) > 0 FROM PaymentAudit p WHERE p.merchantUserId = :email"
+            + " AND p.status IN ('COMPLETED', 'SUCCESS', 'REFUNDED', 'PARTIALLY_REFUNDED') AND (p.kind IS NULL OR p.kind <> 'BALANCE')")
+    boolean hasPaidForPlan(@Param("email") String email);
+
     /** Completed payments since a time, per currency: rows of [currency (null = INR), sum of amounts]. */
     @Query("SELECT p.currency, COALESCE(SUM(p.amount), 0) FROM PaymentAudit p WHERE p.status IN ('COMPLETED', 'SUCCESS')"
             + " AND p.createdAt >= :since GROUP BY p.currency")

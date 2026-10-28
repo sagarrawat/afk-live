@@ -3,6 +3,8 @@ package com.afklive.streamer.endpoint;
 import com.afklive.streamer.model.AdminAction;
 import com.afklive.streamer.service.AdminConsoleService;
 import com.afklive.streamer.service.AdminService;
+import com.afklive.streamer.service.OfferService;
+
 import com.afklive.streamer.service.StatusService;
 import com.afklive.streamer.util.SecurityUtils;
 import org.springframework.core.io.Resource;
@@ -33,11 +35,13 @@ public class AdminApiController {
     private final AdminService admin;
     private final StatusService status;
     private final AdminConsoleService console;
+    private final OfferService offers;
 
-    public AdminApiController(AdminService admin, StatusService status, AdminConsoleService console) {
+    public AdminApiController(AdminService admin, StatusService status, AdminConsoleService console, OfferService offers) {
         this.admin = admin;
         this.status = status;
         this.console = console;
+        this.offers = offers;
     }
 
     public record Reason(String reason) {
@@ -207,6 +211,39 @@ public class AdminApiController {
     @PostMapping("/plans/{plan}")
     public AdminService.PlanView updatePlan(@PathVariable String plan, @RequestBody PlanUpdate body, Principal p) {
         return admin.updatePlanConfig(SecurityUtils.getEmail(p), plan, body.plan(), body.reason());
+    }
+
+    // ------------------------------------------------------------------ BI-10: limits for new sign-ups
+
+    /** What applying the recommended limits for new sign-ups would change, and who it affects (nobody who pays). */
+    @GetMapping("/plan-limits/recommended")
+    public AdminService.LimitsPreview recommendedLimits() {
+        return admin.recommendedLimitsPreview();
+    }
+
+    @PostMapping("/plan-limits/recommended")
+    public AdminService.LimitsPreview applyRecommendedLimits(@RequestBody Reason body, Principal p) {
+        return admin.applyRecommendedLimits(SecurityUtils.getEmail(p), body.reason());
+    }
+
+    // ------------------------------------------------------------------ BI-9: launch offers
+
+    @GetMapping("/offers")
+    public List<OfferService.OfferRow> offers() {
+        return offers.list(ZonedDateTime.now(java.time.ZoneOffset.UTC));
+    }
+
+    public record NewOffer(OfferService.OfferInput offer, String reason) {
+    }
+
+    @PostMapping("/offers")
+    public OfferService.OfferRow createOffer(@RequestBody NewOffer body, Principal p) {
+        return offers.create(SecurityUtils.getEmail(p), body.offer(), body.reason(), ZonedDateTime.now(java.time.ZoneOffset.UTC));
+    }
+
+    @PostMapping("/offers/{id}/end")
+    public OfferService.OfferRow endOffer(@PathVariable Long id, @RequestBody Reason body, Principal p) {
+        return offers.end(SecurityUtils.getEmail(p), id, body.reason(), ZonedDateTime.now(java.time.ZoneOffset.UTC));
     }
 
     // ------------------------------------------------------------------ RE-7: status page incidents

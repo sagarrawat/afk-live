@@ -31,6 +31,14 @@ export interface Dict {
     startFree: string;
     /** The free plan's price, or null to show the catalogue's own label. */
     freePrice: string | null;
+    /** After "/ month" on rupee prices (BI-9: every price includes GST). */
+    inclGst: string;
+    /** Read out before a struck-through list price (screen readers). */
+    listPrice: string;
+    /** BI-9 launch offer lines: real list price, real offer price, how long, and who it's for. */
+    offerMonthly(name: string, percent: number, months: number, price: string, list: string): string;
+    offerYearly(name: string, percent: number, price: string, list: string): string;
+    offerWho(day: string): string;
   };
   calc: {
     hours: string;
@@ -74,6 +82,12 @@ const en: Dict = {
     startWith: (name) => `Start with ${name}`,
     startFree: 'Start free',
     freePrice: null,
+    inclGst: 'incl. GST',
+    listPrice: 'List price',
+    offerMonthly: (name, pct, months, price, list) =>
+      `${name}: ${pct}% off your first ${months === 1 ? 'month' : `${months} months`} — ${price}/month, then ${list}.`,
+    offerYearly: (name, pct, price, list) => `${name}: ${pct}% off your first year — ${price}, then ${list}/year.`,
+    offerWho: (day) => `For new subscribers, until ${day}.`,
   },
   calc: {
     hours: 'h',
@@ -138,7 +152,14 @@ const hi: Dict = {
     startWith: (name) => `${name} से शुरू करें`,
     startFree: 'फ़्री में शुरू करें',
     freePrice: 'फ़्री',
+    inclGst: 'GST सहित',
+    listPrice: 'पूरी कीमत',
+    offerMonthly: (name, pct, months, price, list) =>
+      `${name}: पहले ${months === 1 ? 'महीने' : `${months} महीने`} ${pct}% छूट — ${price}/महीना, फिर ${list}।`,
+    offerYearly: (name, pct, price, list) => `${name}: पहले साल ${pct}% छूट — ${price}, फिर ${list}/साल।`,
+    offerWho: (day) => `सिर्फ़ नए सब्सक्राइबर के लिए, ${day} तक।`,
   },
+
   calc: {
     hours: 'घंटे',
     days: 'दिन',

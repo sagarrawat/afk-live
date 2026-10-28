@@ -62,6 +62,17 @@ public class Subscription {
     @Column(name = "renewal_reminded_at")
     private ZonedDateTime renewalRemindedAt;
 
+    /**
+     * BI-9: what the current period cost before any upgrade credit (the list price, or less with a launch offer);
+     * null for periods paid before this was recorded (then the list price is assumed).
+     */
+    @Column(name = "period_price")
+    private Long periodPrice;
+
+    /** BI-10: the limits bought with this plan (null on rows from before grandfathering, or on a plan an admin set). */
+    @Embedded
+    private PlanTerms terms;
+
     @Column(name = "created_at", nullable = false)
     private ZonedDateTime createdAt = ZonedDateTime.now();
 

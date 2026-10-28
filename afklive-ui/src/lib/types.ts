@@ -405,6 +405,33 @@ export interface BillingOverview {
   nextCharge?: { date: string; amount: number; currency: string; description: string } | null;
   invoices: { id: number; number: string; description: string; total: number; currency: string; issuedAt: string }[];
   unpaidBalance: number;
+  /** BI-9: the account's launch offer and how many discounted payments it has left. */
+  offer?: { name: string; percentOff: number; plan: string; cycle: 'MONTHLY' | 'YEARLY'; payments: number; used: number; left: number } | null;
+}
+
+/** BI-9: the launch offer open now, with each plan's real list price and offer price (GST included). */
+export interface PublicOffer {
+  name: string;
+  percentOff: number;
+  monthlyPeriods: number;
+  includeYearly: boolean;
+  startsAt: string;
+  endsAt: string;
+  currency: 'INR' | 'USD';
+  plans: {
+    id: string;
+    name: string;
+    listMonthly: number;
+    offerMonthly: number;
+    listMonthlyLabel: string;
+    offerMonthlyLabel: string;
+    listYearly: number;
+    offerYearly: number | null;
+    listYearlyLabel: string;
+    offerYearlyLabel: string | null;
+  }[];
+  /** False when the signed-in account can't take it (it has had a plan). */
+  eligible?: boolean | null;
 }
 
 export interface Quote {
@@ -412,12 +439,21 @@ export interface Quote {
   plan: Plan['id'];
   cycle: 'MONTHLY' | 'YEARLY';
   currency: string;
+  /** The period's price after any launch offer (GST included). */
   price: number;
   credit: number;
+  /** Paid now, GST included; {@link gst} of it is GST (INR). */
   amount: number;
   periodStart: string;
   periodEnd: string;
+  listPrice: number;
+  discount: number;
+  offer?: { id: number; name: string; percentOff: number; payments: number; paymentsLeft: number } | null;
+  /** What it renews at once any offer is used up (the list price). */
+  renewalPrice: number;
+  gst: number;
 }
+
 
 export interface BillingProfile {
   legalName?: string | null;

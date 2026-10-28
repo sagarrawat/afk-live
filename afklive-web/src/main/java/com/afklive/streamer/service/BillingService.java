@@ -58,6 +58,7 @@ public class BillingService {
     private final UsageRepository usage;
     private final StreamJobRepository jobs;
     private final NotificationService notifications;
+    private final OfferService offers;
     private final String baseUrl;
     private final String role;
     private final org.springframework.transaction.support.TransactionTemplate tx;
@@ -70,7 +71,7 @@ public class BillingService {
     public BillingService(SubscriptionRepository subscriptions, PaymentAuditRepository audits, PaymentGateway gateway,
                           UserRepository users, PlanService plans, InvoiceService invoices, InvoiceRepository invoiceRepository,
                           BillingProfileRepository profiles, UsageRepository usage, StreamJobRepository jobs,
-                          NotificationService notifications,
+                          NotificationService notifications, OfferService offers,
                           @Value("${app.base-url:http://localhost:8080}") String baseUrl,
                           @Value("${app.streaming.role:all}") String role,
                           org.springframework.transaction.PlatformTransactionManager txManager) {
@@ -86,6 +87,7 @@ public class BillingService {
         this.usage = usage;
         this.jobs = jobs;
         this.notifications = notifications;
+        this.offers = offers;
         this.baseUrl = baseUrl;
         this.role = role;
     }
@@ -130,14 +132,15 @@ public class BillingService {
     public record InvoiceView(Long id, String number, String description, long total, String currency, ZonedDateTime issuedAt) {
     }
 
+    /** {@code offer}: the account's launch offer and how many discounted payments it has left (BI-9), or null. */
     public record Overview(String plan, String planName, String cycle, String status, ZonedDateTime periodEnd,
                            boolean cancelAtPeriodEnd, String pendingPlan, Usage usage, NextCharge nextCharge,
-                           List<InvoiceView> invoices, double unpaidBalance) {
+                           List<InvoiceView> invoices, double unpaidBalance, OfferService.Standing offer) {
     }
 
     public Overview overview(String email) {
         User u = user(email);
-        PlanConfig c = plans.getPlanConfig(u.getPlanType());
+        PlanConfig c = plans.limitsFor(u);
         Optional<Subscription> sub = subscriptions.findByUserId(u.getId()).filter(s -> s.getStatus() != Subscription.Status.CANCELED);
         Usage use = new Usage(Math.round(usage.secondsIn(u.getId(), month(now())) / 36.0) / 100.0, c.getMonthlyHours(),
                 u.getUsedStorageBytes(), c.getMaxStorageBytes(), (int) jobs.countByUserEmailAndIsLiveTrue(email), c.getMaxActiveStreams());
@@ -147,9 +150,10 @@ public class BillingService {
             PlanType nextPlan = s.getPendingPlan() != null ? s.getPendingPlan() : s.getPlanType();
             Subscription.Cycle nextCycle = s.getPendingCycle() != null ? s.getPendingCycle() : s.getCycle();
             if (nextPlan != PlanType.FREE) {
-                long amount = plans.getPlanConfig(nextPlan).price(s.getCurrency(), nextCycle == Subscription.Cycle.YEARLY);
-                next = new NextCharge(s.getCurrentPeriodEnd(), amount, s.getCurrency(),
-                        plans.getPlanConfig(nextPlan).getDisplayName() + " (" + nextCycle.name().toLowerCase() + ")");
+                OfferService.Pricing p = renewalPricing(s, nextPlan, nextCycle);
+                next = new NextCharge(s.getCurrentPeriodEnd(), p.price(), s.getCurrency(),
+                        plans.getPlanConfig(nextPlan).getDisplayName() + " (" + nextCycle.name().toLowerCase() + ")"
+                                + (p.discounted() ? ", " + p.label() : ""));
             }
         }
         List<InvoiceView> inv = invoiceRepository.findAllByUserIdOrderByIssuedAtDesc(u.getId()).stream()
@@ -159,29 +163,64 @@ public class BillingService {
                 sub.map(s -> s.getStatus().name()).orElse(u.getPlanType() == PlanType.FREE ? "FREE" : "ACTIVE"),
                 sub.map(Subscription::getCurrentPeriodEnd).orElse(null), sub.map(Subscription::isCancelAtPeriodEnd).orElse(false),
                 sub.map(s -> s.getPendingPlan() == null ? null : s.getPendingPlan().name()).orElse(null), use, next, inv,
-                u.getUnpaidBalance());
+                u.getUnpaidBalance(), offers.standing(u.getId()));
+    }
+
+    /** What the next period of {@code plan}/{@code cycle} costs this subscriber (a launch offer's renewals, or the list price). */
+    OfferService.Pricing renewalPricing(Subscription s, PlanType plan, Subscription.Cycle cycle) {
+        long list = plans.getPlanConfig(plan).price(s.getCurrency(), cycle == Subscription.Cycle.YEARLY);
+        return offers.forRenewal(s.getUserId(), plan, cycle, s.getCurrency(), list);
     }
 
     // ------------------------------------------------------------------ checkout
 
+    /**
+     * A launch offer on a quote (BI-9): {@code payments} discounted payments in all, {@code paymentsLeft} more after
+     * this one, each at the quote's {@code price}; then the plan renews at the quote's {@code renewalPrice}.
+     */
+    public record OfferLine(Long id, String name, int percentOff, int payments, int paymentsLeft) {
+    }
+
+    /**
+     * {@code listPrice} is the plan's price for the period and {@code discount} a launch offer's (both GST-inclusive);
+     * {@code price} is what the period costs after it; {@code amount} what is paid now after any upgrade credit, of
+     * which {@code gst} is GST (INR). {@code renewalPrice}: the price once any offer is used up (the list price).
+     */
     public record Quote(String kind, PlanType plan, Subscription.Cycle cycle, String currency, long price, long credit,
-                        long amount, ZonedDateTime periodStart, ZonedDateTime periodEnd) {
+                        long amount, ZonedDateTime periodStart, ZonedDateTime periodEnd, long listPrice, long discount,
+                        OfferLine offer, long renewalPrice, long gst) {
+    }
+
+    static Quote quoteOf(String kind, PlanType plan, Subscription.Cycle cycle, String currency, OfferService.Pricing p, long credit,
+                         long amount, ZonedDateTime start, ZonedDateTime end) {
+        OfferLine offer = p.discounted() ? new OfferLine(p.offerId(), p.offerName(), p.percentOff(), p.payments(), p.paymentsLeft()) : null;
+        long gst = amount - InvoiceService.split(amount, currency, null, null).taxable();
+        return new Quote(kind, plan, cycle, currency, p.price(), credit, amount, start, end, p.list(), p.discount(), offer, p.list(), gst);
     }
 
     /** What paying for {@code plan}/{@code cycle} now would cost (new, upgrade with credit, or renewal). */
     public Quote quote(String email, String planId, String cycleId) {
+        return quote(email, planId, cycleId, null);
+    }
+
+    /** As {@link #quote(String, String, String)}, with a launch offer code (blank: the automatic offer, if any). */
+    public Quote quote(String email, String planId, String cycleId, String offerCode) {
         User u = user(email);
         PlanType plan = paidPlan(planId);
         Subscription.Cycle cycle = cycle(cycleId);
         Optional<Subscription> current = subscriptions.findByUserId(u.getId()).filter(s -> s.getStatus() != Subscription.Status.CANCELED);
         String currency = current.map(Subscription::getCurrency).orElse("INR");
-        long price = plans.getPlanConfig(plan).price(currency, cycle == Subscription.Cycle.YEARLY);
-        if (price <= 0) {
+        long list = plans.getPlanConfig(plan).price(currency, cycle == Subscription.Cycle.YEARLY);
+        if (list <= 0) {
             throw new IllegalArgumentException("This plan isn't for sale yet.");
         }
         ZonedDateTime now = now();
         if (current.isEmpty()) {
-            return new Quote(KIND_NEW, plan, cycle, currency, price, 0, price, now, end(now, cycle));
+            OfferService.Pricing p = offers.forNew(u, plan, cycle, currency, list, offerCode, now);
+            return quoteOf(KIND_NEW, plan, cycle, currency, p, 0, p.price(), now, end(now, cycle));
+        }
+        if (offerCode != null && !offerCode.isBlank()) {
+            throw new ConflictException("Offer codes are for accounts that have never had a paid plan.");
         }
         Subscription s = current.get();
         boolean same = s.getPlanType() == plan && s.getCycle() == cycle;
@@ -193,19 +232,23 @@ public class BillingService {
             }
             ZonedDateTime start = s.getStatus() == Subscription.Status.PAST_DUE || s.getCurrentPeriodEnd().isBefore(now)
                     ? now : s.getCurrentPeriodEnd();
-            return new Quote(KIND_RENEW, plan, cycle, currency, price, 0, price, start, end(start, cycle));
+            OfferService.Pricing p = offers.forRenewal(u.getId(), plan, cycle, currency, list);
+            return quoteOf(KIND_RENEW, plan, cycle, currency, p, 0, p.price(), start, end(start, cycle));
         }
         if (!isUpgrade(s, plan, cycle)) {
             throw new ConflictException("Moving to a smaller plan or a monthly cycle happens at the end of your period: use Downgrade.");
         }
         long credit = s.getStatus() == Subscription.Status.ACTIVE ? credit(s, now) : 0;
-        long amount = Math.max(MIN_CHARGE, price - credit);
-        return new Quote(KIND_UPGRADE, plan, cycle, currency, price, Math.min(credit, price - MIN_CHARGE), amount, now, end(now, cycle));
+        long amount = Math.max(MIN_CHARGE, list - credit);
+        // An upgrade is at the list price: a launch offer covers only the plan and cycle it was taken on.
+        return quoteOf(KIND_UPGRADE, plan, cycle, currency, OfferService.Pricing.listOnly(list), Math.min(credit, list - MIN_CHARGE),
+                amount, now, end(now, cycle));
     }
 
-    /** Value of the unused part of the current period (what an upgrade credits). */
+    /** Value of the unused part of the current period (what an upgrade credits), from what the period cost. */
     long credit(Subscription s, ZonedDateTime now) {
-        long paid = plans.getPlanConfig(s.getPlanType()).price(s.getCurrency(), s.getCycle() == Subscription.Cycle.YEARLY);
+        long paid = s.getPeriodPrice() != null ? s.getPeriodPrice()
+                : plans.getPlanConfig(s.getPlanType()).price(s.getCurrency(), s.getCycle() == Subscription.Cycle.YEARLY);
         long total = Duration.between(s.getCurrentPeriodStart(), s.getCurrentPeriodEnd()).toSeconds();
         long left = Duration.between(now, s.getCurrentPeriodEnd()).toSeconds();
         if (total <= 0 || left <= 0) {
@@ -227,8 +270,14 @@ public class BillingService {
     /** Creates an order for the quoted amount and returns the payment page (UPI, cards). */
     @Transactional
     public Checkout checkout(String email, String planId, String cycleId) {
+        return checkout(email, planId, cycleId, null);
+    }
+
+    /** As {@link #checkout(String, String, String)}, with a launch offer code; the order is for the discounted amount. */
+    @Transactional
+    public Checkout checkout(String email, String planId, String cycleId, String offerCode) {
         User u = user(email);
-        Quote q = quote(email, planId, cycleId);
+        Quote q = quote(email, planId, cycleId, offerCode);
         String orderId = "MT" + UUID.randomUUID().toString().replace("-", "").substring(0, 30);
         PaymentAudit audit = new PaymentAudit(orderId, email, q.amount(), "INITIATED");
         audit.setUser(u);
@@ -237,9 +286,13 @@ public class BillingService {
         audit.setBillingCycle(q.cycle().name());
         audit.setCurrency(q.currency());
         audit.setCredit(q.credit());
+        audit.setListAmount(q.listPrice());
+        audit.setDiscountAmount(q.discount());
+        audit.setOfferId(q.offer() == null ? null : q.offer().id());
         audits.save(audit);
         String url = gateway.createCheckout(orderId, q.amount(), baseUrl + "/studio?view=settings&payment_order=" + orderId);
-        log.info("Checkout {} for {}: {} {} {} amount={} credit={}", orderId, email, q.kind(), q.plan(), q.cycle(), q.amount(), q.credit());
+        log.info("Checkout {} for {}: {} {} {} amount={} credit={} discount={}", orderId, email, q.kind(), q.plan(), q.cycle(), q.amount(),
+                q.credit(), q.discount());
         return new Checkout(orderId, url, q);
     }
 
@@ -258,6 +311,8 @@ public class BillingService {
             fresh.setUserId(u.getId());
             return fresh;
         });
+        boolean wasSubscribed = s.getId() != null && s.getStatus() != null && s.getStatus() != Subscription.Status.CANCELED;
+        PlanType previousPlan = wasSubscribed ? s.getPlanType() : null;
         ZonedDateTime start = now;
         if (KIND_RENEW.equals(audit.getKind()) && s.getStatus() == Subscription.Status.ACTIVE && s.getCurrentPeriodEnd() != null
                 && s.getCurrentPeriodEnd().isAfter(now)) {
@@ -278,17 +333,44 @@ public class BillingService {
         s.setPendingPlan(null);
         s.setPendingCycle(null);
         s.setRenewalRemindedAt(null);
+        long paid = audit.getAmount() == null ? 0 : audit.getAmount();
+        s.setPeriodPrice(paid + audit.getCredit());
+        s.setTerms(termsAfterPayment(s.getTerms(), previousPlan, plan, now));
         subscriptions.save(s);
         setPlan(u, plan, s.getCurrentPeriodEnd());
+        offers.recordPaid(u, audit, plan, cycle);
+        String discountLabel = null;
+        if (audit.getDiscountAmount() > 0) {
+            OfferService.Standing st = offers.standing(u.getId());
+            discountLabel = st == null ? "Launch offer" : st.name() + " (" + st.percentOff() + "% off)";
+        }
         String what = plans.getPlanConfig(plan).getDisplayName() + " plan, " + cycle.name().toLowerCase()
                 + (audit.getCredit() > 0 ? " (credit for unused time: " + InvoiceService.money(audit.getCredit(), s.getCurrency()) + ")" : "")
                 + (bonus > 0 ? ", plus " + bonus + " free days from invites" : "");
         Invoice inv = invoices.issue(u.getId(), audit.getTransactionId(), "AFK Live " + what, s.getCurrentPeriodStart(),
-                s.getCurrentPeriodEnd(), s.getCurrency(), audit.getAmount());
+                s.getCurrentPeriodEnd(), s.getCurrency(), paid,
+                audit.getDiscountAmount() > 0 ? audit.getListAmount() : null, audit.getDiscountAmount(), discountLabel);
         notifications.notify(u, new NotificationService.Alert("PAYMENT_RECEIVED", Notification.Level.SUCCESS, null,
                 "Payment received: " + plans.getPlanConfig(plan).getDisplayName(),
                 "You're on " + what + " until " + day(s.getCurrentPeriodEnd()) + ". Invoice " + inv.getNumber() + " is in Billing.",
                 "/settings#billing", null, null, true));
+    }
+
+    /**
+     * BI-10: the limits recorded with a payment. A first plan (or one after a lapse) gets the plan's limits as sold
+     * today; renewing or switching cycle on the same plan keeps what was bought; an upgrade gets the new plan's
+     * limits, keeping anything the old terms gave that is more.
+     */
+    PlanTerms termsAfterPayment(PlanTerms before, PlanType previousPlan, PlanType plan, ZonedDateTime now) {
+        PlanConfig current = plans.getPlanConfig(plan);
+        boolean hadTerms = before != null && before.getPlan() != null && before.getPlan() == previousPlan;
+        if (previousPlan == null || !hadTerms) {
+            return PlanTerms.of(current, now);
+        }
+        if (previousPlan == plan) {
+            return before;
+        }
+        return plan.rank() > previousPlan.rank() ? PlanTerms.carryOver(before, current, now) : PlanTerms.of(current, now);
     }
 
     // ------------------------------------------------------------------ free days (GR-18)
@@ -421,10 +503,10 @@ public class BillingService {
             // Before the end: one reminder to pay for the next period (unless it's ending on purpose).
             if (s.getRenewalRemindedAt() == null && !s.isCancelAtPeriodEnd()) {
                 PlanType nextPlan = s.getPendingPlan() != null ? s.getPendingPlan() : s.getPlanType();
+                Subscription.Cycle nextCycle = s.getPendingCycle() != null ? s.getPendingCycle() : s.getCycle();
                 notifications.notify(u, new NotificationService.Alert("RENEWAL_DUE", Notification.Level.INFO, null,
                         "Your " + plans.getPlanConfig(s.getPlanType()).getDisplayName() + " plan renews on " + day(s.getCurrentPeriodEnd()),
-                        "Pay for the next period (" + plans.getPlanConfig(nextPlan).getDisplayName() + ") from Billing to stay on it.",
-                        "/settings#billing", null, null, true));
+                        renewalMessage(s, nextPlan, nextCycle), "/settings#billing", null, null, true));
                 s.setRenewalRemindedAt(now);
                 subscriptions.save(s);
             }
@@ -438,6 +520,8 @@ public class BillingService {
         if (s.getStatus() == Subscription.Status.ACTIVE) {
             // Period over and not renewed: a few days' grace on the plan they'll continue with.
             if (s.getPendingPlan() != null) {
+                // BI-10: a downgrade takes the smaller plan's limits as sold today.
+                s.setTerms(PlanTerms.of(plans.getPlanConfig(s.getPendingPlan()), now));
                 s.setPlanType(s.getPendingPlan());
                 s.setCycle(s.getPendingCycle() == null ? s.getCycle() : s.getPendingCycle());
                 s.setPendingPlan(null);
@@ -457,7 +541,29 @@ public class BillingService {
         }
     }
 
+    /**
+     * The renewal reminder (BI-7, BI-9): what the next period costs, GST included, and when a launch offer's last
+     * discounted period is next, what it renews at after that.
+     */
+    public String renewalMessage(Subscription s, PlanType nextPlan, Subscription.Cycle nextCycle) {
+        OfferService.Pricing p = renewalPricing(s, nextPlan, nextCycle);
+        String name = plans.getPlanConfig(nextPlan).getDisplayName();
+        String per = nextCycle == Subscription.Cycle.YEARLY ? "year" : "month";
+        String gst = "INR".equalsIgnoreCase(s.getCurrency()) ? " incl. GST" : "";
+        String price = priceLabel(p.price(), s.getCurrency()) + gst;
+        if (!p.discounted()) {
+            return "Pay " + price + " for the next " + per + " of " + name + " from Billing to stay on it.";
+        }
+        String after = p.paymentsLeft() == 0
+                ? " It's the last discounted " + per + ": after it, " + name + " renews at " + priceLabel(p.list(), s.getCurrency()) + gst
+                        + " a " + per + "."
+                : "";
+        return "Pay " + price + " for the next " + per + " of " + name + " (" + p.label() + " on the list price of "
+                + priceLabel(p.list(), s.getCurrency()) + ") from Billing to stay on it." + after;
+    }
+
     private void toFree(Subscription s, User u, String message) {
+
         s.setStatus(Subscription.Status.CANCELED);
         s.setCancelAtPeriodEnd(false);
         s.setPendingPlan(null);

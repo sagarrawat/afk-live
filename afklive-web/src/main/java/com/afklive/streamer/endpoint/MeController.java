@@ -126,7 +126,7 @@ public class MeController {
     }
 
     private Me view(User u, Object auth) {
-        PlanConfig c = plans.getPlanConfig(u.getPlanType());
+        PlanConfig c = plans.limitsFor(u);
         String picture = u.getPictureUrl();
         if (picture == null && auth instanceof OAuth2User o && o.getAttribute("picture") != null) {
             picture = o.getAttribute("picture").toString();

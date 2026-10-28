@@ -60,7 +60,7 @@ class StreamLimitTest {
         when(userService.getOrCreateUser(username)).thenReturn(user);
         when(userService.checkCreditLimit(username)).thenReturn(true);
         // Mock plan service to avoid NPE later in method
-        when(planService.getPlanConfig(any())).thenReturn(config(PlanType.FREE));
+        when(planService.limitsFor(any())).thenReturn(config(PlanType.FREE));
 
         try {
              streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 720, null, null, null, false, null);
@@ -100,7 +100,7 @@ class StreamLimitTest {
         when(userService.getOrCreateUser(username)).thenReturn(user);
 
         // Mock plan service
-        when(planService.getPlanConfig(any())).thenReturn(config(PlanType.ESSENTIALS));
+        when(planService.limitsFor(any())).thenReturn(config(PlanType.ESSENTIALS));
 
         try {
              streamService.startStream(username, java.util.List.of("key"), "video", null, null, 0, null, true, "original", 1080, null, null, null, false, null);

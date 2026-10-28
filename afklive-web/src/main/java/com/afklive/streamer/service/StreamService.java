@@ -209,7 +209,7 @@ public class StreamService {
             watermarkKey = storageService.uploadFile(watermarkFile.getInputStream(), "watermark.png", watermarkFile.getSize());
         }
 
-        int planMax = planService.getPlanConfig(user.getPlanType()).getMaxResolution();
+        int planMax = planService.limitsFor(user).getMaxResolution();
         int maxHeight = (streamQuality > 0 && streamQuality < planMax) ? streamQuality : planMax;
 
         List<StreamSpec.Destination> destinations = new ArrayList<>();
@@ -439,7 +439,7 @@ public class StreamService {
 
     /** True when the user's plan includes a monthly number of hours and they're all used. */
     public boolean freeHoursUsedUp(com.afklive.streamer.model.User user) {
-        int hours = planService.getPlanConfig(user.getPlanType()).getMonthlyHours();
+        int hours = planService.limitsFor(user).getMonthlyHours();
         if (hours <= 0) {
             return false;
         }

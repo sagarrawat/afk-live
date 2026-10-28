@@ -49,7 +49,7 @@ public class UserController {
         User user = userService.getOrCreateUser(username);
         if (user.getFullName() != null) name = user.getFullName();
 
-        PlanConfig planConfig = planService.getPlanConfig(user.getPlanType());
+        PlanConfig planConfig = planService.limitsFor(user);
 
         return Map.of(
                 "name", name,
@@ -100,7 +100,7 @@ public class UserController {
             name = user.getFullName();
         }
 
-        PlanConfig planConfig = planService.getPlanConfig(user.getPlanType());
+        PlanConfig planConfig = planService.limitsFor(user);
 
         return Map.of(
                 "name", name,
