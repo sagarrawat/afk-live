@@ -44,6 +44,17 @@ describe('legal pages', () => {
     expect(contact).toMatch(/within 24 hours and resolve it within 15 days/);
   });
 
+  it('names the AI processors honestly in the privacy policy (AI-1)', () => {
+    const privacy = page('privacy.html');
+    expect(privacy).toContain('<strong>Anthropic</strong>');
+    expect(privacy).toContain('<strong>Google Gemini</strong>');
+    expect(privacy).toMatch(/receives only the text you ask it to write from/);
+    expect(privacy).toMatch(/never your videos, audio, stream keys/);
+    expect(privacy).toContain('nothing you send is used to train AI models');
+    expect(privacy).toContain('Last updated 30 October 2026');
+    expect(page('terms.html')).toContain('Last updated 27 October 2026');
+  });
+
   it('leaves the server-filled details as plain fallbacks, never placeholders', () => {
     const contact = page('contact.html');
     const fills = Array.from(contact.matchAll(/<div data-fill="([a-z]+)">([\s\S]*?)<\/div>/g), (m) => [m[1], m[2]]);

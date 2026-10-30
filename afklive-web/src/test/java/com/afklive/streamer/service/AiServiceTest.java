@@ -158,4 +158,113 @@ class AiServiceTest {
         when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenThrow(new RestClientException("timeout"));
         assertThat(aiService.completeJson("prompt")).isNull();
     }
+
+    // ------------------------------------------------------------------ providers (Anthropic first, then Gemini)
+
+    @Test
+    void anthropicWinsWhenItsKeyIsSetElseGeminiElseOff() {
+        assertThat(AiService.select("sk-ant", "", "g-key", "", restTemplate)).isInstanceOf(AnthropicProvider.class);
+        assertThat(AiService.select("sk-ant", "", "", "", restTemplate).model()).isEqualTo("claude-haiku-5-5");
+        assertThat(AiService.select("sk-ant", " claude-x ", "", "", restTemplate).model()).isEqualTo("claude-x");
+        assertThat(AiService.select("", "", "g-key", "", restTemplate)).isInstanceOf(GeminiProvider.class);
+        assertThat(AiService.select(" ", "", "", "", restTemplate)).isNull();
+        assertThat(AiService.select("ANTHROPIC_API_KEY", "", "GEMINI_API_KEY", "", restTemplate)).as("example-file placeholders").isNull();
+        AiService off = new AiService((AiProvider) null, null);
+        assertThat(off.isAvailable()).isFalse();
+        assertThat(off.isConfigured()).isFalse();
+        assertThat(off.providerName()).isNull();
+    }
+
+    private void anthropicAnswers(String text, int in, int out) {
+        Map<String, Object> response = Map.of(
+                "content", List.of(Map.of("type", "text", "text", text)),
+                "stop_reason", "end_turn",
+                "usage", Map.of("input_tokens", in, "output_tokens", out));
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenReturn(response);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void claudeIsCalledOverPlainHttpWithTheKeyAndVersionInHeaders() {
+        AiService claude = new AiService(new AnthropicProvider("sk-ant-secret", null, restTemplate), null);
+        anthropicAnswers("{\"titles\":[\"Rain sounds for sleep\"]}", 120, 40);
+        assertThat(claude.completeJson("the prompt")).isEqualTo("{\"titles\":[\"Rain sounds for sleep\"]}");
+        ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> body = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForObject(url.capture(), body.capture(), eq(Map.class));
+        assertThat(url.getValue()).isEqualTo("https://api.anthropic.com/v1/messages");
+        assertThat(body.getValue().getHeaders().getFirst("x-api-key")).isEqualTo("sk-ant-secret");
+        assertThat(body.getValue().getHeaders().getFirst("anthropic-version")).isEqualTo("2023-06-01");
+        Map<String, Object> b = body.getValue().getBody();
+        assertThat(b).containsEntry("model", "claude-haiku-5-5").containsEntry("max_tokens", 2048)
+                .containsEntry("system", AnthropicProvider.JSON_SYSTEM);
+        assertThat((List<Map<String, Object>>) b.get("messages")).containsExactly(Map.of("role", "user", "content", "the prompt"));
+        assertThat(b.toString()).doesNotContain("sk-ant-secret");
+    }
+
+    @Test
+    void everyCallsTokensAreCountedAgainstTheBudget() {
+        AiBudget budget = org.mockito.Mockito.mock(AiBudget.class);
+        when(budget.allows()).thenReturn(true);
+        AiService claude = new AiService(new AnthropicProvider("k", "claude-haiku-5-5", restTemplate), budget);
+        anthropicAnswers("Rain sounds for sleep", 300, 25);
+        assertThat(claude.generateTitle("rain")).isEqualTo("Rain sounds for sleep");
+        verify(budget).record("anthropic", "claude-haiku-5-5", 300, 25);
+    }
+
+    @Test
+    void geminiUsageIsCountedToo() {
+        AiBudget budget = org.mockito.Mockito.mock(AiBudget.class);
+        when(budget.allows()).thenReturn(true);
+        AiService g = new AiService(new GeminiProvider("k", null, restTemplate), budget);
+        Map<String, Object> response = Map.of(
+                "candidates", List.of(Map.of("content", Map.of("parts", List.of(Map.of("text", "{}"))))),
+                "usageMetadata", Map.of("promptTokenCount", 200, "candidatesTokenCount", 50, "thoughtsTokenCount", 10));
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenReturn(response);
+        assertThat(g.completeJson("p")).isEqualTo("{}");
+        verify(budget).record("gemini", "gemini-flash-lite-latest", 200, 60);
+    }
+
+    @Test
+    void onceTheMonthsBudgetIsUsedUpNothingCallsOut() {
+        AiBudget budget = org.mockito.Mockito.mock(AiBudget.class);
+        when(budget.allows()).thenReturn(false);
+        AiService claude = new AiService(new AnthropicProvider("k", null, restTemplate), budget);
+        assertThat(claude.isAvailable()).isFalse();
+        assertThat(claude.isConfigured()).isTrue();
+        assertThat(claude.completeJson("p")).isNull();
+        assertThat(claude.generateTitle("lofi beats")).as("falls back to the creator's words").isEqualTo("Lofi beats");
+        org.mockito.Mockito.verifyNoInteractions(restTemplate);
+    }
+
+    @Test
+    void rateLimitsNoCreditAndTimeoutsAreNullNotErrors() {
+        AiService claude = new AiService(new AnthropicProvider("k", null, restTemplate), null);
+        for (int code : new int[] {400, 402, 429, 500, 529}) {
+            org.mockito.Mockito.reset(restTemplate);
+            org.springframework.web.client.HttpStatusCodeException e = code >= 500
+                    ? org.springframework.web.client.HttpServerErrorException.create(org.springframework.http.HttpStatusCode.valueOf(code),
+                            "x", new org.springframework.http.HttpHeaders(), new byte[0], null)
+                    : org.springframework.web.client.HttpClientErrorException.create(org.springframework.http.HttpStatusCode.valueOf(code),
+                            "x", new org.springframework.http.HttpHeaders(),
+                            "{\"error\":{\"message\":\"Your credit balance is too low\"}}".getBytes(), null);
+            when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenThrow(e);
+            assertThat(claude.completeJson("p")).as("HTTP " + code).isNull();
+        }
+        org.mockito.Mockito.reset(restTemplate);
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class)))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("Read timed out"));
+        assertThat(claude.completeJson("p")).isNull();
+    }
+
+    @Test
+    void aRefusalIsBilledButGivesNoText() {
+        AiBudget budget = org.mockito.Mockito.mock(AiBudget.class);
+        when(budget.allows()).thenReturn(true);
+        AiService claude = new AiService(new AnthropicProvider("k", null, restTemplate), budget);
+        when(restTemplate.postForObject(anyString(), any(), eq(Map.class))).thenReturn(Map.of(
+                "content", List.of(), "stop_reason", "refusal", "usage", Map.of("input_tokens", 90, "output_tokens", 0)));
+        assertThat(claude.completeJson("p")).isNull();
+        verify(budget).record("anthropic", "claude-haiku-5-5", 90, 0);
+    }
 }

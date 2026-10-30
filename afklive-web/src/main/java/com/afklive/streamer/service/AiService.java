@@ -4,9 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -20,8 +17,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Text drafts from Gemini for titles, descriptions, tags and reply suggestions. Everything here is a
- * draft the creator reads and edits: nothing is posted to YouTube from this class.
+ * Text drafts for titles, descriptions, tags and reply suggestions, from one {@link AiProvider}: Anthropic
+ * (Claude) when {@code ANTHROPIC_API_KEY} is set, else Google Gemini when {@code GEMINI_API_KEY} is set, else
+ * none (AI is off and every draft falls back to the creator's own words, never an error). Every call is
+ * counted against the monthly AI budget ({@link AiBudget}); once it's used up, AI is off until the next UTC
+ * month. Everything here is a draft the creator reads and edits: nothing is posted to YouTube from this class.
  *
  * <p>Titles follow the growth plan's honest-title rule (docs/growth-plan.md, rule 6) and the GR-9 title
  * checks ({@link GoLiveCheck}): start with what people search for, say only what is on the stream, and
@@ -36,43 +36,76 @@ public class AiService {
     /** YouTube's title limit, in characters. */
     static final int TITLE_MAX = 100;
 
-    /** The default model: the cheapest Gemini class that writes good Indic text (Flash-Lite). */
-    static final String DEFAULT_MODEL = "gemini-flash-lite-latest";
+    /** The default Gemini model: the cheapest Gemini class that writes good Indic text (Flash-Lite). */
+    static final String DEFAULT_MODEL = GeminiProvider.DEFAULT_MODEL;
 
-    private final String geminiKey;
-    private final String model;
-    private final RestTemplate restTemplate;
+    /** The model in use, or null when AI is off. */
+    private final AiProvider provider;
+    /** Null only in unit tests: no budget. */
+    private final AiBudget budget;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
-     * @param geminiKey empty: AI is off and every draft falls back to the creator's own words (never an error)
-     * @param model     the Gemini model id ({@code GEMINI_MODEL}); blank uses {@link #DEFAULT_MODEL}
+     * @param anthropicKey   {@code ANTHROPIC_API_KEY}; set: Claude writes (it wins over Gemini)
+     * @param anthropicModel {@code ANTHROPIC_MODEL}; blank uses {@link AnthropicProvider#DEFAULT_MODEL}
+     * @param geminiKey      {@code GEMINI_API_KEY}; used when there's no Anthropic key
+     * @param geminiModel    {@code GEMINI_MODEL}; blank uses {@link #DEFAULT_MODEL}
      */
     @Autowired
-    public AiService(@Value("${app.gemini.key:}") String geminiKey, @Value("${app.gemini.model:}") String model) {
-        this(geminiKey, model, timed());
+    public AiService(@Value("${app.anthropic.key:}") String anthropicKey, @Value("${app.anthropic.model:}") String anthropicModel,
+                     @Value("${app.gemini.key:}") String geminiKey, @Value("${app.gemini.model:}") String geminiModel,
+                     AiBudget budget) {
+        this(select(anthropicKey, anthropicModel, geminiKey, geminiModel, timed()), budget);
+        log.info("AI writing: {}", provider == null ? "off (no ANTHROPIC_API_KEY or GEMINI_API_KEY)" : provider.name() + ", " + provider.model());
     }
 
+    /** Gemini only, no budget (unit tests). */
     AiService(String geminiKey, RestTemplate restTemplate) {
         this(geminiKey, null, restTemplate);
     }
 
+    /** Gemini only, no budget (unit tests). */
     AiService(String geminiKey, String model, RestTemplate restTemplate) {
-        this.geminiKey = geminiKey;
-        this.model = model == null || model.isBlank() ? DEFAULT_MODEL : model.strip();
-        this.restTemplate = restTemplate;
+        this(select(null, null, geminiKey, model, restTemplate), null);
+    }
+
+    AiService(AiProvider provider, AiBudget budget) {
+        this.provider = provider;
+        this.budget = budget;
+    }
+
+    /** Anthropic when its key is set, else Gemini when its key is set, else null (AI off). */
+    static AiProvider select(String anthropicKey, String anthropicModel, String geminiKey, String geminiModel, RestTemplate http) {
+        if (AnthropicProvider.usable(anthropicKey)) {
+            return new AnthropicProvider(anthropicKey.strip(), anthropicModel, http);
+        }
+        if (GeminiProvider.usable(geminiKey)) {
+            return new GeminiProvider(geminiKey.strip(), geminiModel, http);
+        }
+        return null;
     }
 
     /** Its own client with timeouts: a slow model must not hold a web request for minutes. */
-    private static RestTemplate timed() {
+    static RestTemplate timed() {
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(5_000);
         f.setReadTimeout(25_000);
         return new RestTemplate(f);
     }
 
+    /** The model in use; with AI off, the default Gemini model (only used in cache keys then). */
     public String model() {
-        return model;
+        return provider == null ? DEFAULT_MODEL : provider.model();
+    }
+
+    /** "anthropic", "gemini", or null when no key is set. */
+    public String providerName() {
+        return provider == null ? null : provider.name();
+    }
+
+    /** This month's AI spend against the cap, for admin. */
+    public AiBudget.Report spend() {
+        return budget == null ? null : budget.report(providerName(), provider == null ? null : provider.model());
     }
 
     // ------------------------------------------------------------------ prompts (tested on their own)
@@ -116,7 +149,7 @@ public class AiService {
 
     public String generateTitle(String context) {
         if (isAiEnabled()) {
-            String title = cleanTitle(callGemini(titlePrompt(context)));
+            String title = cleanTitle(call(titlePrompt(context)));
             if (title != null) return title;
         }
         return fallbackTitle(context);
@@ -143,7 +176,7 @@ public class AiService {
 
     public String generateDescription(String title) {
         if (isAiEnabled()) {
-            String desc = callGemini(descriptionPrompt(title));
+            String desc = call(descriptionPrompt(title));
             if (desc != null) return desc;
         }
         return title;
@@ -151,7 +184,7 @@ public class AiService {
 
     public String generateTags(String context) {
         if (isAiEnabled()) {
-            String tags = callGemini(tagsPrompt(context));
+            String tags = call(tagsPrompt(context));
             if (tags != null) return tags;
         }
         return fallbackTags(context);
@@ -175,7 +208,7 @@ public class AiService {
             CompletableFuture<String> descFuture = titleFuture.thenApplyAsync(this::generateDescription, executor);
             CompletableFuture<String> tagsFuture = CompletableFuture.supplyAsync(() -> generateTags(context), executor);
             CompletableFuture<String> tipFuture = CompletableFuture.supplyAsync(() -> {
-                String tip = callGemini("Give one short, engaging tip for a streamer streaming about: " + context + ". e.g. 'Ask chat to...'");
+                String tip = call("Give one short, engaging tip for a streamer streaming about: " + context + ". e.g. 'Ask chat to...'");
                 return tip != null ? tip : "Ask chat where they are watching from!";
             }, executor);
 
@@ -205,7 +238,7 @@ public class AiService {
     public List<String> generateReplySuggestions(String commentText) {
         if (isAiEnabled()) {
             String prompt = "You are a YouTuber. Generate 3 short, engaging, and polite reply suggestions for this comment: '" + commentText + "'. Return them as a pipe-separated string (e.g. Reply 1|Reply 2|Reply 3). Do not include numbering or quotes.";
-            String result = callGemini(prompt);
+            String result = call(prompt);
             if (result != null && !result.isEmpty()) {
                 String[] splits = result.split("\\|");
                 List<String> suggestions = new java.util.ArrayList<>();
@@ -231,60 +264,47 @@ public class AiService {
         );
     }
 
-    /** True when a Gemini key is configured. Without one, nothing calls out and drafts fall back. */
+    /**
+     * True when a key is configured and this month's AI budget isn't used up. Without it, nothing calls out
+     * and drafts fall back (the title writer is hidden or says it isn't available).
+     */
     public boolean isAvailable() {
-        return isAiEnabled();
+        return provider != null && (budget == null || budget.allows());
+    }
+
+    /** True when a key is configured, whatever the budget. */
+    public boolean isConfigured() {
+        return provider != null;
     }
 
     /**
-     * One answer from the model, asked to reply in JSON (AI-1 title writer); null when AI is off, the call
-     * fails or times out. Never throws.
+     * One answer from the model, asked to reply in JSON (AI-1 title writer); null when AI is off, the budget
+     * is used up, or the call fails or times out. Never throws.
      */
     public String completeJson(String prompt) {
-        return isAiEnabled() ? callGemini(prompt, true) : null;
+        return call(prompt, true);
     }
 
     private boolean isAiEnabled() {
-        return geminiKey != null && !geminiKey.isBlank() && !geminiKey.contains("GEMINI_API_KEY");
+        return provider != null;
     }
 
-    private String callGemini(String prompt) {
-        return callGemini(prompt, false);
+    private String call(String prompt) {
+        return call(prompt, false);
     }
 
-    private String callGemini(String prompt, boolean json) {
-        try {
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
-
-            Map<String, Object> requestBody = json
-                    ? Map.of("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
-                            "generationConfig", Map.of("responseMimeType", "application/json", "temperature", 0.7,
-                                    "maxOutputTokens", 2048))
-                    : Map.of("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))));
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            // In a header, not the URL, so the key never lands in access logs or error messages.
-            headers.set("x-goog-api-key", geminiKey);
-
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-
-            Map response = restTemplate.postForObject(url, entity, Map.class);
-
-            // Parse response: candidates[0].content.parts[0].text
-            if (response != null && response.containsKey("candidates")) {
-                List candidates = (List) response.get("candidates");
-                if (!candidates.isEmpty()) {
-                    Map candidate = (Map) candidates.get(0);
-                    Map content = (Map) candidate.get("content");
-                    List parts = (List) content.get("parts");
-                    Map part = (Map) parts.get(0);
-                    return ((String) part.get("text")).trim();
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Gemini call failed ({}): {}", model, e.getClass().getSimpleName());
+    /** Checks the budget, calls the model and counts the tokens it used. The prompt and key are never logged. */
+    private String call(String prompt, boolean json) {
+        if (provider == null || (budget != null && !budget.allows())) {
+            return null;
         }
-        return null; // Fallback to null instead of prompt
+        AiProvider.Reply r = provider.complete(prompt, json);
+        if (r == null) {
+            return null;
+        }
+        if (budget != null && (r.inputTokens() > 0 || r.outputTokens() > 0)) {
+            budget.record(provider.name(), provider.model(), r.inputTokens(), r.outputTokens());
+        }
+        return r.text();
     }
 }

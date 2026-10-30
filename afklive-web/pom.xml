@@ -20,6 +20,8 @@
         <soak.excludedGroups>soak</soak.excludedGroups>
         <!-- The browser end-to-end test (@Tag("e2e"), src/e2e/java): only the e2e profile (afklive-scripts/e2e.sh) turns it on. -->
         <e2e.excludedGroups>e2e</e2e.excludedGroups>
+        <!-- AI-1: the title writer against the real model API (@Tag("ai-eval")): only afklive-scripts/ai-eval.sh turns it on. -->
+        <aieval.excludedGroups>ai-eval</aieval.excludedGroups>
         <playwright.version>1.56.0</playwright.version>
     </properties>
     <dependencies>
@@ -243,7 +245,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <excludedGroups>${soak.excludedGroups},${e2e.excludedGroups}</excludedGroups>
+                    <excludedGroups>${soak.excludedGroups},${e2e.excludedGroups},${aieval.excludedGroups}</excludedGroups>
                 </configuration>
             </plugin>
             <plugin>
@@ -266,6 +268,13 @@
     </build>
 
     <profiles>
+        <!-- AI-1: afklive-scripts/ai-eval.sh runs the 30 Indic fixture streams against the real model (needs ANTHROPIC_API_KEY). -->
+        <profile>
+            <id>ai-eval</id>
+            <properties>
+                <aieval.excludedGroups>none</aieval.excludedGroups>
+            </properties>
+        </profile>
         <!--
           The browser end-to-end test of the creator journey (afklive-scripts/e2e.sh, docs/operations.md, "End-to-end
           test"). A profile so normal builds neither compile it nor download Playwright (its driver is ~200 MB).

@@ -1,0 +1,37 @@
+[
+  {"id": "en-lofi-study", "niche": "lofi", "language": "en", "phone": false, "name": "Lofi study radio", "brief": "chill lofi beats for studying, rain in the background", "tracks": ["01_midnight_rain.mp3", "02 - Coffee Shop (official audio).mp3", "late_night_notes.mp3"]},
+  {"id": "en-rain-sleep", "niche": "ambient", "language": "en", "phone": false, "name": "Rain for sleep", "brief": "10 hours of heavy rain on a tin roof, dark screen", "tracks": ["heavy-rain-tin-roof.mp4"]},
+  {"id": "en-bgmi-replay", "niche": "gaming", "language": "en", "phone": false, "name": "BGMI best moments", "brief": "my best BGMI chicken dinners from last season, replays", "tracks": ["bgmi_erangel_win.mp4", "bgmi_livik_20_kills.mp4"]},
+  {"id": "en-podcast-rerun", "niche": "podcast", "language": "en", "phone": false, "name": "The Founder Chai podcast", "brief": "reruns of our startup podcast episodes, Indian founders talk about failure", "tracks": ["ep12_failure.mp4", "ep13_hiring.mp4", "ep14_fundraising.mp4"]},
+  {"id": "en-kids-rhymes", "niche": "kids", "language": "en", "phone": false, "name": "Nursery rhymes for toddlers", "brief": "classic English nursery rhymes with animation, Twinkle Twinkle, Baa Baa Black Sheep", "tracks": ["twinkle_twinkle.mp4", "baa_baa_black_sheep.mp4", "wheels_on_the_bus.mp4"]},
+  {"id": "en-freefire-phone", "niche": "gaming", "language": "en", "phone": true, "name": "Free Fire ranked push", "brief": "pushing to Grandmaster in Free Fire tonight, talking to chat", "tracks": []},
+
+  {"id": "hi-hanuman-chalisa", "niche": "devotional", "language": "hi", "phone": false, "name": "हनुमान चालीसा 24 घंटे", "brief": "हनुमान चालीसा का पाठ, सुबह और शाम", "tracks": ["hanuman_chalisa_hariharan.mp3", "sankat_mochan_hanuman_ashtak.mp3"]},
+  {"id": "hi-varanasi-aarti", "niche": "devotional", "language": "hi", "phone": false, "name": "गंगा आरती वाराणसी", "brief": "दशाश्वमेध घाट की गंगा आरती की रिकॉर्डिंग", "tracks": ["ganga_aarti_dashashwamedh.mp4"]},
+  {"id": "hi-krishna-bhajan", "niche": "devotional", "language": "hi", "phone": false, "name": "कृष्ण भजन", "brief": "राधे कृष्ण भजन, मधुर बांसुरी के साथ", "tracks": ["achyutam_keshavam.mp3", "radhe_radhe_japo.mp3", "govind_bolo.mp3"]},
+  {"id": "hi-lofi-songs", "niche": "lofi", "language": "hi", "phone": false, "name": "Hindi lofi songs", "brief": "पुराने हिंदी गानों का लोफी वर्ज़न, पढ़ाई के लिए", "tracks": ["tum_hi_ho_lofi.mp3", "kesariya_lofi.mp3"]},
+  {"id": "hi-bgmi-phone", "niche": "gaming", "language": "hi", "phone": true, "name": "BGMI रश गेमप्ले", "brief": "मोबाइल से BGMI खेल रहा हूँ, चैट से बात", "tracks": []},
+  {"id": "hi-podcast", "niche": "podcast", "language": "hi", "phone": false, "name": "गाँव की बातें पॉडकास्ट", "brief": "खेती और गाँव के जीवन पर बातचीत के पुराने एपिसोड", "tracks": ["episode_1_kheti.mp4", "episode_2_mandi.mp4"]},
+
+  {"id": "ta-murugan", "niche": "devotional", "language": "ta", "phone": false, "name": "முருகன் பக்தி பாடல்கள்", "brief": "கந்த சஷ்டி கவசம் மற்றும் முருகன் பாடல்கள்", "tracks": ["kanda_sashti_kavasam.mp3", "muruga_muruga.mp3"]},
+  {"id": "ta-lofi", "niche": "lofi", "language": "ta", "phone": false, "name": "Tamil lofi", "brief": "இளையராஜா பாடல்களின் லோஃபி வடிவம், இரவு படிப்புக்கு", "tracks": ["ilayaraja_lofi_1.mp3", "ilayaraja_lofi_2.mp3"]},
+  {"id": "ta-freefire-phone", "niche": "gaming", "language": "ta", "phone": true, "name": "Free Fire தமிழ்", "brief": "போனில் இருந்து Free Fire விளையாடுகிறேன்", "tracks": []},
+  {"id": "ta-kids-rhymes", "niche": "kids", "language": "ta", "phone": false, "name": "தமிழ் குழந்தை பாடல்கள்", "brief": "குழந்தைகளுக்கான தமிழ் ரைம்ஸ், அம்மா இங்கே வா வா", "tracks": ["amma_inge_vaa.mp4", "nila_nila_odi_vaa.mp4"]},
+  {"id": "ta-podcast", "niche": "podcast", "language": "ta", "phone": false, "name": "தமிழ் டெக் பேச்சு", "brief": "தொழில்நுட்பம் பற்றிய பாட்காஸ்ட் பழைய எபிசோடுகள்", "tracks": ["tech_pechu_ep5.mp4"]},
+
+  {"id": "te-suprabhatam", "niche": "devotional", "language": "te", "phone": false, "name": "వేంకటేశ్వర సుప్రభాతం", "brief": "తిరుమల శ్రీ వేంకటేశ్వర సుప్రభాతం, ఉదయం", "tracks": ["venkateswara_suprabhatam_ms.mp3"]},
+  {"id": "te-lofi", "niche": "lofi", "language": "te", "phone": false, "name": "Telugu lofi", "brief": "తెలుగు సినిమా పాటల లోఫై, చదువుకోవడానికి", "tracks": ["samajavaragamana_lofi.mp3", "inkem_inkem_lofi.mp3"]},
+  {"id": "te-bgmi-replay", "niche": "gaming", "language": "te", "phone": false, "name": "BGMI తెలుగు హైలైట్స్", "brief": "నా BGMI బెస్ట్ మ్యాచ్‌ల రికార్డింగ్స్", "tracks": ["bgmi_te_match1.mp4", "bgmi_te_match2.mp4"]},
+  {"id": "te-kids-rhymes", "niche": "kids", "language": "te", "phone": false, "name": "తెలుగు పిల్లల పాటలు", "brief": "చిన్న పిల్లల కోసం తెలుగు రైమ్స్, చందమామ రావే", "tracks": ["chandamama_raave.mp4"]},
+  {"id": "te-podcast", "niche": "podcast", "language": "te", "phone": false, "name": "తెలుగు కథల పాడ్‌కాస్ట్", "brief": "పాత తెలుగు కథల ఆడియో ఎపిసోడ్లు", "tracks": ["katha_ep1.mp3", "katha_ep2.mp3"]},
+
+  {"id": "bn-rabindra", "niche": "devotional", "language": "bn", "phone": false, "name": "রবীন্দ্রসংগীত", "brief": "রবীন্দ্রসংগীতের সংকলন, সন্ধ্যার জন্য", "tracks": ["ami_chini_go_chini.mp3", "purano_sei_diner_kotha.mp3"]},
+  {"id": "bn-durga-aarti", "niche": "devotional", "language": "bn", "phone": false, "name": "দুর্গা পূজার আরতি", "brief": "কলকাতার পূজা প্যান্ডেলের ধুনুচি নাচ ও আরতি", "tracks": ["durga_aarti_kolkata.mp4"]},
+  {"id": "bn-kids-rhymes", "niche": "kids", "language": "bn", "phone": false, "name": "বাংলা ছড়া", "brief": "শিশুদের জন্য বাংলা ছড়া, আয় আয় চাঁদ মামা", "tracks": ["aay_aay_chand_mama.mp4", "khoka_ghumalo.mp4"]},
+  {"id": "bn-podcast", "niche": "podcast", "language": "bn", "phone": false, "name": "আড্ডা পডকাস্ট", "brief": "বাংলা আড্ডা পডকাস্টের পুরনো পর্ব", "tracks": ["adda_ep3.mp4"]},
+
+  {"id": "mr-ganpati-aarti", "niche": "devotional", "language": "mr", "phone": false, "name": "गणपती आरती", "brief": "सुखकर्ता दुखहर्ता आणि गणपतीच्या आरत्या", "tracks": ["sukhkarta_dukhharta.mp3", "ganpati_bappa_morya.mp3"]},
+  {"id": "mr-vitthal-abhang", "niche": "devotional", "language": "mr", "phone": false, "name": "विठ्ठल अभंग", "brief": "पंढरपूरच्या विठोबाचे अभंग, तुकाराम आणि ज्ञानेश्वर", "tracks": ["abhang_tukaram.mp3", "abhang_dnyaneshwar.mp3"]},
+  {"id": "mr-kids-rhymes", "niche": "kids", "language": "mr", "phone": false, "name": "मराठी बालगीते", "brief": "लहान मुलांसाठी मराठी बालगीते, ये रे ये रे पावसा", "tracks": ["ye_re_ye_re_pavsa.mp4"]},
+  {"id": "mr-freefire-phone", "niche": "gaming", "language": "mr", "phone": true, "name": "Free Fire मराठी", "brief": "मोबाईलवरून Free Fire खेळतोय, चॅटशी गप्पा", "tracks": []}
+]

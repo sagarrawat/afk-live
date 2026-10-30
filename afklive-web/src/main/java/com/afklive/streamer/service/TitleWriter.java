@@ -198,6 +198,11 @@ public final class TitleWriter {
         if (titles.isEmpty()) {
             return null;
         }
+        // In Hindi, Tamil and the rest: when some titles are in the language's script, drop the ones that aren't
+        // (a model sometimes slips back to English). When none are, keep them: a start beats nothing.
+        if (titles.stream().anyMatch(t -> inScript(t, in.language()))) {
+            titles.removeIf(t -> !inScript(t, in.language()));
+        }
         JsonNode d = root.get("description");
         String intro = cleanIntro(d != null && d.isTextual() ? d.asText() : "", in.phone());
         List<String> tags = cleanTags(strings(root.get("tags")), in);
@@ -252,6 +257,67 @@ public final class TitleWriter {
         return out;
     }
 
+    /**
+     * True when {@code text} is written in the language's script: English has no Indic letters; Hindi and
+     * Marathi have Devanagari letters, Tamil Tamil letters and so on, and no letters of another Indic script.
+     * Latin words people search for ("lofi", "24/7") may appear in any of them.
+     */
+    public static boolean inScript(String text, Language language) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        Character.UnicodeScript want = script(language);
+        boolean has = false;
+        for (int cp : text.codePoints().toArray()) {
+            if (!Character.isLetter(cp)) {
+                continue;
+            }
+            Character.UnicodeScript s = Character.UnicodeScript.of(cp);
+            if (s == Character.UnicodeScript.LATIN || s == Character.UnicodeScript.COMMON) {
+                continue;
+            }
+            if (s != want) {
+                return false;
+            }
+            has = true;
+        }
+        return want == Character.UnicodeScript.LATIN || has;
+    }
+
+    static Character.UnicodeScript script(Language l) {
+        return switch (l) {
+            case EN -> Character.UnicodeScript.LATIN;
+            case HI, MR -> Character.UnicodeScript.DEVANAGARI;
+            case TA -> Character.UnicodeScript.TAMIL;
+            case TE -> Character.UnicodeScript.TELUGU;
+            case BN -> Character.UnicodeScript.BENGALI;
+        };
+    }
+
+    /**
+     * "Live" written in Indian scripts (Hindi/Marathi लाइव/लाईव्ह, Tamil லைவ், Telugu లైవ్, Bengali লাইভ), with
+     * the "now" words that go with it. On a replay these mislead as much as an English "LIVE" does; GR-9's
+     * English check doesn't read them, so the writer rewrites them itself.
+     */
+    static final Pattern NATIVE_LIVE = Pattern.compile(
+            "(?<![\\p{L}\\p{M}])(?:लाइव्ह|लाईव्ह|लाइव|लाईव|லைவ்|లైవ్|লাইভ)(?![\\p{L}\\p{M}])");
+    private static final Pattern NATIVE_NOW = Pattern.compile(
+            "(?<![\\p{L}\\p{M}])(?:अभी|आता|இப்போது|ఇప్పుడు|এখন)(?![\\p{L}\\p{M}])");
+
+    /**
+     * {@code t} with native-script "live" words (and, when there was one, "now") taken out and the
+     * punctuation they leave tidied; null when there were none.
+     */
+    static String withoutNativeLive(String t) {
+        if (t == null || !NATIVE_LIVE.matcher(t).find()) {
+            return null;
+        }
+        String s = NATIVE_NOW.matcher(NATIVE_LIVE.matcher(t).replaceAll(" ")).replaceAll(" ");
+        s = s.replaceAll("[ \\t]+", " ").replaceAll(" *\\n *", "\n");
+        s = s.replaceAll(" +([,।.!])", "$1").replaceAll("([,।])\\1+", "$1").replaceAll(",([.।!])", "$1");
+        return s.replaceAll("^[\\s,|:\\-–—•·]+", "").strip();
+    }
+
     private static final Pattern HASHTAG = Pattern.compile("(?<![\\p{L}\\p{N}])#[\\p{L}\\p{M}\\p{N}_]+");
     /** Emoji and pictographs (not letters of any script). */
     private static final Pattern EMOJI = Pattern.compile("[\\x{1F000}-\\x{1FAFF}\\x{2600}-\\x{27BF}\\x{FE0F}\\x{200D}]");
@@ -268,8 +334,11 @@ public final class TitleWriter {
         String t = raw.strip().lines().map(String::strip).filter(l -> !l.isEmpty()).findFirst().orElse("");
         t = t.replaceAll("^(\\d{1,2}[.)]\\s+|[-•]\\s+)", "");
         t = t.replaceAll("^[\"'“”‘’*]+|[\"'“”‘’*]+$", "").strip();
-        if (!phone && GoLiveCheck.misleadingLive(t) != null) {
-            t = GoLiveCheck.honestTitle(t, forever);
+        if (!phone) {
+            String n = withoutNativeLive(t);
+            if (n != null || GoLiveCheck.misleadingLive(t) != null) {
+                t = GoLiveCheck.honestTitle(n != null ? n : t, forever);
+            }
         }
         t = EMOJI.matcher(HASHTAG.matcher(t).replaceAll(" ")).replaceAll(" ").replaceAll("\\s+", " ").strip();
         t = t.replaceAll("[\\s|:\\-–—•·,]+$", "").strip();
@@ -287,6 +356,8 @@ public final class TitleWriter {
         String d = raw == null ? "" : raw.strip();
         if (!phone) {
             d = GoLiveCheck.withoutLiveWording(d);
+            String n = withoutNativeLive(d);
+            d = n == null ? d : n;
         }
         d = EMOJI.matcher(HASHTAG.matcher(d).replaceAll("")).replaceAll("");
         d = d.replaceAll("[ \\t]+", " ").replaceAll(" *\\n *", "\n").replaceAll("\\n{3,}", "\n\n").strip();
@@ -335,7 +406,7 @@ public final class TitleWriter {
             t = EMOJI.matcher(t).replaceAll("").strip();
             String key = t.toLowerCase(Locale.ROOT);
             if (t.isEmpty() || t.length() > 40 || BANNED_TAGS.contains(key) || key.matches("(19|20)\\d\\d")
-                    || (!in.phone() && (LIVE_TAGS.contains(key) || GoLiveCheck.misleadingLive(t) != null))
+                    || (!in.phone() && (LIVE_TAGS.contains(key) || GoLiveCheck.misleadingLive(t) != null || withoutNativeLive(t) != null))
                     || !GoLiveCheck.hasSearchablePhrase(t) && !key.matches("24/?7")) {
                 continue;
             }

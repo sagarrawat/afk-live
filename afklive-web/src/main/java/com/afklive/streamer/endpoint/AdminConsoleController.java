@@ -28,11 +28,13 @@ public class AdminConsoleController {
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final BusinessMetrics business;
     private final com.afklive.streamer.service.FairUse fairUse;
+    private final com.afklive.streamer.service.AiService ai;
 
     public AdminConsoleController(AdminConsoleService console, CostMeter costs, PlayoutCopies copies,
                                   org.springframework.jdbc.core.JdbcTemplate jdbc, BusinessMetrics business,
-                                  com.afklive.streamer.service.FairUse fairUse) {
+                                  com.afklive.streamer.service.FairUse fairUse, com.afklive.streamer.service.AiService ai) {
         this.fairUse = fairUse;
+        this.ai = ai;
         this.jdbc = jdbc;
         this.business = business;
         this.console = console;
@@ -89,6 +91,12 @@ public class AdminConsoleController {
     @GetMapping("/copies")
     public PlayoutCopies.Stats copies() {
         return copies.stats();
+    }
+
+    /** AI-1 FinOps: this UTC month's AI spend (tokens priced per million) against APP_AI_MONTHLY_BUDGET_USD. */
+    @GetMapping("/ai-spend")
+    public com.afklive.streamer.service.AiBudget.Report aiSpend() {
+        return ai.spend();
     }
 
     /** Sign-ups, active creators, first go-live and paid conversion, MRR, churn, cohorts and stream-hours (BusinessMetrics). */
