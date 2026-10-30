@@ -355,6 +355,7 @@ CH-3 (pinned and timed messages, "repeating message every N minutes") was droppe
 | MK-4 | As a creator, I want a help centre with guides so that I solve problems myself | Getting started, destinations, scheduling, billing, troubleshooting; searchable | P1 |
 | MK-5 | As a visitor, I want to compare AFK Live with alternatives so that I can choose with confidence | Fair comparison pages based on public information | P2 |
 | MK-6 | As a creator, I want a changelog so that I see the product improving | Public changelog; in-app "what's new" | P2 |
+| MK-7 | As a visitor, I want a free title and description writer without signing up so that I get a searchable, honest title for my live now and see what AFK Live can do | No sign-in; pick what I stream, a short description, language (English, Hindi, Tamil, Telugu, Bengali, Marathi) and replay or phone; 3 titles, a description and tags with Copy; "Stream this 24/7" carries the chosen title into my first stream after sign-up; says plainly when it is resting. Built: /tools/youtube-live-title-generator and /hi/tools/youtube-live-title-generator, the AI-1 prompt and checks; per-visitor (5 an hour, 15 a day) and daily (300) limits in the database, Turnstile when configured, counted in the monthly AI budget | P2 |
 
 ### 21. Mobile and accessibility
 

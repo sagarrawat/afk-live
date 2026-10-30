@@ -27,7 +27,7 @@ const hindiFiles = ['hi-help.html', ...articleFiles];
 function fileFor(path: string): string | undefined {
   const known: Record<string, string> = { '/': 'index.html', '/hi': 'hi.html', '/pricing': 'pricing.html', '/help': 'help.html', '/hi/help': 'hi-help.html' };
   if (known[path]) return known[path];
-  const m = path.match(/^\/(hi\/help|help|for)\/([a-z0-9-]+)$/);
+  const m = path.match(/^\/(hi\/help|help|for|hi\/tools|tools)\/([a-z0-9-]+)$/);
   if (!m) return undefined;
   return `${m[1].replace('/', '-')}-${m[2]}.html`;
 }
@@ -99,8 +99,8 @@ describe('hreflang', () => {
       expect(page(twinFile!).includes('<html lang="hi">'), twinFile).toBe(twin === alt.hi);
       pairs++;
     }
-    // The homepages, the help centres and the stream-key article, each counted from both sides.
-    expect(pairs).toBe(6);
+    // The homepages, the help centres, the stream-key article and the title writer (MK-7), each counted from both sides.
+    expect(pairs).toBe(8);
     expect(alternates(page('hi-help-youtube-stream-key.html'))).toEqual({ en: '/help/youtube-stream-key', hi: '/hi/help/youtube-stream-key', 'x-default': '/help/youtube-stream-key' });
     expect(alternates(page('hi-help.html')).en).toBe('/help');
   });

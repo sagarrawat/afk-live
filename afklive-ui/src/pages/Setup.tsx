@@ -3,6 +3,7 @@ import { PushPrompt } from '@/components/PushPrompt';
 import clsx from 'clsx';
 import { CircleCheck, ListVideo, Loader2, Smartphone, TriangleAlert, Upload as UploadIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { clearFirstStreamDraft, readFirstStreamDraft, type FirstStreamDraft } from '@/lib/first-stream-draft';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { destinationUrl, readKey } from '@/components/AddDestination';
 import { TestNote, useDestinationTests } from '@/components/DestinationTest';
@@ -43,6 +44,8 @@ export function Setup() {
       setStep(0);
     }
   }, [resume, resumed.isError, streamId]);
+  // MK-7: a title chosen on the site's free title writer before signing up.
+  const [draft] = useState<FirstStreamDraft | null>(() => readFirstStreamDraft());
   const navigate = useNavigate();
   const invalidate = useInvalidate();
   const finish = async (to: string) => {
@@ -69,8 +72,10 @@ export function Setup() {
           </li>
         ))}
       </ol>
+      {draft && <DraftNote draft={draft} />}
       {step === 0 && (
         <ChooseSource
+          draft={draft}
           onCreated={(id) => {
             setStreamId(id);
             setStep(1);
@@ -83,18 +88,50 @@ export function Setup() {
   );
 }
 
-function ChooseSource({ onCreated }: { onCreated: (id: number) => void }) {
+/** MK-7: the title (and description to copy) the creator wrote on the site's free title writer. Shown as text only. */
+function DraftNote({ draft }: { draft: FirstStreamDraft }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mb-6 rounded-lg border border-line bg-panel p-4 text-sm" data-testid="title-draft">
+      <p className="text-muted">Your title from the free title writer</p>
+      <p className="mt-1 break-words font-medium">{draft.title}</p>
+      <p className="mt-1 text-muted">
+        Your first stream gets this name and title.
+        {draft.description ? ' Copy the description into YouTube Studio when you set up the live there.' : ''}
+      </p>
+      {draft.description && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mt-2"
+          onClick={() => {
+            void navigator.clipboard?.writeText(draft.description).then(() => setCopied(true), () => {});
+          }}
+        >
+          {copied ? 'Copied' : 'Copy description'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ChooseSource({ onCreated, draft }: { onCreated: (id: number) => void; draft?: FirstStreamDraft | null }) {
   const { busy, run } = useAction();
   const create = (source: 'PLAYLIST' | 'PHONE') =>
     run(async () => {
       const s = await post<StreamView>('/api/streams', {
-        name: source === 'PHONE' ? 'Live from my phone' : 'My 24/7 stream',
+        name: draft?.title ?? (source === 'PHONE' ? 'Live from my phone' : 'My 24/7 stream'),
         source,
         orientation: 'LANDSCAPE',
         qualityHeight: 720,
         fps: 30,
       });
       await patch(`/api/streams/${s.id}`, { timeZone: browserTimeZone() }).catch(() => {});
+      if (draft) {
+        // The stream check reads this as the YouTube title (GR-9). Used once: the next stream starts fresh.
+        await put(`/api/streams/${s.id}/check/title`, { youtubeTitle: draft.title }).catch(() => {});
+        clearFirstStreamDraft();
+      }
       onCreated(s.id);
     });
   return (

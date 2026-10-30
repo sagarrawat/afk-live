@@ -139,10 +139,11 @@ export default defineConfig({
         terms: resolve(__dirname, 'site/terms.html'),
         // RE-7: the public status page (served at /status).
         status: resolve(__dirname, 'site/status.html'),
-        // MK-3: the use-case pages (site/use-cases.py); MK-4: the help centre, in English and Hindi (site/help.py).
+        // MK-3: the use-case pages (site/use-cases.py); MK-4: the help centre, in English and Hindi (site/help.py);
+        // MK-7: the free tools, in English and Hindi (hand-written tools-*.html, hi-tools-*.html).
         ...Object.fromEntries(
           readdirSync(resolve(__dirname, 'site'))
-            .filter((f) => /^(for|help|hi-help)-[a-z0-9-]+\.html$/.test(f) || f === 'help.html' || f === 'hi-help.html')
+            .filter((f) => /^(for|help|hi-help|tools|hi-tools)-[a-z0-9-]+\.html$/.test(f) || f === 'help.html' || f === 'hi-help.html')
             .map((f) => [f.replace('.html', ''), resolve(__dirname, 'site', f)]),
         ),
       },

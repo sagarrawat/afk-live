@@ -28,6 +28,12 @@ public final class PublicPages {
     public static final List<String> HINDI_HELP_ARTICLES = List.of("24-ghante-live", "mobile-se-live", "recorded-video-live",
             "youtube-stream-key");
 
+    /** MK-7: free tools, no sign-in (hand-written site/tools-&lt;slug&gt;.html, and site/hi-tools-&lt;slug&gt;.html in Hindi). */
+    public static final List<String> TOOLS = List.of("youtube-live-title-generator");
+
+    /** MK-7: the tools in Hindi, under /hi/tools. */
+    public static final List<String> HINDI_TOOLS = List.of("youtube-live-title-generator");
+
     /** Public address → built file under static/site/, for every page search engines should index, in sitemap order. */
     public static final Map<String, String> INDEXABLE;
 
@@ -50,6 +56,12 @@ public final class PublicPages {
         pages.put("/hi/help", "hi-help.html");
         for (String slug : HINDI_HELP_ARTICLES) {
             pages.put("/hi/help/" + slug, "hi-help-" + slug + ".html");
+        }
+        for (String slug : TOOLS) {
+            pages.put("/tools/" + slug, "tools-" + slug + ".html");
+        }
+        for (String slug : HINDI_TOOLS) {
+            pages.put("/hi/tools/" + slug, "hi-tools-" + slug + ".html");
         }
         pages.put("/privacy", "privacy.html");
         pages.put("/refund-policy", "refund-policy.html");

@@ -35,7 +35,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/library/merge", "/api/payment/initiate", "/api/auth/", "/api/support/");
 
     /** Expensive endpoints matched exactly (their prefixes also cover cheap polling endpoints). */
-    private static final Set<String> EXPENSIVE_EXACT = Set.of("/api/convert");
+    private static final Set<String> EXPENSIVE_EXACT = Set.of("/api/convert", "/api/public/title-writer");
 
     private final long generalPerMinute;
     private final long expensivePerMinute;
