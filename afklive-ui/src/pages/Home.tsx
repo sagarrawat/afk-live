@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { GoLiveButton, StopButton } from '@/components/live-actions';
 import { HoursLeft } from '@/components/HoursLeft';
+import { FinishSetupCard, FreeHoursBanner, WhatsNextCard } from '@/components/Journey';
 import { StreamingDataBanner, StreamingDataLine } from '@/components/StreamingData';
 import { HealthDot, isOnAir, LiveBadge, reachProblem, stopReason, Uptime } from '@/components/status';
 import { Button, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Segmented, Select, Spinner, useAction } from '@/components/ui';
 import { post } from '@/lib/api';
+import { showFinishSetup } from '@/lib/journey';
 import { keys, useInvalidate, useMe, useQualityOptions, useStreams } from '@/lib/queries';
 import type { StreamSummary, StreamView } from '@/lib/types';
 
@@ -22,6 +24,8 @@ export function Home() {
 
   const sorted = [...(streams ?? [])].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   const live = sorted.filter((s) => isOnAir(s.live.state)).length;
+  // ON-9: while "Finish setting up" shows, its button is the screen's one primary action.
+  const finishing = showFinishSetup(me, streams);
 
   return (
     <>
@@ -41,25 +45,29 @@ export function Home() {
           ) : undefined
         }
         actions={
-          <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+          <Button variant={finishing ? 'secondary' : 'primary'} icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
             New stream
           </Button>
         }
       />
       <ErrorNote error={error} />
       {me && <StreamingDataBanner me={me} />}
+      {me && <FreeHoursBanner me={me} className="mb-4" />}
+      {finishing && streams && <FinishSetupCard streams={streams} />}
       {streams && streams.length === 0 ? (
         <Empty
           icon={<ListVideo className="h-8 w-8" />}
           title="No streams yet"
           action={
             <div className="flex flex-wrap justify-center gap-2">
-              <Button variant="primary" onClick={() => setCreating(true)}>
+              <Button variant={finishing ? 'secondary' : 'primary'} onClick={() => setCreating(true)}>
                 Create a stream
               </Button>
-              <Link to="/studio/setup" className="inline-flex h-10 items-center rounded px-4 text-muted hover:bg-raised hover:text-ink">
-                Use the setup guide
-              </Link>
+              {!finishing && (
+                <Link to="/studio/setup" className="inline-flex h-10 items-center rounded px-4 text-muted hover:bg-raised hover:text-ink">
+                  Use the setup guide
+                </Link>
+              )}
             </div>
           }
         >
@@ -72,6 +80,7 @@ export function Home() {
           ))}
         </ul>
       )}
+      {me && streams && (me.goLives ?? 0) >= 1 && <WhatsNextCard me={me} streams={streams} />}
       <NewStreamDialog open={creating} onClose={() => setCreating(false)} />
     </>
   );

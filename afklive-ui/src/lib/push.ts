@@ -42,6 +42,22 @@ export async function enablePush(publicKey: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * ON-9: this device's alerts for the "What's next" checklist. unavailable: the server has no push set up or this
+ * browser can't do it; blocked: the browser said no; off; on.
+ */
+export function pushStateOf(
+  supported: boolean,
+  permission: string | undefined,
+  info: Pick<PushInfo, 'available' | 'publicKey'> | null,
+  subscribed: boolean,
+): 'unavailable' | 'blocked' | 'off' | 'on' {
+  if (!supported || !info?.available || !info.publicKey) return 'unavailable';
+  if (subscribed) return 'on';
+  if (permission === 'denied') return 'blocked';
+  return 'off';
+}
+
 export async function disablePush(): Promise<void> {
   const sub = await currentSubscription();
   if (!sub) return;

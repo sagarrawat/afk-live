@@ -126,7 +126,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 
 ## User stories
 
-**There are 164 stories across 24 epics: 67 P0, 60 P1, 36 P2 and 1 P3 (AI-3, parked). P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
+**There are 165 stories across 24 epics: 67 P0, 61 P1, 36 P2 and 1 P3 (AI-3, parked). P0 is the launch bar, P1 makes us competitive with upstream.so, P2 is where we pull ahead.** Each story is written as "As a \[persona\], I want … so that …" with testable acceptance criteria. "Creator" means any of the personas; "admin" means the AFK Live operator.
 
 ### 1. Onboarding and account
 
@@ -140,6 +140,7 @@ The phone only has to send one clean feed; everything that costs battery, CPU or
 | ON-6 | As a creator, I want to secure my account with two-factor authentication so that my channels can't be hijacked | TOTP 2FA; recovery codes; enforced for agency owners if they choose | P1 |
 | ON-7 | As a creator, I want to delete my account and export my data so that I stay in control | Self-serve export (zip of metadata + media links) and deletion with 7-day grace | P1 |
 | ON-8 | As a new creator, I want setup to end with proof that YouTube is receiving my stream so that I know I am done | Setup tests the destination automatically; after Go live it waits for RE-8 "On YouTube" and shows success with a link to YouTube Studio, or the fix; "first live confirmed" is recorded and is the activation metric. Built: `users.first_live_at`, set once by the web's first-live sweep; the admin funnel's first-live step reads it; setup's last step waits for "On YouTube" | P0 |
+| ON-9 | As a new creator who left setup halfway or has just gone live for the first time, I want the app to show me the next step so that I finish setting up and keep my channel growing | Home shows "Finish setting up" to an account that never went live (and has nothing on air): where it stopped in plain words (no stream yet, a stream without videos, no destination, ready but never live), worked out from its streams, videos and destinations rather than browser storage, with one button that resumes setup at exactly that step (`/studio/setup?stream=ID&step=content|destination`; an unknown stream starts setup over). After the first go-live, a compact "What's next" checklist of 3 to 5 items that tick themselves from real state: alerts on this device (when push is available), a schedule (or "it runs 24/7" for an always-on playlist), a second video, a YouTube title the stream check doesn't flag (opens the title editor and writer), and an invite (GR-18). Both can be hidden for the account on every device (`dismissedHints`) and the checklist goes when everything is done. On Free, from 70% of the month's hours a calm note on Home and the stream page says how many hours are left and the Creator price this account would pay this month (the launch offer, else the list price), linking to Billing; an in-app notice at 70% and one at 100% (BI-1), once a month each, never on plans without an hour limit. Built in the app only; email and day-2 reminders wait for email (OPS-1) | P1 |
 
 ### 2. Media library
 
@@ -299,7 +300,7 @@ CH-3 (pinned and timed messages, "repeating message every N minutes") was droppe
 
 | ID | Story | Acceptance criteria | Priority |
 | --- | --- | --- | --- |
-| BI-1 | As a new creator, I want a free tier with limited monthly hours so that I can try the product properly | Free hours per month, 720p, 1 stream, a small watermark; usage meter visible | P0 |
+| BI-1 | As a new creator, I want a free tier with limited monthly hours so that I can try the product properly | Free hours per month, 720p, 1 stream, a small watermark; usage meter visible. Built: hours left on Streams and the stream page; from 70% a note with the Creator price (ON-9); in-app notices at 70% and 100%, once a month each (metering on the web side) | P0 |
 | BI-2 | As a creator, I want prices per concurrent stream so that cost grows with my use | Plans priced by number of simultaneous streams; quality and storage by tier; monthly and yearly (yearly discounted) | P0 |
 | BI-3 | As an Indian creator, I want to pay in INR with UPI or cards and get a GST invoice so that it fits how I pay | INR checkout; UPI autopay for subscriptions; GST invoice emailed and downloadable | P0 |
 | BI-4 | As an international creator, I want to pay in USD by card so that I can buy from anywhere | USD checkout via an international processor; tax-compliant receipts | P1 |

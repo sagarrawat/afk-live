@@ -88,10 +88,10 @@ describe('Stream check card (GR-9)', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  const show = () =>
+  const show = (entry = '/studio/streams/4') =>
     render(
       <QueryClientProvider client={makeQueryClient()}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[entry]}>
           <GoLiveCheckCard
             stream={
               {
@@ -180,6 +180,13 @@ describe('Stream check card (GR-9)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save and check' }));
     await waitFor(() => expect(calls).toContainEqual(['PUT', '/api/streams/4/check/title', { youtubeTitle: 'Lofi beats to study' }]));
     expect(await screen.findByText('Lofi beats to study')).toBeInTheDocument();
+  });
+
+  it("opens the title editor when Home's checklist links here (ON-9)", async () => {
+    view = { ...base };
+    show('/studio/streams/4?title=write');
+    const input = await screen.findByLabelText('Your YouTube title');
+    await waitFor(() => expect(input).toHaveFocus());
   });
 
   it('only links help articles that exist', () => {
