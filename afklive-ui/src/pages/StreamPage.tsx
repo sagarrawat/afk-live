@@ -4,7 +4,7 @@ import { NavLink, Navigate, useParams } from 'react-router-dom';
 import { GoLiveButton, PlannedStop, SlowNotice, StopButton } from '@/components/live-actions';
 import { HealthDot, isOnAir, LiveBadge, reachProblem, stopReason, Uptime } from '@/components/status';
 import { FreeHoursBanner } from '@/components/Journey';
-import { ErrorNote, Spinner } from '@/components/ui';
+import { ErrorNote, ScrollTabs, Spinner } from '@/components/ui';
 import { useMe, useStream } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { AudioTab } from './stream/AudioTab';
@@ -100,7 +100,7 @@ export function StreamPage() {
       </header>
       {me && <FreeHoursBanner me={me} className="-mt-2 mb-6" />}
 
-      <nav aria-label="Stream sections" className="-mx-4 mb-6 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
+      <ScrollTabs label="Stream sections" className="-mx-4 mb-6 border-b border-line md:mx-0" navClassName="px-4 md:px-0">
         <ul className="flex min-w-max gap-1">
           {tabs.map(([t, label]) => (
             <li key={t}>
@@ -116,7 +116,7 @@ export function StreamPage() {
             </li>
           ))}
         </ul>
-      </nav>
+      </ScrollTabs>
 
       {tab === 'overview' && <OverviewTab stream={s} />}
       {tab === 'playlist' && <PlaylistTab stream={s} />}

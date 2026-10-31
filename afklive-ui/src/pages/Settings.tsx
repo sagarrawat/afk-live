@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { NavLink, Navigate, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/ui';
+import { PageHeader, ScrollTabs } from '@/components/ui';
 import { BillingSettings } from './settings/BillingSettings';
 import { DataSettings } from './settings/DataSettings';
 import { InviteSettings } from './settings/InviteSettings';
@@ -23,7 +23,7 @@ export function Settings() {
   return (
     <>
       <PageHeader title="Settings" />
-      <nav aria-label="Settings sections" className="-mx-4 mb-6 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
+      <ScrollTabs label="Settings sections" className="-mx-4 mb-6 border-b border-line md:mx-0" navClassName="px-4 md:px-0">
         <ul className="flex min-w-max gap-1">
           {SECTIONS.map(([s, label]) => (
             <li key={s}>
@@ -37,7 +37,7 @@ export function Settings() {
             </li>
           ))}
         </ul>
-      </nav>
+      </ScrollTabs>
       {section === 'profile' && <ProfileSettings />}
       {section === 'billing' && <BillingSettings />}
       {section === 'notifications' && <NotificationSettings />}

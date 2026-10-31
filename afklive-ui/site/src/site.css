@@ -178,9 +178,11 @@ section[id] {
   gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
-  /* Room for the focus ring inside the scroller. */
+  /* Room for the focus ring inside the scroller. Only the sides are pulled back: a vertical margin here
+     would beat the markup's mt-* (this rule comes after Tailwind's utilities) and glue the tabs to the heading. */
   padding: 3px;
-  margin: -3px;
+  margin-left: -3px;
+  margin-right: -3px;
 }
 /* Five niches wrap onto two lines on a phone rather than hiding off the edge. */
 .niche-tabs {
@@ -476,6 +478,16 @@ section[id] {
 /* Start free, at the end of a Hindi help article: a piece of night, like the channel it starts. */
 .help-cta {
   @apply rounded-2xl p-6 sm:p-8;
+}
+
+/* Footer links on phones: a full-height row each (about 42 px), so a thumb hits the one it means. */
+@media (max-width: 767px) {
+  .footer-links {
+    row-gap: 0;
+  }
+  .footer-links a {
+    padding-block: 11px;
+  }
 }
 
 /* Language switch (English / हिन्दी) in the header. The current language is marked. */

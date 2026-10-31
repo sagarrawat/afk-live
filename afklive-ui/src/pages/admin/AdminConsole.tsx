@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
 import { useTheme } from '@/components/Shell';
-import { Spinner } from '@/components/ui';
+import { ScrollTabs, Spinner } from '@/components/ui';
 import { useMe } from '@/lib/queries';
 import { Audit, FunnelPanel, Plans, RevenuePanel, TicketPage, Tickets, UserPage } from '../Admin';
 import { AdminSearch } from './AdminSearch';
@@ -49,27 +49,32 @@ function AttentionCount() {
 }
 
 function Nav({ current, phone }: { current: string; phone?: boolean }) {
-  return (
-    <nav aria-label="Admin" className={phone ? 'flex gap-1 overflow-x-auto border-b border-line px-3 md:hidden' : 'flex flex-col gap-0.5'}>
-      {ADMIN_NAV.map(({ to, label, icon: Icon }) => {
-        const active = navFor(current) === to;
-        return (
-          <NavLink
-            key={to}
-            to={`/studio/admin/${to}`}
-            aria-current={active ? 'page' : undefined}
-            className={clsx(
-              phone
-                ? clsx('-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 text-sm', active ? 'border-accent font-medium text-ink' : 'border-transparent text-muted')
-                : clsx('flex items-center gap-2.5 rounded px-2.5 py-1.5 text-sm', active ? 'bg-raised font-medium text-ink' : 'text-muted hover:bg-raised hover:text-ink'),
-            )}
-          >
-            <Icon className="h-4 w-4 shrink-0" aria-hidden />
-            {label}
-            {to === 'overview' && <AttentionCount />}
-          </NavLink>
-        );
-      })}
+  const links = ADMIN_NAV.map(({ to, label, icon: Icon }) => {
+    const active = navFor(current) === to;
+    return (
+      <NavLink
+        key={to}
+        to={`/studio/admin/${to}`}
+        aria-current={active ? 'page' : undefined}
+        className={clsx(
+          phone
+            ? clsx('-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2.5 text-sm', active ? 'border-accent font-medium text-ink' : 'border-transparent text-muted')
+            : clsx('flex items-center gap-2.5 rounded px-2.5 py-1.5 text-sm', active ? 'bg-raised font-medium text-ink' : 'text-muted hover:bg-raised hover:text-ink'),
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+        {label}
+        {to === 'overview' && <AttentionCount />}
+      </NavLink>
+    );
+  });
+  return phone ? (
+    <ScrollTabs label="Admin" className="border-b border-line md:hidden" navClassName="flex gap-1 px-3">
+      {links}
+    </ScrollTabs>
+  ) : (
+    <nav aria-label="Admin" className="flex flex-col gap-0.5">
+      {links}
     </nav>
   );
 }

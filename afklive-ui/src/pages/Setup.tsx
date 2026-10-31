@@ -58,7 +58,7 @@ export function Setup() {
     <div className="mx-auto max-w-2xl">
       <div className="mb-8 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">Set up your first stream</h1>
-        <button className="text-sm text-muted hover:text-ink" onClick={() => finish(streamId ? `/studio/streams/${streamId}` : '/studio')}>
+        <button className="-mr-2 h-11 shrink-0 whitespace-nowrap px-2 text-sm text-muted hover:text-ink" onClick={() => finish(streamId ? `/studio/streams/${streamId}` : '/studio')}>
           Skip setup
         </button>
       </div>
