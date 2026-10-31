@@ -20,16 +20,18 @@ set -euo pipefail
 
 ALLOWED=(
   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_YOUTUBE_CLIENT_ID GOOGLE_YOUTUBE_CLIENT_SECRET
-  ANTHROPIC_API_KEY GEMINI_API_KEY
+  ANTHROPIC_API_KEY
   APP_PUSH_VAPID_KEY
   APP_TURNSTILE_SITE_KEY APP_TURNSTILE_SECRET
   PHONEPE_CLIENT_ID PHONEPE_CLIENT_SECRET PHONEPE_CLIENT_VERSION PHONEPE_CALLBACK_PASSWORD
-  ZEPTOMAIL_TOKEN SMTP_USERNAME SMTP_PASSWORD
+  ZEPTOMAIL_TOKEN
   STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
 )
 # Deliberately not here: server-generated or data-critical values (APP_ENCRYPTION_KEY, POSTGRES_PASSWORD,
 # REMEMBER_ME_KEY, WORKER_CONTROL_TOKEN, INGEST_*). A wrong copy of those breaks sign-in or makes stored
-# stream keys unreadable, so they stay on the server only.
+# stream keys unreadable, so they stay on the server only. GEMINI_API_KEY and SMTP_* are left out for now:
+# GitHub holds older copies (Jan 2026) that could overwrite working values on the server. Add them back once
+# the GitHub copies are confirmed current.
 
 ENV_FILE=/opt/afklive/afklive.env
 # Tests point it elsewhere. Under sudo the path is fixed (sudo also drops the variable), so the sudoers line

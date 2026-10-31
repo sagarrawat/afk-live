@@ -761,8 +761,7 @@ remove it from `WORKER_HOSTS` and its peer from the main server's WireGuard conf
 
 ## Secrets from GitHub (OPS-7)
 
-Integration secrets (Google sign-in, Anthropic and Gemini, push, Turnstile, PhonePe, ZeptoMail/SMTP, object
-storage) are kept as **repository secrets** in GitHub (Settings → Secrets and variables → Actions). Every web
+Integration secrets (Google sign-in, Anthropic, push, Turnstile, PhonePe, ZeptoMail, object storage) are kept as **repository secrets** in GitHub (Settings → Secrets and variables → Actions). Every web
 deploy runs `afklive-scripts/sync-secrets.sh` on the server before the new version starts: it writes the secrets
 that are set into `/opt/afklive/afklive.env`, replacing a key that is there and adding one that isn't. It keeps
 every other line and the file's mode, and leaves a copy in `afklive.env.bak`.
@@ -774,7 +773,8 @@ every other line and the file's mode, and leaves a copy in `afklive.env.bak`.
   one, delete the line on the server.
 - **Allowed keys only** (the list at the top of the script, mirrored in the workflow; `SyncSecretsScriptTest`
   checks they match). Server-generated or data-critical values stay on the server only: `APP_ENCRYPTION_KEY`,
-  `POSTGRES_PASSWORD`, `REMEMBER_ME_KEY`, `WORKER_CONTROL_TOKEN`, `INGEST_*`.
+  `POSTGRES_PASSWORD`, `REMEMBER_ME_KEY`, `WORKER_CONTROL_TOKEN`, `INGEST_*`. `GEMINI_API_KEY` and `SMTP_*` are
+  left out for now because GitHub holds older copies; add them to both lists once those are confirmed current.
 - Values go over stdin and are never printed; the log names the keys that changed. A value with a single quote
   or a line break is refused (nothing written).
 

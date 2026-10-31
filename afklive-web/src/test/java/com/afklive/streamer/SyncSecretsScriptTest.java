@@ -90,7 +90,7 @@ class SyncSecretsScriptTest {
 
     @Test
     void anEmptyValueNeverWipesTheServersValue() throws Exception {
-        Run r = run("GEMINI_API_KEY=\nGOOGLE_CLIENT_ID=\n");
+        Run r = run("ANTHROPIC_API_KEY=\nGOOGLE_CLIENT_ID=\n");
 
         assertThat(r.exit()).isZero();
         assertThat(r.out()).contains("No secrets to sync");
@@ -133,9 +133,9 @@ class SyncSecretsScriptTest {
 
     @Test
     void valuesWithSpacesAndDollarSignsAreReadBackExactlyByBash() throws Exception {
-        run("SMTP_PASSWORD=p@ss $HOME word\n");
+        run("STORAGE_SECRET_KEY=p@ss $HOME word\n");
 
-        Process p = new ProcessBuilder("/bin/bash", "-c", "set -a; . '" + env + "'; set +a; printf '%s' \"$SMTP_PASSWORD\"").start();
+        Process p = new ProcessBuilder("/bin/bash", "-c", "set -a; . '" + env + "'; set +a; printf '%s' \"$STORAGE_SECRET_KEY\"").start();
         assertThat(p.waitFor(10, TimeUnit.SECONDS)).isTrue();
         assertThat(new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("p@ss $HOME word");
     }
