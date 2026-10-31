@@ -144,6 +144,13 @@ class AppShellTest extends PostgresIntegrationTest {
                         .content("{\"dismissHint\":\"anything-else\"}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(get("/api/me").with(user(email).roles("USER"))).andExpect(jsonPath("$.dismissedHints[0]").value("youtube-side"));
+        // ON-9: Home's "Finish setting up" and "What's next" cards are hidden the same way.
+        for (String hint : new String[]{"finish-setup", "whats-next"}) {
+            mvc.perform(patch("/api/me").with(user(email).roles("USER")).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"dismissHint\":\"" + hint + "\"}"))
+                    .andExpect(status().isOk());
+        }
+        mvc.perform(get("/api/me").with(user(email).roles("USER"))).andExpect(jsonPath("$.dismissedHints.length()").value(3));
         // The card also shows for the whole of a first go-live: every go-live is a job.
         User u = users.findByEmail(email).orElseThrow();
         jobs.save(new StreamJob(u, "k", null, null, null, false, 0, "First", null, null, java.time.ZonedDateTime.now(), "YouTube"));

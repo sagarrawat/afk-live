@@ -30,8 +30,11 @@ import java.util.Set;
 @RequestMapping("/api/me")
 public class MeController {
 
-    /** GL-6: tips a creator can dismiss for good (on every device). */
-    public static final Set<String> HINTS = Set.of("youtube-side");
+    /**
+     * Tips a creator can dismiss for good (on every device): GL-6 "What you'll see on YouTube"; ON-9 "Finish setting
+     * up" and "What's next" on Home.
+     */
+    public static final Set<String> HINTS = Set.of("youtube-side", "finish-setup", "whats-next");
 
     private final UserRepository users;
     private final PlanService plans;
