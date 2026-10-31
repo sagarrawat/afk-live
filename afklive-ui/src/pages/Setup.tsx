@@ -1,9 +1,9 @@
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { PushPrompt } from '@/components/PushPrompt';
 import clsx from 'clsx';
 import { CircleCheck, ListVideo, Loader2, Smartphone, TriangleAlert, Upload as UploadIcon } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { destinationUrl, readKey } from '@/components/AddDestination';
 import { TestNote, useDestinationTests } from '@/components/DestinationTest';
 import { MediaPicker } from '@/components/MediaPicker';
@@ -14,16 +14,35 @@ import { get, patch, post, put } from '@/lib/api';
 import { HELP, YOUTUBE_STUDIO_LIVE } from '@/lib/help';
 import { fitNotes, frameRateNote, suggestedShape, VERTICAL_ON_YOUTUBE, type Orientation } from '@/lib/shape';
 import { browserTimeZone } from '@/lib/format';
+import { parseResume } from '@/lib/journey';
 import { keys, useInvalidate, useMe, useStream } from '@/lib/queries';
 import type { Destination, LiveState, MediaItem, StreamView } from '@/lib/types';
 import { useUploads } from '@/lib/uploads-context';
 import type { Progress } from '@/lib/upload';
 import { PhoneTab } from './stream/PhoneTab';
 
-/** ON-2: live in under five minutes. Three steps, each skippable; ends live or as a saved draft. */
+/**
+ * ON-2: live in under five minutes. Three steps, each skippable; ends live or as a saved draft.
+ * ON-9: /studio/setup?stream=ID&step=content|destination resumes a setup left halfway at that step.
+ */
 export function Setup() {
-  const [step, setStep] = useState(0);
-  const [streamId, setStreamId] = useState<number | null>(null);
+  const [search] = useSearchParams();
+  const [resume] = useState(() => parseResume(search));
+  const [step, setStep] = useState<number>(resume?.step ?? 0);
+  const [streamId, setStreamId] = useState<number | null>(resume?.streamId ?? null);
+  // A resume link to a stream that isn't there (deleted, or someone else's) starts over instead of showing nothing.
+  const resumed = useQuery({
+    queryKey: keys.stream(resume?.streamId ?? 0),
+    queryFn: () => get<StreamView>(`/api/streams/${resume?.streamId}`),
+    enabled: resume != null,
+    retry: false,
+  });
+  useEffect(() => {
+    if (resume && resumed.isError && streamId === resume.streamId) {
+      setStreamId(null);
+      setStep(0);
+    }
+  }, [resume, resumed.isError, streamId]);
   const navigate = useNavigate();
   const invalidate = useInvalidate();
   const finish = async (to: string) => {
@@ -59,7 +78,7 @@ export function Setup() {
         />
       )}
       {step === 1 && streamId && <Content streamId={streamId} onNext={() => setStep(2)} />}
-      {step === 2 && streamId && <Destination streamId={streamId} onFinish={finish} />}
+      {step === 2 && streamId && <Destination streamId={streamId} onFinish={finish} useExisting={resume != null} />}
     </div>
   );
 }
@@ -277,7 +296,7 @@ function Content({ streamId, onNext }: { streamId: number; onNext: () => void })
   );
 }
 
-function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: string) => void }) {
+function Destination({ streamId, onFinish, useExisting = false }: { streamId: number; onFinish: (to: string) => void; useExisting?: boolean }) {
   const { data: s } = useStream(streamId);
   const { data: me } = useMe();
   const [key, setKey] = useState('');
@@ -287,6 +306,8 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
   const invalidate = useInvalidate();
   const { problem } = readKey('YOUTUBE', key);
   if (!s) return null;
+  // ON-9: a resumed setup whose stream already has a destination goes straight to "ready to go live".
+  const addedId = added?.id ?? (useExisting ? s.destinations.find((d) => d.enabled)?.destinationId : undefined) ?? null;
   const save = () =>
     run(async () => {
       const d = await post<Destination>('/api/destinations', { name: 'YouTube', key: destinationUrl('YOUTUBE', key), type: 'RTMP', selected: true });
@@ -297,7 +318,7 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
     }, 'YouTube stream key saved.');
   return (
     <Panel title="Send it to YouTube">
-      {!added ? (
+      {addedId == null ? (
         <>
           <ol className="list-decimal space-y-1 pl-5 text-muted">
             <li>
@@ -333,7 +354,7 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
             {s.source === 'PHONE' ? 'Press Go live, then start streaming in your phone app. Until your phone connects, viewers see your Starting soon scene.' : 'Press Go live. Your playlist is usually on YouTube within 15 seconds.'}
             {me?.plan.id === 'FREE' && ' The Free plan includes 10 hours a month at 720p.'}
           </p>
-          <TestNote state={tests[added.id]} platform="YOUTUBE" className="mt-3" />
+          {added && <TestNote state={tests[added.id]} platform="YOUTUBE" className="mt-3" />}
           {firstLiveStep(s.live).step === 'off' ? (
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <GoLiveButton stream={s} />
@@ -342,7 +363,7 @@ function Destination({ streamId, onFinish }: { streamId: number; onFinish: (to: 
               </Button>
             </div>
           ) : (
-            <FirstLiveProof live={s.live} onFinish={onFinish} streamId={s.id} destinationId={added.id} />
+            <FirstLiveProof live={s.live} onFinish={onFinish} streamId={s.id} destinationId={addedId ?? undefined} />
           )}
         </>
       )}

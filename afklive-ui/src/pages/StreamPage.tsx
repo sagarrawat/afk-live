@@ -3,8 +3,9 @@ import { ChevronLeft } from 'lucide-react';
 import { NavLink, Navigate, useParams } from 'react-router-dom';
 import { GoLiveButton, PlannedStop, SlowNotice, StopButton } from '@/components/live-actions';
 import { HealthDot, isOnAir, LiveBadge, reachProblem, stopReason, Uptime } from '@/components/status';
+import { FreeHoursBanner } from '@/components/Journey';
 import { ErrorNote, Spinner } from '@/components/ui';
-import { useStream } from '@/lib/queries';
+import { useMe, useStream } from '@/lib/queries';
 import type { StreamView } from '@/lib/types';
 import { AudioTab } from './stream/AudioTab';
 import { DestinationsTab } from './stream/DestinationsTab';
@@ -44,6 +45,7 @@ export function StreamPage() {
   const id = Number(params.id);
   const tab = params.tab ?? 'overview';
   const { data: s, isLoading, error } = useStream(id);
+  const { data: me } = useMe();
 
   if (isLoading) return <Spinner label="Loading the stream" />;
   if (error || !s) return <ErrorNote error={error ?? new Error('Stream not found.')} />;
@@ -96,6 +98,7 @@ export function StreamPage() {
           </div>
         </div>
       </header>
+      {me && <FreeHoursBanner me={me} className="-mt-2 mb-6" />}
 
       <nav aria-label="Stream sections" className="-mx-4 mb-6 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
         <ul className="flex min-w-max gap-1">

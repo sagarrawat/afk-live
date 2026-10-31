@@ -423,18 +423,83 @@ public class StreamService {
                     usage.add(job.getUser().getId(), BillingService.month(now), seconds);
                 }
                 com.afklive.streamer.model.User user = job.getUser();
+                try {
+                    notifyHours(user, now);
+                } catch (RuntimeException e) {
+                    log.warn("Hours notice for user {} failed: {}", user.getId(), e.getMessage());
+                }
                 if (freeHoursUsedUp(user) && !StreamStates.STOP.equals(job.getDesiredState())) {
                     log.info("User {} used this month's included hours; stopping stream {}", user.getId(), job.getId());
                     requestStop(job, "This month's free streaming hours are used up");
-                    notifications.notify(user.getEmail(), new NotificationService.Alert(NotificationService.Types.PLAN_LIMIT,
-                            com.afklive.streamer.model.Notification.Level.WARNING, job.getStreamId(), "Free streaming hours used up",
-                            "Your stream stopped because this month's free hours are used. Upgrade to stream without a limit.",
-                            "/pricing", "free-hours:" + BillingService.month(now), java.time.Duration.ofDays(31), true));
                 }
             } catch (Exception e) {
                 log.error("Error metering job " + job.getId(), e);
             }
         }
+    }
+
+    /** Hours notices already sent (or found already sent) by this instance: skips the database check every minute. */
+    private final java.util.Set<String> hoursNoticed = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** BI-1: the dedupe key of the hours notice for a step (70 or 100) in a month; 100 keeps the key it always had. */
+    public static String hoursNoticeKey(int step, String month) {
+        return (step >= 100 ? "free-hours:" : "free-hours-" + step + ":") + month;
+    }
+
+    /**
+     * BI-1: tells a creator on a plan with monthly hours (Free) once a month when 70% are used and once when they're
+     * all used, in the app (the second also by push and email as their alert settings allow). Passing both between two
+     * ticks sends only the second. Paid plans (no hour limit) never get one. Runs on the web side, from metering.
+     * The dedupe key carries the month, so each fires at most once a month per account, across instances.
+     */
+    public void notifyHours(com.afklive.streamer.model.User user, ZonedDateTime now) {
+        int hours = planService.limitsFor(user).getMonthlyHours();
+        if (hours <= 0) {
+            return;
+        }
+        String month = BillingService.month(now);
+        long used = usage.secondsIn(user.getId(), month);
+        long limit = hours * 3600L;
+        int step = used >= limit ? 100 : used * 10 >= limit * 7 ? 70 : 0;
+        if (step == 0) {
+            return;
+        }
+        String key = hoursNoticeKey(step, month);
+        if (!hoursNoticed.add(user.getId() + ":" + key)) {
+            return;
+        }
+        if (hoursNoticed.size() > 20_000) {
+            hoursNoticed.clear(); // a cache only: the dedupe key in the database is what keeps it to once a month
+        }
+        String resets = now.withZoneSameInstant(ZoneId.of("UTC")).withDayOfMonth(1).plusMonths(1)
+                .format(java.time.format.DateTimeFormatter.ofPattern("d MMMM", java.util.Locale.ENGLISH));
+        String title;
+        String body;
+        if (step == 100) {
+            title = "Free streaming hours used up";
+            body = "You've used all " + hours + " free hours this month, so your streams stop until " + resets
+                    + ". The Creator plan keeps you live 24/7 with no hour limit.";
+        } else {
+            String left = hoursText(Math.max(0, limit - used) / 3600.0);
+            title = left + " left this month";
+            body = "You've used " + hoursText(used / 3600.0) + " of your " + hours + " free hours. When they run out, your streams stop until "
+                    + resets + ". The Creator plan keeps you live 24/7 with no hour limit.";
+        }
+        try {
+            notifications.notify(user.getEmail(), new NotificationService.Alert(NotificationService.Types.PLAN_LIMIT,
+                    step == 100 ? com.afklive.streamer.model.Notification.Level.WARNING : com.afklive.streamer.model.Notification.Level.INFO,
+                    null, title, body, "/studio/settings/billing", key, Duration.ofDays(40), step == 100));
+        } catch (RuntimeException e) {
+            hoursNoticed.remove(user.getId() + ":" + key); // try again on the next tick
+            throw e;
+        }
+    }
+
+    /** "3 hours", "1 hour", "2.5 hours". */
+    static String hoursText(double h) {
+        double r = Math.round(h * 10) / 10.0;
+        String n = r == Math.rint(r) ? String.valueOf((long) r) : String.valueOf(r);
+        return n + (r == 1 ? " hour" : " hours");
     }
 
     /** True when the user's plan includes a monthly number of hours and they're all used. */

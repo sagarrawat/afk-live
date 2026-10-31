@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ClipboardCheck, ExternalLink, ImagePlus, Music, PenLine } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { HelpLink } from '@/components/HelpLink';
 import { MediaPicker } from '@/components/MediaPicker';
 import { Button, Input, Panel, buttonClass, useAction } from '@/components/ui';
@@ -65,10 +65,13 @@ export function GoLiveCheckCard({ stream: s }: { stream: StreamView }) {
     queryFn: () => get<CheckView>(`/api/streams/${s.id}/check`),
   });
   const { busy, run } = useAction();
-  const [editing, setEditing] = useState(false);
+  // ON-9: "Write a YouTube title" on Home links here with ?title=write: the title editor opens with the writer.
+  const [search] = useSearchParams();
+  const fromLink = search.get('title') === 'write';
+  const [editing, setEditing] = useState(fromLink);
   const [showKept, setShowKept] = useState(false);
-  const [focus, setFocus] = useState<'title' | 'thumbnail' | null>(null);
-  const [writer, setWriter] = useState<WriterMode>(null);
+  const [focus, setFocus] = useState<'title' | 'thumbnail' | null>(fromLink ? 'title' : null);
+  const [writer, setWriter] = useState<WriterMode>(fromLink ? 'open' : null);
   const canWrite = !!useTitleWriter(s.id).data?.available;
 
   if (!data) return null;
