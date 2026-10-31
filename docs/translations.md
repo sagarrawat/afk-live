@@ -12,6 +12,7 @@ the help centre, the use-case pages, pricing, legal pages and emails are English
 | Hindi header, footer | `afklive-ui/site/partials/header-hi.html`, `footer-hi.html` | |
 | Hindi static plan cards | `afklive-ui/site/partials/pricing-hi.html` | Generated: must equal `planCards(STATIC_PLANS, 'MONTHLY', 'hi')` (tested). Regenerate if you change the dictionary's plan strings |
 | Hindi help articles and their index | `afklive-ui/site/help.py` (`HI_ARTICLES`, `hi_index`, `CTA_HI`) | Run `python3 site/help.py` after editing; it writes `site/hi-help*.html`. A question in an article's `faq` is shown on the page and becomes FAQPage markup at build time, so keep each question unique across the site |
+| The "updating" page (shown while the web app restarts) | `afklive-scripts/caddy/errors/index.html` | English and Hindi on one page (`<section lang="hi">`); needs a native speaker's review like the rest |
 | Words scripts write into the page | `afklive-ui/site/src/i18n.ts` (`DICT.en`, `DICT.hi`) | Plan cards, calculator formula and verdict, proof line, incident note, example-stream titles and image descriptions |
 
 Scripts pick the language from `<html lang>`. The English strings in `DICT.en` must not change by

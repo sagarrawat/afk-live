@@ -9,7 +9,7 @@ Run after changing anything here (needs fonttools, brotli and Python Playwright)
 Outputs are committed: site/public/brand/* (served at /site/brand/), public/* for the app (PWA icons,
 manifest) and src/components/brand-paths.ts (the same shapes for React).
 """
-import math, pathlib, subprocess, tempfile
+import math, pathlib, re, subprocess, tempfile
 from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 from fontTools.pens.svgPathPen import SVGPathPen
@@ -86,6 +86,10 @@ def main():
     write(SITE / 'logo-on-dark.svg', svg(w, 64, body))
     w, body = lockup(NIGHT)
     write(SITE / 'logo-on-light.svg', svg(w, 64, body))
+    # The "updating" page Caddy serves while the web app restarts can't load anything, so it carries the logo inline.
+    page = ROOT.parent / 'afklive-scripts/caddy/errors/index.html'
+    page.write_text(re.sub(r'(<!-- brand:logo-on-light -->).*?(<!-- /brand -->)',
+                           lambda m: m.group(1) + svg(w, 64, body).strip() + m.group(2), page.read_text(), flags=re.S))
     w, body = lockup(MIST, MIST, MIST)
     write(SITE / 'logo-mono-light.svg', svg(w, 64, body))
     w, body = lockup(NIGHT, NIGHT, NIGHT)

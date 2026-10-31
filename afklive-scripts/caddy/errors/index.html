@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<!--
+  The page Caddy shows while the web app restarts (a deploy), instead of the browser's bare "502".
+  Served by Caddy's handle_errors (afklive-scripts/caddy/Caddyfile, Caddyfile.single-upstream) with status 503,
+  from /opt/afklive/errors/index.html; the web deploy workflow uploads it. Self-contained on purpose: the app is
+  down, so nothing here may load from it or from anywhere else. Brand: docs/brand.md. Hindi: docs/translations.md.
+  The logo between the brand markers is written by afklive-ui/brand/build.py (a test checks it matches).
+-->
+<title>Updating · AFK Live</title>
+<noscript><meta http-equiv="refresh" content="20"></noscript>
+<style>
+  :root {
+    --bg: #F4F5FB; --panel: #FFFFFF; --line: #DCDFEE; --ink: #10122A; --muted: #54597E;
+    --accent: #21245C; --accent-ink: #FFFFFF; --live: #FF4438; --ok: #169654;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", sans-serif;
+    -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; align-items: center;
+    padding: 32px 16px;
+  }
+  .logo { margin: 8px 0 40px; line-height: 0; }
+  .logo svg { height: 32px; width: auto; }
+  main { width: 100%; max-width: 520px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px 24px; }
+  h1, h2 { margin: 0; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; text-wrap: balance; }
+  h1 { font-size: 26px; }
+  h2 { font-size: 22px; }
+  p { margin: 8px 0 0; color: var(--muted); }
+  .live { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; color: var(--ink); font-weight: 600; }
+  .dot { flex: none; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: var(--live); animation: pulse 2s ease-in-out infinite; }
+  .live small { display: block; font-weight: 400; color: var(--muted); font-size: 14px; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+  [lang="hi"] { line-height: 1.7; }
+  .actions { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 24px;
+    border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600;
+    text-decoration: none; border: 0; cursor: pointer;
+  }
+  .btn:hover { background: #2E3275; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  #state { margin: 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  footer { margin-top: 24px; font-size: 14px; color: var(--muted); text-align: center; }
+  footer a { color: var(--accent); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+  @media (max-width: 400px) { .card { padding: 24px 18px; } .btn { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="logo"><!-- brand:logo-on-light --><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 236.17 64" role="img"><title>AFK Live</title><path fill="#FFB627" d="M28.96 11A24 24 0 1 0 53 35.04A17 17 0 0 1 28.96 11Z"/><circle fill="#FF4438" cx="41" cy="23" r="8"/><path fill="#10122A" transform="translate(78 45.0) scale(26)" d="M0.003 0 0.371 -1H0.703L1.069 0H0.799L0.536 -0.834L0.273 0ZM0.268 -0.251V-0.451H0.802V-0.251ZM1.136 0V-1H1.857V-0.787H1.387V-0.609H1.794V-0.396H1.387V0ZM1.952 0V-1H2.203V-0.613L2.583 -1H2.886L2.522 -0.632L2.92 0H2.634L2.352 -0.464L2.203 -0.312V0ZM3.24 0V-1H3.49V-0.213H3.965V0ZM4.055 0V-0.75H4.298V0ZM4.176 -0.825Q4.105 -0.825 4.064 -0.866Q4.023 -0.907 4.023 -0.978Q4.023 -1.049 4.064 -1.09Q4.105 -1.131 4.176 -1.131Q4.247 -1.131 4.288 -1.09Q4.329 -1.049 4.329 -0.978Q4.329 -0.907 4.288 -0.866Q4.247 -0.825 4.176 -0.825ZM4.664 0 4.379 -0.75H4.651L4.816 -0.18H4.798L4.961 -0.75H5.234L4.949 0ZM5.67 0.019Q5.559 0.019 5.467 -0.029Q5.375 -0.078 5.32 -0.166Q5.266 -0.255 5.266 -0.376Q5.266 -0.497 5.319 -0.585Q5.373 -0.672 5.464 -0.721Q5.556 -0.769 5.67 -0.769Q5.733 -0.769 5.798 -0.75Q5.863 -0.731 5.918 -0.683Q5.973 -0.635 6.006 -0.549Q6.04 -0.463 6.04 -0.328H5.422V-0.455H5.822L5.805 -0.421Q5.798 -0.487 5.779 -0.527Q5.76 -0.567 5.73 -0.586Q5.7 -0.604 5.663 -0.604Q5.613 -0.604 5.58 -0.574Q5.548 -0.544 5.533 -0.493Q5.518 -0.441 5.518 -0.375Q5.518 -0.276 5.553 -0.216Q5.589 -0.156 5.668 -0.156Q5.717 -0.156 5.753 -0.182Q5.789 -0.207 5.81 -0.262L6.026 -0.21Q6 -0.128 5.943 -0.078Q5.887 -0.027 5.815 -0.004Q5.743 0.019 5.67 0.019Z"/></svg><!-- /brand --></div>
+<main>
+  <div class="card">
+    <section>
+      <h1>AFK Live is updating</h1>
+      <p>We’ll be back in about a minute. This page reloads on its own when we are.</p>
+      <div class="live"><span class="dot" aria-hidden="true"></span><div>Your live streams keep running.<small>They run on separate stream servers, which this update doesn’t touch.</small></div></div>
+    </section>
+    <hr>
+    <section lang="hi">
+      <h2>AFK Live update हो रहा है</h2>
+      <p>करीब एक मिनट में वापस आ जाएगा। तैयार होते ही ये पेज अपने आप खुल जाएगा।</p>
+      <div class="live"><span class="dot" aria-hidden="true"></span><div>आपकी live streams चलती रहेंगी।<small>वे अलग stream servers पर चलती हैं, जिन्हें ये update नहीं छूता।</small></div></div>
+    </section>
+    <div class="actions">
+      <a class="btn" id="retry" href="">Try again · फिर से कोशिश करें</a>
+      <p id="state" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+  <footer>Taking longer than a few minutes? Email <a href="mailto:support@afklive.in">support@afklive.in</a></footer>
+</main>
+<script>
+(function () {
+  // Ask the app if it's back: /healthz answers 200 once it is (here, Caddy answers 503 until then). Every 5 s,
+  // then a little slower (up to 30 s) so a long outage doesn't hammer the server; immediately on "Try again",
+  // when the tab comes back into view or the phone comes back online.
+  var state = document.getElementById('state');
+  var retry = document.getElementById('retry');
+  var delay = 5000, timer = null, checking = false, started = Date.now();
+  function show(text) { state.textContent = text; }
+  function back() {
+    show('Back. Loading… · वापस आ गया…');
+    // replace(): a GET of this address, never a resubmitted form, and no extra history entry.
+    location.replace(location.href);
+  }
+  function schedule() {
+    clearTimeout(timer);
+    var slow = Date.now() - started > 3 * 60 * 1000;
+    show((slow ? 'Taking longer than usual. ' : '') + 'Checking again in ' + Math.round(delay / 1000) + ' s');
+    timer = setTimeout(check, delay);
+    delay = Math.min(30000, Math.round(delay * 1.5));
+  }
+  function check() {
+    if (checking) return;
+    checking = true;
+    clearTimeout(timer);
+    show('Checking… · जाँच रहे हैं…');
+    fetch('/healthz', { cache: 'no-store', credentials: 'same-origin', headers: { Accept: 'text/plain' } })
+      .then(function (r) { if (r.ok) back(); else schedule(); })
+      .catch(schedule)
+      .then(function () { checking = false; });
+  }
+  retry.addEventListener('click', function (e) { e.preventDefault(); delay = 5000; check(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+  window.addEventListener('online', check);
+  schedule();
+})();
+</script>
+</body>
+</html>

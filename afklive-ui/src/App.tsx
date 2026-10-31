@@ -4,6 +4,7 @@ import { createBrowserRouter, Link, Navigate, Route, RouterProvider, Routes, use
 import { Shell, useTheme } from './components/Shell';
 import { Empty, ToastProvider } from './components/ui';
 import { LeaveGuard, UnsavedChangesProvider } from './components/unsaved';
+import { UpdatingNotice } from './components/UpdatingNotice';
 import { ApiError, patch } from './lib/api';
 import { browserTimeZone, guessCurrency } from './lib/format';
 import { keys, useMe } from './lib/queries';
@@ -112,6 +113,7 @@ export function App({ client }: { client?: QueryClient }) {
       <ToastProvider>
         <UploadsProvider>
           <RouterProvider router={router} />
+          <UpdatingNotice />
         </UploadsProvider>
       </ToastProvider>
     </QueryClientProvider>

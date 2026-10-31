@@ -21,6 +21,40 @@
 	}
 }
 
+# While the web app restarts, visitors get a page that says so (and reloads itself), not the browser's bare
+# "502". Only Caddy's own errors land here (no upstream answering: 502, 503 no healthy slot, 504 timeout);
+# what the app answers itself, a 503 included, passes through untouched. API calls get JSON the app's fetch
+# layer understands (afklive-ui/src/lib/api.ts). The page: afklive-scripts/caddy/errors/index.html, uploaded by
+# every web deploy to /opt/afklive/errors/. docs/operations.md, "While the web app restarts".
+# The same block is in Caddyfile.single-upstream (a test keeps them equal).
+# --- afklive_updating ---
+(afklive_updating) {
+	handle_errors 502 503 504 {
+		header Cache-Control "no-store"
+		header Retry-After "30"
+
+		@api path /api /api/*
+		handle @api {
+			header Content-Type "application/json"
+			respond `{"error":"updating","retryAfter":30}` 503
+		}
+
+		@page header Accept *text/html*
+		handle @page {
+			root * /opt/afklive/errors
+			rewrite * /index.html
+			file_server {
+				status 503
+			}
+		}
+
+		handle {
+			respond "AFK Live is updating. Back in about a minute." 503
+		}
+	}
+}
+# --- end afklive_updating ---
+
 # SEO: one address for the site. http:// and www. answer with a single 301 to https://afklive.in, path and
 # query kept (Caddy's own http->https redirect is a 308 and would leave www as a second hop). Certificates
 # are still issued for both names: ACME challenges are answered before these redirects.
@@ -41,6 +75,7 @@ afklive.in, www.afklive.in {
 		max_size 10GB
 	}
 	import afklive_web
+	import afklive_updating
 }
 
 # The ingest server's auth hook (MediaMTX on this machine): authHTTPAddress http://127.0.0.1:8079/internal/ingest/auth?secret=...

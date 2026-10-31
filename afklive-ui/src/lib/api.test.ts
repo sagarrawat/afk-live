@@ -1,4 +1,4 @@
-import { ApiError, isExpiredToken, post } from './api';
+import { ApiError, errorMessage, get, isExpiredToken, isUpdating, post, UPDATING_MESSAGE, updatingNow } from './api';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -55,5 +55,76 @@ describe('api', () => {
     expect(isExpiredToken({ message: 'csrf' })).toBe(false);
     expect(isExpiredToken('csrf')).toBe(false);
     expect(isExpiredToken(undefined)).toBe(false);
+  });
+
+  describe('while the web app restarts (Caddy answers "updating")', () => {
+    const updatingAnswer = () => json({ error: 'updating', retryAfter: 30 }, 503);
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('a read waits, says "updating", and gets its answer once the app is back', async () => {
+      vi.useFakeTimers();
+      let calls = 0;
+      const fetchMock = vi.fn(async () => (++calls <= 2 ? updatingAnswer() : json({ id: 1 })));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = get('/api/me');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(updatingNow()).toBe(true);
+      await vi.advanceTimersByTimeAsync(3_000); // second try: still updating
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(4_500); // third try: back
+      await expect(result).resolves.toEqual({ id: 1 });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(updatingNow()).toBe(false);
+    });
+
+    it('a change is not repeated on its own: it says why, in plain words', async () => {
+      const fetchMock = vi.fn(async () => updatingAnswer());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const err = await post('/api/streams/1/go-live').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(503);
+      expect((err as ApiError).message).toBe(UPDATING_MESSAGE);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(updatingNow()).toBe(true);
+
+      vi.stubGlobal('fetch', vi.fn(async () => json({ ok: true })));
+      await post('/api/x');
+      expect(updatingNow()).toBe(false);
+    });
+
+    it('a read gives up after a few minutes and shows the message', async () => {
+      vi.useFakeTimers();
+      const fetchMock = vi.fn(async () => updatingAnswer());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = get('/api/me').catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(4 * 60_000);
+      const err = await result;
+      expect((err as ApiError).message).toBe(UPDATING_MESSAGE);
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(5);
+      expect(fetchMock.mock.calls.length).toBeLessThan(25);
+      vi.stubGlobal('fetch', vi.fn(async () => json({})));
+      await get('/api/me');
+    });
+
+    it("the app's own 503 is an ordinary error, not an update", async () => {
+      const fetchMock = vi.fn(async () => json({ message: 'Storage is unavailable.' }, 503));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(get('/api/media')).rejects.toThrow('Storage is unavailable.');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(updatingNow()).toBe(false);
+    });
+
+    it('recognises the answer and never shows the raw word', () => {
+      expect(isUpdating({ error: 'updating', retryAfter: 30 })).toBe(true);
+      expect(isUpdating({ error: 'other' })).toBe(false);
+      expect(isUpdating('updating')).toBe(false);
+      expect(errorMessage({ error: 'updating' }, 503)).toBe(UPDATING_MESSAGE);
+    });
   });
 });

@@ -71,6 +71,38 @@ jobs:
           target: "/opt/afklive/incoming/web/"
           strip_components: 2
 
+      # The "AFK Live is updating" page Caddy shows while the web app restarts (afklive-scripts/caddy/errors,
+      # docs/operations.md, "While the web app restarts"). Uploaded before the deploy so it's in place when the
+      # old version stops. Until the one-time server setup is done this upload fails, and that never stops the
+      # deploy (the next step only warns).
+      - name: Copy updating page to DigitalOcean VM
+        continue-on-error: true
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "afklive-scripts/caddy/errors/index.html"
+          target: "/opt/afklive/incoming/errors/"
+          strip_components: 3
+
+      # Swapped in with one rename, so Caddy never serves a half-written page.
+      - name: Publish updating page
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            SRC=/opt/afklive/incoming/errors/index.html
+            DIR=/opt/afklive/errors
+            if [ -f "$SRC" ] && [ -d "$DIR" ] && [ -w "$DIR" ]; then
+              install -m 0644 "$SRC" "$DIR/index.html.new" && mv -f "$DIR/index.html.new" "$DIR/index.html" && echo "Updating page published to $DIR/index.html"
+            else
+              echo "::warning::The 'updating' page isn't set up on this server yet (docs/operations.md, 'While the web app restarts'); visitors see the browser's 502 page during a restart."
+            fi
+            exit 0
+
       # OPS-7: integration secrets live in GitHub (Settings → Secrets and variables → Actions) and are written
       # into /opt/afklive/afklive.env before the new version starts. A secret not set in GitHub is skipped, so
       # the server's own value stays. Values go over stdin and are never printed. Until the one-time server
