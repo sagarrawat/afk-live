@@ -309,6 +309,8 @@ ARTICLES = [
                     "YouTube's spam policy covers misleading titles. “24/7 replay” is honest. If you are really there live, keep your title.",
                     "<strong>Up to 100 characters,</strong> but the first 40 or so are what shows on phones.",
                 ]),
+                ("p", 'Stuck for words? Our <a href="/tools/youtube-live-title-generator">free title writer</a> drafts three titles, '
+                      "a description and tags in English or five Indian languages, no sign-up needed."),
             ]),
             ("Thumbnails", [
                 ("ul", [

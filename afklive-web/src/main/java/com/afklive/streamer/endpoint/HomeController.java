@@ -77,6 +77,23 @@ public class HomeController {
         return "forward:/site/hi-help-" + slug + ".html";
     }
 
+    /** MK-7: free tools (the title writer), in English and Hindi; no sign-in. */
+    @GetMapping("/tools/{slug}")
+    public String tool(@PathVariable String slug) {
+        if (!PublicPages.TOOLS.contains(slug)) {
+            throw new NotFoundException("Page not found.");
+        }
+        return "forward:/site/tools-" + slug + ".html";
+    }
+
+    @GetMapping("/hi/tools/{slug}")
+    public String hindiTool(@PathVariable String slug) {
+        if (!PublicPages.HINDI_TOOLS.contains(slug)) {
+            throw new NotFoundException("Page not found.");
+        }
+        return "forward:/site/hi-tools-" + slug + ".html";
+    }
+
     @GetMapping("/terms")
     public String terms() {
         return "forward:/site/terms.html";

@@ -234,6 +234,15 @@ app:
     # US dollars per million input / output tokens, for the model in use. Empty: Claude Haiku 5.5's 0.10 / 0.50.
     price-input-per-million: ${APP_AI_PRICE_INPUT_PER_MTOK:}
     price-output-per-million: ${APP_AI_PRICE_OUTPUT_PER_MTOK:}
+    # MK-7: the free title writer on the public site (/tools/youtube-live-title-generator). Requests that reach the
+    # model per visitor (IP) an hour and a day, and for all visitors a UTC day. All count toward the monthly budget.
+    public-per-ip-hour: ${APP_AI_PUBLIC_PER_IP_HOUR:5}
+    public-per-ip-day: ${APP_AI_PUBLIC_PER_IP_DAY:15}
+    public-daily-limit: ${APP_AI_PUBLIC_DAILY_LIMIT:300}
+  turnstile:
+    # MK-7: Cloudflare Turnstile on the public title writer, only when both are set (empty: skipped).
+    secret: ${APP_TURNSTILE_SECRET:}
+    site-key: ${APP_TURNSTILE_SITE_KEY:}
   storage:
     # local | s3 (any S3-compatible store: Cloudflare R2, DigitalOcean Spaces, AWS S3, MinIO).
     # STORAGE_* names win; the older DO_SPACES_* names still work as fallbacks. See docs/operations.md#object-storage.

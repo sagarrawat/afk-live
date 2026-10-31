@@ -1367,6 +1367,29 @@ streams (`afklive-web/src/test/resources/ai-eval/`). To see what the real model 
 `ANTHROPIC_API_KEY=... afklive-scripts/ai-eval.sh` (Maven profile `ai-eval`, not part of any build; 30 calls,
 about a cent) and read `afklive-web/target/ai-eval/report.md`.
 
+## Free title writer on the site (MK-7)
+
+`/tools/youtube-live-title-generator` (and `/hi/tools/...`) lets anyone write three titles, a description and tags
+without an account: `GET /api/public/title-writer/status` (is it up; the Turnstile site key) and `POST
+/api/public/title-writer` (CSRF token required, like every form; the page reads the `XSRF-TOKEN` cookie). The prompt
+and checks are the title writer's (AI-1). Guards, all on the web side and shared through the database
+(`ai_public_counts`, one conditional upsert per counter, rows kept two days at most):
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `APP_AI_PUBLIC_PER_IP_HOUR` | 5 | Drafts per visitor an hour (the visitor is a SHA-256 of IP address and day; addresses aren't stored) |
+| `APP_AI_PUBLIC_PER_IP_DAY` | 15 | Drafts per visitor a UTC day |
+| `APP_AI_PUBLIC_DAILY_LIMIT` | 300 | Drafts for all visitors together a UTC day; past it the page says the tool is resting until tomorrow |
+| `APP_TURNSTILE_SITE_KEY`, `APP_TURNSTILE_SECRET` | empty | Both set: the page shows Cloudflare Turnstile and every request is verified with Cloudflare. Empty: skipped |
+
+Descriptions are capped at 200 characters and treated as plain text. A request counts once it reaches the model,
+even if the answer can't be used. Every call also counts toward `APP_AI_MONTHLY_BUDGET_USD`; with AI off or the
+budget used up, the page shows "This tool is resting right now" and still offers sign-up. The POST is also under
+the API's per-IP limit for expensive calls (`RateLimitFilter`, 20 a minute). Worst case at the default limits:
+300 drafts a day, about $0.09 a day with Haiku. "Stream this 24/7" keeps the chosen title and description in the
+browser (`localStorage`, key `afk.firstStreamDraft`, a week at most); the app's first-stream setup names the stream
+with it, sets it as the stream check's YouTube title and offers the description to copy, then forgets it.
+
 ## Automatic replies removed (AI-3)
 
 AFK Live never posts in YouTube chat, replies to comments or deletes comments by itself. YouTube's spam

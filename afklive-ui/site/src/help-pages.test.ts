@@ -27,7 +27,7 @@ describe('help centre pages', () => {
   });
 
   it('builds them, and serves and lists them in the sitemap (PublicPages)', () => {
-    expect(siteConfig).toMatch(/\(for\|help\|hi-help\)-/);
+    expect(siteConfig).toMatch(/\(for\|help\|hi-help\|tools\|hi-tools\)-/);
     expect(siteConfig).toContain("f === 'help.html'");
     expect(publicPages).toContain('pages.put("/help", "help.html")');
     const listed = publicPages.match(/HELP_ARTICLES = List\.of\(([^;]+)\);/)?.[1] ?? '';

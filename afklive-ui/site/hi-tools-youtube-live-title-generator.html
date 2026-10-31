@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- MK-7: the free title writer in Hindi (PublicTitleWriter). Every string needs a native speaker's review: docs/translations.md. -->
+  <title>YouTube live title generator, फ़्री | AFK Live</title>
+  <meta name="description" content="YouTube live के लिए सच्चे, search में मिलने वाले titles, description और tags हिन्दी, अंग्रेज़ी, तमिल, तेलुगु, बांग्ला या मराठी में। फ़्री, sign up नहीं।" />
+  <link rel="canonical" href="https://afklive.in/hi/tools/youtube-live-title-generator" />
+  <link rel="alternate" hreflang="en" href="https://afklive.in/tools/youtube-live-title-generator" />
+  <link rel="alternate" hreflang="hi" href="https://afklive.in/hi/tools/youtube-live-title-generator" />
+  <link rel="alternate" hreflang="x-default" href="https://afklive.in/tools/youtube-live-title-generator" />
+  <meta property="og:title" content="YouTube live के लिए फ़्री title और description writer" />
+  <meta property="og:description" content="YouTube live के लिए सच्चे, search में मिलने वाले titles, description और tags हिन्दी, अंग्रेज़ी, तमिल, तेलुगु, बांग्ला या मराठी में। फ़्री, sign up नहीं।" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://afklive.in/hi/tools/youtube-live-title-generator" />
+  <meta property="og:locale" content="hi_IN" />
+<!-- include:head -->
+  <!-- Devanagari only on Hindi pages: English pages don't download it. -->
+  <link rel="stylesheet" href="./src/devanagari.css" />
+  <script type="module" src="./src/main.ts"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "होम", "item": "https://afklive.in/hi"}, {"@type": "ListItem", "position": 2, "name": "YouTube live के लिए फ़्री title और description writer", "item": "https://afklive.in/hi/tools/youtube-live-title-generator"}]}</script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "YouTube live के लिए फ़्री title और description writer", "url": "https://afklive.in/hi/tools/youtube-live-title-generator", "applicationCategory": "MultimediaApplication", "operatingSystem": "Web", "inLanguage": "hi", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "INR"}, "publisher": {"@type": "Organization", "name": "AFK Live", "url": "https://afklive.in/"}}</script>
+  <!-- jsonld:faq -->
+</head>
+<body>
+<!-- include:header-hi -->
+<main class="mx-auto max-w-3xl px-4 pb-24 pt-10 sm:px-6">
+  <nav aria-label="Breadcrumb" class="text-sm"><a href="/hi" class="link">होम</a> <span aria-hidden="true" class="text-muted">/</span> <span class="text-muted" aria-current="page">YouTube live के लिए फ़्री title और description writer</span></nav>
+  <h1 class="mt-4 text-[32px] font-extrabold leading-[1.15] tracking-[-0.02em] sm:text-[44px]">YouTube live के लिए फ़्री title और description writer</h1>
+  <p class="mt-4 text-lg text-muted">बताइए आपकी stream पर क्या है। आपको तीन titles मिलेंगे जो उन शब्दों से शुरू होते हैं जो लोग search करते हैं, साथ में description और tags, आपकी भाषा में। फ़्री, sign up की ज़रूरत नहीं।</p>
+
+  <section class="mt-8 rounded-xl border border-line bg-panel p-4 sm:p-6" data-title-tool aria-labelledby="tool-title">
+    <h2 id="tool-title" class="sr-only">अपने titles लिखें</h2>
+    <p class="note-ok" data-tool-resting hidden></p>
+    <form class="space-y-5" data-tool-form>
+      <div>
+        <label class="label" for="tool-niche">आप क्या stream करते हैं</label>
+        <select id="tool-niche" name="niche" class="field" required>
+          <option value="lofi">Lofi music</option>
+          <option value="devotional">भजन, आरती और मंत्र</option>
+          <option value="gaming">Mobile gaming (BGMI, Free Fire)</option>
+          <option value="podcasts">Podcasts</option>
+          <option value="study">Study with me</option>
+          <option value="kids">बच्चों की कविताएँ और गाने</option>
+          <option value="other">कुछ और</option>
+        </select>
+      </div>
+      <div>
+        <label class="label" for="tool-description">Stream पर क्या है, कुछ शब्दों में</label>
+        <textarea id="tool-description" name="description" class="field h-24 py-2" maxlength="200" minlength="3" required
+          placeholder="हर सुबह हनुमान चालीसा, मंदिर की मंडली के साथ"></textarea>
+        <p class="mt-1 text-right text-xs text-muted tnum" data-tool-counter aria-live="polite"></p>
+      </div>
+      <div class="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label class="label" for="tool-language">भाषा</label>
+          <select id="tool-language" name="language" class="field">
+            <option value="hi" selected>हिन्दी</option>
+            <option value="en">English</option>
+            <option value="ta">தமிழ் (तमिल)</option>
+            <option value="te">తెలుగు (तेलुगु)</option>
+            <option value="bn">বাংলা (बांग्ला)</option>
+            <option value="mr">मराठी</option>
+          </select>
+        </div>
+        <fieldset>
+          <legend class="label">आप कैसे stream करते हैं</legend>
+          <label class="flex items-center gap-2 py-1"><input type="radio" name="mode" value="replay" checked /> मेरे videos, 24 घंटे</label>
+          <label class="flex items-center gap-2 py-1"><input type="radio" name="mode" value="phone" /> फ़ोन से live</label>
+        </fieldset>
+      </div>
+      <p class="text-sm text-muted">पहले से record किए videos चला रहे हैं? तो हम उसे कभी “LIVE” नहीं कहते: replay पर यह दर्शकों को गुमराह करता है, और YouTube की spam policy गुमराह करने वाले titles पर लागू होती है।</p>
+      <div data-turnstile></div>
+      <p class="note-bad" data-tool-error role="alert" hidden></p>
+      <button type="submit" class="btn-primary w-full sm:w-auto" data-tool-submit>Titles लिखें</button>
+    </form>
+
+    <div class="mt-8" data-tool-result hidden aria-live="polite">
+      <h3 class="text-lg font-bold">Titles</h3>
+      <ul class="mt-2" data-tool-titles></ul>
+      <div class="mt-6 flex items-center justify-between gap-3">
+        <h3 class="text-lg font-bold">Description</h3>
+        <span data-tool-description-copy></span>
+      </div>
+      <p class="mt-2 whitespace-pre-line break-words" data-tool-description></p>
+      <div class="mt-6 flex items-center justify-between gap-3">
+        <h3 class="text-lg font-bold">Tags</h3>
+        <span data-tool-tags-copy></span>
+      </div>
+      <p class="mt-2 break-words text-muted" data-tool-tags></p>
+      <div class="mt-8 rounded-lg bg-raised p-4">
+        <p class="font-medium">आप सोते रहें, चैनल live रहे।</p>
+        <p class="mt-1 text-sm text-muted">एक बार upload करें, AFK Live cloud से YouTube पर 24 घंटे चलाता है, PC चालू रखने की ज़रूरत नहीं। आपकी पहली stream यहाँ चुने title और description से शुरू होगी। (App अंग्रेज़ी में है।)</p>
+        <a href="/register" hreflang="en" class="btn-primary mt-4 w-full sm:w-auto" data-tool-cta data-funnel="start">AFK Live से इसे 24 घंटे चलाएँ</a>
+      </div>
+    </div>
+    <noscript><p class="note-bad">इसके लिए JavaScript चाहिए। App में titles लिखने के लिए <a href="/register" hreflang="en" class="link">फ़्री sign up करें</a>।</p></noscript>
+  </section>
+
+  <article class="help-article mt-12">
+    <h2 id="kaise-likhta-hai">यह कैसे लिखता है</h2>
+    <ul>
+      <li><strong>पहले वो शब्द जो लोग search करते हैं।</strong> हर title उन शब्दों से शुरू होता है जो लोग YouTube पर लिखते हैं, जैसे “हनुमान चालीसा” या “lofi beats to study”।</li>
+      <li><strong>सच्चा।</strong> कोई clickbait नहीं, पूरे CAPITAL शब्द नहीं, emoji या hashtag नहीं, और पहले से record किए videos पर “LIVE” नहीं। सच में फ़ोन से live हैं? तब live लिखना ठीक है।</li>
+      <li><strong>आपकी भाषा, आपकी लिपि।</strong> हिन्दी और मराठी देवनागरी में, तमिल, तेलुगु और बांग्ला अपनी-अपनी लिपि में। गानों, कलाकारों, देवी-देवताओं और जगहों के नाम जैसे हैं वैसे रहते हैं।</li>
+      <li><strong>YouTube की सीमा में।</strong> Title 100 अक्षरों तक और 5 से 10 tags।</li>
+    </ul>
+    <p>24 घंटे live के बारे में और: <a href="/hi/help/24-ghante-live">YouTube पर 24 घंटे live कैसे रहें</a>।</p>
+  </article>
+
+  <section class="mt-14" aria-labelledby="faq-title">
+    <h2 id="faq-title" class="text-2xl font-bold tracking-tight">सवाल</h2>
+    <div class="mt-4 divide-y divide-line border-y border-line" data-faq>
+      <details class="py-4"><summary class="cursor-pointer font-medium">क्या यह title writer सच में फ़्री है?</summary>
+        <p class="mt-2 text-muted">हाँ। बिना account के आप हर घंटे कुछ drafts लिख सकते हैं। AFK Live के फ़्री account से आप अपनी हर stream के लिए और लिख सकते हैं, playlist की tracklist के साथ।</p></details>
+      <details class="py-4"><summary class="cursor-pointer font-medium">मैं जो लिखता हूँ उसका क्या होता है?</summary>
+        <p class="mt-2 text-muted">Draft लिखने के लिए सिर्फ़ आपके लिखे शब्द और चुने हुए options हमारे AI provider को भेजे जाते हैं। हम उन्हें store नहीं करते, और उनसे AI models को train नहीं किया जाता। ज़्यादा जानकारी हमारी privacy policy (अंग्रेज़ी में) में है।</p></details>
+      <details class="py-4"><summary class="cursor-pointer font-medium">क्या यह मेरे YouTube चैनल पर कुछ post करता है?</summary>
+        <p class="mt-2 text-muted">नहीं। यह drafts लिखता है जिन्हें आप ख़ुद YouTube Studio में copy करते हैं। कहीं कुछ post नहीं होता।</p></details>
+    </div>
+  </section>
+</main>
+<!-- include:footer-hi -->
+</body>
+</html>

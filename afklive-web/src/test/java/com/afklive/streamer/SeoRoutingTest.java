@@ -125,6 +125,23 @@ class SeoRoutingTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void freeToolsAreServedSignedOutInBothLanguages() throws Exception {
+        mvc.perform(get("/tools/youtube-live-title-generator")).andExpect(status().isOk())
+                .andExpect(forwardedUrl("/site/tools-youtube-live-title-generator.html"));
+        mvc.perform(get("/hi/tools/youtube-live-title-generator")).andExpect(status().isOk())
+                .andExpect(forwardedUrl("/site/hi-tools-youtube-live-title-generator.html"));
+        assertThat(PublicPages.INDEXABLE).containsEntry("/tools/youtube-live-title-generator", "tools-youtube-live-title-generator.html")
+                .containsEntry("/hi/tools/youtube-live-title-generator", "hi-tools-youtube-live-title-generator.html");
+        for (String path : new String[]{"/tools/nope", "/hi/tools/nope", "/tools"}) {
+            mvc.perform(get(path).accept(MediaType.TEXT_HTML)).andExpect(status().isNotFound());
+        }
+        mvc.perform(get("/tools/youtube-live-title-generator/")).andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location", "/tools/youtube-live-title-generator"));
+        mvc.perform(get("/site/hi-tools-youtube-live-title-generator.html")).andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location", "/hi/tools/youtube-live-title-generator"));
+    }
+
+    @Test
     void oldAddressesMovedForGood() throws Exception {
         String[][] cases = {{"/home.html", "/"}, {"/pricing.html", "/pricing"}, {"/privacy.html", "/privacy"}, {"/terms.html", "/terms"},
                 {"/features", "/#how"}, {"/features.html", "/#how"}};
