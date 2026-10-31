@@ -249,6 +249,7 @@ function Plans({ billing: b, currency: initial }: { billing: BillingOverview; cu
                   p.monthlyHours > 0 ? `${p.monthlyHours} hours a month` : 'Unlimited hours, 24/7',
                   `${p.destinationsPerStream} destination${p.destinationsPerStream === 1 ? '' : 's'} per stream`,
                   `${bytes(p.storageBytes)} storage`,
+                  ...(p.monthlyTrafficGb ? [`${p.monthlyTrafficGb.toLocaleString('en-IN')} GB of streaming data a month`] : []),
                   p.watermark ? 'Small AFK Live mark on stream' : 'No watermark',
                 ].map((f) => (
                   <li key={f} className="flex gap-2">

@@ -61,6 +61,7 @@ class BillingServiceTest extends PostgresIntegrationTest {
     @Autowired NotificationRepository notifications;
     @Autowired StreamService streams;
     @Autowired WebApplicationContext context;
+    @Autowired com.afklive.streamer.service.PlanService planService;
 
     MockMvc mvc;
 
@@ -116,6 +117,27 @@ class BillingServiceTest extends PostgresIntegrationTest {
         assertThat(billing.catalog("USD").get(1).monthlyLabel()).isEqualTo("$9");
         assertThat(BillingService.priceLabel(750, "USD")).isEqualTo("$7.50"); // cents kept when there are any
         assertThat(BillingService.priceLabel(399_900, "INR")).isEqualTo("₹3,999");
+    }
+
+    @Test
+    void catalogShowsEachPlansStreamingDataAllowanceSoThePricingPageCanStateIt() throws Exception {
+        var creator = planService.getPlanConfig(com.afklive.streamer.model.PlanType.ESSENTIALS);
+        Integer before = creator.getMonthlyTrafficGb();
+        try {
+            creator.setMonthlyTrafficGb(2000);
+            planService.updatePlan(creator);
+            assertThat(billing.catalog("INR").get(1).monthlyTrafficGb()).isEqualTo(2000);
+            mvc.perform(get("/api/billing/plans")).andExpect(status().isOk())
+                    .andExpect(jsonPath("$[1].monthlyTrafficGb").value(2000));
+            creator = planService.getPlanConfig(com.afklive.streamer.model.PlanType.ESSENTIALS);
+            creator.setMonthlyTrafficGb(null);
+            planService.updatePlan(creator);
+            assertThat(billing.catalog("INR").get(1).monthlyTrafficGb()).isNull(); // none: the cards say nothing
+        } finally {
+            creator = planService.getPlanConfig(com.afklive.streamer.model.PlanType.ESSENTIALS);
+            creator.setMonthlyTrafficGb(before);
+            planService.updatePlan(creator);
+        }
     }
 
     @Test
