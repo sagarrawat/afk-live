@@ -1321,23 +1321,51 @@ listing open flags; no email or push. `app.check.weekly-auto=false` turns the ho
 
 ## Title writer (AI-1, GR-10)
 
-"Write title and description" in the stream check (`/api/streams/{id}/ai/metadata`, web only) asks Gemini
-for three titles, a description and tags in English, Hindi, Tamil, Telugu, Bengali or Marathi, checks
-them with the GR-9 title rules and adds a tracklist with timestamps worked out from the playlist. Drafts
-only: nothing is sent to YouTube. Settings (all optional):
+"Write title and description" in the stream check (`/api/streams/{id}/ai/metadata`, web only) asks the AI
+model for three titles, a description and tags in English, Hindi, Tamil, Telugu, Bengali or Marathi, checks
+them with the GR-9 title rules (plus "live" written in Indian scripts, and the language's script: when some
+titles are in it, the ones that aren't are dropped) and adds a tracklist with timestamps worked out from the
+playlist. Drafts only: nothing is sent to YouTube. The same model writes the older one-line drafts
+(`/api/ai/*`, library uploads) and comment-reply drafts.
+
+**Which model.** Claude (Anthropic's Messages API, plain HTTP with the app's timed client: 5 s connect, 25 s
+read) when `ANTHROPIC_API_KEY` is set; else Gemini when `GEMINI_API_KEY` is set; else AI is off and the writer
+is hidden (the endpoint answers `UNAVAILABLE`, never an error). Errors, timeouts, rate limits (429), overload
+(529) and an empty credit balance count as "no answer": the creator gets a start from their own words and
+the draft isn't counted. Only the status code is logged; prompts, answers and keys never are. Keys go in
+headers (`x-api-key`, `x-goog-api-key`), never URLs. If Gemini is used, its key must belong to a Google Cloud
+project with billing on: the free tier may use prompts for training, which the privacy policy rules out.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | empty | Empty: the writer is hidden in the app and the endpoint answers `UNAVAILABLE` (never an error) |
-| `GEMINI_MODEL` | `gemini-flash-lite-latest` | The model id; keep a Flash-Lite class model (about ₹0.05–0.1 a draft) |
+| `ANTHROPIC_API_KEY` | empty | Set: Claude writes (wins over Gemini) |
+| `ANTHROPIC_MODEL` | `claude-haiku-5-5` | The Claude model id |
+| `GEMINI_API_KEY` | empty | Used when there's no Anthropic key. Both empty: the writer is hidden |
+| `GEMINI_MODEL` | `gemini-flash-lite-latest` | The Gemini model id; keep a Flash-Lite class model |
 | `AI_DAILY_LIMIT_FREE` | 20 | Drafts per account per day on Free (the day is the creator's time zone) |
 | `AI_DAILY_LIMIT_PAID` | 100 | The same on paid plans |
+| `APP_AI_MONTHLY_BUDGET_USD` | 10 | AI stops for the rest of the UTC month once this month's spend reaches it. 0: no AI calls at all |
+| `APP_AI_PRICE_INPUT_PER_MTOK` | 0.10 | US dollars per million input tokens of the model in use (Claude Haiku 5.5's price) |
+| `APP_AI_PRICE_OUTPUT_PER_MTOK` | 0.50 | The same for output tokens. Set both when you switch model or provider |
 
 Fair use is counted in `ai_usage` with one conditional upsert (`generations < limit`), so several web
 instances can't let an account past it; an answer that can't be used is not counted. The same inputs
 (stream, language, name, title, note, playlist, model) within 24 hours read `ai_drafts` and cost nothing.
-The key goes in the `x-goog-api-key` header, never the URL. Worst case per Free account at the full limit
-every day: about ₹35 a month; typical use (a few drafts a month): ₹1–7.
+
+**Monthly spending cap (FinOps).** Every call's input and output tokens, as the API reports them (`usage`,
+or Gemini's `usageMetadata`), are added to `ai_spend` (UTC month, provider, model) with one upsert and priced
+at the rates above. Before each call the month's sum is read from the database, so every web instance stops
+at the cap; calls already in flight can overshoot it by a few cents. At the cap the writer says "Writing
+titles isn't available right now" until the month ends (UTC). Admins get one alert at 80% and one at 100% per
+month (in-app and email; `ai_budget_alerts (month, threshold)` is the claim, as with the transfer alerts).
+Admin, Billing, "AI spend" shows the month's spend, the cap and tokens by model (`GET /api/admin/ai-spend`).
+A title-writer draft is about 1,000 input and 400 output tokens: about $0.0003 with Haiku, so the default $10
+is roughly 30,000 drafts a month.
+
+**Quality check.** `TitleWriterIndicTest` runs the writer's checks over recorded answers for 30 realistic
+streams (`afklive-web/src/test/resources/ai-eval/`). To see what the real model writes for them, run
+`ANTHROPIC_API_KEY=... afklive-scripts/ai-eval.sh` (Maven profile `ai-eval`, not part of any build; 30 calls,
+about a cent) and read `afklive-web/target/ai-eval/report.md`.
 
 ## Automatic replies removed (AI-3)
 

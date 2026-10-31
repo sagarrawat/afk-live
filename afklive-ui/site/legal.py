@@ -8,6 +8,8 @@ it when /contact is served (ContactPage.java). Keep those divs flat (no nested d
 import html, pathlib, re
 HERE = pathlib.Path(__file__).resolve().parent
 UPDATED = "27 October 2026"
+# Per page when only one page changed (the AI processors were added to the privacy policy).
+PAGE_UPDATED = {"privacy": "30 October 2026"}
 SUPPORT = '<a href="mailto:support@afklive.in">support@afklive.in</a>'
 GRIEVANCE = '<a href="/contact#grievance-redressal">grievance officer</a>'
 
@@ -24,7 +26,7 @@ PRIVACY = [
   "To run your streams and send them where you choose, to bill you and issue GST invoices, to send the alerts and emails you've asked for, to keep accounts secure (for example two-step sign-in and rate limits), and to fix problems. We don't sell your data and we don't show ads.",
  ]),
  ("Who helps us", [
-  "<strong>DigitalOcean</strong> hosts our servers and your files (in India). <strong>Cloudflare</strong> runs our domain's DNS. <strong>PhonePe</strong> processes payments. <strong>Zoho ZeptoMail</strong> sends our emails. <strong>Google</strong> handles Google sign-in if you use it. The platforms you stream to (YouTube, Facebook and others) receive your stream under their own terms and privacy policies.",
+  "<strong>DigitalOcean</strong> hosts our servers and your files (in India). <strong>Cloudflare</strong> runs our domain's DNS. <strong>PhonePe</strong> processes payments. <strong>Zoho ZeptoMail</strong> sends our emails. <strong>Google</strong> handles Google sign-in if you use it. <strong>Anthropic</strong> (and <strong>Google Gemini</strong>, when we use it instead) writes the title, description and tag suggestions you ask for: it receives only the text you ask it to write from, such as your stream's name and current title, your playlist's track names and the short note you type, never your videos, audio, stream keys, email address or payment details, and nothing you send is used to train AI models. The platforms you stream to (YouTube, Facebook and others) receive your stream under their own terms and privacy policies.",
  ]),
  ("Cookies", [
   "We use only the cookies needed to sign you in, remember you if you ask us to, and protect forms from forgery. No advertising or tracking cookies.",
@@ -159,7 +161,7 @@ def render(slug, title, desc, sections, numbered=True):
 <!-- include:header -->
 <main class="mx-auto max-w-3xl px-4 pb-24 pt-14 sm:px-6">
   <h1 class="text-[40px] font-extrabold leading-none tracking-[-0.035em] sm:text-[56px]">{title}</h1>
-  <p class="mt-4 text-sm text-muted">Last updated {UPDATED}</p>
+  <p class="mt-4 text-sm text-muted">Last updated {PAGE_UPDATED.get(slug, UPDATED)}</p>
   <article class="legal mt-10">
 {content}
   </article>

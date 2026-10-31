@@ -136,8 +136,12 @@ class TitleWriterTest {
     void indicTitlesPassTheSearchablePhraseCheck() {
         Draft d = TitleWriter.parse("{\"titles\":[\"हनुमान चालीसा · 24/7 replay\",\"காலை பக்தி பாடல்கள்\"],\"description\":\"सुबह की आरती।\",\"tags\":[\"हनुमान चालीसा\",\"भजन\"]}",
                 playlist(Language.HI, true, List.of()));
-        assertThat(d.titles()).containsExactly("हनुमान चालीसा · 24/7 replay", "காலை பக்தி பாடல்கள்");
+        assertThat(d.titles()).as("a Tamil title in a Hindi draft is in the wrong script, so it's dropped")
+                .containsExactly("हनुमान चालीसा · 24/7 replay");
         assertThat(d.tags()).contains("हनुमान चालीसा", "भजन").hasSizeGreaterThanOrEqualTo(5);
+        Draft ta = TitleWriter.parse("{\"titles\":[\"காலை பக்தி பாடல்கள்\"],\"description\":\"\",\"tags\":[]}",
+                playlist(Language.TA, true, List.of()));
+        assertThat(ta.titles()).containsExactly("காலை பக்தி பாடல்கள்");
     }
 
     @Test

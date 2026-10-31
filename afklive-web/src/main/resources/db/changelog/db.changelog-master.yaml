@@ -95,3 +95,5 @@ databaseChangeLog:
       file: db/changelog/changes/175-launch-offer-plan-terms.sql
   - include:
       file: db/changelog/changes/180-offer-results-index.sql
+  - include:
+      file: db/changelog/changes/185-ai-spend.sql

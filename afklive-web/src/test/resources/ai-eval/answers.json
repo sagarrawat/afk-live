@@ -1,0 +1,43 @@
+{
+  "_comment": "Recorded model answers (as the API returned them, some deliberately bad) for inputs.json. TitleWriterIndicTest runs the title writer's checks over them; no live API calls. Strings are raw answers (code fences and all); objects are JSON answers.",
+
+  "en-lofi-study": {"titles": ["🔴 LIVE NOW: Lofi beats to study with rain", "Lofi study radio · rain and chill beats 24/7", "Chill lofi beats to study and relax"],
+    "description": "LIVE now! Soft lofi beats with gentle rain in the background, made for studying and focus. #lofi",
+    "tags": ["lofi", "lofi beats", "study music", "rain sounds", "chill beats", "viral", "live", "2026", "focus music", "lofi radio", "study with me"]},
+
+  "en-kids-rhymes": {"titles": ["Nursery rhymes for toddlers: Twinkle Twinkle Little Star, Baa Baa Black Sheep, Wheels on the Bus and many more classic songs for kids", "Twinkle Twinkle and Baa Baa Black Sheep | Nursery rhymes", "Classic English nursery rhymes for toddlers"],
+    "description": "Animated English nursery rhymes for toddlers, including Twinkle Twinkle Little Star and Baa Baa Black Sheep.",
+    "tags": ["nursery rhymes", "kids songs", "twinkle twinkle little star", "baa baa black sheep", "wheels on the bus", "toddler songs"]},
+
+  "en-freefire-phone": {"titles": ["Free Fire ranked push to Grandmaster", "Free Fire live: Grandmaster push with chat", "Free Fire ranked tonight"],
+    "description": "I'm live from my phone pushing Free Fire ranked to Grandmaster. Say hi in chat!",
+    "tags": ["free fire", "free fire ranked", "grandmaster push", "free fire live", "mobile gaming"]},
+
+  "hi-hanuman-chalisa": {"titles": ["लाइव हनुमान चालीसा पाठ 24 घंटे", "हनुमान चालीसा | संकट मोचन हनुमान अष्टक", "Hanuman Chalisa 24/7 non stop"],
+    "description": "हनुमान चालीसा और संकट मोचन हनुमान अष्टक का पाठ, लाइव अभी, सुबह और शाम सुनने के लिए।",
+    "tags": ["हनुमान चालीसा", "hanuman chalisa", "संकट मोचन", "हनुमान भजन", "भक्ति गीत", "लाइव", "trending"]},
+
+  "hi-bgmi-phone": {"titles": ["BGMI रश गेमप्ले | मोबाइल से लाइव", "BGMI हिंदी गेमप्ले चैट के साथ", "BGMI रश गेमप्ले हिंदी में"],
+    "description": "मैं मोबाइल से BGMI खेल रहा हूँ, चैट में बात करें।",
+    "tags": ["bgmi", "bgmi हिंदी", "bgmi rush gameplay", "मोबाइल गेमिंग", "bgmi live"]},
+
+  "ta-murugan": "```json\n{\"titles\": [\"முருகன் பக்தி பாடல்கள் | கந்த சஷ்டி கவசம்\", \"Murugan devotional songs 24/7\", \"கந்த சஷ்டி கவசம் 24/7\"], \"description\": \"கந்த சஷ்டி கவசம் மற்றும் முருகன் பக்தி பாடல்கள், நாள் முழுவதும் கேட்க.\", \"tags\": [\"முருகன் பாடல்கள்\", \"கந்த சஷ்டி கவசம்\", \"murugan songs\", \"tamil devotional\", \"பக்தி பாடல்கள்\", \"லைவ்\"]}\n```",
+
+  "ta-freefire-phone": {"titles": ["Free Fire தமிழ் கேம்ப்ளே | லைவ்", "Free Fire தமிழ் ரேங்க்ட் புஷ்", "போனில் Free Fire தமிழ்"],
+    "description": "போனில் இருந்து Free Fire விளையாடுகிறேன், சாட்டில் பேசலாம்.",
+    "tags": ["free fire tamil", "free fire", "தமிழ் கேமிங்", "free fire live tamil", "mobile gaming"]},
+
+  "te-suprabhatam": {"titles": ["వేంకటేశ్వర సుప్రభాతం | తిరుమల ఉదయం", "లైవ్ శ్రీ వేంకటేశ్వర సుప్రభాతం ఇప్పుడు", "తిరుమల సుప్రభాతం 24/7"],
+    "description": "తిరుమల శ్రీ వేంకటేశ్వర సుప్రభాతం, ప్రతి ఉదయం వినడానికి.",
+    "tags": ["వేంకటేశ్వర సుప్రభాతం", "suprabhatam", "తిరుమల", "venkateswara songs", "భక్తి పాటలు", "telugu devotional"]},
+
+  "bn-rabindra": {"titles": ["রবীন্দ্রসংগীত | সন্ধ্যার গান", "লাইভ রবীন্দ্রসংগীত এখন", "আমি চিনি গো চিনি ও রবীন্দ্রসংগীত"],
+    "description": "সন্ধ্যার জন্য রবীন্দ্রসংগীতের সংকলন, আমি চিনি গো চিনি সহ।",
+    "tags": ["রবীন্দ্রসংগীত", "rabindra sangeet", "বাংলা গান", "tagore songs", "সন্ধ্যার গান"]},
+
+  "mr-ganpati-aarti": "Here are your drafts:\n```json\n{\"titles\": [\"🙏 गणपती आरती | सुखकर्ता दुखहर्ता 🙏\", \"#Ganpati गणपती बाप्पा मोरया आरती\", \"गणपतीच्या आरत्या 24/7\"], \"description\": \"सुखकर्ता दुखहर्ता आणि गणपतीच्या आरत्या, दिवसभर ऐकण्यासाठी. #ganpati 🙏\", \"tags\": [\"गणपती आरती\", \"sukhkarta dukhharta\", \"ganpati aarti\", \"मराठी आरती\", \"बाप्पा\", \"#viral\"]}\n```",
+
+  "mr-vitthal-abhang": {"titles": ["लाईव्ह विठ्ठल अभंग | तुकाराम", "पंढरपूरचे विठ्ठल अभंग", "Vitthal abhang Tukaram Dnyaneshwar"],
+    "description": "तुकाराम आणि ज्ञानेश्वर यांचे विठ्ठल अभंग, लाईव्ह आता.",
+    "tags": ["विठ्ठल अभंग", "abhang", "तुकाराम", "ज्ञानेश्वर", "पंढरपूर", "लाईव्ह"]}
+}

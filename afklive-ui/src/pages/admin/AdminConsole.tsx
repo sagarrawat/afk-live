@@ -10,6 +10,7 @@ import { Audit, FunnelPanel, Plans, RevenuePanel, TicketPage, Tickets, UserPage 
 import { AdminSearch } from './AdminSearch';
 import { BusinessPage } from './BusinessPage';
 import { CostPanel, WorstCasePanel } from './CostPanel';
+import { AiSpendPanel } from './AiSpendPanel';
 import { LivePage } from './LivePage';
 import { OverviewPage, useAttention } from './OverviewPage';
 import { ServersPage } from './ServersPage';
@@ -99,6 +100,7 @@ function Section() {
           <RevenuePanel />
           <CostPanel />
           <WorstCasePanel />
+          <AiSpendPanel />
           <Plans />
         </div>
       );
