@@ -1,0 +1,47 @@
+# The current production server's Caddyfile: one web app on 127.0.0.1:8080, no deploy slots yet (before the
+# OPS-4 setup in docs/operations.md, "Web deploys without downtime"; after it, use ./Caddyfile instead, which has
+# the same "updating" block). Install as /etc/caddy/Caddyfile, then:
+#   sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# Setup: docs/operations.md, "While the web app restarts".
+
+# While the web app restarts, visitors get a page that says so (and reloads itself), not the browser's bare
+# "502". Only Caddy's own errors land here (no upstream answering: 502, 503 no healthy slot, 504 timeout);
+# what the app answers itself, a 503 included, passes through untouched. API calls get JSON the app's fetch
+# layer understands (afklive-ui/src/lib/api.ts). The page: afklive-scripts/caddy/errors/index.html, uploaded by
+# every web deploy to /opt/afklive/errors/. docs/operations.md, "While the web app restarts".
+# The same block is in Caddyfile and Caddyfile.single-upstream (CaddyUpdatingPageTest keeps them equal).
+# --- afklive_updating ---
+(afklive_updating) {
+	handle_errors 502 503 504 {
+		header Cache-Control "no-store"
+		header Retry-After "30"
+
+		@api path /api /api/*
+		handle @api {
+			header Content-Type "application/json"
+			respond `{"error":"updating","retryAfter":30}` 503
+		}
+
+		@page header Accept *text/html*
+		handle @page {
+			root * /opt/afklive/errors
+			rewrite * /index.html
+			file_server {
+				status 503
+			}
+		}
+
+		handle {
+			respond "AFK Live is updating. Back in about a minute." 503
+		}
+	}
+}
+# --- end afklive_updating ---
+
+afklive.in, www.afklive.in {
+	@www host www.afklive.in
+	redir @www https://afklive.in{uri} permanent
+
+	reverse_proxy 127.0.0.1:8080
+	import afklive_updating
+}

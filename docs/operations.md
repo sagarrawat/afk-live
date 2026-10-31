@@ -759,6 +759,57 @@ at a time without interruption: `curl -X POST -H "X-Worker-Token: TOKEN" http://
 Just stopping it also works: other workers take its streams over within 45 s (a short reconnect). Then
 remove it from `WORKER_HOSTS` and its peer from the main server's WireGuard config.
 
+## While the web app restarts: the "updating" page
+
+When no web app answers (a deploy with the old restart, a crash, both slots down), Caddy answers instead of
+the browser's bare "This page isn't working, HTTP ERROR 502":
+
+| Request | Answer (always `503`, `Retry-After: 30`, `Cache-Control: no-store`) |
+| --- | --- |
+| A page (`Accept` includes `text/html`) | `afklive-scripts/caddy/errors/index.html`: "AFK Live is updating, back in about a minute. Your live streams keep running." in English and Hindi. It asks `/healthz` every 5 s (slower over time, at most every 30 s) and loads the page the visitor wanted once the app answers; "Try again" checks at once; without JavaScript it reloads every 20 s |
+| `/api/*` | `{"error":"updating","retryAfter":30}`. The app (`lib/api.ts`) shows "Updating, reconnecting…" at the top, keeps retrying reads for up to 3 minutes, and turns a change (POST, PUT, ...) into "AFK Live is updating. Try again in a minute." instead of repeating it on its own |
+| Anything else (`/healthz`, scripts, images) | A line of plain text |
+
+Only Caddy's own errors land here (`handle_errors 502 503 504`: nothing listening, no healthy slot, upstream
+timeout). Whatever the app answers itself passes through unchanged, its own 503s included. "Your live streams
+keep running" is true because the stream workers are separate processes (`afklive-worker@a/b`) that a web
+restart doesn't touch; on a single-process install (`STREAMING_ROLE=all`) streams reconnect within seconds.
+
+The page is one self-contained file (inline CSS and script, the logo inlined by `afklive-ui/brand/build.py`,
+no requests to anywhere: the app is down when it shows). `CaddyUpdatingPageTest` checks the Caddyfiles, the
+workflow and the page, and with `caddy` on PATH (or `CADDY_BIN`) validates the files and runs the block for real.
+Every web deploy uploads the page to `/opt/afklive/incoming/errors/` and swaps it into `/opt/afklive/errors/`
+before the new version starts, so page changes ship with the next web deploy. Until the one-time setup below is
+done, those two steps only warn.
+
+### One-time server setup
+
+The same `handle_errors` block is in both Caddyfiles: `afklive-scripts/caddy/Caddyfile.single-upstream` is for
+the server as it runs today (one web app on port 8080, before the OPS-4 setup); `afklive-scripts/caddy/Caddyfile`
+(two slots) already has it, so the OPS-4 setup brings it along. As root (`sudo -i`), from a checkout of this
+release:
+
+```sh
+# 1. Where the page lives. The deploy user (DO_USER secret; "deploy" here) writes it, Caddy only reads it.
+install -d -o deploy -g deploy -m 2775 /opt/afklive/incoming/errors
+install -d -o deploy -g deploy -m 0755 /opt/afklive/errors
+install -o deploy -g deploy -m 0644 afklive-scripts/caddy/errors/index.html /opt/afklive/errors/index.html
+sudo -u caddy head -c 15 /opt/afklive/errors/index.html && echo " <- Caddy can read it"
+
+# 2. Caddy. Keep a copy, install the file, check that only the new block and its import were added (keep any
+#    other line your file had, e.g. encode or request_body), then validate and reload (no dropped connections).
+cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.before-updating-page
+cp afklive-scripts/caddy/Caddyfile.single-upstream /etc/caddy/Caddyfile
+diff /etc/caddy/Caddyfile.before-updating-page /etc/caddy/Caddyfile
+caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+
+# 3. Check: the site still answers as before
+curl -sI https://afklive.in/ | head -1
+```
+
+The next web deploy publishes the page itself ("Publish updating page" says so in its log). To undo: restore
+`/etc/caddy/Caddyfile.before-updating-page` and `systemctl reload caddy`; the directories can stay.
+
 ## Secrets from GitHub (OPS-7)
 
 Integration secrets (Google sign-in, Anthropic, push, Turnstile, PhonePe, ZeptoMail, object storage) are kept as **repository secrets** in GitHub (Settings → Secrets and variables → Actions). Every web
@@ -1354,7 +1405,8 @@ It never says why (no error text, versions or counts), sends `Cache-Control: no-
 `X-Robots-Tag: noindex`, is not in the sitemap, needs no sign-in, creates no session and is outside
 the API rate limiter (`HealthController`, `HealthzProbe`, `HealthzSecurityConfig`). Each web instance
 reuses its answer for 5 s, so frequent checks cost the database almost nothing; HEAD works too. If both
-deploy slots are down, Caddy answers 502, which a monitor also reads as down. The localhost-only
+deploy slots are down, Caddy answers 503 with a line of text ("While the web app restarts", above; 502 before
+that setup), which a monitor also reads as down. The localhost-only
 actuator probes (`/actuator/health/readiness`, used by Caddy and the deploy script) are separate and
 unchanged.
 
