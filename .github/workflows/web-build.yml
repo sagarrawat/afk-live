@@ -71,6 +71,44 @@ jobs:
           target: "/opt/afklive/incoming/web/"
           strip_components: 2
 
+      # OPS-7: integration secrets live in GitHub (Settings → Secrets and variables → Actions) and are written
+      # into /opt/afklive/afklive.env before the new version starts. A secret not set in GitHub is skipped, so
+      # the server's own value stays. Values go over stdin and are never printed. Until the one-time server
+      # setup is done (docs/operations.md, "Secrets from GitHub") this step only warns; the deploy goes on.
+      - name: Sync secrets
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_YOUTUBE_CLIENT_ID: ${{ secrets.GOOGLE_YOUTUBE_CLIENT_ID }}
+          GOOGLE_YOUTUBE_CLIENT_SECRET: ${{ secrets.GOOGLE_YOUTUBE_CLIENT_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          APP_PUSH_VAPID_KEY: ${{ secrets.APP_PUSH_VAPID_KEY }}
+          APP_TURNSTILE_SITE_KEY: ${{ secrets.APP_TURNSTILE_SITE_KEY }}
+          APP_TURNSTILE_SECRET: ${{ secrets.APP_TURNSTILE_SECRET }}
+          PHONEPE_CLIENT_ID: ${{ secrets.PHONEPE_CLIENT_ID }}
+          PHONEPE_CLIENT_SECRET: ${{ secrets.PHONEPE_CLIENT_SECRET }}
+          PHONEPE_CLIENT_VERSION: ${{ secrets.PHONEPE_CLIENT_VERSION }}
+          PHONEPE_CALLBACK_PASSWORD: ${{ secrets.PHONEPE_CALLBACK_PASSWORD }}
+          ZEPTOMAIL_TOKEN: ${{ secrets.ZEPTOMAIL_TOKEN }}
+          STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
+          STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          envs: GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_YOUTUBE_CLIENT_ID,GOOGLE_YOUTUBE_CLIENT_SECRET,ANTHROPIC_API_KEY,APP_PUSH_VAPID_KEY,APP_TURNSTILE_SITE_KEY,APP_TURNSTILE_SECRET,PHONEPE_CLIENT_ID,PHONEPE_CLIENT_SECRET,PHONEPE_CLIENT_VERSION,PHONEPE_CALLBACK_PASSWORD,ZEPTOMAIL_TOKEN,STORAGE_ACCESS_KEY,STORAGE_SECRET_KEY
+          script: |
+            set -e
+            if [ ! -x /opt/afklive/scripts/sync-secrets.sh ]; then
+              echo "::warning::Secrets from GitHub aren't set up on this server yet (docs/operations.md, 'Secrets from GitHub'); the server's afklive.env is used as it is."
+              exit 0
+            fi
+            for k in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_YOUTUBE_CLIENT_ID GOOGLE_YOUTUBE_CLIENT_SECRET ANTHROPIC_API_KEY APP_PUSH_VAPID_KEY APP_TURNSTILE_SITE_KEY APP_TURNSTILE_SECRET PHONEPE_CLIENT_ID PHONEPE_CLIENT_SECRET PHONEPE_CLIENT_VERSION PHONEPE_CALLBACK_PASSWORD ZEPTOMAIL_TOKEN STORAGE_ACCESS_KEY STORAGE_SECRET_KEY; do
+              eval "v=\${$k:-}"
+              [ -n "$v" ] && printf '%s=%s\n' "$k" "$v"
+            done | sudo /opt/afklive/scripts/sync-secrets.sh
+
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
         env:
