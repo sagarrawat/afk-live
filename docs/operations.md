@@ -759,6 +759,35 @@ at a time without interruption: `curl -X POST -H "X-Worker-Token: TOKEN" http://
 Just stopping it also works: other workers take its streams over within 45 s (a short reconnect). Then
 remove it from `WORKER_HOSTS` and its peer from the main server's WireGuard config.
 
+## Secrets from GitHub (OPS-7)
+
+Integration secrets (Google sign-in, Anthropic and Gemini, push, Turnstile, PhonePe, ZeptoMail/SMTP, object
+storage) are kept as **repository secrets** in GitHub (Settings → Secrets and variables → Actions). Every web
+deploy runs `afklive-scripts/sync-secrets.sh` on the server before the new version starts: it writes the secrets
+that are set into `/opt/afklive/afklive.env`, replacing a key that is there and adding one that isn't. It keeps
+every other line and the file's mode, and leaves a copy in `afklive.env.bak`.
+
+- **Change a secret:** update it in GitHub, then run **Afklive-web CI & CD** (Actions → Run workflow). That is a
+  zero-downtime web deploy; it doesn't touch running streams. The main server's worker reads the file on its
+  own next deploy. Remote workers (FO-8) keep their own `afklive.env`.
+- **Not set in GitHub = unchanged on the server.** An empty or missing secret never wipes a value. To remove
+  one, delete the line on the server.
+- **Allowed keys only** (the list at the top of the script, mirrored in the workflow; `SyncSecretsScriptTest`
+  checks they match). Server-generated or data-critical values stay on the server only: `APP_ENCRYPTION_KEY`,
+  `POSTGRES_PASSWORD`, `REMEMBER_ME_KEY`, `WORKER_CONTROL_TOKEN`, `INGEST_*`.
+- Values go over stdin and are never printed; the log names the keys that changed. A value with a single quote
+  or a line break is refused (nothing written).
+
+### One-time server setup
+
+```sh
+sudo install -o root -g root -m 0755 afklive-scripts/sync-secrets.sh /opt/afklive/scripts/
+echo "DEPLOY_USER ALL=(root) NOPASSWD: /opt/afklive/scripts/sync-secrets.sh" | sudo tee /etc/sudoers.d/afklive-sync-secrets
+sudo chmod 0440 /etc/sudoers.d/afklive-sync-secrets && sudo visudo -c   # DEPLOY_USER: the user in the DO_USER secret
+```
+
+Until this is done, the deploy's "Sync secrets" step only warns and the server's file is used as it is.
+
 ## Phone streaming: the ingest server
 
 Phones publish to an ingest server ([MediaMTX](https://github.com/bluenviron/mediamtx)); the worker

@@ -342,6 +342,7 @@ CH-3 (pinned and timed messages, "repeating message every N minutes") was droppe
 | OPS-4 | As a user, I want the website and app to stay up during updates so that I never see errors because of a release | Blue/green on the same server behind Caddy with a readiness check and graceful shutdown; migrations are expand-then-contract; zero 502s during a deploy | P0 |
 | OPS-5 | As an admin, I want a staging copy of the app so that I try a release before creators get it | Staging runs on the production droplet on its own port, database and worker slot with a stream limit of 1; deploys there first; costs no new server | P1 |
 | OPS-6 | As an admin, I want a nightly soak test so that leaks and drift show up before release | A 6-hour run each night (72 hours before major releases) checking memory, timestamps, A/V drift under 40 ms and reconnects; results posted to the PR checks | P1 |
+| OPS-7 | As an admin, I want integration secrets kept in GitHub so that I change one without logging into the server | Repository secrets on an allowed list are written into `afklive.env` on every web deploy (`sync-secrets.sh`); an unset secret never wipes the server's value; values never printed; data-critical keys (encryption, database, remember-me, worker token) stay server-only | P1 |
 
 ### 20. Marketing site and help
 
