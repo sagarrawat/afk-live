@@ -15,6 +15,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 
 // ------------------------------------------------------------------ buttons
 
@@ -81,7 +82,8 @@ export function Panel({ title, action, children, className, pad = true }: { titl
   return (
     <section className={clsx('rounded-md border border-line bg-panel', className)}>
       {(title || action) && (
-        <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        // Wraps: on a phone, wide actions (the Plans toggles) go under the title instead of squeezing it.
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line px-4 py-3">
           <h2 className="text-md font-semibold">{title}</h2>
           {action}
         </header>
@@ -206,11 +208,61 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
           disabled={o.disabled}
           title={o.title}
           onClick={() => onChange(o.value)}
-          className={clsx('h-8 rounded-sm px-3 text-sm disabled:opacity-40', value === o.value ? 'bg-raised font-medium text-ink' : 'text-muted hover:text-ink')}
+          // grow: when a phone is too narrow for one row, each wrapped row fills the width evenly instead of
+          // leaving one option alone at the start of the last row.
+          className={clsx('h-8 grow rounded-sm px-3 text-sm disabled:opacity-40', value === o.value ? 'bg-raised font-medium text-ink' : 'text-muted hover:text-ink')}
         >
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ section tabs
+
+/**
+ * A row of section links that scrolls sideways when it doesn't fit (a phone). The current section (the
+ * link with aria-current) is scrolled into view, so it's never cut off at the edge, and a soft fade marks
+ * the side that has more links, so a half-visible label reads as "scroll for more" rather than a mistake.
+ */
+export function ScrollTabs({ label, className, navClassName, children }: { label: string; className?: string; navClassName?: string; children: ReactNode }) {
+  const ref = useRef<HTMLElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  const { pathname } = useLocation();
+  const measure = useCallback(() => {
+    const n = ref.current;
+    if (!n) return;
+    const left = n.scrollLeft > 1;
+    const right = n.scrollLeft + n.clientWidth < n.scrollWidth - 1;
+    setMore((m) => (m.left === left && m.right === right ? m : { left, right }));
+  }, []);
+  useEffect(() => {
+    const n = ref.current;
+    const current = n?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (n && current) {
+      const nav = n.getBoundingClientRect();
+      const tab = current.getBoundingClientRect();
+      const pad = 32; // clear of the fade
+      if (tab.left < nav.left) n.scrollLeft = Math.max(0, n.scrollLeft - (nav.left + pad - tab.left));
+      else if (tab.right > nav.right) n.scrollLeft += tab.right - (nav.right - pad);
+    }
+    measure();
+  }, [pathname, measure]);
+  useEffect(() => {
+    const n = ref.current;
+    if (!n || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(n);
+    return () => ro.disconnect();
+  }, [measure]);
+  return (
+    <div className={clsx('relative', className)}>
+      <nav ref={ref} aria-label={label} onScroll={measure} className={clsx('overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', navClassName)}>
+        {children}
+      </nav>
+      <span aria-hidden data-fade="left" className={clsx('pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-bg to-transparent transition-opacity', more.left ? 'opacity-100' : 'opacity-0')} />
+      <span aria-hidden data-fade="right" className={clsx('pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-bg to-transparent transition-opacity', more.right ? 'opacity-100' : 'opacity-0')} />
     </div>
   );
 }
